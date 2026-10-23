@@ -974,8 +974,9 @@ final class Coverages {
         // still apart. What the lines beside it are is asked of every reading of it at once
         // ({@link #besideEachLine}), and the readings are brought together by {@link #merged}.
         List<ReadingOfALine> out = new ArrayList<>();
+        MeasuredInput.Lines read = subject.lines();
         for (Border each : lines) {
-            out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
+            out.add(assessed(each, reading(read.at(each), projection, elsewhere(lines, each),
                             wayTo(each, reaching), subject.quantities().region()),
                     observed, put));
         }
@@ -1030,9 +1031,11 @@ final class Coverages {
                                  Probe probe, ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
+        MeasuredInput.Lines lines = input.lines();
         for (BorderAssessment border : measured.each()) {
-            OneSearchOfABorder search = searching(border.border(), input, probe, realizer,
-                    wayTo(border.border(), reaching));
+            MeasuredInput.BorderReading read = lines.at(border.border());
+            OneSearchOfABorder search = searching(border.border(), read, input, probe,
+                    realizer, wayTo(border.border(), reaching));
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
                 ItemAssessment item = border.at(point);
@@ -1051,7 +1054,7 @@ final class Coverages {
             // readings are put together: the row that rules a line out was composed along this
             // reading's way and is read back at this reading's positions.
             ARowTellingTheLinesApart toldApart =
-                    settled(border.border(), tellingApart(border, search), input);
+                    settled(border.border(), tellingApart(border, search), read);
             out.add(new BorderAssessment(border.border(), items,
                     shownArriving(border.beside(), toldApart), toldApart,
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
@@ -1066,7 +1069,7 @@ final class Coverages {
      */
     private static ARowTellingTheLinesApart settled(Border reading,
                                                     ARowTellingTheLinesApart toldApart,
-                                                    MeasuredInput input) {
+                                                    MeasuredInput.BorderReading read) {
         // The line drawn and put to rows once for the border, and only where a search saw a row
         // run there: every search here is one of this reading's.
         boolean drawnYet = false;
@@ -1087,7 +1090,7 @@ final class Coverages {
                 Optional<DrawnBoundary> held = DrawnBoundary.of(reading).orNull();
                 if (held != null && held.isPresent()) {
                     drawn = held.get();
-                    toRows = StandingAtAPoint.putToRows(input.at(reading),
+                    toRows = StandingAtAPoint.putToRows(read,
                             reading.origin().recordedAt());
                 }
             }
@@ -1665,11 +1668,10 @@ final class Coverages {
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
      */
-    private static OneSearchOfABorder searching(Border border,
-                                                souther.compiler.partition.MeasuredInput input,
+    private static OneSearchOfABorder searching(Border border, MeasuredInput.BorderReading line,
+                                                MeasuredInput input,
                                                 Probe probe, LevelRealizer realizer,
                                                 souther.compiler.partition.WayToTheBorder within) {
-        souther.compiler.partition.MeasuredInput.BorderReading line = input.at(border);
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
         List<ConditionOutcomeSite> site =
@@ -2466,8 +2468,9 @@ final class Coverages {
         // line come to is one answer, and it is put together where the last thing that is a
         // reading's own has been asked ({@link #merged}).
         List<ReadingOfALine> out = new ArrayList<>();
+        MeasuredInput.Lines read = subject.lines();
         for (Border each : partitioning.between()) {
-            out.add(assessed(each, reading(subject.at(each),
+            out.add(assessed(each, reading(read.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each), wayTo(each, reaching),
                             subject.quantities().region()),

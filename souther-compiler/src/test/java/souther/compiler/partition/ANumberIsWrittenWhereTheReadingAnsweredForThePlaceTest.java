@@ -19,6 +19,7 @@ import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -192,7 +193,7 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
                         quantities(source).ordersOf(fixed.term()).answered(), four))),
                 new Reachability.Reaching(quantities(source).region(), Requirements.NONE,
                         TruthsAsked.NONE, List.of(onTheWayOver(at)), Reachability.Ways.ONE,
-                        List.of()),
+                        List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 

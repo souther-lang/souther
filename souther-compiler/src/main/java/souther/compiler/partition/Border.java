@@ -597,7 +597,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * it, so nothing here folds two spellings of one form.
      */
     public boolean sameReadingAs(Border other) {
-        if (other == null || !origin.equals(other.origin) || !cut.equals(other.cut)) {
+        if (other == null || !drawnAt().equals(other.drawnAt())) {
             return false;
         }
         if (!answers.keySet().equals(other.answers.keySet())) {
@@ -618,6 +618,16 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         return Set.copyOf(pointsOwed()).equals(Set.copyOf(other.pointsOwed()))
                 && Set.copyOf(pointsLeftOut()).equals(Set.copyOf(other.pointsLeftOut()));
     }
+
+    /** Where this line was drawn and what drew it, which two lines are one reading only where they
+     *  share ({@link #sameReadingAs}): what a reader filing lines to find one again files them
+     *  by. */
+    public DrawnAt drawnAt() {
+        return new DrawnAt(cut, origin);
+    }
+
+    /** Where a line was drawn and what drew it ({@link #drawnAt}). */
+    public record DrawnAt(BoundaryTarget cut, LineOrigin origin) {}
 
     /** The points a row is owed at, without whose each is. */
     private List<BorderObligationPoint> pointsOwed() {

@@ -6459,8 +6459,10 @@ public final class Adequacy {
                                              List<BorderAssessment> edges,
                                              ReachingCuts reaching) {
             Map<ControlPlace, HeldOutcome.Bringing> found = new LinkedHashMap<>();
+            MeasuredInput.Lines drawn = subject.lines();
             return place -> found.computeIfAbsent(place, asked -> switch (asked) {
-                case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
+                case ControlPlace.Outcome outcome ->
+                        holding(subject, drawn, edges, reaching, outcome);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
                 case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
@@ -6480,6 +6482,7 @@ public final class Adequacy {
          * ({@link ReachingCuts#heldAt}).
          */
         private static HeldOutcome.Bringing holding(MeasuredInput subject,
+                                                    MeasuredInput.Lines drawn,
                                                     List<BorderAssessment> edges,
                                                     ReachingCuts reaching,
                                                     ControlPlace.Outcome outcome) {
@@ -6514,7 +6517,7 @@ public final class Adequacy {
                                 || !(point.getValue() instanceof ItemAssessment.Owed owed)) {
                             continue;
                         }
-                        BorderQuantity quantity = subject.at(edge.border()).quantity();
+                        BorderQuantity quantity = drawn.at(edge.border()).quantity();
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
