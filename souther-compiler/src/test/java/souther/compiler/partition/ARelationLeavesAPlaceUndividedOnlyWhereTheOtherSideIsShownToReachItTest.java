@@ -319,6 +319,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A {@code let} is worked out whether or not anything reads its name: the value of one nothing
+     * reads stops a run at {@code a + 1} as much as one the comparison is over.
+     */
+    @Test
+    void aLetNothingReadsStopsARunAsMuchAsOneThatIsRead() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "{\n    let unused = a.value + 1\n    a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES), left("a: Yen, b: Yen", yen, body, "6:13"));
+        assertTrue(classesAt("a: Yen, b: Yen", yen, body, "b").stream()
+                        .anyMatch(each -> each.contains("9223372036854775807")),
+                "the greatest Int settles the comparison false");
+    }
+
+    /**
      * What the comparison works out itself is worked out on a row at it: {@code a + M - M} is
      * {@code a} as a form and stops at every {@code a} above nought as written.
      */

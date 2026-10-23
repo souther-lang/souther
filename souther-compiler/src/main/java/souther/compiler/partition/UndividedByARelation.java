@@ -811,6 +811,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             && count.takenAs() instanceof TakenAs.HowManyItHolds,
                     relation, elementsAsked(taken.demand())));
         });
+        // What the run got past working out is stated of the places it names like a condition is,
+        // so that a place it narrows is read over the run it leaves.
+        way.gotPast().forEach(past -> {
+            Set<TermPath> places = new LinkedHashSet<>();
+            past.terms().forEach(term -> places.add(term.subjectPath()));
+            out.add(new OnAWay(places, false, past, null));
+        });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         way.requirements().atANameTheCasesShare()

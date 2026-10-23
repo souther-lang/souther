@@ -288,18 +288,29 @@ public sealed interface Reachability {
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
-                    Optional<List<TakenConstraint>> narrowedBy)
+                    Optional<List<TakenConstraint>> narrowedBy,
+                    List<TakenConstraint> gotPast)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
-                    || declined == null || narrowedBy == null) {
+                    || declined == null || narrowedBy == null || gotPast == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
             declined = List.copyOf(declined);
             narrowedBy = narrowedBy.map(List::copyOf);
+            gotPast = List.copyOf(gotPast);
+        }
+
+        /** A way a run has got past nothing on that a region says. */
+        public Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
+                        List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
+                        List<OnTheWay.Declined> declined,
+                        Optional<List<TakenConstraint>> narrowedBy) {
+            this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
+                    List.of());
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -331,7 +342,7 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy);
+                    narrowedBy, gotPast);
         }
 
         /** Whether taking {@code each} in moves where a number it names runs or what is held
@@ -382,10 +393,14 @@ public sealed interface Reachability {
                                 TakenConstraint.narrowedBy(narrowing,
                                         whole.from().declarations())));
             };
-            return narrowed.emptiness().isPresent() ? new Reaching(region, requirements, truths,
-                    boundedOnTheWay, split, declined, narrowedBy)
-                    : new Reaching(narrowed, requirements, truths, boundedOnTheWay, split,
-                            declined, by);
+            if (narrowed.emptiness().isPresent()) {
+                return new Reaching(region, requirements, truths, boundedOnTheWay, split,
+                        declined, narrowedBy, gotPast);
+            }
+            List<TakenConstraint> past = new ArrayList<>(gotPast);
+            past.addAll(narrowing);
+            return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
+                    by, past);
         }
 
         /**
