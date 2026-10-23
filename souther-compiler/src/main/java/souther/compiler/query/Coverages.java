@@ -1050,7 +1050,8 @@ final class Coverages {
             // What this reading's own search showed arriving is said of this reading, before its
             // readings are put together: the row that rules a line out was composed along this
             // reading's way and is read back at this reading's positions.
-            ARowTellingTheLinesApart toldApart = settled(tellingApart(border, search), input);
+            ARowTellingTheLinesApart toldApart =
+                    settled(border.border(), tellingApart(border, search), input);
             out.add(new BorderAssessment(border.border(), items,
                     shownArriving(border.beside(), toldApart), toldApart,
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
@@ -1063,20 +1064,42 @@ final class Coverages {
      * rules its line out ({@link WhatARowRulesOut}), where one did
      * ({@link ARowTellingTheLinesApart.AtOneReading#settledBy}).
      */
-    private static ARowTellingTheLinesApart settled(ARowTellingTheLinesApart toldApart,
+    private static ARowTellingTheLinesApart settled(Border reading,
+                                                    ARowTellingTheLinesApart toldApart,
                                                     MeasuredInput input) {
+        // The line drawn and put to rows once for the border, and only where a search saw a row
+        // run there: every search here is one of this reading's.
+        boolean drawnYet = false;
+        DrawnBoundary drawn = null;
+        StandingAtAPoint.AtALine toRows = null;
         List<ARowTellingTheLinesApart.AtOneReading> out = new ArrayList<>();
         for (ARowTellingTheLinesApart.AtOneReading one : toldApart.each()) {
-            Optional<DrawnBoundary> drawn = DrawnBoundary.of(one.reading()).orNull();
-            if (drawn == null || drawn.isEmpty() || one.seenThere().isEmpty()) {
+            if (!one.reading().equals(reading)) {
+                throw new IllegalStateException("a search of one reading made at another: "
+                        + one.reading() + " and " + reading);
+            }
+            if (one.seenThere().isEmpty()) {
                 out.add(one);
                 continue;
             }
-            StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(
-                    input.at(one.reading()), one.reading().origin().recordedAt());
+            if (!drawnYet) {
+                drawnYet = true;
+                Optional<DrawnBoundary> held = DrawnBoundary.of(reading).orNull();
+                if (held != null && held.isPresent()) {
+                    drawn = held.get();
+                    toRows = StandingAtAPoint.putToRows(input.at(reading),
+                            reading.origin().recordedAt());
+                }
+            }
+            if (drawn == null) {
+                out.add(one);
+                continue;
+            }
+            DrawnBoundary line = drawn;
+            StandingAtAPoint.AtALine put = toRows;
             out.add(one.settledBy(seen -> {
                 WhatARowRulesOut.Said said =
-                        WhatARowRulesOut.of(toRows, drawn.get(), one.line(), seen.readBack());
+                        WhatARowRulesOut.of(put, line, one.line(), seen.readBack());
                 return said.said().settles() ? Optional.of(said.at()) : Optional.empty();
             }));
         }

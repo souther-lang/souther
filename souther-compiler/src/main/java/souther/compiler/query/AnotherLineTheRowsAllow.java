@@ -431,9 +431,16 @@ public sealed interface AnotherLineTheRowsAllow {
              *  {@code drawn} it is on, and how far along this line it is — or why either sum could
              *  not be held. */
             default ExactAnswer<Read> read(DrawnBoundary drawn, Map<NumericTerm, Place> values) {
-                return drawn.satisfies(values).flatMap(modelKeeps ->
-                        OrderedAffineBoundary.along(direction(), values)
-                                .map(at -> new Read(modelKeeps, at)));
+                return read(drawn.satisfies(values), values);
+            }
+
+            /** The same, with which side of the model's line the row is on already read as
+             *  {@code side}: it is the same whichever line of the family asks, so the rows of a
+             *  measurement are put to the model's line once and not once per line. */
+            default ExactAnswer<Read> read(ExactAnswer<Boolean> side,
+                                           Map<NumericTerm, Place> values) {
+                return side.flatMap(modelKeeps -> OrderedAffineBoundary.along(direction(), values)
+                        .map(at -> new Read(modelKeeps, at)));
             }
 
             /** No row read yet against {@code direction}, beside {@code drawn}. */
@@ -1060,6 +1067,7 @@ public sealed interface AnotherLineTheRowsAllow {
         // what it leaves undecided.
         StandingAtAPoint.RowsRead rows = null;
         List<Sides> sides = new ArrayList<>();
+        List<OnTheModelsLine> sided = new ArrayList<>();
         List<Map<NumericTerm, Place>> satisfying = new ArrayList<>();
         List<Map<NumericTerm, Place>> refusing = new ArrayList<>();
         Set<ReadingGap> sideNotHeld = new LinkedHashSet<>();
@@ -1068,7 +1076,9 @@ public sealed interface AnotherLineTheRowsAllow {
             rows = rows == null ? read : rows.and(read);
             Sides here = new Sides(one, new ArrayList<>(), new ArrayList<>());
             for (Map<NumericTerm, Place> values : read.each()) {
-                switch (boundary.satisfies(values)) {
+                ExactAnswer<Boolean> keeps = boundary.satisfies(values);
+                sided.add(new OnTheModelsLine(values, keeps));
+                switch (keeps) {
                     case ExactAnswer.Held<Boolean> side ->
                             (side.value() ? here.satisfying() : here.refusing()).add(values);
                     case ExactAnswer.Unheld<Boolean> unheld ->
@@ -1100,7 +1110,7 @@ public sealed interface AnotherLineTheRowsAllow {
         }
         List<Direction> each = new ArrayList<>();
         for (QuantityKey other : family) {
-            each.add(assessed(boundary, other, rows, sides));
+            each.add(assessed(boundary, other, rows, sided, sides));
         }
         return new ByDirection(each);
     }
@@ -1108,6 +1118,9 @@ public sealed interface AnotherLineTheRowsAllow {
     /** One reading's rows on each side of the model's line, with the reading they reached. */
     record Sides(Reading reading, List<Map<NumericTerm, Place>> satisfying,
                          List<Map<NumericTerm, Place>> refusing) {}
+
+    /** A row's values, with whether the model's own line keeps it, or why that was not held. */
+    record OnTheModelsLine(Map<NumericTerm, Place> values, ExactAnswer<Boolean> keeps) {}
 
     /**
      * Whether no value is shown to stand at any point the border has on the side it refuses.
@@ -1154,15 +1167,17 @@ public sealed interface AnotherLineTheRowsAllow {
      *
      * <p>{@code rows} are every reading's, and the fold is theirs together. An input is named from
      * one reading's rows along that reading's way ({@code sides}), and it rules out the line as all
-     * the rows leave it: the fold it is stepped against is that one.
+     * the rows leave it: the fold it is stepped against is that one. {@code sided} is the same rows
+     * with the side of the model's line each is on, read once for every line of the family.
      */
     private static Direction assessed(DrawnBoundary boundary, QuantityKey other,
-                                      StandingAtAPoint.RowsRead rows, List<Sides> sides) {
+                                      StandingAtAPoint.RowsRead rows,
+                                      List<OnTheModelsLine> sided, List<Sides> sides) {
         Stands.Fold none = Stands.Fold.none(boundary, other);
         Set<ReadingGap> notHeld = new LinkedHashSet<>();
         List<Stands.Read> read = new ArrayList<>();
-        for (Map<NumericTerm, Place> values : rows.each()) {
-            switch (none.read(boundary, values)) {
+        for (OnTheModelsLine row : sided) {
+            switch (none.read(row.keeps(), row.values())) {
                 case ExactAnswer.Held<Stands.Read> held -> read.add(held.value());
                 case ExactAnswer.Unheld<Stands.Read> unheld ->
                         notHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
