@@ -12,6 +12,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -19,6 +20,8 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -53,6 +56,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -463,7 +467,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * what a term takes beside another along both is not what it takes along each: the runs of each
      * may join without a gap while a pair one way keeps out is one the other never reaches. Nothing
      * here shows what they come to together. A way split at a choice is each of its branches, so
-     * each is a way here, and a way some of whose branches were not split out shows nothing.
+     * each is a way here, and a way some of whose branches were not split out is read again with
+     * its choices as they come to for this, or shows nothing ({@link #branchesOf}).
      *
      * @param witnesses where a count of elements meeting a statement is shown to take every value
      *                  beside how many the container holds ({@link #countWithinItsContainer})
@@ -514,9 +519,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         for (Reachability.Reaching each : ways) {
-            if (!branchesOf(each, branches)) {
+            if (!branchesOf(each, branches, read)) {
                 return nothingShown;
             }
+        }
+        if (branches.isEmpty()) {
+            return WhatItLeaves.ofAWayNoRowComesAlong(places());
         }
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
@@ -615,24 +623,525 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A way split at a choice is the choices together, and what it states of the places is
      * stated by each branch and by none of them whole: under {@code x == 0 || x == 1}, a row
-     * holds {@code x} at nought or at one, which the way whole says nothing of. A way looked along
-     * whole past the figure is one whose branches past it were not split out, and nothing is shown
-     * of those.
+     * holds {@code x} at nought or at one, which the way whole says nothing of.
+     *
+     * <p>A way looked along whole past the figure is one whose branches past it were not split
+     * out. It is read again with each choice on it as it is shown to come to for this relation
+     * ({@link #readAgainForThis}), and its branches are those of what that comes to; where
+     * no choice is shown to come to less, nothing is shown of it. A way read again that no row
+     * takes adds nothing to {@code into}, since no row takes the way it was read from either.
      */
-    private static boolean branchesOf(Reachability.Reaching way,
-                                      List<Reachability.Reaching> into) {
+    private boolean branchesOf(Reachability.Reaching way, List<Reachability.Reaching> into,
+                               InputReading read) {
         return switch (way.ways()) {
             case Reachability.Ways.One _ -> into.add(way);
             case Reachability.Ways.Each each -> {
                 for (Reachability.Reaching branch : each.along()) {
-                    if (!branchesOf(branch, into)) {
+                    if (!branchesOf(branch, into, read)) {
                         yield false;
                     }
                 }
                 yield true;
             }
-            case Reachability.Ways.Whole _ -> false;
+            case Reachability.Ways.Whole whole -> {
+                Optional<Reachability> again = readAgainForThis(whole, read);
+                yield again.isPresent()
+                        && (!(again.get() instanceof Reachability.Reaching reaching)
+                                || branchesOf(reaching, into, read));
+            }
         };
+    }
+
+    /**
+     * The way {@code whole} was read from, read again with each choice on it as it comes to for
+     * this relation — or empty where no choice is shown to come to less than it is.
+     *
+     * <p>What this relation shows along a way is what it shows of the values its places take
+     * there, so ways that differ only in what they leave other places are one way to it, and a
+     * choice it does not read is read as often as there are ways of the choices beside it. Three
+     * things are shown apart, and only then is a choice read as less ({@link ChoiceRead}).
+     *
+     * <p>What part of each alternative bears on the relation. A condition bears on it where it
+     * asks of a position a side reads, or one the declarations or a condition on the way bearing
+     * on the relation tie to one ({@link #bearingOnTheRelation}), and the rest is apart.
+     *
+     * <p>That some value meets what is apart. A way no contradiction was found on is not that —
+     * {@code z > 0 && z < 1} over an {@code Int} is open — so what every choice read as less
+     * leaves to be met apart is met by one value, beside the rest of the way and the declarations
+     * ({@link #metBySomeValue}).
+     *
+     * <p>And then that the values the relation's places take along the way are those they take
+     * along what it is read as. A row along the way holds them where some alternative's part
+     * bearing on the relation leaves them. And every value of theirs that part leaves, beside the
+     * rest of what bears on the relation, stands in a row with the one value met apart beside it:
+     * the positions apart are tied to none of theirs, by the declarations or by anything left on
+     * the way.
+     *
+     * <p>A condition nothing was read of may tie anything to anything, so where one is on the way
+     * nothing is shown. What comes back is read for this relation alone: the way, its choices and
+     * the figure that stopped it are still what the generator, the coverage and the reports read.
+     */
+    private Optional<Reachability> readAgainForThis(Reachability.Ways.Whole whole,
+                                                    InputReading read) {
+        Set<TermPath> bearing = positionsRead();
+        if (bearing == null || !whole.from().way().declined().isEmpty()) {
+            return Optional.empty();
+        }
+        List<OnTheWay> entries = whole.from().way().onTheWay();
+        Set<OnTheWay> choices = Collections.newSetFromMap(new IdentityHashMap<>());
+        choices.addAll(whole.unsplit());
+        // What each condition asks of: one on the way, and one in an alternative of a choice.
+        List<Set<TermPath>> asked = new ArrayList<>();
+        for (OnTheWay each : entries) {
+            if (choices.contains(each) && each.ofSeveralWays()) {
+                each.alternatives().forEach(alternative ->
+                        alternative.forEach(one -> askedOneByOne(one, asked)));
+            } else {
+                asked.add(positionsOf(each));
+            }
+        }
+        List<OnTheWay> stated = entries.stream().filter(each -> !choices.contains(each)).toList();
+        // A choice whose part apart no value was shown to meet is kept as it is, and the
+        // positions it asks of then bear on the relation through it: the rest are parted again.
+        Set<OnTheWay> keptWhole = Collections.newSetFromMap(new IdentityHashMap<>());
+        Map<OnTheWay, ChoiceRead> parted = new IdentityHashMap<>();
+        boolean again = true;
+        while (again) {
+            again = false;
+            bearingOnTheRelation(bearing, asked, read);
+            parted.clear();
+            for (OnTheWay each : whole.unsplit()) {
+                ChoiceRead one = keptWhole.contains(each) ? null
+                        : ChoiceRead.of(each, bearing, read);
+                if (one != null) {
+                    parted.put(each, one);
+                } else if (bearing.addAll(positionsOf(each))) {
+                    again = true;
+                    break;
+                }
+            }
+            if (again) {
+                continue;
+            }
+            if (!aValueMeets(stated, whole.from(), bearing, read)) {
+                return Optional.empty();
+            }
+            List<OnTheWay> met = new ArrayList<>(stated);
+            for (OnTheWay each : whole.unsplit()) {
+                ChoiceRead one = parted.get(each);
+                if (one == null || one.whole()) {
+                    continue;
+                }
+                List<OnTheWay> with = new ArrayList<>(met);
+                with.addAll(one.toMeet());
+                if (aValueMeets(with, whole.from(), bearing, read)) {
+                    met = with;
+                } else {
+                    keptWhole.add(each);
+                    bearing.addAll(positionsOf(each));
+                    again = true;
+                    break;
+                }
+            }
+        }
+        if (parted.values().stream().allMatch(ChoiceRead::whole)) {
+            return Optional.empty();
+        }
+        List<OnTheWay> rest = new ArrayList<>();
+        for (OnTheWay each : entries) {
+            ChoiceRead one = parted.get(each);
+            if (one == null) {
+                rest.add(each);
+            } else {
+                one.standingFor().ifPresent(rest::add);
+            }
+        }
+        return Optional.of(whole.from().readAs(rest));
+    }
+
+    /**
+     * Whether some value is shown to meet what {@code onTheWay} asks of the positions not in
+     * {@code bearing}, beside the declarations, along one of the ways it comes to
+     * ({@link #metBySomeValue}).
+     */
+    private static boolean aValueMeets(List<OnTheWay> onTheWay, Reachability.ReadFrom from,
+                                       Set<TermPath> bearing, InputReading read) {
+        if (!(from.readAs(onTheWay) instanceof Reachability.Reaching meeting)) {
+            return false;
+        }
+        List<Reachability.Reaching> open = switch (meeting.ways()) {
+            case Reachability.Ways.One _ -> List.of(meeting);
+            case Reachability.Ways.Each each -> each.along();
+            case Reachability.Ways.Whole each -> each.along();
+        };
+        // A way some of whose choices the figure left unchosen asks less than a row along it
+        // meets, so only one every choice on which was chosen shows anything.
+        return open.stream().anyMatch(each -> each.ways() instanceof Reachability.Ways.One
+                && metBySomeValue(each, bearing, read));
+    }
+
+    /**
+     * The positions this relation reads: those of its places, and those a walk handing a side its
+     * value walks or starts from — or null where some side is read off places this cannot name,
+     * as what an operation answered of something unnamed is.
+     */
+    private Set<TermPath> positionsRead() {
+        Set<TermPath> out = new LinkedHashSet<>();
+        places().forEach(place -> out.add(place.path()));
+        for (Side each : sides) {
+            if (each.number() != null) {
+                out.addAll(each.number().placesReadOff());
+            }
+            switch (each.along()) {
+                case null -> {
+                    if (each.madeOf().isEmpty() && each.number() == null) {
+                        return null;
+                    }
+                }
+                case Quantity.KeptSoFar kept -> {
+                    out.add(kept.container());
+                    out.addAll(kept.ofEach().placesReadOff());
+                    if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
+                        out.addAll(from.placesReadOff());
+                    }
+                }
+                case Quantity.PositionInTheWalk position -> out.add(position.container());
+                case Quantity.HowManyMeet counted -> {
+                    Optional<List<TermPath>> reads =
+                            PositionsAStatementReads.of(counted.ofTheElement());
+                    if (reads.isEmpty()
+                            || !(counted.container() instanceof DecisionSubject.AnInput(
+                                    TermPath container))) {
+                        return null;
+                    }
+                    out.add(container);
+                    out.addAll(reads.get());
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Adds to {@code into} what each condition {@code entry} asks of, one by one inside the
+     *  alternatives of a choice, which are parted where they stand ({@link ChoiceRead}). */
+    private static void askedOneByOne(OnTheWay entry, List<Set<TermPath>> into) {
+        if (entry instanceof OnTheWay.OneOf several) {
+            several.alternatives().forEach(alternative ->
+                    alternative.forEach(one -> askedOneByOne(one, into)));
+        } else {
+            into.add(positionsOf(entry));
+        }
+    }
+
+    /** The positions {@code entry} asks of, inside its alternatives and its statements as
+     *  well. */
+    private static Set<TermPath> positionsOf(OnTheWay entry) {
+        Set<TermPath> out = new LinkedHashSet<>(WayToTheBorder.positionsOf(entry));
+        if (entry.ofSeveralWays()) {
+            entry.alternatives().forEach(alternative ->
+                    alternative.forEach(one -> out.addAll(positionsOf(one))));
+        }
+        if (entry instanceof OnTheWay.Counted counted) {
+            counted.parts().forEach(one -> out.addAll(positionsOf(one)));
+        }
+        return out;
+    }
+
+    /**
+     * A choice on a way, read for a relation: what each alternative of it asks that bears on the
+     * relation, and what it asks apart from that.
+     *
+     * <p>Three things, by what is apart. Nothing: it is read as it is. Some alternative asks
+     * nothing bearing on it: where what that one asks apart is met, every value the relation's
+     * places take beside the rest of the way is one some row past the choice holds them at, and
+     * the choice comes to nothing for the relation. Otherwise: where what every alternative asks
+     * apart is met by one value, a row past the choice holds the relation's places at the values
+     * some alternative's part bearing on it leaves, and every such value with that one value
+     * beside it is a row past the choice — so it comes to the parts bearing on it, which is how
+     * {@code !(age >= 70 && ancestor && !apart)} comes to the age alone.
+     *
+     * @param bearing what each alternative asks that bears on the relation, in their order
+     * @param apart   what each asks apart from that
+     */
+    private record ChoiceRead(OnTheWay choice, List<List<OnTheWay>> bearing,
+                              List<List<OnTheWay>> apart) {
+
+        /**
+         * {@code choice} parted by {@code positions}, those bearing on the relation — or null
+         * where it is not read so: a count, whose ways are its statements' and no alternatives,
+         * or a choice of cases some of which bear and some not.
+         */
+        static ChoiceRead of(OnTheWay choice, Set<TermPath> positions, InputReading read) {
+            if (!choice.ofSeveralWays()) {
+                return null;
+            }
+            List<List<OnTheWay>> bearing = new ArrayList<>();
+            List<List<OnTheWay>> apart = new ArrayList<>();
+            for (List<OnTheWay> alternative : choice.alternatives()) {
+                List<OnTheWay> on = new ArrayList<>();
+                List<OnTheWay> off = new ArrayList<>();
+                for (OnTheWay each : alternative) {
+                    // A choice inside an alternative is parted as one on the way is, and what it
+                    // comes to for the relation is part of what the alternative does.
+                    ChoiceRead inside = each instanceof OnTheWay.OneOf
+                            ? of(each, positions, read) : null;
+                    if (inside != null) {
+                        inside.standingFor().ifPresent(on::add);
+                        off.addAll(inside.toMeet());
+                    } else {
+                        (bearsOn(positionsOf(each), positions, read) ? on : off).add(each);
+                    }
+                }
+                bearing.add(on);
+                apart.add(off);
+            }
+            ChoiceRead out = new ChoiceRead(choice, bearing, apart);
+            return out.whole() || out.leftOut() || choice instanceof OnTheWay.OneOf ? out : null;
+        }
+
+        /** Whether nothing it asks is apart from the relation. */
+        boolean whole() {
+            return apart.stream().allMatch(List::isEmpty);
+        }
+
+        /** Whether some alternative asks nothing bearing on the relation. */
+        boolean leftOut() {
+            return bearing.stream().anyMatch(List::isEmpty);
+        }
+
+        /**
+         * What a value is to meet for this to come to {@link #standingFor}: one of the
+         * alternatives asking nothing bearing on the relation, where some does, and what every
+         * alternative asks apart otherwise.
+         */
+        List<OnTheWay> toMeet() {
+            if (!leftOut()) {
+                return apart.stream().flatMap(List::stream).toList();
+            }
+            List<List<OnTheWay>> free = new ArrayList<>();
+            for (int each = 0; each < bearing.size(); each++) {
+                if (bearing.get(each).isEmpty()) {
+                    free.add(apart.get(each));
+                }
+            }
+            if (free.size() == 1) {
+                return free.getFirst();
+            }
+            if (free.size() == bearing.size()) {
+                return List.of(choice);
+            }
+            OnTheWay.OneOf several = (OnTheWay.OneOf) choice;
+            return List.of(new OnTheWay.OneOf(several.condition(), several.anchor(), free,
+                    Optional.empty()));
+        }
+
+        /** What the choice comes to for the relation, where what {@link #toMeet} asks is met:
+         *  nothing where some alternative asks nothing bearing on it, and the parts bearing on it
+         *  otherwise. */
+        Optional<OnTheWay> standingFor() {
+            if (whole()) {
+                return Optional.of(choice);
+            }
+            if (leftOut()) {
+                return Optional.empty();
+            }
+            OnTheWay.OneOf several = (OnTheWay.OneOf) choice;
+            return Optional.of(new OnTheWay.OneOf(several.condition(), several.anchor(), bearing,
+                    Optional.empty()));
+        }
+    }
+
+    /**
+     * Widens {@code bearing}, the positions the relation reads, to every position bearing on them:
+     * those of each of {@code stated} — what a condition on the way, or one alternative of a
+     * choice, asks of — that asks of one bearing on them, until none is left that does.
+     *
+     * <p>A condition asking of a position the relation reads and of another holds the two
+     * together, and so does an alternative asking of both, since which values the one takes then
+     * turns on which way the other went. So such a position is one the relation reads through the
+     * condition, and a condition asking of it bears on the relation in turn: {@code x} read, and
+     * {@code y} tied to it, and {@code z} to {@code y}, bear on it alike.
+     */
+    private static void bearingOnTheRelation(Set<TermPath> bearing, List<Set<TermPath>> stated,
+                                             InputReading read) {
+        boolean[] taken = new boolean[stated.size()];
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (int each = 0; each < stated.size(); each++) {
+                if (!taken[each] && bearsOn(stated.get(each), bearing, read)) {
+                    bearing.addAll(stated.get(each));
+                    taken[each] = true;
+                    grew = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether one of {@code positions} is one of {@code bearing}, inside or around one, or tied to
+     * one by a rule of the declarations ({@link #tiedByTheDeclarations}). No declaration relates
+     * one parameter to another, so only places under one are tied.
+     */
+    private static boolean bearsOn(Set<TermPath> positions, Set<TermPath> bearing,
+                                   InputReading read) {
+        for (TermPath each : positions) {
+            for (TermPath that : bearing) {
+                if (overlap(each, that) || (each.head().equals(that.head())
+                        && !Collections.disjoint(tiedByTheDeclarations(each, read),
+                                tiedByTheDeclarations(that, read)))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether some value is shown to meet what {@code way} asks of the positions not bearing on
+     * the relation, beside the declarations: one way some row may take, open and nothing on it
+     * declined.
+     *
+     * <p>The numbers those positions are asked of are given values one at a time, each one
+     * whole number where the region puts it once the ones before stand where they were put
+     * ({@link #oneValueEach}), and every statement of them is then worked out at those values. That
+     * is the proof: the values are a row's, whatever the region took in or rounded, where the
+     * declarations leave each its values between its ends and no rule of a value around it names
+     * it, which may hold it beside another. A truth asked of a {@code Bool} no rule around it
+     * names is met by one of its values, and a case asked of a position no rule around it names by
+     * a value of the case, where one is shown to exist ({@link #aValueIsShownToExist}). Anything
+     * else asked of those positions shows nothing.
+     */
+    private static boolean metBySomeValue(Reachability.Reaching way, Set<TermPath> bearing,
+                                          InputReading read) {
+        if (!way.declined().isEmpty()) {
+            return false;
+        }
+        List<TakenConstraint.Affine> numbers = new ArrayList<>();
+        for (OnTheWay.TakenIn taken : way.boundedOnTheWay()) {
+            if (bearsOn(taken.demand().positions(), bearing, read)) {
+                continue;
+            }
+            switch (taken.demand()) {
+                case RowDemand.Relational(TakenConstraint.Affine affine) -> numbers.add(affine);
+                case RowDemand.Relational _ -> {
+                    return false;
+                }
+                case RowDemand.ATruth truth -> {
+                    for (TermPath at : truth.positions()) {
+                        if (namedByTheDeclarations(at, read) != Named.NOT) {
+                            return false;
+                        }
+                    }
+                }
+                case RowDemand.Exists _, RowDemand.ForAll _, RowDemand.OneValueAtBoth _,
+                     RowDemand.SoMany _, RowDemand.ForTheRun _ -> {
+                    return false;
+                }
+            }
+        }
+        Requirements required = way.requirements();
+        for (NameReach.Crossing each : required.crossings()) {
+            if (!bearsOn(Set.of(each.at(), each.to()), bearing, read)) {
+                return false;
+            }
+        }
+        for (Map.Entry<TermPath, CasesLeft> each : required.refinements().entrySet()) {
+            TermPath at = each.getKey();
+            if (bearsOn(Set.of(at), bearing, read)) {
+                continue;
+            }
+            if (namedByTheDeclarations(at, read) != Named.NOT
+                    || each.getValue().atoms().stream().noneMatch(atom ->
+                            atom instanceof Refinement.SumCase sum
+                                    && aValueIsShownToExist(Type.ref(sum.leaf()), read))) {
+                return false;
+            }
+        }
+        Map<NumericTerm, ExactRatio> values = oneValueEach(numbers, way.region(), read);
+        return values != null && numbers.stream().allMatch(each -> holdsAt(each, values));
+    }
+
+    /** Whether {@code statement} holds with each number it is of at {@code values} — false where
+     *  one is not there, or the arithmetic cannot say. */
+    static boolean holdsAt(TakenConstraint.Affine statement, Map<NumericTerm, ExactRatio> values) {
+        ExactRatio at = statement.form().constant();
+        for (Map.Entry<NumericTerm, ExactRatio> term : statement.form().coefs().entrySet()) {
+            ExactRatio value = values.get(term.getKey());
+            if (value == null || !(term.getValue().times(value)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weighed))
+                    || !(at.plus(weighed) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))) {
+                return false;
+            }
+            at = sum;
+        }
+        return statement.rel().holds(at.signum());
+    }
+
+    /**
+     * A whole number for each number {@code statements} are of, each one where {@code region}
+     * puts it once the ones before it stand at theirs, and between the ends the declarations
+     * leave it — or null where one is not the value at a position, has no such ends, or is put
+     * nowhere a whole number is.
+     *
+     * <p>Not a proof of anything on its own: the region may put a number wider than the
+     * statements leave it, so the values are worked out against them after.
+     */
+    private static Map<NumericTerm, ExactRatio> oneValueEach(
+            List<TakenConstraint.Affine> statements, SearchRegion region, InputReading read) {
+        Set<NumericTerm> terms = new LinkedHashSet<>();
+        statements.forEach(each -> terms.addAll(each.form().coefs().keySet()));
+        Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+        SearchRegion given = region;
+        for (NumericTerm term : terms) {
+            Source source = term instanceof NumericTerm.ValueOf value ? sourceOf(value, read)
+                    : null;
+            if (source == null || source.named()) {
+                return null;
+            }
+            NumericDomain.Bounds declared = switch (source.takes()) {
+                case Takes.Every _ -> NumericDomain.Bounds.OPEN;
+                case Takes.Some some -> source.onlyItsEnds() ? some.ends() == null
+                        ? NumericDomain.Bounds.OPEN : some.ends() : null;
+            };
+            if (declared == null || !(given.projectionOf(term)
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds put))) {
+                return null;
+            }
+            BigInteger whole = aWholeNumberIn(put.meet(declared));
+            if (whole == null) {
+                return null;
+            }
+            out.put(term, ExactRatio.of(whole));
+            given = given.given(term, Count.of(new BigDecimal(whole)));
+        }
+        return out;
+    }
+
+    /** The least whole number {@code run} holds, the greatest where it runs down without end, or
+     *  nought where it has no end — or null where it holds none. */
+    private static BigInteger aWholeNumberIn(NumericDomain.Bounds run) {
+        BigInteger out;
+        if (run.min() != null) {
+            if (!(run.min().at() instanceof Count least)
+                    || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger up))) {
+                return null;
+            }
+            out = !run.min().inclusive() && ExactRatio.of(up).equals(least.exactly())
+                    ? up.add(BigInteger.ONE) : up;
+        } else if (run.max() != null) {
+            if (!(run.max().at() instanceof Count most)
+                    || !(most.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger down))) {
+                return null;
+            }
+            out = !run.max().inclusive() && ExactRatio.of(down).equals(most.exactly())
+                    ? down.subtract(BigInteger.ONE) : down;
+        } else {
+            out = BigInteger.ZERO;
+        }
+        return run.admits(ExactRatio.of(out)) ? out : null;
     }
 
     /**

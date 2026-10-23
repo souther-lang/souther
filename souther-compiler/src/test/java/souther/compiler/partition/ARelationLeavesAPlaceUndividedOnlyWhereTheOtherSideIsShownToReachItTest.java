@@ -1676,6 +1676,152 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         body.replace("y <= 25", "y <= 10"), "4:112"));
     }
 
+    /** Five choices of two ways each on values no relation below reads: thirty-two ways
+     *  together, more than a way is looked along each of. */
+    private static final String FIVE_APART = "(b1 || c1) && (b2 || c2) && (b3 || c3)"
+            + " && (b4 || c4) && (b5 || c5)";
+
+    private static final String THE_FIVE = ", b1: Bool, c1: Bool, b2: Bool, c2: Bool,"
+            + " b3: Bool, c3: Bool, b4: Bool, c4: Bool, b5: Bool, c5: Bool";
+
+    /**
+     * The words the comparison {@code comparison} leaves each place with, under {@code guard} —
+     * and, where {@code beside} is true, under the five choices apart as well.
+     */
+    private static Map<String, String> leftPast(String inputs, String declarations, String guard,
+                                                String comparison, boolean beside) {
+        String taking = beside ? inputs + THE_FIVE : inputs;
+        String body = "if " + (beside ? FIVE_APART + " && " : "") + guard + " then " + comparison
+                + " else false";
+        int at = ("let m (" + taking.replaceAll(": [A-Za-z<>]+", "") + ") = ").length()
+                + body.indexOf(comparison) + comparison.indexOf("==") + 1;
+        return left(taking, declarations, body, "4:" + at);
+    }
+
+    /**
+     * A way past more choices than are looked along is read, for a relation, as what the choices
+     * leave the values it reads: ways that differ only in values it does not read are one way to
+     * it. With five choices on {@code Bool}s beside it, {@code x == y} leaves each where it does
+     * without them — and so it does with a choice one of whose ways asks for an {@code Int} no
+     * value is, where the other is met.
+     */
+    @Test
+    void aWayPastTheFigureIsReadAsWhatItLeavesTheValuesTheRelationReads() {
+        Map<String, String> free = Map.of("x", RELATES, "y", RELATES);
+        assertEquals(free, leftPast("x: Int, y: Int", "data Unused = Int", "true", "x == y",
+                true));
+        assertEquals(free, leftPast("x: Int, y: Int, z: Int, w: Bool", "data Unused = Int",
+                "(z > 0 && z < 1 || w)", "x == y", true));
+    }
+
+    /**
+     * A way open is not a way some value takes. Where the only way of a choice asking nothing of
+     * what the relation reads asks for an {@code Int} above nought and below one, no row takes
+     * it, so a row past the choice holds {@code x} at five or more and {@code y} below five never
+     * stands beside one: the choice is kept as it is, and read as it is without the five beside
+     * it.
+     */
+    @Test
+    void aChoiceWhoseWayApartNoValueIsShownToMeetIsKeptAsItIs() {
+        for (String apart : List.of("z > 0 && z < 1",
+                "z >= 0 && z <= 1 && z /= 0 && z /= 1")) {
+            String guard = "(" + apart + " || x >= 5)";
+            Map<String, String> alone = leftPast("x: Int, y: Int, z: Int, v: Int",
+                    "data Unused = Int", guard, "x == y", false);
+            assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone, apart);
+            assertEquals(alone, leftPast("x: Int, y: Int, z: Int, v: Int", "data Unused = Int",
+                    guard, "x == y", true), apart);
+        }
+    }
+
+    /**
+     * A choice on a place the declarations tie to one the relation reads bears on the relation,
+     * and so does one on a place tied to it through another the way relates both to: the choice
+     * on {@code z} is read as it is, past the five as without them.
+     */
+    @Test
+    void aChoiceOnAPlaceTiedToTheRelationsIsReadAsItIs() {
+        String tied = "data P = { x: Int, z: Int } invariant x <= z";
+        for (String onZ : List.of("(p.z <= 3 || p.z >= 10)", "p.z <= 3")) {
+            Map<String, String> byTheRule = leftPast("p: P, y: Int", tied, onZ, "p.x == y",
+                    false);
+            assertEquals(Map.of("p.x", RELATES, "y", NOT_SHOWN), byTheRule, onZ);
+            assertEquals(byTheRule, leftPast("p: P, y: Int", tied, onZ, "p.x == y", true), onZ);
+        }
+
+        String through = "w <= z && x <= w && (z <= 3 || z >= 10)";
+        Map<String, String> onTheWay = leftPast("x: Int, y: Int, w: Int, z: Int",
+                "data Unused = Int", through, "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), onTheWay);
+        assertEquals(onTheWay, leftPast("x: Int, y: Int, w: Int, z: Int", "data Unused = Int",
+                through, "x == y", true));
+    }
+
+    /**
+     * A choice naming what the relation reads and what it does not comes to the first, where a
+     * value is shown to meet the second: past {@code !(x >= 70 && a && !d)}, {@code a} false
+     * lets every {@code x} through, so {@code y} reaches every value as {@code x} does. Where no
+     * value is — a number held at nought or above is never below it — the choice still keeps
+     * {@code x} below seventy, and {@code y} from seventy on stands beside no {@code x}. And
+     * where every way of it names both, it comes to the parts naming {@code x}, each a way of
+     * its own: {@code x} from seventy or up to ten, and no {@code x} between for {@code y}.
+     */
+    @Test
+    void aChoiceNamingBothComesToWhatItLeavesTheRelationOnlyWhereTheRestIsMet() {
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
+                leftPast("x: Int, y: Int, a: Bool, d: Bool", "data Unused = Int",
+                        "Bool.not(x >= 70 && a && Bool.not(d))", "x == y", true));
+        String eachNamesBoth = "(x >= 70 && a || x <= 10 && d)";
+        Map<String, String> alone = leftPast("x: Int, y: Int, a: Bool, d: Bool",
+                "data Unused = Int", eachNamesBoth, "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, a: Bool, d: Bool", "data Unused = Int",
+                eachNamesBoth, "x == y", true));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
+                leftPast("x: Int, y: Int, z: N", "data N = Int invariant value >= 0",
+                        "Bool.not(x >= 70 && z.value >= 0)", "x == y", true));
+    }
+
+    /**
+     * A condition nothing was read of may hold anything beside anything, so a way with one on it
+     * is not read as less than it is: the relation is shown nothing of past the five, as it is
+     * without them.
+     */
+    @Test
+    void aWayWithAConditionNothingWasReadOfIsNotReadAsLess() {
+        String guard = "(String.startsWith(\"a\", s) || w)";
+        Map<String, String> alone = leftPast("x: Int, y: Int, s: String, w: Bool",
+                "data Unused = Int", guard, "x == y", false);
+        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, s: String, w: Bool", "data Unused = Int",
+                guard, "x == y", true));
+    }
+
+    /**
+     * Ways that leave the relation's values apart are each still a way to it: past the five, the
+     * choices on {@code x} and {@code y} are proved along every way of taking them together, as
+     * {@link #choicesOnPlacesApartAreProvedAlongEveryWayOfTakingThemTogether} has them without.
+     * And ways more than are looked along that each leave the relation's values something of
+     * their own are shown nothing of, as before.
+     */
+    @Test
+    void waysLeavingTheRelationsValuesApartAreStillApart() {
+        String guard = "(x >= 0 && x <= 10 || x >= 20 && x <= 30)"
+                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 25)";
+        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                leftPast("x: Int, y: Int", "data Unused = Int", guard, "x == y", true));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
+                leftPast("x: Int, y: Int", "data Unused = Int", guard.replace("y <= 25", "y <= 10"),
+                        "x == y", true));
+
+        String eachItsOwn = "(x1 >= 0 || x1 <= -5) && (x2 >= 0 || x2 <= -5)"
+                + " && (x3 >= 0 || x3 <= -5) && (x4 >= 0 || x4 <= -5) && (x5 >= 0 || x5 <= -5)";
+        Map<String, String> summed = leftPast("x1: Int, x2: Int, x3: Int, x4: Int, x5: Int, y: Int",
+                "data Unused = Int", eachItsOwn, "x1 + x2 + x3 + x4 + x5 == y", true);
+        assertEquals(Map.of("x1", NOT_SHOWN, "x2", NOT_SHOWN, "x3", NOT_SHOWN, "x4", NOT_SHOWN,
+                "x5", NOT_SHOWN, "y", NOT_SHOWN), summed);
+    }
+
     /**
      * A run whose end the rules put at a third is handed over from a hair below it, which no
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
