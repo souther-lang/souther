@@ -317,7 +317,8 @@ final class FormReach<A> {
     private int unboundedIn(Map<A, ExactRatio> coefs) {
         int unbounded = 0;
         for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
-            if (runsWithoutEnd(rangeOf(each.getKey()), each.getValue().signum())) {
+            int sign = each.getValue().signum();
+            if (sign != 0 && ends.endWeighedBy(each.getKey(), sign, true) == null) {
                 unbounded++;
             }
         }
@@ -395,7 +396,7 @@ final class FormReach<A> {
             }
             negated.put(each.getKey(), weight);
         }
-        ExactCut room = Reach.mostOf(negated, half.bound().at(), this::rangeOf);
+        ExactCut room = Reach.mostOf(negated, half.bound().at(), ends::endWeighedBy);
         return room != null && room.at().signum() > 0 ? Room.ABOVE_NOUGHT : Room.NOT_SETTLED;
     }
 
@@ -662,7 +663,7 @@ final class FormReach<A> {
     /** What the ends leave the form, each position read at its own end. The highest alone, which
      *  is every route's question here. */
     private ExactCut fromTheRanges(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return Reach.mostOf(coefs, constant, this::rangeOf);
+        return Reach.mostOf(coefs, constant, ends::endWeighedBy);
     }
 
     private Reach rangeOf(A position) {

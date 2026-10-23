@@ -42,30 +42,46 @@ public record Reach(ExactCut least, ExactCut most) {
      */
     public static <A> Reach of(Map<A, ExactRatio> coefs, ExactRatio constant,
                                Function<A, Reach> positions) {
-        return new Reach(endOf(coefs, constant, positions, false),
-                endOf(coefs, constant, positions, true));
+        Ends<A> ends = endsOf(positions);
+        return new Reach(endOf(coefs, constant, ends, false), endOf(coefs, constant, ends, true));
     }
 
     /**
      * The upper end of {@link #of}, for a reader that asks for no other: the sums of the lower end
      * are not taken, and nothing is summed past a position with no end that way.
+     *
+     * @param ends the end of each position its weight reads, which is all of it this end asks
      */
     public static <A> ExactCut mostOf(Map<A, ExactRatio> coefs, ExactRatio constant,
-                                      Function<A, Reach> positions) {
-        return endOf(coefs, constant, positions, true);
+                                      Ends<A> ends) {
+        return endOf(coefs, constant, ends, true);
+    }
+
+    /**
+     * The end of a position a sum reads where the position is weighed by a weight of sign
+     * {@code sign}, for the sum's upper end or its lower one, as {@link #endWeighedBy} reads it; null
+     * where the position has no end that way.
+     */
+    @FunctionalInterface
+    public interface Ends<A> {
+
+        ExactCut weighedBy(A position, int sign, boolean upper);
+    }
+
+    private static <A> Ends<A> endsOf(Function<A, Reach> positions) {
+        return (position, sign, upper) -> {
+            Reach runs = positions.apply(position);
+            return (runs == null ? ANYWHERE : runs).endWeighedBy(sign, upper);
+        };
     }
 
     private static <A> ExactCut endOf(Map<A, ExactRatio> coefs, ExactRatio constant,
-                                      Function<A, Reach> positions, boolean upper) {
+                                      Ends<A> ends, boolean upper) {
         ExactRatio sum = constant;
         boolean reached = true;
         for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
             ExactRatio weight = each.getValue();
-            Reach runs = positions.apply(each.getKey());
-            if (runs == null) {
-                runs = ANYWHERE;
-            }
-            ExactCut end = runs.endWeighedBy(weight.signum(), upper);
+            ExactCut end = ends.weighedBy(each.getKey(), weight.signum(), upper);
             if (end == null) {
                 return null;
             }
@@ -90,7 +106,13 @@ public record Reach(ExactCut least, ExactCut most) {
      * the lower, as a pull down does.
      */
     public ExactCut endWeighedBy(int sign, boolean upper) {
-        return (sign > 0) == upper ? most : least;
+        return readsTheMost(sign, upper) ? most : least;
+    }
+
+    /** Whether the end {@link #endWeighedBy} reads for {@code sign} and {@code upper} is the
+     *  greatest, and not the least. */
+    public static boolean readsTheMost(int sign, boolean upper) {
+        return (sign > 0) == upper;
     }
 
     /** Whether either end was found. */

@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -100,6 +101,58 @@ class WhatAWeightedSumRunsBetweenIsAskedInOnePlaceTest {
     void aPositionNothingIsKnownAboutRunsTheWholeWay() {
         assertTrue(reachOf(weighing("a", 1), Map.of()).saysNothing());
         assertTrue(Reach.ANYWHERE.saysNothing());
+    }
+
+    /**
+     * The upper end read off the one end of each position its weight reads is the upper end of what
+     * the sum runs between, read off both ends of each: whatever the signs of the weights, a weight
+     * of nought, a position bounded on one side or on none, an end not reached, and a sum too far
+     * apart in scale for the exact arithmetic to hold. And the end a box hands for a weight is the
+     * one the position's range hands for it.
+     */
+    @Test
+    void theOneEndAWeightReadsIsTheEndOfTheRangeItReadsItFrom() {
+        ExactRatio far = ExactRatio.of(Long.MAX_VALUE);
+        Map<String, ExactCut> least = new LinkedHashMap<>();
+        Map<String, ExactCut> most = new LinkedHashMap<>();
+        least.put("shut", ExactCut.inclusive(num(-3)));
+        most.put("shut", ExactCut.inclusive(num(7)));
+        least.put("open", ExactCut.exclusive(num(1)));
+        most.put("open", ExactCut.exclusive(num(4)));
+        least.put("below", ExactCut.inclusive(num(2)));
+        most.put("above", ExactCut.exclusive(num(9)));
+        least.put("far", ExactCut.inclusive(far.negated()));
+        most.put("far", ExactCut.inclusive(far));
+        Box<String> box = new Box<>(least, most);
+        List<String> atoms = List.of("shut", "open", "below", "above", "far", "nowhere");
+        List<ExactRatio> weights = List.of(num(-2), num(-1), ExactRatio.ZERO, num(1), num(3), far);
+        int checked = 0;
+        for (String one : atoms) {
+            for (String other : atoms) {
+                for (ExactRatio first : weights) {
+                    for (ExactRatio second : weights) {
+                        // Two positions, or one weighed once where the two are the same.
+                        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+                        coefs.put(one, first);
+                        coefs.putIfAbsent(other, second);
+                        assertEquals(Reach.of(coefs, num(5), atom -> Reach.between(
+                                        box.leastOf(atom), box.mostOf(atom))).most(),
+                                Reach.mostOf(coefs, num(5), box::endWeighedBy),
+                                () -> "the upper end of " + coefs);
+                        checked++;
+                    }
+                }
+            }
+            for (ExactRatio weight : weights) {
+                for (boolean upper : new boolean[] {false, true}) {
+                    assertEquals(Reach.between(box.leastOf(one), box.mostOf(one))
+                                    .endWeighedBy(weight.signum(), upper),
+                            box.endWeighedBy(one, weight.signum(), upper),
+                            () -> "the end of " + one + " for " + weight);
+                }
+            }
+        }
+        assertTrue(checked > 0, "something was checked");
     }
 
     @Test

@@ -59,7 +59,7 @@ final class BindingEnvironment {
     private final Map<BindingId, TermPath> roots;
     /** What one application of a closure handed a parameter: one of the values written out, which
      *  names nothing, so it is read the same wherever it is read. */
-    private final Map<BindingId, Core> handed;
+    private final Handed handed;
     private final Map<BindingId, Core> table;
     private final Layer newest;
     private final ElementBindings elements;
@@ -116,13 +116,47 @@ final class BindingEnvironment {
         }
     }
 
+    /**
+     * What the applications on the way here handed, and the hash of all of it, which is its
+     * {@link Map#hashCode}: worked out as each value is handed, once for that value.
+     *
+     * <p>Two environments that are one application apart differ in what it handed and in nothing
+     * else, and an environment is asked for its hash where a reading is kept by it. Hashed by the
+     * names alone, every application of a closure over the values written out is one hash, and
+     * telling them apart walks the values each time two of them meet.
+     */
+    private record Handed(Map<BindingId, Core> values, int hash) {
+
+        static final Handed NONE = new Handed(Map.of(), 0);
+
+        /** This, with {@code binding} handed {@code value} in place of whatever it held. */
+        Handed with(BindingId binding, Core value) {
+            Map<BindingId, Core> wider = new LinkedHashMap<>(values);
+            Core was = wider.put(binding, value);
+            int entry = binding.hashCode() ^ value.hashCode();
+            return new Handed(Map.copyOf(wider),
+                    hash - (was == null ? 0 : binding.hashCode() ^ was.hashCode()) + entry);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Handed that && hash == that.hash
+                    && values.equals(that.values));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, ValueDefinitions values, boolean callsStand) {
-        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, values,
+        this(Map.copyOf(roots), Handed.NONE, Map.copyOf(bound), null, elements, values,
                 new HeldHash(elements, values), callsStand, Map.of(), Map.of(), Map.of());
     }
 
-    private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
+    private BindingEnvironment(Map<BindingId, TermPath> roots, Handed handed,
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
                                ValueDefinitions values, HeldHash heldHash, boolean callsStand,
                                Map<BindingId, InputReads.EntryLookedUp> selected,
@@ -201,7 +235,7 @@ final class BindingEnvironment {
         }
         // The element an application handed it, before the container it is an element of: on this
         // application the name is that one value.
-        Core given = handed.get(binding);
+        Core given = handed.values().get(binding);
         if (given != null) {
             return new BindingRole.Alias(given);
         }
@@ -222,7 +256,7 @@ final class BindingEnvironment {
      * was given nothing.
      */
     Core given(BindingId binding) {
-        return !handed.containsKey(binding)
+        return !handed.values().containsKey(binding)
                 && roleOf(binding) instanceof BindingRole.Alias(Core value) ? value : null;
     }
 
@@ -387,10 +421,8 @@ final class BindingEnvironment {
      * the values a container was written with, naming no binding of its own.
      */
     BindingEnvironment handing(BindingId binding, Core value) {
-        Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
-        wider.put(binding, value);
-        return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements, values,
-                heldHash, callsStand, selected, opened, answered);
+        return new BindingEnvironment(roots, handed.with(binding, value), table, newest, elements,
+                values, heldHash, callsStand, selected, opened, answered);
     }
 
     /**
@@ -434,16 +466,17 @@ final class BindingEnvironment {
      * is a tree, and an environment made at every name a reading follows would walk every tree
      * bound on the way at each. Two environments binding the same names to different values are
      * still told apart, by {@link #equals}. What the body holds is the hash worked out once, where
-     * it was first held ({@link #heldHash}).
+     * it was first held ({@link #heldHash}), and what was handed is hashed by the values too, each
+     * worked out once as it was handed ({@link Handed}).
      */
     @Override
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            // The names of what was handed and what was selected, as of what was bound: what each
-            // is handed or picked out by is a tree, and equality reads it where a hash would walk
-            // it for every environment made.
-            h = Objects.hash(roots, handed.keySet(), bound().keySet(), heldHash.get(), callsStand,
+            // What was handed, whose hash was worked out as each value was handed, and the names
+            // of what was selected, as of what was bound: what each of those is picked out by is
+            // a tree, and equality reads it where a hash would walk it for every environment made.
+            h = Objects.hash(roots, handed.hash(), bound().keySet(), heldHash.get(), callsStand,
                     selected.keySet(), opened.keySet(), answered.keySet());
             hash = h;
         }
@@ -452,7 +485,8 @@ final class BindingEnvironment {
 
     @Override
     public String toString() {
-        return "BindingEnvironment[roots=" + roots + ", handed=" + handed + ", bound=" + bound()
+        return "BindingEnvironment[roots=" + roots + ", handed=" + handed.values() + ", bound="
+                + bound()
                 + ", elements=" + elements + ", callsStand=" + callsStand
                 + ", selected=" + selected + ", opened=" + opened.keySet() + "]";
     }
