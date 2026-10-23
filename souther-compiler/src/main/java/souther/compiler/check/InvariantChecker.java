@@ -1149,6 +1149,18 @@ public final class InvariantChecker {
                         ? new WithoutAPart(named, world, c.answers) : null);
         ConstraintState<FactSubject> constraints = k.constraints()
                 .takingRead(answered.whole().confinement(), allowed, c.answers);
+        // Where the order of every number the rules speak of stops, off the order each was named
+        // on: a row of this value holds them inside those ends, and they go with the rules
+        // wherever the rules are carried. Every one, since an atom is named on an order or not at
+        // all — a count on the whole numbers, whatever it counts.
+        Map<FactSubject, NumericDomain.Bounds> stops = new LinkedHashMap<>();
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            Carrier order = c.terms.carrierOf(atom);
+            if (order != null) {
+                stops.put(atom, order.whereItStops());
+            }
+        }
+        constraints = constraints.heldInsideTheirOrders(stops);
         // How each atom's values are spaced, kept so that settling one afterwards states the
         // equality the same way this does. A count is a whole number of things whatever the
         // things are spaced by; a position's own value is spaced by its type.

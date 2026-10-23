@@ -1115,6 +1115,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
                     declared));
         }
+        // A side nothing above showed anything of is asked of the differences the two stand
+        // apart by, each in the run the declarations leave it.
+        if (!out.containsAll(places()) && !offItsLine) {
+            List<WhatARelationLeavesUndivided.Leaves> apart =
+                    leftByTheirDifference(sources, carriers, stating, heldWhole, read, along);
+            for (int at = 0; at < apart.size(); at++) {
+                if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
+                    continue;
+                }
+                if (apart.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
+                    out.addAll(sides.get(at).madeOf());
+                } else {
+                    leaves.set(at, apart.get(at));
+                }
+            }
+        }
         for (int at = 0; at < sides.size(); at++) {
             if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
                     && !out.containsAll(sides.get(at).madeOf())) {
@@ -2295,17 +2311,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.number() instanceof NumericTerm.ValueOf, on.spacingBetweenValues(),
                     on.whereItStops()));
         }
-        // A statement about both sides is in each side's list; it is one statement.
-        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
-        aboutEither.addAll(stating.get(1));
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
-        for (OnAWay each : aboutEither) {
-            WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
-                    : onTheDifference(each.affine().form(), each.affine().rel());
-            if (statement == null) {
-                return Set.of();
-            }
-            held.add(statement);
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(stating);
+        if (held == null) {
+            return Set.of();
         }
         // Values taken of a place stop where the operation does, short of the type, and an
         // operation is given only when that is where the representation stops.
@@ -2315,6 +2323,77 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
                 UndividedByARelation::overlap, greatestOf(on));
+    }
+
+    /**
+     * What the relation leaves each of two sides, in the order of the sides, where it and
+     * everything a way states of the two is about how far apart they are and each is the value at
+     * a position the declarations leave a run of its type
+     * ({@link WhatARelationLeavesUndivided#leavesByTheirDifference}) — each null where nothing is
+     * shown, and none where they are not two such sides.
+     *
+     * <p>What each side takes is asked of the way's region: the way's statements are the
+     * differences, which the region holds the two to together and each alone to nothing narrower
+     * than they imply, and whatever else the way states, of other places, is a row's to hold as
+     * well — so a way no row takes inside where the types stop leaves each side no run
+     * ({@link SearchRegion#wholeRunOf}).
+     */
+    private List<WhatARelationLeavesUndivided.Leaves> leftByTheirDifference(
+            List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
+            boolean heldWhole, InputReading read, SearchRegion along) {
+        if (!heldWhole || sides.size() != 2 || carriers.get(0) == null
+                || !carriers.get(0).equals(carriers.get(1))
+                || !apartByTheDeclarations(0, 1, sources, read)) {
+            return List.of();
+        }
+        Carrier on = carriers.get(0);
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            Side each = sides.get(i);
+            Source source = sources.get(i);
+            if (!(each.atOnePosition() instanceof NumericTerm.ValueOf value) || source == null) {
+                return List.of();
+            }
+            NumericDomain.Bounds realizes = asARelationReadsIt(
+                    realized(value, source, along, Way.UNTOUCHED), on);
+            NumericDomain.Bounds holds = asARelationReadsIt(along.projectionOf(value)
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                    ? within : NumericDomain.Bounds.OPEN, on);
+            if (realizes == null) {
+                return List.of();
+            }
+            terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
+                    realizes, null, true, on.spacingBetweenValues(), on.whereItStops()));
+        }
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(stating);
+        if (held == null) {
+            return List.of();
+        }
+        List<WhatARelationLeavesUndivided.Leaves> out = new ArrayList<>();
+        for (int at = 0; at < sides.size(); at++) {
+            out.add(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, at, constant,
+                    relation, held, UndividedByARelation::overlap, greatestOf(on)));
+        }
+        return out;
+    }
+
+    /** Everything {@code stating} holds of the two sides, as statements about their difference —
+     *  or null where something it holds is not. A statement about both sides is in each side's
+     *  list; it is one statement. */
+    private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
+            List<List<OnAWay>> stating) {
+        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
+        aboutEither.addAll(stating.get(1));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
+        for (OnAWay each : aboutEither) {
+            WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
+                    : onTheDifference(each.affine().form(), each.affine().rel());
+            if (statement == null) {
+                return null;
+            }
+            held.add(statement);
+        }
+        return held;
     }
 
     /**

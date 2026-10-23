@@ -11,12 +11,16 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -283,6 +287,167 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void theMiddleOfTheTypeHasToSeeBothOutcomes() {
         assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -400_000_000_000L, Rel.GT));
         assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -300_000_000_000L, Rel.GT));
+    }
+
+    /**
+     * Read of their difference, {@code a + K > b} over amounts from nought, {@code K} nine
+     * quintillion: an {@code a} past the greatest {@code Int} less {@code K} has no row computed,
+     * since {@code a + K} is past the type whatever {@code b} is. The answer says so, as a run
+     * whose line is the type's alone, and draws no line of the model on {@code a}; on {@code b}
+     * it draws the model's line at {@code K}, below which every {@code a} holds it.
+     */
+    @Test
+    void aValueNoRowIsComputedAtIsARunOfTheTypeAloneInTheReadingOfADifference() {
+        long k = 9_000_000_000_000_000_000L;
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, amounts, amounts, null, true),
+                term("b", -1, amounts, amounts, null, true));
+
+        WhatARelationLeavesUndivided.Leaves.Settled a =
+                (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
+                        .leavesByTheirDifference(terms, 0, ExactRatio.of(k), Rel.GT, List.of(),
+                                String::equals, GREATEST_INT);
+        assertEquals(List.of(), a.linesOfTheModel());
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                ExactRatio.of(Long.MAX_VALUE - k + 1))), a.ofTheTypeAlone());
+
+        WhatARelationLeavesUndivided.Leaves.Settled b =
+                (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
+                        .leavesByTheirDifference(terms, 1, ExactRatio.of(k), Rel.GT, List.of(),
+                                String::equals, GREATEST_INT);
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.LE, ExactRatio.of(k - 1))),
+                b.linesOfTheModel());
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                ExactRatio.of(BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)))),
+                b.ofTheTypeAlone());
+    }
+
+    /**
+     * The same where {@code a} is what an operation answers and not the value at a place: every
+     * row that answers it past the greatest {@code Int} less {@code K} stands there, so those
+     * values are no end the type passes over, and nothing is shown.
+     */
+    @Test
+    void aValueNoRowIsComputedAtIsNoRunOfTheTypeWhereItIsNoPlace() {
+        long k = 9_000_000_000_000_000_000L;
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, amounts, amounts, null, false),
+                term("b", -1, amounts, amounts, null, true));
+
+        assertNull(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
+                ExactRatio.of(k), Rel.GT, List.of(), String::equals, GREATEST_INT));
+    }
+
+    /**
+     * Read of their difference, {@code t > w} where every row holds {@code t >= w}, both from
+     * nought: a {@code w} at the greatest {@code Int} has no {@code t} above it, which is where
+     * the type stops and no line of the model's. The answer keeps it as the type's line, and
+     * draws none of the model's on {@code w}.
+     */
+    @Test
+    void aValueOnlyTheOrdersEndKeepsFromAnOutcomeIsARunOfTheTypeAlone() {
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("t", 1, amounts, amounts, null, true),
+                term("w", -1, amounts, amounts, null, true));
+        WhatARelationLeavesUndivided.Leaves.Settled w =
+                (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
+                        .leavesByTheirDifference(terms, 1, ExactRatio.ZERO, Rel.GT,
+                                List.of(new WhatARelationLeavesUndivided.OnTheDifference(
+                                        ExactRatio.ONE, ExactRatio.ZERO, Rel.GE)),
+                                String::equals, GREATEST_INT);
+
+        assertEquals(List.of(), w.linesOfTheModel());
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                ExactRatio.of(Long.MAX_VALUE))), w.ofTheTypeAlone());
+    }
+
+    /**
+     * Read of their difference, {@code w > t} where every row holds {@code w >= t}, {@code w}
+     * from nought to ten and {@code t} from nought: a {@code t} past ten has no {@code w} at all,
+     * so no row reaches it on either side, and nothing is shown of {@code t}. Held to ten as well,
+     * {@code t} is parted at ten, which no {@code w} is above.
+     */
+    @Test
+    void aValueNoRowOfEitherSideReachesIsNoValueLeftEitherWay() {
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.OnTheDifference> atLeast =
+                List.of(new WhatARelationLeavesUndivided.OnTheDifference(ExactRatio.ONE,
+                        ExactRatio.ZERO, Rel.GE));
+        for (NumericDomain.Bounds held : List.of(amounts, run(0, 10))) {
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("w", 1, run(0, 10), run(0, 10), null, true),
+                    term("t", -1, held, held, null, true));
+            WhatARelationLeavesUndivided.Leaves t = WhatARelationLeavesUndivided
+                    .leavesByTheirDifference(terms, 1, ExactRatio.ZERO, Rel.GT, atLeast,
+                            String::equals, GREATEST_INT);
+            if (held == amounts) {
+                assertNull(t);
+            } else {
+                assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                        ExactRatio.of(10))), ((WhatARelationLeavesUndivided.Leaves.Settled) t)
+                        .linesOfTheModel());
+            }
+        }
+    }
+
+    /**
+     * {@code a + c - s - 5 >= 0} over decimals, {@code c} above five and below ten: held at a
+     * value it takes — a step inside its open end, at six — {@code c} leaves {@code a} against
+     * {@code s} one apart, and {@code s} stands at every {@code a} plus one and either side of
+     * it. The end itself, which {@code c} does not take, would hold nothing.
+     */
+    @Test
+    void aDecimalHeldStillStandsInsideAnEndItsRunLeavesOut() {
+        NumericDomain.Bounds aboveFive = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(5)),
+                Endpoint.exclusive(Count.of(10)));
+        NumericDomain.Bounds fromNought =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                dense("a", 1, run(0, 10)), dense("c", 1, aboveFive), dense("s", -1, fromNought));
+
+        assertEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(),
+                WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.of(-5), Rel.GE,
+                        String::equals, (one, other) -> true, Granularity.DENSE, null));
+    }
+
+    /**
+     * {@code a + c - s >= 0} over {@code Int}s, {@code c} strictly between nought and two: held
+     * still at one, the whole number inside its ends, {@code c} leaves {@code a} against
+     * {@code s}. Where nothing says how the values of {@code c} are spaced, no value is shown
+     * between those ends — whole, it would take none strictly between nought and one — and the
+     * end it leaves out is no row to hold it at.
+     */
+    @Test
+    void aTermWhoseSpacingIsNotSaidIsHeldAtNoValue() {
+        List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
+        for (Granularity spacing : Arrays.asList(Granularity.DISCRETE, null)) {
+            long high = spacing == null ? 1 : 2;
+            NumericDomain.Bounds between = new NumericDomain.Bounds(
+                    Endpoint.exclusive(Count.of(0)), Endpoint.exclusive(Count.of(high)));
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("a", 1, run(0, 10), run(0, 10), null, true),
+                    new WhatARelationLeavesUndivided.Term<>(List.of("c"), ExactRatio.ONE, between,
+                            between, null, true, spacing, INTS),
+                    term("s", -1, INTS, INTS, null, true));
+            leaves.add(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
+                    String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT));
+        }
+        assertEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(), leaves.get(0));
+        assertNotEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(), leaves.get(1));
+    }
+
+    /** A decimal term at its place, taking every value of {@code run}, on an order with no end. */
+    private static WhatARelationLeavesUndivided.Term<String> dense(String place, long weight,
+                                                                  NumericDomain.Bounds run) {
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), run,
+                run, null, true, Granularity.DENSE, NumericDomain.Bounds.OPEN);
     }
 
     /** A type with no end, as a decimal is, leaves every difference one some value is apart by. */

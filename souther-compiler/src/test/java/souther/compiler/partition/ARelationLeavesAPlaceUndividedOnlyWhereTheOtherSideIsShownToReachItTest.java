@@ -669,7 +669,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
         // Where what the gross reaches is shown, a deduction of nought settles the comparison
         // whatever the gross is, and is a class of its own.
-        assertEquals(Map.of("value >= 0 && value /= 5", Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
+        assertEquals(Map.of("value >= 0 && value /= 5", Map.of("g", NOT_SHOWN),
                 "value >= 0 && Int.floorMod(value, 2) == 0", Map.of("g", NOT_SHOWN),
                 "value >= 0 && value * value >= 4", Map.of("g", NOT_SHOWN)), eachRule);
         for (String rule : List.of("value >= \"b\" && String.length(value) <= 1",
@@ -1357,11 +1357,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** Beside a total, two positions are each a term of the relation and not of the run. The
-     *  adjustment held at nought, the gross stands at every value the total takes. */
+     *  adjustment held at nought, the gross stands at every value the total takes; and the total
+     *  held at nought, the gross and the adjustment stand at each other's values wherever a row is
+     *  computed, which leaves out only those beside the ends of the type. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", NOT_SHOWN,
-                        "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", RELATES, "gross", RELATES),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));
     }
@@ -1768,16 +1769,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void anEndAModelHoldsIsAValueTheRelationDivides() {
         String stage = "data Stage = Prospecting | Negotiation | Won | Lost";
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
-                left("a: Stage, b: Stage", stage, "a < b", "4:18"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of(), left("a: Stage, b: Stage", stage, "a < b", "4:18"));
+        assertEquals(Map.of(),
                 left("a: Stage, b: Stage", stage, "if a <= b then a < b else false", "4:33"));
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Stage, b: Stage", stage, "a == b", "4:18"));
         assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
                 left("a: String, b: String", stage, "a < b", "4:18"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
-                left("a: Time, b: Time", stage, "a < b", "4:18"));
+        assertEquals(Map.of(), left("a: Time, b: Time", stage, "a < b", "4:18"));
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Int, b: Int", stage, "a < b", "4:18"));
     }
@@ -2836,5 +2835,235 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) == 2",
                 "Set.contains(champ, ds.value)", "5:21").get("champ"));
+    }
+
+    private static final String HOURS =
+            "data Hours = Decimal invariant value >= 0.0m && value <= 168.0m";
+
+    /**
+     * Weighed by four, hours from nought to 168 reach every standard below four times them and
+     * every one from it, and run out at 42: from there on no standard is above four times them.
+     * A standard past nought has hours below a quarter of it, which a decimal from nought has, so
+     * only the standard of nought settles the comparison. Weighed three to four, the hours run out
+     * at 126.
+     */
+    @Test
+    void aWeightOnADecimalDrawsTheLineWhereTheOtherRunsOut() {
+        String inputs = "h: Hours, s: Hours";
+        for (String body : List.of("h.value * 4.0m >= s.value",
+                "h.value * 4.0m >= s.value * 3.0m")) {
+            assertEquals(Map.of(), left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)),
+                    body);
+            assertEquals(List.of("s/0 <= x <= 0", "s/0 < x <= 168"),
+                    classesAt(inputs, HOURS, body, "s"), body);
+        }
+        assertEquals(List.of("h/0 <= x < 42", "h/42 <= x <= 168"),
+                classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
+        assertEquals(List.of("h/0 <= x < 126", "h/126 <= x <= 168"),
+                classesAt(inputs, HOURS, "h.value * 4.0m >= s.value * 3.0m", "h"));
+    }
+
+    /**
+     * Weighed by two, an amount past half the greatest {@code Int} has no row at all, its double
+     * past the type, and every amount before it has an insured amount at its double and one above:
+     * the revenue is related and the line is the arithmetic's. Beside an insured amount not shown
+     * to take every value between its ends, nothing is shown of the revenue.
+     */
+    @Test
+    void aWeightOnAWholeNumberLeavesTheValuesPastHalfTheTypeToTheArithmetic() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "r.value * 2 >= i.value";
+        assertEquals(Map.of("r", RELATES),
+                left("r: Yen, i: Yen", yen, body, atThe(">=", yen, "r: Yen, i: Yen", body)));
+        assertEquals(List.of("i/0 <= x <= 0", "i/0 < x"),
+                classesAt("r: Yen, i: Yen", yen, body, "i"));
+        String gap = yen + "\ndata Gap = Int invariant value <= 10 || value >= 20";
+        assertEquals(NOT_SHOWN, left("r: Yen, i: Gap", gap, body,
+                atThe(">=", gap, "r: Yen, i: Gap", body)).get("r"));
+    }
+
+    /**
+     * Asked where an earlier comparison of the same two left {@code w <= t}, {@code t > w} is about
+     * how far apart they are, and the earlier one keeps them nought apart or more. A tax of nought
+     * has only a withholding of nought, and fails; every other has one below it and one at it, and
+     * every withholding has a tax at it and one above. Held apart by anything but their difference
+     * the two are not read so. And along {@code w >= t} with {@code w} held to ten, the way
+     * holds {@code t} to ten as well: a tax past it takes the other way, and the one at ten has
+     * no withholding above it. The earlier comparison draws its own lines on the tax beside
+     * that: at nought, below which no withholding is, and from eleven, where every one is below.
+     */
+    @Test
+    void aComparisonUnderTheArmOfAnEarlierOneOfTheSameTwoIsReadOfTheirDifference() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "t: Yen, w: Yen";
+        String body = "if w.value > t.value then false else t.value > w.value";
+        assertEquals(Map.of("w", RELATES),
+                left(inputs, yen, body, atThe("> w.value", yen, inputs, body)));
+        assertEquals(List.of("t/0 <= x <= 0", "t/0 < x"), classesAt(inputs, yen, body, "t"));
+        String twice = "if w.value > 2 * t.value then false else t.value > w.value";
+        assertEquals(Map.of("t", NOT_SHOWN, "w", NOT_SHOWN),
+                left(inputs, yen, twice, atThe("> w.value", yen, inputs, twice)));
+        String small = yen + "\ndata Small = Int invariant value >= 0 && value <= 10";
+        String kept = "if w.value < t.value then false else w.value > t.value";
+        assertEquals(Map.of(), left("t: Yen, w: Small", small, kept,
+                atThe("> t.value", small, "t: Yen, w: Small", kept)));
+        assertEquals(List.of("t/0 <= x <= 0", "t/0 < x < 10", "t/10 <= x < 11", "t/11 <= x"),
+                classesAt("t: Yen, w: Small", small, kept, "t"));
+    }
+
+    /**
+     * Along the arm where an allowance is above its cap, the cap stands in for it on one side and
+     * the allowance on the other, so the two do not cancel: {@code a + c - s - 150000 >= 0} with
+     * {@code c} from 150001. Held there, {@code c} leaves {@code a} against {@code s} one apart,
+     * and each {@code a} has an {@code s} at one above it and two above it. Where nothing shows the
+     * allowance takes a value above its cap, nothing is shown of {@code a} along that arm.
+     */
+    @Test
+    void aTermHeldAboveItsCapAlongAnArmIsHeldWhereItStarts() {
+        String capped = """
+                module w1
+                data Yen = Int invariant value >= 0
+                %s
+                behavior m : (a: Yen, c: %s, s: Yen) -> Bool
+                let m (a, c, s) = {
+                    let capped = if c.value > 150000 then 150000 else c.value
+                    a.value + c.value >= capped + s.value
+                }
+                """;
+        String written = capped.formatted("data Unused = Int", "Yen");
+        String at = "7:" + (written.lines().toList().get(6).indexOf(">=") + 1);
+        assertEquals(Set.of(), notReadIn(written, at));
+        assertEquals(RELATES, leftIn(written, at).get("a"));
+        String unshown = capped.formatted(
+                "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
+        assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());
+    }
+
+    /**
+     * A premise nothing proves, over positions none of the sum's are related to, leaves the sum's
+     * positions the runs their ends give them: it bounds nothing of them, and some row holds it.
+     * The sum is then read as beside a premise that is proved.
+     */
+    @Test
+    void aPremiseNothingProvesOverOtherPositionsLeavesASumItsRun() {
+        String declared = HOURS + "\ndata Yen = Int invariant value >= 0"
+                + "\ndata Rem = { base: Yen, sched: Yen }";
+        String inputs = "h: Hours, s: Hours, r: Rem";
+        for (String premise : List.of("h.value * 4.0m >= s.value * 3.0m", "h.value >= 30.0m")) {
+            String body = "if " + premise + " then false"
+                    + " else r.base.value + r.sched.value < 88000";
+            assertEquals(Map.of(), left(inputs, declared, body,
+                    atThe("< 88000", declared, inputs, body)), premise);
+        }
+    }
+
+    /**
+     * A way only values past the greatest {@code Int} take leaves no row to the comparison behind
+     * it, so the amounts there are not shown to reach each other: {@code a - b >= M} beside
+     * {@code b >= 1}, which the box and its differences prove, and {@code a - 2b >= M - 1} beside
+     * it, which nothing proves, are each held by an {@code a} past {@code M} alone. A way some
+     * pair of {@code Int}s holds leaves the amounts every value they take.
+     */
+    @Test
+    void aWayOnlyValuesPastTheirTypeTakeLeavesNoRowToReachAnything() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "a: Int, b: Int, x: Yen, y: Yen";
+        for (String way : List.of("b >= 1 && a - b >= 9223372036854775807",
+                "b >= 1 && a - 2 * b >= 9223372036854775806")) {
+            String body = "if " + way + " then x.value >= y.value else false";
+            assertEquals(NOT_SHOWN, left(inputs, yen, body,
+                    atThe(">= y.value", yen, inputs, body)).get("x"), way);
+        }
+        String some = "if b >= 1 && a - 2 * b >= 9223372036854775805 then x.value >= y.value"
+                + " else false";
+        assertEquals(RELATES, left(inputs, yen, some, atThe(">= y.value", yen, inputs, some))
+                .get("x"));
+    }
+
+    /**
+     * And of a behavior over such a declaration: no {@code D} is held by two lists further apart
+     * than the greatest {@code Int}, so it is refused, and nothing the body compares is said to
+     * reach anything. One less apart, a list of the greatest length beside one of one holds it,
+     * and the amounts relate.
+     */
+    @Test
+    void aDeclarationOnlyLengthsPastWhereAnIntStopsHoldLeavesABehaviorNoRowToReachAnything() {
+        for (String apart : List.of("9223372036854775807", "9223372036854775806")) {
+            String declared = """
+                    data Yen = Int invariant value >= 0
+                    data D = { g: Yen, d: Yen, ys: List<Int>, zs: List<Int> }
+                        invariant List.length(zs) >= 1
+                            && List.length(ys) - List.length(zs) >= %s""".formatted(apart);
+            String body = "v.g.value >= v.d.value";
+            boolean none = apart.endsWith("7");
+            assertEquals(none ? List.of("E1013") : List.of(), measured("v: D", declared, "Bool",
+                    body).diagnostics().values().stream().flatMap(List::stream)
+                    .map(each -> each.diagnostic().code().toString()).toList(), apart);
+            assertEquals(none ? Map.of() : Map.of("v.g", RELATES), left("v: D", declared, body,
+                    atThe(">=", declared, "v: D", body)), apart);
+        }
+    }
+
+    /**
+     * The same of a declaration's rules over lengths, since a length is an {@code Int} and stops
+     * where one does: {@code List.length(ys) - List.length(zs) >= M} beside
+     * {@code List.length(zs) >= 1} is held by no two lists, so the amounts the rule beside it
+     * relates are not shown to reach each other. One less than {@code M} is held by a list of
+     * {@code M} beside a list of one.
+     */
+    @Test
+    void aRuleOnlyLengthsPastWhereAnIntStopsHoldLeavesNoRowToReachAnything() {
+        for (String apart : List.of("9223372036854775807", "9223372036854775806")) {
+            Compilation compilation = Compilation.ofSource("""
+                    module w1
+                    data Yen = Int invariant value >= 0
+                    data D = { g: Yen, d: Yen, ys: List<Int>, zs: List<Int> }
+                        invariant g.value >= d.value && List.length(zs) >= 1
+                            && List.length(ys) - List.length(zs) >= %s
+                    behavior m : (x: D) -> Bool
+                    let m (x) = true
+                    """.formatted(apart), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+            String said = apart.endsWith("7") ? "not shown to reach every value here"
+                    : "it relates the value here to another value rather than dividing";
+            for (String place : List.of("x.g", "x.d")) {
+                assertTrue(report.lines().anyMatch(line -> line.contains("invariant D #1")
+                        && line.contains(said) && line.endsWith("about `" + place + "`")),
+                        apart + "\n" + report);
+            }
+        }
+    }
+
+    /**
+     * Over decimals from nought, {@code a >= s + 5}: every {@code s} has an {@code a} at five
+     * above it and one below, the {@code a} needed running on without end on an order that has
+     * none, and an {@code a} below five holds it for no {@code s}.
+     */
+    @Test
+    void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
+        String amount = "data Amount = Decimal invariant value >= 0.0m";
+        String body = "a.value >= s.value + 5.0m";
+        assertEquals(Map.of("s", RELATES), left("a: Amount, s: Amount", amount, body,
+                atThe(">=", amount, "a: Amount, s: Amount", body)));
+        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
+                classesAt("a: Amount, s: Amount", amount, body, "a"));
+    }
+
+    /** The places some comparison at {@code at} of a model written out whole is not read about. */
+    private static Set<String> notReadIn(String source, String at) {
+        Compilation compilation = measured(source);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        Set<String> out = new TreeSet<>();
+        for (String line : report.lines().map(String::strip).toList()) {
+            if (line.startsWith("· not read") && line.contains("comparison@" + at + " ")
+                    && line.contains("about `")) {
+                out.add(line.substring(line.lastIndexOf("about `") + 7, line.length() - 1));
+            }
+        }
+        return out;
     }
 }

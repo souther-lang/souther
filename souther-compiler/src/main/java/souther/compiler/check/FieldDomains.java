@@ -384,15 +384,20 @@ public final class FieldDomains {
      * the domain it asked had never heard of the rules.
      *
      * <p>And of the classes a place is held to, which that state holds as atoms of their own
-     * ({@link #classLeavingNothing}).
+     * ({@link #classLeavingNothing}), and of where the numbers' orders stop: a value holds each
+     * number inside its order, so rules only numbers past an end hold leave no value
+     * ({@link NumericDomain#leavesNoRow}). Asked here, of a value, and not of the state wherever it
+     * is read: a region a reading narrowed to nothing reads as a region nothing is said of.
      */
     public boolean infeasible() {
-        return constraints.isBottom() || classLeavingNothing() != null;
+        return constraints.isBottom() || classLeavingNothing() != null
+                || constraints.numbers().leavesNoRow();
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public boolean infeasible(StringMachineAnswers machines) {
-        return constraints.isBottom(machines) || classLeavingNothing() != null;
+        return constraints.isBottom(machines) || classLeavingNothing() != null
+                || constraints.numbers().leavesNoRow();
     }
 
     /**
@@ -406,12 +411,21 @@ public final class FieldDomains {
      * subject, and what this value's rules call the place it is at is known here and nowhere else.
      */
     public Optional<Emptiness> holdsNothing() {
-        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing);
+        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing)
+                .or(this::noRowOfTheNumbers);
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public Optional<Emptiness> holdsNothing(StringMachineAnswers machines) {
-        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing);
+        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing)
+                .or(this::noRowOfTheNumbers);
+    }
+
+    /** The rules contradicting where the numbers' orders stop, as the general sentence: what
+     *  they leave holds no number inside its order ({@link NumericDomain#leavesNoRow}). */
+    private Optional<Emptiness> noRowOfTheNumbers() {
+        return constraints.numbers().leavesNoRow()
+                ? Optional.of(new Emptiness.ConflictingRules()) : Optional.empty();
     }
 
     /**

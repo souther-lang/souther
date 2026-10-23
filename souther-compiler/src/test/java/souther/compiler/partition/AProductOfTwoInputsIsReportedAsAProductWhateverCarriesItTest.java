@@ -104,7 +104,9 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
      * written out over the product on each sign stops: what is left unread of it is the relation,
      * and not the division. The sign is what the quotient knows of the divisor and a product
      * written alone does not: held above nought, the divisor keeps the dividend's least values
-     * below the line.
+     * below the line. A comparison read to the end is not asked here: the quotient parts its
+     * divisor at the sign itself, and the arms written out leave that to the conditions before
+     * them.
      */
     @Test
     void aQuotientByAnInputIsADivisorAndNotAProduct() {
@@ -113,12 +115,12 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= i.q, xs)
                         """));
-        assertEquals(reasons("""
+        assertEquals(stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> if i.p > 0 then i.q >= 10 * i.p
                             else if i.p < 0 then i.q <= 10 * i.p else false, xs)
                         """),
-                reasons("""
+                stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= 10, xs)
                         """));
@@ -277,7 +279,17 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         return reasonsOf(DATA + "\n" + behaviors);
     }
 
-    private static List<String> reasonsOf(String model) {
+    /** The same, of the readings that stopped alone, and not of a rule read to the end. */
+    private static List<String> stopped(String behaviors) {
+        return notReadIn(DATA + "\n" + behaviors).stream()
+                .filter(PartitionEvidence.NotRead::readingStopped)
+                .map(each -> each.at() + ": " + each.reason())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private static List<PartitionEvidence.NotRead> notReadIn(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -286,7 +298,11 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         assertNotNull(coverage, () -> "the model under test compiles: " + model);
         PartitionEvidence measured = coverage.get("f");
         assertNotNull(measured, () -> "f was measured: " + model);
-        return measured.notRead().stream()
+        return measured.notRead();
+    }
+
+    private static List<String> reasonsOf(String model) {
+        return notReadIn(model).stream()
                 .map(each -> each.at() + ": " + each.reason())
                 .distinct()
                 .sorted()
