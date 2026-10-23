@@ -1024,6 +1024,9 @@ final class Pullback {
         Operators[] told = new Operators[1];
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
+            if (apart == null) {
+                leaveUnsaidWhatMayEndARunUnder(body, reads);
+            }
             told[0] = operated;
             return whereEachOperatorAnswers(operated);
         });
@@ -1047,23 +1050,8 @@ final class Pullback {
             case Core.Binary binary when apart != null && binary.op().compares()
                     && WhatABodyReads.holds(binary, apart) -> { }
             case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
-                    || binary.op() == BinOp.MUL -> leaveUnsaidUnlessComposed(
-                            AffineForms.outcome(e, reads, quantities()));
-            case Core.Neg _ -> leaveUnsaidUnlessComposed(
-                    AffineForms.outcome(e, reads, quantities()));
-            case Core.Binary binary when !(WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                    binary.type(), List.of(binary.left().type(), binary.right().type()))
-                    instanceof WhereAnOperatorAnswers.Everywhere) -> {
-                // A quotient or a join is told of to nobody, and may stop a run on its operands.
-                for (Core operand : List.of(binary.left(), binary.right())) {
-                    leaveUnsaidOver(AffineForms.outcome(operand, reads, quantities()));
-                }
-                for (Evaluated.Step step : Evaluated.inOrder(e)) {
-                    if (step instanceof Evaluated.Step.Always(Core part)) {
-                        operatorsIn(part, reads, apart, ofTheRelation);
-                    }
-                }
-            }
+                    || binary.op() == BinOp.MUL -> AffineForms.outcome(e, reads, quantities());
+            case Core.Neg _ -> AffineForms.outcome(e, reads, quantities());
             case Core.LetIn li -> {
                 if (li.binder() == null || !ofTheRelation.contains(li.binder().binding())) {
                     operatorsIn(li.value(), reads, apart, ofTheRelation);
@@ -1080,20 +1068,74 @@ final class Pullback {
         }
     }
 
-    /** An operator whose form was not composed is told to nobody, and may stop a run on anything
-     *  it reads. */
-    private void leaveUnsaidUnlessComposed(AffineForms.Outcome<Quantity, InputReads> outcome) {
-        if (!(outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
-            operated.leaveUnsaidOverUnreadOperands();
+    /**
+     * What may end a run anywhere under {@code standing}, whether or not it is worked out on every
+     * run, left unsaid over what it reads — but the operators already told of, which
+     * {@link #whereEachOperatorAnswers} says or leaves unsaid itself.
+     *
+     * <p>Asked of the owner of what a node ends a run for ({@link WhatARunMayEndFor}) at every
+     * node, so that no kind of node is enumerated here: a quotient, a kernel call, a library
+     * operation, a construction and a call this does not know the callee of are all one question,
+     * and a kind added to the IR is answered there. And under every part and not only those that
+     * always run: a part worked out on some runs ends those runs, and the rows that arrive are the
+     * rows of the others — which is no narrowing, since it is not known which, and is a place the
+     * run may stop on.
+     */
+    private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads) {
+        Core e = Core.withoutStanding(standing);
+        if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
+                && !WhatARunMayEndFor.itself(e).endsNone()) {
+            boolean[] hasOperands = {false};
+            Core.forEachChild(e, operand -> {
+                hasOperands[0] = true;
+                leaveUnsaidOverWhatItReads(operand, reads);
+            });
+            if (!hasOperands[0]) {
+                operated.leaveUnsaidOverUnreadOperands();
+            }
+        }
+        if (e instanceof Core.LetIn li) {
+            leaveUnsaidWhatMayEndARunUnder(li.value(), reads);
+            leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads));
+        } else {
+            Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads));
         }
     }
 
-    /** An operator no region says where it answers stops a run on what its operand is made of. */
-    private void leaveUnsaidOver(AffineForms.Outcome<Quantity, InputReads> outcome) {
+    /** The places {@code operand} reads, as the ones what is worked out over it may stop a run
+     *  on: those of the numbers its form is over, or else those it stands at, and no place this
+     *  can name where it is neither. */
+    private void leaveUnsaidOverWhatItReads(Core operand, InputReads reads) {
+        // Reading a form tells the operators in it, which are worked out on some runs only here.
+        Operators held = operated;
+        operated = null;
+        AffineForms.Outcome<Quantity, InputReads> outcome;
+        try {
+            outcome = AffineForms.outcome(operand, reads, quantities());
+        } finally {
+            operated = held;
+        }
         if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             operated.leaveUnsaid(form.coefs().keySet());
         } else {
-            operated.leaveUnsaidOverUnreadOperands();
+            leaveUnsaidOverWhereItStands(operand, reads);
+        }
+    }
+
+    private void leaveUnsaidOverWhereItStands(Core operand, InputReads reads) {
+        switch (reads.pathOf(operand, read.rules().newtypes())) {
+            case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
+            case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
+            default -> {
+                boolean[] hasParts = {false};
+                Core.forEachChild(Core.withoutStanding(operand), part -> {
+                    hasParts[0] = true;
+                    leaveUnsaidOverWhereItStands(part, reads);
+                });
+                if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read) {
+                    operated.leaveUnsaidOverUnreadOperands();
+                }
+            }
         }
     }
 

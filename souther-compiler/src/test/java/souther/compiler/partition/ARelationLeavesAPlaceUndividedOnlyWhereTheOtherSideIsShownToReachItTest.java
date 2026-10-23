@@ -379,6 +379,27 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * What may stop a run is asked of the one owner of it, at every node and not only those that
+     * always run: a call of a kernel, a part worked out where a condition came out one way, and
+     * an arm of a branch, each stop the run on the number they read, and past each of them
+     * {@code p} is the one value that lets a row on, which {@code a != p} then takes from
+     * {@code a}.
+     */
+    @Test
+    void whatMayStopARunIsAskedOfWhatEndsARunWhereverItIsWorkedOut() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN);
+        for (String unused : List.of(
+                "Int.floorMod(1, p.value)",
+                "p.value == 0 && p.value + 9223372036854775807 + 1 > 0",
+                "if p.value == 0 then p.value + 9223372036854775807 + 1 else 0")) {
+            String body = "{\n    let unused = " + unused + "\n"
+                    + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+            assertEquals(notShown, left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"), unused);
+        }
+    }
+
+    /**
      * What the comparison works out itself is worked out on a row at it: {@code a + M - M} is
      * {@code a} as a form and stops at every {@code a} above nought as written.
      */
