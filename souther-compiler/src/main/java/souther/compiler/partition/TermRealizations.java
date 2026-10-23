@@ -2255,30 +2255,35 @@ final class TermRealizations {
         // nought added up and files no key at all. An end is one element, which is its own end
         // by either; and how many elements the key has is asked of them as well where a count of
         // them is asked beside the number.
-        boolean anEnd = gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End;
-        NumericSet some = anEnd ? new NumericSet.At(Count.of(1))
+        // An end, and a total from the last element put, are written as one element: one element
+        // is its own end, and a key whose total is its own number whichever case it is of. That
+        // is a way of writing them and not what they are: a count of the key's elements that has
+        // no one in it asks for one this does not write, and is not a count no key has.
+        CompositionRepertoire oneElement = switch (gathered.gathering()) {
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> null;
+            case NumericTerm.GatheredUnderItsKey.Gathering.End _ ->
+                    CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT;
+            case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
+                    CompositionRepertoire.TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT;
+        };
+        NumericSet some = oneElement != null ? new NumericSet.At(Count.of(1))
                 : new NumericSet.AwayFrom(List.of(Count.of(0)));
-        // An end is written as one element, which is a way of writing it and not what an end is: a
-        // count of its key's elements that has no one in it asks for an end this does not write,
-        // and is not a count no key has.
-        if (anEnd && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
-            return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
-                    CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)),
-                    "an end of the elements of a key is written as one element, and the key is"
-                            + " asked to have more");
+        if (oneElement != null && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
+            return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(oneElement)),
+                    "what the elements of a key come to is written as one element, and the key"
+                            + " is asked to have more");
         }
         // A key filed in a map has some element, so whatever count of them is asked, one or more
         // of the counts in it is the size.
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
-                howMany == null || anEnd ? some : howMany, Carrier.WHOLE, 1);
+                howMany == null || oneElement != null ? some : howMany, Carrier.WHOLE, 1);
         Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
                         reading, elements, inside));
-        // And an end that is not written is not an end no row has: the container may be one its
-        // type makes hold more of the key's elements than one, which the end is among.
-        return anEnd ? someOf(made, CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT)
-                : made;
+        // And one that is not written is not one no row has: the container may be one its type
+        // makes hold more of the key's elements than one, which it is made of.
+        return oneElement != null ? someOf(made, oneElement) : made;
     }
 
     /**

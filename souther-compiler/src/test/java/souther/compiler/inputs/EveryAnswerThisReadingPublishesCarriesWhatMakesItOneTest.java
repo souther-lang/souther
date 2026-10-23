@@ -207,6 +207,10 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == InputReads.WhatItHolds.class) {
             return new InputReads.WhatItHolds.Unsaid();
         }
+        if (type == RunSource.TraversalOrder.class) {
+            return new RunSource.TraversalOrder(TermPath.of("x").element(),
+                    TraversalDirection.FORWARD);
+        }
         if (type.isEnum()) {
             return type.getEnumConstants()[0];
         }

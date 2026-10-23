@@ -670,28 +670,39 @@ final class TermReading {
          *  put nowhere. One of the two. */
         private record Keyed<G>(Place place, Neighbouring<G> stopped) {}
 
+        /** The value at a place of an element whose case is asked, as the cases it may be of
+         *  read it; or why it is none. One of the two. */
+        private record CaseOf<G>(ObservedValue value, Neighbouring<G> stopped) {}
+
+        /** What {@code element} holds at {@code subject}, for the case it is of. */
+        private CaseOf<G> caseOf(Function<ElementProjection, Holding<G>> element,
+                                 ElementProjection subject) {
+            ObservedValue held;
+            switch (element.apply(subject)) {
+                case Holding.Nothing<G>(G why) -> {
+                    return new CaseOf<>(null, new Neighbouring.HeldNothing<>(why));
+                }
+                case Holding.Value<G>(ObservedValue value) -> held = value;
+            }
+            Membership.Incomplete cut = Membership.unread(held);
+            ObservedValue inner = cut != null ? null
+                    : ObservedValue.inside(on.wornAt(subject), held);
+            Membership.Incomplete unread = cut != null ? cut : Membership.unread(inner);
+            return unread != null ? new CaseOf<>(null, new Neighbouring.Read<>(
+                    new Reading.Missing(unread.cause()))) : new CaseOf<>(inner, null);
+        }
+
         /** The key of {@code element}, read along the one way its case is read along. */
         private Keyed<G> keyOf(Function<ElementProjection, Holding<G>> element) {
             ElementProjection way;
             switch (term.key()) {
                 case ElementKey.At(ElementProjection path) -> way = path;
                 case ElementKey.ByCase chosen -> {
-                    ObservedValue subject;
-                    switch (element.apply(chosen.subject())) {
-                        case Holding.Nothing<G>(G why) -> {
-                            return new Keyed<>(null, new Neighbouring.HeldNothing<>(why));
-                        }
-                        case Holding.Value<G>(ObservedValue value) -> subject = value;
+                    CaseOf<G> subject = caseOf(element, chosen.subject());
+                    if (subject.stopped() != null) {
+                        return new Keyed<>(null, subject.stopped());
                     }
-                    Membership.Incomplete cut = Membership.unread(subject);
-                    ObservedValue inner = cut != null ? null
-                            : ObservedValue.inside(on.wornAt(chosen.subject()), subject);
-                    Membership.Incomplete unread = cut != null ? cut : Membership.unread(inner);
-                    if (unread != null) {
-                        return new Keyed<>(null, new Neighbouring.Read<>(
-                                new Reading.Missing(unread.cause())));
-                    }
-                    way = chosen.readAlong(cases -> cases.leaves(inner));
+                    way = chosen.readAlong(cases -> cases.leaves(subject.value()));
                 }
             }
             Carrier keyedOn = way == null ? null : on.fieldCarrier(way);
@@ -740,10 +751,17 @@ final class TermReading {
             };
         }
 
-        /** What the elements of {@code key} come to, read in order until one stops them. */
+        /** What the elements of {@code key} come to, read in the order they were handed until one
+         *  stops them: the order the row writes them, or from the last of them where the walk was
+         *  handed them so and the gathering turns on it. */
         private Neighbouring<G> read(Place key) {
             List<ExactRatio> numbers = new ArrayList<>();
-            for (int at : ofEachKey.getOrDefault(key, List.of())) {
+            List<Integer> ofTheKey = ofEachKey.getOrDefault(key, List.of());
+            List<Integer> handed = term.gathering() instanceof NumericTerm.GatheredUnderItsKey
+                    .Gathering.SinceAPut(var _, var _, RunSource.TraversalOrder order)
+                    && order.direction() == TraversalDirection.REVERSE
+                    ? ofTheKey.reversed() : ofTheKey;
+            for (int at : handed) {
                 HeldFields<G> fields = new HeldFields<>(each.get(at));
                 OneElement element = new OneElement(on, fields, at);
                 ExactAnswer<ExactRatio> made = term.value().at(element);
@@ -753,6 +771,18 @@ final class TermReading {
                 Reading stopped = whyNoNumberOf(made, element, on.observed());
                 if (stopped != null) {
                     return new Neighbouring.Read<>(stopped);
+                }
+                // An element that puts its number in place of the ones before is where the
+                // numbers gathered start again.
+                if (term.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(
+                        ElementProjection subject, List<CasesLeft> puts, var _)) {
+                    CaseOf<G> itsCase = caseOf(each.get(at), subject);
+                    if (itsCase.stopped() != null) {
+                        return itsCase.stopped();
+                    }
+                    if (puts.stream().anyMatch(cases -> cases.leaves(itsCase.value()))) {
+                        numbers.clear();
+                    }
                 }
                 numbers.add(((ExactAnswer.Held<ExactRatio>) made).value());
             }
@@ -818,7 +848,9 @@ final class TermReading {
     private static Reading gatheredBy(NumericTerm.GatheredUnderItsKey.Gathering gathering,
                                       List<ExactRatio> numbers, Carrier on) {
         return switch (gathering) {
-            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> sumOf(numbers, on);
+            // The numbers from the last element that put are the ones read.
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
+                 NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ -> sumOf(numbers, on);
             case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) -> {
                 ExactRatio end = numbers.getFirst();
                 for (ExactRatio other : numbers) {
