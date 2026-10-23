@@ -614,6 +614,13 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/WhatABodyReads", "madeOf", "(" + core + "Ljava/util/Set;)V", 1,
                 "asks whether a node binds a name, and walks on through a Widen into what it"
                         + " holds");
+        row(out, c + "core/WhatABodyReads", "boundIn", "(" + core + "Ljava/util/Map;)V", 1,
+                "asks whether a node binds a name, and walks on through a Widen into what it"
+                        + " holds");
+        row(out, c + "core/WhatABodyReads", "readsIn",
+                "(" + core + "Ljava/util/function/Consumer;)V", 1,
+                "asks whether a node reads a name, and walks on through a Widen into what it"
+                        + " holds");
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I", 2, COUNTS_THROUGH_IT);
         row(out, c + "core/GrowingFold", "aliased", "(" + core + "Ljava/util/Set;)I", 1,
                 COUNTS_THROUGH_IT);

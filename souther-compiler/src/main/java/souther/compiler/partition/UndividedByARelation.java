@@ -2151,9 +2151,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                SearchRegion region) {
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
-        // What one entry holds: the element, and the key a map files it under.
-        List<TermPath> entry = type instanceof Type.MapOf
-                ? List.of(container.element(), container.key()) : List.of(container.element());
+        List<TermPath> entry = read.domain().entryOf(container, rules);
         for (TermPath part : entry) {
             if (namedDownTo(part, container.steps().size(), read, null) != Named.NOT) {
                 return null;

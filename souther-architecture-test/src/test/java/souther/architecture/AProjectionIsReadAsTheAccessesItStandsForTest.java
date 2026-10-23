@@ -439,8 +439,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/WhatABodyReads", "madeOf", "(" + core + "Ljava/util/Set;)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
-        row(out, c + "core/WhatABodyReads", "namesMadeOf",
-                "(" + core + "Ljava/util/Set;)Ljava/util/Set;", Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "core/WhatABodyReads", "holds", "(" + core + "L" + c + "core/Core$Read;)Z",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "core/WhatABodyReads", "boundIn", "(" + core + "Ljava/util/Map;)V",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "core/WhatABodyReads", "readsIn",
+                "(" + core + "Ljava/util/function/Consumer;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "count", "(" + core + "Ljava/util/function/Predicate;[I)V",
@@ -554,6 +558,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "readOnceForEveryValue", "(" + core + reads
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "partition/Pullback", "comparisonHolding",
+                "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/OrderOfElements", "walk", "(" + core + "Ljava/util/Map;[Z[I)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/WhatARunMayEndFor", "of", "(" + core + ")L" + c

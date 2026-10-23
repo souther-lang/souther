@@ -756,6 +756,13 @@ public final class InputDomain {
         return typeAt(path, source) instanceof Type.ListOf;
     }
 
+    /** What one entry of the container at {@code path} holds: its element, and the key a map
+     *  files it under. */
+    public List<TermPath> entryOf(TermPath path, RuleReadingSource source) {
+        return typeAt(path, source) instanceof Type.MapOf
+                ? List.of(path.element(), path.key()) : List.of(path.element());
+    }
+
     /**
      * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
      *
