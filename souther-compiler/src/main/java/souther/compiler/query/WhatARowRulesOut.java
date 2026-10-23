@@ -17,9 +17,9 @@ import java.util.Map;
  *
  * <p>The one place the question is put. A row offered for a line is weighed by it, and so is a row
  * a search composed and saw run to the rule, before the line it was composed for is said to be one
- * a row arriving can tell apart. Both ask it of the row read back and of the reading's own line:
- * the values a search asked for are what the row was composed for and need not be what it holds,
- * and another reading's line was left by other rows.
+ * a row arriving can tell apart. Both ask it of the row read back, at the reading it was composed
+ * along: the values a search asked for are what the row was composed for and need not be what it
+ * holds, and another reading's copy of the line is one the row's run did not read at.
  *
  * <p>A row whose run reached no value on the line, or one whose sum the exact arithmetic could not
  * hold, is one nothing here can tell about — neither ruling the line out nor shown to leave it.
@@ -48,8 +48,9 @@ final class WhatARowRulesOut {
     }
 
     /**
-     * What {@code row} does to {@code beside}, the line one reading's rows leave beside the border
-     * that reading drew as {@code drawn}, read where {@code toRows} reads that reading's line.
+     * What {@code row} does to {@code beside}, the line the rows of every reading leave beside the
+     * border one reading drew as {@code drawn}, with the row read where {@code toRows} reads that
+     * reading's line.
      *
      * <p>Whether the row leaves no place on the line standing beside the rows already read, and not
      * whether it answers the line at its current place differently. A row the model keeps between the

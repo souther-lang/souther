@@ -601,9 +601,9 @@ public record Settlements(List<ObligationIdentity> requested,
             //
             // One entry per line of the family the rows leave standing, which is what is owed: a
             // row ruling one of them out need not rule out another. And each entry is put to the
-            // place that reading's own rows leave the line at, which its search carries: the
-            // readings of one line are reached by different rows, and the place the line is said
-            // to stand at is one of them.
+            // line its search was made for, which is where every reading's rows leave it together,
+            // and read at the reading the search was made along: the row was composed along that
+            // reading's way and is read back at its positions.
             Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides = new LinkedHashMap<>();
             if (filling != null) {
                 List<BorderAssessment> lines =

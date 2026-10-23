@@ -503,6 +503,21 @@ public final class StandingAtAPoint {
         public boolean everyOne() {
             return why.isEmpty() && !unwatched && tried instanceof ReadingsTried.EveryOne;
         }
+
+        /**
+         * These rows and {@code other}'s, which is what two readings of one line read between
+         * them: every row of either, whatever either went without, and every reading where both
+         * walked every one.
+         */
+        public RowsRead and(RowsRead other) {
+            List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> both =
+                    new ArrayList<>(each);
+            both.addAll(other.each);
+            Set<ReadingGap> without = new LinkedHashSet<>(why);
+            without.addAll(other.why);
+            return new RowsRead(both, without, tried.and(other.tried),
+                    unwatched || other.unwatched);
+        }
     }
 
     /**

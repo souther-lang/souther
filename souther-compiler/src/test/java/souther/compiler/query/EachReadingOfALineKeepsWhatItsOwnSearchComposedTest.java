@@ -218,7 +218,8 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                 TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE, at(x, y),
                 SearchOutcomes.of(ItemAssessment.Attempt.Built.certified(
                         new Generator.GeneratedRow(new Generator.Purpose.Unstated(), List.of()),
-                        WayToTheBorder.UNTOUCHED, InputsOfTheBody.aRowOfNoInputsReadBack())))));
+                        WayToTheBorder.UNTOUCHED, InputsOfTheBody.aRowOfNoInputsReadBack())),
+                null)));
     }
 
     /** A search of one reading that ran and had nowhere to compose. */
@@ -228,7 +229,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                 SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
                         new Generator.UnresolvedCombination(List.of("-2 * x + y = 0"),
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                        WayToTheBorder.UNTOUCHED)))));
+                        WayToTheBorder.UNTOUCHED)), null)));
     }
 
     private static Map<NumericTerm, Place> at(int x, int y) {

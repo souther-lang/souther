@@ -43,6 +43,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 /**
@@ -937,23 +938,59 @@ public sealed interface AnotherLineTheRowsAllow {
     }
 
     /**
-     * What the rows leave standing beside {@code boundary}.
+     * One reading of a line, as the lines beside it are asked of it.
+     *
+     * <p>A line a helper draws is read once per call, and what is a reading's own is the rows that
+     * got to that call and the way they took there. A step from one of those rows is held to that
+     * way, since it is the way the row arrived along.
+     *
+     * @param border    the line as this reading met it
+     * @param rows      the rows that reached this reading, read only when they are asked for
+     * @param elsewhere the behavior's other lines, for preferring an input an author can see the
+     *                  difference at
+     * @param way       the conditions a row meets on its way to this reading
+     * @param refused   whether the declarations of the positions are shown to leave nothing at an
+     *                  input under that way. It decides which input is named for a line and never
+     *                  whether the line stands: an input is worked out by stepping along a line,
+     *                  which knows the arithmetic and nothing of what a position's type refuses
+     */
+    record Reading(Border border, Supplier<StandingAtAPoint.RowsRead> rows,
+                   List<OrderedAffineBoundary> elsewhere, WayToTheBorder way,
+                   Predicate<Map<NumericTerm, Place>> refused) {
+
+        public Reading {
+            Objects.requireNonNull(border, "a reading is of a line");
+            Objects.requireNonNull(rows, "and reads the rows that reached it");
+            elsewhere = List.copyOf(elsewhere);
+            Objects.requireNonNull(way, "which came along some way");
+            Objects.requireNonNull(refused, "under declarations that say what they refuse");
+        }
+    }
+
+    /**
+     * What the rows leave standing beside a line, over every reading of it.
      *
      * <p>Every line of the family, each answered on its own ({@link ByDirection}). A row that rules
      * one of them out need not rule out another, so a pass that stopped at the first one standing
      * would hand a reader one row to write and leave the next line for the run after it.
      *
-     * <p>{@code refused} says whether the declarations of the positions are shown to leave nothing
-     * at an input. It decides which input is named for the line and never whether the line stands:
-     * an input is worked out by stepping along a line, which knows the arithmetic and nothing of
-     * what a position's type refuses.
+     * <p><b>One answer for the line, from every reading's rows together.</b> A line beside this one
+     * is one line however many calls read it: a fault in a helper is one threshold at every call,
+     * so it stands only where some threshold keeps and refuses what the rows of every call have the
+     * model keep and refuse. Answered per reading and the answers put together, two readings each
+     * leaving it standing at places apart would leave it standing where no threshold keeps both;
+     * and a reading short of the rows its points need, or whose rows all fall on one side, would
+     * have its rows dropped from the question rather than counted in it. What stays a reading's own
+     * is where a step from its rows may go, which is that reading's way.
+     *
+     * @param readings      every reading of one line, in the order they were read
+     * @param everyPointMet whether a row is at every point the line owes one at, by any reading
      */
-    static AnotherLineTheRowsAllow of(Border border,
-                                      boolean everyPointMet,
-                                      java.util.function.Supplier<StandingAtAPoint.RowsRead> read,
-                                      List<OrderedAffineBoundary> elsewhere,
-                                      WayToTheBorder way,
-                                      Predicate<Map<NumericTerm, Place>> refused) {
+    static AnotherLineTheRowsAllow of(List<Reading> readings, boolean everyPointMet) {
+        if (readings.isEmpty()) {
+            throw new IllegalArgumentException("a line asked about is read somewhere");
+        }
+        Border border = readings.getFirst().border();
         // What the line is, before what its rule states about it. Whether there is a line one step
         // from this one is the line's own answer and is the same whichever way the rule reads it —
         // so a bound on one position comes back as a question that does not arise, and never as one
@@ -989,8 +1026,9 @@ public sealed interface AnotherLineTheRowsAllow {
         // And a side to refuse a row on. Where no value stands on the side the border refuses,
         // nothing a row is written at could rule a line of the family out, and that is a proof read
         // off the model rather than anything the rows or a search came to — so it is asked before
-        // either of them, and whether the points are met is beside the point.
-        if (noValueStandsOnTheFarSide(border)) {
+        // either of them, and whether the points are met is beside the point. At every reading,
+        // since a row refused at any of them is one a line of the family could keep.
+        if (readings.stream().allMatch(one -> noValueStandsOnTheFarSide(one.border()))) {
             return new NotApplicable(family, NotOwedReason.NO_VALUE_CAN_STAND_THERE);
         }
         // And the rows have met its points. Asked sooner, a border the rows have not caught up with
@@ -1014,20 +1052,31 @@ public sealed interface AnotherLineTheRowsAllow {
         // The rows read here and not before. Reading them is a walk of its own over every row, and
         // every question above is about the line alone — so a border with no line beside it, which
         // is every bound on a position, pays nothing for being asked.
-        StandingAtAPoint.RowsRead rows = read.get();
-        // The rows on each side, for the steps an input is named by. A row whose sum on the model's
-        // own line could not be held is on neither: the fold below meets it again and says what it
-        // leaves undecided.
+        //
+        // Every reading's rows, which is what the line is asked of, and each reading's rows on each
+        // side apart, which is what a step naming an input is taken from. A row whose sum on the
+        // model's own line could not be held is on neither: the fold below meets it again and says
+        // what it leaves undecided.
+        StandingAtAPoint.RowsRead rows = null;
+        List<Sides> sides = new ArrayList<>();
         List<Map<NumericTerm, Place>> satisfying = new ArrayList<>();
         List<Map<NumericTerm, Place>> refusing = new ArrayList<>();
         Set<ReadingGap> sideNotHeld = new LinkedHashSet<>();
-        for (Map<NumericTerm, Place> values : rows.each()) {
-            switch (boundary.satisfies(values)) {
-                case ExactAnswer.Held<Boolean> side ->
-                        (side.value() ? satisfying : refusing).add(values);
-                case ExactAnswer.Unheld<Boolean> unheld ->
-                        sideNotHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
+        for (Reading one : readings) {
+            StandingAtAPoint.RowsRead read = one.rows().get();
+            rows = rows == null ? read : rows.and(read);
+            Sides here = new Sides(one, new ArrayList<>(), new ArrayList<>());
+            for (Map<NumericTerm, Place> values : read.each()) {
+                switch (boundary.satisfies(values)) {
+                    case ExactAnswer.Held<Boolean> side ->
+                            (side.value() ? here.satisfying() : here.refusing()).add(values);
+                    case ExactAnswer.Unheld<Boolean> unheld ->
+                            sideNotHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
+                }
             }
+            satisfying.addAll(here.satisfying());
+            refusing.addAll(here.refusing());
+            sides.add(here);
         }
         // No row the rule keeps, so there is nothing a threshold on any other line has to keep, and
         // the tightest one there is falls below every row instead of at one of them — which is a
@@ -1050,11 +1099,14 @@ public sealed interface AnotherLineTheRowsAllow {
         }
         List<Direction> each = new ArrayList<>();
         for (QuantityKey other : family) {
-            each.add(assessed(boundary, other, rows, satisfying, refusing, elsewhere, way,
-                    refused));
+            each.add(assessed(boundary, other, rows, sides));
         }
         return new ByDirection(each);
     }
+
+    /** One reading's rows on each side of the model's line, with the reading they reached. */
+    record Sides(Reading reading, List<Map<NumericTerm, Place>> satisfying,
+                         List<Map<NumericTerm, Place>> refusing) {}
 
     /**
      * Whether no value is shown to stand at any point the border has on the side it refuses.
@@ -1098,14 +1150,13 @@ public sealed interface AnotherLineTheRowsAllow {
      * read in part. Ruled out without it, the line is ruled out — a row read leaves fewer lines
      * standing, never more — and otherwise that row is what leaves the line undecided, and never
      * what rules it out.
+     *
+     * <p>{@code rows} are every reading's, and the fold is theirs together. An input is named from
+     * one reading's rows along that reading's way ({@code sides}), and it rules out the line as all
+     * the rows leave it: the fold it is stepped against is that one.
      */
     private static Direction assessed(DrawnBoundary boundary, QuantityKey other,
-                                      StandingAtAPoint.RowsRead rows,
-                                      List<Map<NumericTerm, Place>> satisfying,
-                                      List<Map<NumericTerm, Place>> refusing,
-                                      List<OrderedAffineBoundary> elsewhere,
-                                      WayToTheBorder way,
-                                      Predicate<Map<NumericTerm, Place>> refused) {
+                                      StandingAtAPoint.RowsRead rows, List<Sides> sides) {
         Stands.Fold none = Stands.Fold.none(boundary, other);
         Set<ReadingGap> notHeld = new LinkedHashSet<>();
         List<Stands.Read> read = new ArrayList<>();
@@ -1138,13 +1189,22 @@ public sealed interface AnotherLineTheRowsAllow {
         }
         // And an input that rules the line out and that the rules do send a row to. Where nothing
         // could show one, the question stands rather than being answered by whichever way it fell.
-        Distinguisher parting =
-                partingAt(boundary, ends, satisfying, refusing, elsewhere, way, refused);
+        // Asked of each reading in turn, from its rows and along its way, and the first that names
+        // an input the declarations leave room for is the one named.
+        Distinguisher parting = null;
+        for (Sides one : sides) {
+            Distinguisher here = partingAt(boundary, ends, one.satisfying(), one.refusing(),
+                    one.reading().elsewhere(), one.reading().way(), one.reading().refused());
+            if (here != null && here.named() != null) {
+                return new Stands(ends, here.named());
+            }
+            parting = parting == null ? here : parting;
+        }
         if (parting == null) {
             return new Undecided(other,
                     new Unsettled.NoReachableDistinguisher(new Stands(ends, null)));
         }
-        return new Stands(ends, parting.named());
+        return new Stands(ends, null);
     }
 
     /**

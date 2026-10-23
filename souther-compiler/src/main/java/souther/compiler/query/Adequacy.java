@@ -4305,7 +4305,7 @@ public final class Adequacy {
             // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
             // while having no axis at all. Which lines there are of either kind is the reading of the
             // model's, and this is handed both rather than assembling one of them.
-            List<BorderAssessment> out = new ArrayList<>();
+            List<Coverages.ReadingOfALine> out = new ArrayList<>();
             // The rows read once for every line, and not once per line.
             Coverages.RowsPutToTheLines put = Coverages.RowsPutToTheLines.of(observed, numbering);
             for (Axis axis : partitioning.axes()) {
@@ -4320,7 +4320,7 @@ public final class Adequacy {
             }
             out.addAll(Coverages.assessBetween(subject, observed, put,
                     partitioning.reaching()));
-            return new LineReadings(out);
+            return Coverages.besideEachLine(out);
         }
 
     }

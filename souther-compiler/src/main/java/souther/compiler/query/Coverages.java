@@ -962,7 +962,7 @@ final class Coverages {
      * what this says is that a path is not left short of what it is owed, and not that the region is
      * idle here.
      */
-    static List<BorderAssessment> assess(
+    static List<ReadingOfALine> assess(
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             ItemAssessment.WritabilityProjection projection,
@@ -971,8 +971,9 @@ final class Coverages {
         // per call of that helper, and the rows do not owe the same border twice for having been
         // offered it twice — but each reading is reached under its caller's own conditions, so what
         // a row for it may be composed out of is the reading's and is settled while the readings are
-        // still apart. They are brought together by {@link #merged}, after that.
-        List<BorderAssessment> out = new ArrayList<>();
+        // still apart. What the lines beside it are is asked of every reading of it at once
+        // ({@link #besideEachLine}), and the readings are brought together by {@link #merged}.
+        List<ReadingOfALine> out = new ArrayList<>();
         for (Border each : lines) {
             out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
                             wayTo(each, reaching), subject.quantities().region()),
@@ -1047,44 +1048,57 @@ final class Coverages {
             // And who put on the way what the search went along, which is what says at which calls
             // of a helper a reader meets what the search went without.
             // What this reading's own search showed arriving is said of this reading, before its
-            // readings are put together: the place a line is left at and the row that rules it out
-            // are both this reading's, and put together first, the place could be one reading's and
-            // the row another's.
-            ARowTellingTheLinesApart toldApart = tellingApart(border, search);
+            // readings are put together: the row that rules a line out was composed along this
+            // reading's way and is read back at this reading's positions.
+            ARowTellingTheLinesApart toldApart = settled(tellingApart(border, search), input);
             out.add(new BorderAssessment(border.border(), items,
-                    shownArriving(border.beside(), toldApart, input), toldApart,
+                    shownArriving(border.beside(), toldApart), toldApart,
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
         }
         return new LineReadings(out);
     }
 
     /**
-     * {@code beside}, one reading's, with each line nothing showed an input arriving at put where
-     * this reading's rows leave it, where this reading's search composed a row that was seen run to
-     * the rule and, read back, rules the line out ({@link WhatARowRulesOut}): an input that arrives
-     * and tells the two apart, which is the row as it was read back. A row composed and not seen
-     * there, or one that arrives and does not rule the line out, leaves the line where it was.
+     * The same searches, each with a row it composed that was seen run to the rule and, read back,
+     * rules its line out ({@link WhatARowRulesOut}), where one did
+     * ({@link ARowTellingTheLinesApart.AtOneReading#settledBy}).
+     */
+    private static ARowTellingTheLinesApart settled(ARowTellingTheLinesApart toldApart,
+                                                    MeasuredInput input) {
+        List<ARowTellingTheLinesApart.AtOneReading> out = new ArrayList<>();
+        for (ARowTellingTheLinesApart.AtOneReading one : toldApart.each()) {
+            Optional<DrawnBoundary> drawn = DrawnBoundary.of(one.reading()).orNull();
+            if (drawn == null || drawn.isEmpty() || one.seenThere().isEmpty()) {
+                out.add(one);
+                continue;
+            }
+            StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(
+                    input.at(one.reading()), one.reading().origin().recordedAt());
+            out.add(one.settledBy(seen -> {
+                WhatARowRulesOut.Said said =
+                        WhatARowRulesOut.of(toRows, drawn.get(), one.line(), seen.readBack());
+                return said.said().settles() ? Optional.of(said.at()) : Optional.empty();
+            }));
+        }
+        return new ARowTellingTheLinesApart(out);
+    }
+
+    /**
+     * {@code beside} with each line nothing showed an input arriving at put where the rows leave
+     * it, where this reading's search composed a row that settles it ({@link #settled}): an input
+     * that arrives and tells the two apart, which is the row as it was read back. A row composed
+     * and not seen there, or one that arrives and does not rule the line out, leaves the line where
+     * it was.
      */
     private static AnotherLineTheRowsAllow shownArriving(
-            AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
-            MeasuredInput input) {
+            AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
         if (!(beside instanceof AnotherLineTheRowsAllow.ByDirection lines)) {
             return beside;
         }
         Map<QuantityKey, Map<NumericTerm, Place>> arriving = new LinkedHashMap<>();
         for (ARowTellingTheLinesApart.AtOneReading one : toldApart.each()) {
-            Optional<ObservedInputs> seen = one.seenThere();
-            Optional<DrawnBoundary> drawn = DrawnBoundary.of(one.reading()).orNull();
-            if (seen.isEmpty() || drawn == null || drawn.isEmpty()
-                    || arriving.containsKey(one.direction())) {
-                continue;
-            }
-            WhatARowRulesOut.Said said = WhatARowRulesOut.of(
-                    StandingAtAPoint.putToRows(input.at(one.reading()),
-                            one.reading().origin().recordedAt()),
-                    drawn.get(), one.line(), seen.get());
-            if (said.said().settles()) {
-                arriving.put(one.direction(), said.at());
+            if (one.settling() != null) {
+                arriving.putIfAbsent(one.direction(), one.settling().at());
             }
         }
         return arriving.isEmpty() ? beside : lines.shownArriving(arriving);
@@ -1240,9 +1254,9 @@ final class Coverages {
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
         StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows);
 
-        /** Which other line those same rows leave standing beside this one, read through the same
-         *  walk over them, and asked only of a border whose points they have met. */
-        AnotherLineTheRowsAllow beside(boolean everyPointMet, List<ObservedInputs> rows);
+        /** What the lines beside this one are asked of at this reading: those same rows, read
+         *  through the same walk over them, and the way they took here. */
+        AnotherLineTheRowsAllow.Reading beside(List<ObservedInputs> rows);
 
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
@@ -1329,9 +1343,9 @@ final class Coverages {
      * about a point and not about a shape, so a shape added later inherits them rather than being
      * trusted to repeat them.
      */
-    private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
-                                             souther.compiler.query.Adequacy.RowReading observed,
-                                             RowsPutToTheLines put) {
+    private static ReadingOfALine assessed(Border border, OneShapeOfBorder shape,
+                                           souther.compiler.query.Adequacy.RowReading observed,
+                                           RowsPutToTheLines put) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
         // guard's line is about a place in a body and is reached or not; an invariant's and a
@@ -1362,13 +1376,67 @@ final class Coverages {
                 }
             });
         }
-        // And which other line these same rows leave standing. Read off the same rows and the same
-        // reading of the line as the points above: a row at each of the four shows the line has not
-        // moved, and nothing about the four shows it has not turned.
-        return new BorderAssessment(border, items, absent != null
-                ? new AnotherLineTheRowsAllow.CouldNotTell(
-                        new AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(absent))
-                : shape.beside(everyPointMet(items), rows));
+        // And what the lines beside it are asked of here: the same rows and the same reading of the
+        // line as the points above. A row at each of the four shows the line has not moved, and
+        // nothing about the four shows it has not turned.
+        return new ReadingOfALine(border, items, absent, shape.beside(rows));
+    }
+
+    /**
+     * One reading of a line, with what its rows came to at each point, before the line's other
+     * readings are in.
+     *
+     * @param border the line as this reading met it
+     * @param items  what each point came to at this reading
+     * @param absent why nothing was read against the line, or null where the rows were
+     * @param beside what the lines beside it are asked of at this reading
+     */
+    record ReadingOfALine(Border border, Map<DomainPoint, ItemAssessment> items,
+                          Measurement<ItemAssessment.Coverage> absent,
+                          AnotherLineTheRowsAllow.Reading beside) {}
+
+    /**
+     * Every reading, with the lines beside its line answered once for the line.
+     *
+     * <p>Which lines the rows leave standing beside a line is a question about the line, and every
+     * reading's rows answer it together ({@link AnotherLineTheRowsAllow#of}); so it is asked once
+     * per line, of all its readings, and each reading carries that one answer. What stays a
+     * reading's own is its points and its way, which the search made per reading next is made
+     * along. Whether the points are met is the line's too: a point is met where a row is at it at
+     * any reading ({@link #together}), which is what the readings put together say of it.
+     */
+    static LineReadings besideEachLine(List<ReadingOfALine> readings) {
+        SequencedMap<BoundaryLine, List<ReadingOfALine>> byLine = new LinkedHashMap<>();
+        for (ReadingOfALine each : readings) {
+            byLine.computeIfAbsent(BoundaryLine.of(each.border()), _ -> new ArrayList<>())
+                    .add(each);
+        }
+        Map<BoundaryLine, AnotherLineTheRowsAllow> beside = new LinkedHashMap<>();
+        byLine.forEach((line, ofOneLine) -> beside.put(line, besideOneLine(ofOneLine)));
+        List<BorderAssessment> out = new ArrayList<>();
+        for (ReadingOfALine each : readings) {
+            out.add(new BorderAssessment(each.border(), each.items(),
+                    beside.get(BoundaryLine.of(each.border()))));
+        }
+        return new LineReadings(out);
+    }
+
+    /** What every reading of one line says about the lines beside it, said once. */
+    private static AnotherLineTheRowsAllow besideOneLine(List<ReadingOfALine> ofOneLine) {
+        // Nothing was read against the line, which is the line's and not one reading's: what says
+        // so is whether the comparison's runs were watched, and the readings share the comparison.
+        for (ReadingOfALine each : ofOneLine) {
+            if (each.absent() != null) {
+                return new AnotherLineTheRowsAllow.CouldNotTell(
+                        new AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(each.absent()));
+            }
+        }
+        Map<DomainPoint, ItemAssessment> met = new LinkedHashMap<>(ofOneLine.getFirst().items());
+        for (ReadingOfALine next : ofOneLine.subList(1, ofOneLine.size())) {
+            met.replaceAll((point, item) -> together(item, next.items().get(point)));
+        }
+        return AnotherLineTheRowsAllow.of(
+                ofOneLine.stream().map(ReadingOfALine::beside).toList(), everyPointMet(met));
     }
 
     /**
@@ -1420,8 +1488,7 @@ final class Coverages {
     }
 
     /**
-     * Whether a row is at every point this reading of the border owes one at, and it owes at least
-     * one.
+     * Whether a row is at every point the border owes one at, and it owes at least one.
      *
      * <p>What says the question about the lines beside it is due. A border short of a row at one of
      * its points is short of the rows that show where it falls, and one the rules leave no value at
@@ -1471,11 +1538,9 @@ final class Coverages {
             }
 
             @Override
-            public AnotherLineTheRowsAllow beside(boolean everyPointMet,
-                                                  List<ObservedInputs> rows) {
-                return AnotherLineTheRowsAllow.of(line.border(), everyPointMet,
-                        () -> toRows.valuesOf(rows), elsewhere, way,
-                        refusedByTheDeclarations);
+            public AnotherLineTheRowsAllow.Reading beside(List<ObservedInputs> rows) {
+                return new AnotherLineTheRowsAllow.Reading(line.border(),
+                        () -> toRows.valuesOf(rows), elsewhere, way, refusedByTheDeclarations);
             }
 
             // What the position's rules prove answers this border's points only where a row reaches
@@ -1995,22 +2060,15 @@ final class Coverages {
     /**
      * What two readings of one line say about the lines beside it.
      *
-     * <p>One answer, because there is one question: which lines these rows leave standing is about
-     * the line and the rows, and two readings of one line are readings of one line by the same rows.
-     * So a reading that was asked answers for both, and two that were both asked and disagree are
-     * this compiler saying two things about one measurement.
+     * <p>One answer, because there is one question, and it was asked once of every reading's rows
+     * ({@link #besideEachLine}). What a reading adds after that is what its own search showed
+     * arriving, at a line nothing showed an input arriving at — so two readings differ there and
+     * nowhere else, and two that differ anywhere else are this compiler saying two things about
+     * one measurement.
      */
     static AnotherLineTheRowsAllow besides(AnotherLineTheRowsAllow a,
                                            AnotherLineTheRowsAllow b) {
-        // A reading that was asked answers for both, whichever of them could not be asked or could
-        // not settle it. Two readings of one line are readings by the same rows, so one of them
-        // reaching an answer is the answer.
-        if (a instanceof AnotherLineTheRowsAllow.CouldNotTell
-                || a instanceof AnotherLineTheRowsAllow.NotDueYet) {
-            return b;
-        }
-        if (b instanceof AnotherLineTheRowsAllow.CouldNotTell
-                || b instanceof AnotherLineTheRowsAllow.NotDueYet || a.equals(b)) {
+        if (a.equals(b)) {
             return a;
         }
         // Line by line of the family, which two readings of one line share.
@@ -2030,38 +2088,35 @@ final class Coverages {
     /**
      * What two readings of one line say about one line of its family.
      *
-     * <p><b>Each reading's rows are the ones reaching it.</b> A helper called from two places is
-     * read at each, and the rows a reading folds are the rows that got to that call — so two readings
-     * can leave a line at two places, or one leave it and the other rule it out, and neither is
-     * this compiler saying two things about one measurement.
-     *
-     * <p>So the answer is over the readings, the way a row offered for the line is weighed: rows
-     * ruling the line out at any reading of it show which of the two lines the model draws there,
-     * and it is the one line wherever it is called, so the line is ruled out. Where no reading rules
-     * it out and some leave it standing, it is owed a row, once; the place said is a reading's own,
-     * and a reading that named an input is said before one that did not. What a row read back does
-     * to the line at a reading is asked of that reading's own place, which its search carries
-     * ({@link ARowTellingTheLinesApart.AtOneReading#line}), and never of the place said here.
+     * <p>The line's answer at both, except where a reading's search showed an input arriving at a
+     * line the rows left with none: the line is then one the rows leave standing, at that input,
+     * which the other reading's search did not show. Where both showed one, either input rules out
+     * the line as the rows leave it: one that names an input is said before one that names none,
+     * and otherwise the first.
      */
     static AnotherLineTheRowsAllow.Direction besides(AnotherLineTheRowsAllow.Direction a,
                                                      AnotherLineTheRowsAllow.Direction b) {
-        // A reading that settled it answers for both, the way a reading that was asked does above:
-        // what stopped the other is about its own way to the border or its own rows' readings.
-        if (a instanceof AnotherLineTheRowsAllow.Undecided) {
-            return b;
-        }
-        if (b instanceof AnotherLineTheRowsAllow.Undecided || a.equals(b)) {
+        if (a.equals(b) || shownArrivingAt(a, b)) {
             return a;
         }
-        if (a instanceof AnotherLineTheRowsAllow.RuledOut) {
-            return a;
-        }
-        if (b instanceof AnotherLineTheRowsAllow.RuledOut) {
+        if (shownArrivingAt(b, a)) {
             return b;
         }
-        AnotherLineTheRowsAllow.Stands one = (AnotherLineTheRowsAllow.Stands) a;
-        AnotherLineTheRowsAllow.Stands other = (AnotherLineTheRowsAllow.Stands) b;
-        return one.tellsApartAt() != null || other.tellsApartAt() == null ? one : other;
+        if (a instanceof AnotherLineTheRowsAllow.Stands one
+                && b instanceof AnotherLineTheRowsAllow.Stands other && one.isTheLineOf(other)) {
+            return one.tellsApartAt() != null || other.tellsApartAt() == null ? one : other;
+        }
+        throw new IllegalStateException("two readings of one line answering differently about a"
+                + " line beside it, which was asked once of both: " + a + " and " + b);
+    }
+
+    /** Whether {@code shown} is {@code left} with an input a search showed arriving at it. */
+    private static boolean shownArrivingAt(AnotherLineTheRowsAllow.Direction shown,
+                                           AnotherLineTheRowsAllow.Direction left) {
+        return shown instanceof AnotherLineTheRowsAllow.Stands standing
+                && left instanceof AnotherLineTheRowsAllow.Undecided(var _,
+                        AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher(var was))
+                && standing.isTheLineOf(was);
     }
 
     /**
@@ -2379,7 +2434,7 @@ final class Coverages {
      * made and coming to nothing, and the line is one nothing has shown to be writable — reported and
      * not counted, the same account any other unpromised edge gets.
      */
-    static List<BorderAssessment> assessBetween(
+    static List<ReadingOfALine> assessBetween(
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             RowsPutToTheLines put, ReachingCuts reaching) {
@@ -2387,7 +2442,7 @@ final class Coverages {
         // One entry per reading, the way a line at a place is read: what several readings of one
         // line come to is one answer, and it is put together where the last thing that is a
         // reading's own has been asked ({@link #merged}).
-        List<BorderAssessment> out = new ArrayList<>();
+        List<ReadingOfALine> out = new ArrayList<>();
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(subject.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
