@@ -212,6 +212,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",
                     "stops walking a way read again at the walks it is read again with, and hands"
                             + " the figure to what the relation says it stopped at"),
+            Map.entry("souther.compiler.partition.AWayReadForARelation#metBySomeValue("
+                            + "Lsouther/compiler/partition/Reachability$Reaching;)Z",
+                    "allows the elimination what is left of the pairs a way is read again with,"
+                            + " and hands the figure to what the relation says it stopped at where"
+                            + " the elimination stopped there and no value was shown"),
             Map.entry("souther.compiler.partition.UndividedByARelation#leftWhereRowsArrive("
                             + "Lsouther/compiler/inputs/InputReading;Ljava/util/List;"
                             + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"

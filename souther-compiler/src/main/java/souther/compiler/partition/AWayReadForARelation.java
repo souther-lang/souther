@@ -96,6 +96,10 @@ final class AWayReadForARelation {
     /** How many walks this has taken ({@link CompositionBudget#WALKS_A_WAY_IS_READ_AGAIN_WITH}). */
     private int walks;
 
+    /** How many pairs of bounds this has put together
+     *  ({@link CompositionBudget#PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH}). */
+    private long pairs;
+
     private final Set<CompositionBudget> stoppedAt = new LinkedHashSet<>();
 
     private AWayReadForARelation(Reachability.Ways.Whole whole, Set<TermPath> read,
@@ -608,7 +612,13 @@ final class AWayReadForARelation {
                 return false;
             }
         }
-        return WholeValuesMeeting.of(numbers, way.region(),
-                declarations::leaveEveryValueBetween) != null;
+        WholeValuesMeeting.Witness witness = WholeValuesMeeting.of(numbers, way.region(),
+                declarations::leaveEveryValueBetween,
+                CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH.maximum() - pairs);
+        pairs += witness.pairsCombined();
+        if (witness instanceof WholeValuesMeeting.Witness.NotShown(boolean past, long _) && past) {
+            stoppedAt.add(CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH);
+        }
+        return witness instanceof WholeValuesMeeting.Witness.Found;
     }
 }
