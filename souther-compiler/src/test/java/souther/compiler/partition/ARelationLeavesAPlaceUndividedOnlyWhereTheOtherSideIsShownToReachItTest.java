@@ -1901,6 +1901,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
     }
 
+    /**
+     * Numbers a way apart bounds together are given values where the bounds together leave them.
+     * {@code z + w} at two or more and at two or less, and {@code z - w} at nought or more and at
+     * nought or less, put each at one, though no one of the four does: such a choice comes to
+     * nothing for {@code x == y} past the five, as it does written with two equalities, however the
+     * bounds are written and in whatever order, and so it does with {@code 2z + 3w} held at five
+     * from both sides. Where the bounds together leave no whole numbers — {@code z + w} above
+     * nought and below one, or {@code z} one past every {@code Int} — or a value they leave is held
+     * out, the choice is kept as it is, and read as it is without the five.
+     */
+    @Test
+    void numbersAWayApartBoundsTogetherAreGivenValuesWhereTheBoundsTogetherLeaveThem() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int, v: Int";
+        Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
+        for (String apart : List.of("z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0",
+                "z - w <= 0 && z + w <= 2 && z - w >= 0 && z + w >= 2",
+                "2 - w <= z && z + w < 3 && w - z <= 0 && z <= w",
+                "2 * z + 3 * w >= 5 && 2 * z + 3 * w <= 5 && 3 * z - 3 * w >= 0 && z <= w")) {
+            assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
+                    true), apart);
+        }
+        for (String apart : List.of("z + w > 0 && z + w < 1",
+                "z - w >= 9223372036854775807 && z - w <= 9223372036854775807 && w >= 1",
+                "z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0 && z + 2 * w /= 3")) {
+            String guard = "(" + apart + " || x >= 5)";
+            Map<String, String> alone = leftPast(inputs, UNUSED, guard, "x == y", false);
+            assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone, apart);
+            assertEquals(alone, leftPast(inputs, UNUSED, guard, "x == y", true), apart);
+        }
+    }
+
     /** Four choices of two ways each on numbers a way apart holds below {@code z}: sixteen ways
      *  together, which beside a choice of two that bear on {@code x} are more than a way is looked
      *  along each of. */

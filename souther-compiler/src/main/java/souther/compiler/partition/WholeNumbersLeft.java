@@ -139,4 +139,10 @@ record WholeNumbersLeft(BigInteger least, BigInteger most, Set<BigInteger> holes
             }
         }
     }
+
+    /** Whether {@code value} is one of these. */
+    boolean leaves(BigInteger value) {
+        return (least == null || value.compareTo(least) >= 0)
+                && (most == null || value.compareTo(most) <= 0) && !holes.contains(value);
+    }
 }

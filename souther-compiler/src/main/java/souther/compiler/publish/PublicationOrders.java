@@ -327,6 +327,8 @@ public final class PublicationOrders {
                     // The walking a way past the ways looked along is read again with for one
                     // relation, beside the walking of the way it reads again.
                     CompositionBudget.WALKS_A_WAY_IS_READ_AGAIN_WITH,
+                    // Beside it: what one walk's way apart is then worked out with.
+                    CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH,
                     // Beside the one above it, and for the same reason: both bound how many times
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.
