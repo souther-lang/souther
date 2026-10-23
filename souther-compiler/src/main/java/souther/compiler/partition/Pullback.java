@@ -1089,8 +1089,7 @@ final class Pullback {
             boolean[] hasOperands = {false};
             // A quotient stops where its divisor is nought, and what it divides is no part of it.
             Core.forEachChild(e, operand -> {
-                if (e instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
-                        && operand != quotient.right()) {
+                if (isWhatAQuotientDivides(e, operand)) {
                     return;
                 }
                 hasOperands[0] = true;
@@ -1108,6 +1107,13 @@ final class Pullback {
                     Core.withoutStanding(child) instanceof Core.Block block
                             ? boundInside(e, block, reads, bound) : bound));
         }
+    }
+
+    /** Whether {@code operand} is what the quotient {@code e} divides, which it stops a run on no
+     *  more than on the number it divides by. */
+    private static boolean isWhatAQuotientDivides(Core e, Core operand) {
+        return e instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
+                && operand != quotient.right();
     }
 
     /**

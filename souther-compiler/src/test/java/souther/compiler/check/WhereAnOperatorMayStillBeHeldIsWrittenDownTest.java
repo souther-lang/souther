@@ -158,6 +158,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.operatorsIn",
                     "which operators a body works out, which a sum, a difference and a product"
                             + " are and a comparison is not"),
+            new Held("souther.compiler.partition.Pullback.isWhatAQuotientDivides",
+                    "which operand of a quotient it stops a run on, the one it divides by and not"
+                            + " the one it divides"),
             new Held("souther.compiler.partition.Pullback.comparisonHolding",
                     "which comparison a read of a step stands in, whose arithmetic is the"
                             + " relation it states and not something the step works out beside it"),
