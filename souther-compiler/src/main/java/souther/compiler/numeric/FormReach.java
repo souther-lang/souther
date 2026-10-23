@@ -1,6 +1,8 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,9 +64,9 @@ final class FormReach<A> {
     /** The one order a walk of a form's positions takes them in — see {@link CanonicalOrder}. */
     private final CanonicalOrder<A> order;
 
-    /** Every half-space of every rule, stated once for the round — see {@link #premises}. Null
-     *  until the first form of two or more positions asks. */
-    private List<Premise<A>> premises;
+    /** Every half-space of every rule, stated once for the round, and which of them name each
+     *  position — see {@link #premises}. Null until the first form of two or more positions asks. */
+    private Premises<A> premises;
 
     /**
      * How many premises this has merged into a form, and how many it has held against the ends, for
@@ -183,15 +185,19 @@ final class FormReach<A> {
 
     /** The highest the form is proven to come to, or null where nothing bounds it above. */
     ExactCut most(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return highest(inOrder(coefs), constant, null);
+        Map<A, ExactRatio> ordered = inOrder(coefs);
+        return highest(ordered, constant, null, namingAnyOf(ordered));
     }
 
     private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {
-        ExactCut most = highest(coefs, constant, without);
+        // The form and its negation name the same positions, so which premises name one of them is
+        // asked once for the two.
+        BitSet naming = namingAnyOf(coefs);
+        ExactCut most = highest(coefs, constant, without, naming);
         // The least a form comes to is the highest its negation comes to, on the other side of
         // nought. Asked that way rather than derived a second time, so the two ends are one reading
         // and cannot come apart.
-        ExactCut flipped = highest(negated(coefs), constant.negated(), without);
+        ExactCut flipped = highest(negated(coefs), constant.negated(), without, naming);
         ExactCut least = flipped == null ? null
                 : new ExactCut(flipped.at().negated(), flipped.inclusive());
         return new Reach(least, most);
@@ -203,8 +209,13 @@ final class FormReach<A> {
         return out;
     }
 
+    /**
+     * @param naming which premises, by their place in {@link #premises}, name one of
+     *               {@code coefs}' positions ({@link #namingAnyOf}); null for a form of one
+     *               position or none, which asks no premise
+     */
     private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
-                                AffineConstraint<A> without) {
+                                AffineConstraint<A> without, BitSet naming) {
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -224,12 +235,13 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
-        for (Premise<A> each : premises()) {
+        for (Premise<A> each : premises().each()) {
             if (each.rule().equals(without)) {
                 continue;
             }
             AffineConstraint.HalfSpace<A> premise = each.half();
-            if (residualsAreRangedOnly && namesNoneOf(premise, coefs) && passesOver(each, ranges)) {
+            if (residualsAreRangedOnly && !naming.get(each.place())
+                    && passesOver(each, ranges)) {
                 continue;
             }
             if (ranges != null && heldAlready(each, coefs, weighs)) {
@@ -326,16 +338,25 @@ final class FormReach<A> {
         return weighed;
     }
 
-    /** Whether {@code premise}'s sum names none of the positions {@code coefs} holds, weighed or
-     *  not — a position held at nought is still one a merge would combine. */
-    private static <A> boolean namesNoneOf(AffineConstraint.HalfSpace<A> premise,
-                                           Map<A, ExactRatio> coefs) {
+    /**
+     * Which premises, by their place in {@link #premises}, name one of the positions {@code coefs}
+     * holds, weighed or not — a position held at nought is still one a merge would combine. Null for
+     * a form of one position or none, which {@link #highest} answers without a premise.
+     *
+     * <p>Made for the one form and let go after it, and no longer than the round has premises.
+     */
+    private BitSet namingAnyOf(Map<A, ExactRatio> coefs) {
+        if (coefs.size() <= 1) {
+            return null;
+        }
+        Map<A, List<Integer>> naming = premises().naming();
+        BitSet out = new BitSet();
         for (A position : coefs.keySet()) {
-            if (premise.form().coefs().containsKey(position)) {
-                return false;
+            for (int place : naming.getOrDefault(position, List.of())) {
+                out.set(place);
             }
         }
-        return true;
+        return out;
     }
 
     /**
@@ -501,28 +522,47 @@ final class FormReach<A> {
     }
 
     /**
-     * Every half-space of every rule, in the order the rules are held.
+     * Every half-space of every rule, in the order the rules are held, and which of them name each
+     * position.
      *
      * <p>Once for the round rather than once for every form asked in it: an equality states its two
-     * half-spaces afresh each time it is asked for them.
+     * half-spaces afresh each time it is asked for them, and which premises a form names is the
+     * same question for every form that holds one position.
      *
-     * <p>Worked out on the first ask and kept. What is kept is a function of what this was handed,
-     * so two threads that both work it out work out the same list.
+     * <p>Worked out on the first ask and kept, the two in one value so that no thread reads one
+     * without the other. What is kept is a function of what this was handed, so two threads that
+     * both work it out work out the same.
      */
-    private List<Premise<A>> premises() {
-        List<Premise<A>> read = premises;
+    private Premises<A> premises() {
+        Premises<A> read = premises;
         if (read == null) {
             List<Premise<A>> out = new ArrayList<>();
+            Map<A, List<Integer>> naming = new HashMap<>();
             for (AffineConstraint<A> rule : rules) {
                 for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
-                    out.add(new Premise<>(rule, half));
+                    Premise<A> premise = new Premise<>(rule, half, out.size());
+                    for (A position : half.form().atomsIn(order)) {
+                        naming.computeIfAbsent(position, _ -> new ArrayList<>())
+                                .add(premise.place());
+                    }
+                    out.add(premise);
                 }
             }
-            read = List.copyOf(out);
+            // Each position holds the places of the premises that name it and no more, so the
+            // index holds as many places as the premises name positions: one set of bits per
+            // position would be as long as the last place that names it, which over positions
+            // each named once is the square of the round.
+            Map<A, List<Integer>> places = new HashMap<>();
+            naming.forEach((position, named) -> places.put(position, List.copyOf(named)));
+            read = new Premises<>(List.copyOf(out), Map.copyOf(places));
             premises = read;
         }
         return read;
     }
+
+    /** {@link #premises}: each premise, and the places of the premises naming each position
+     *  ({@link Premise#place}). */
+    private record Premises<A>(List<Premise<A>> each, Map<A, List<Integer>> naming) {}
 
     /**
      * One half-space of a rule, and where its room stands once a form has asked.
@@ -536,14 +576,23 @@ final class FormReach<A> {
 
         private final AffineConstraint<A> rule;
         private final AffineConstraint.HalfSpace<A> half;
+
+        /** Which premise of the round this is, in the order the rules are held: what the index
+         *  of the premises naming each position is by. */
+        private final int place;
         private Room room;
 
         /** {@link #heldEndOf}'s answer, empty where it is not such a bound, and null until asked. */
         private Optional<HeldEnd<A>> held;
 
-        Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half) {
+        Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half, int place) {
             this.rule = rule;
             this.half = half;
+            this.place = place;
+        }
+
+        int place() {
+            return place;
         }
 
         AffineConstraint<A> rule() {

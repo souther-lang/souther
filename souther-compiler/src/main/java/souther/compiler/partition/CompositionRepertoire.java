@@ -140,6 +140,17 @@ public enum CompositionRepertoire {
     ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
 
     /**
+     * The totals of a key from the last of its elements that puts its number in place of the
+     * ones before, among the elements adding up to them.
+     *
+     * <p>One element is a key whose total is its own number, whichever case it is of, so such a
+     * total is written as one. A container that must hold more of that key's elements, and a
+     * total no one element's number comes to, are written by none of these; what would is a way
+     * of writing the elements after the last put so that they add up to it.
+     */
+    TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
+
+    /**
      * The elements whose computed number is made of the fields of one element in ways this
      * compiler solves for.
      *
@@ -211,6 +222,7 @@ public enum CompositionRepertoire {
                  VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
                  ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+                 TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
         };

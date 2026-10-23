@@ -2225,11 +2225,9 @@ final class Pullback {
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        if (walk == null || !(walkedContainer(walk.container(), reads)
-                instanceof DecisionSubject.AnInput held)) {
-            return null;
-        }
-        if (!(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))) {
+        if (walk == null
+                || !(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(
+                        LinearForm<Quantity> seed))) {
             return null;
         }
         // A step adding to what it carried each value it is handed that it does not hold yet adds
@@ -2243,7 +2241,10 @@ final class Pullback {
                 && DefaultBoundOperationFacts.get().addsWhatItDoesNotHold(applied.operation())
                         instanceof AddsWhatItDoesNotHold adds) {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
-                    ? differentOverAWalk(walk, held, step, applied, adds) : null;
+                    ? differentOverAWalk(walk, reads, step, applied, adds) : null;
+        }
+        if (!(walkedContainer(walk.container(), reads) instanceof DecisionSubject.AnInput held)) {
+            return null;
         }
         Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
         return tentatively(soFar, () -> {
@@ -2313,44 +2314,71 @@ final class Pullback {
     }
 
     /**
-     * How many what {@code walk}, from nothing held over the elements of {@code held}, ends with
-     * holds, where its step {@code applied}, standing as {@code step}, adds to what it carried
-     * each value it is handed that what it carried does not hold yet ({@link
-     * AddsWhatItDoesNotHold}): how many different values it was handed over the elements — or
-     * null where it adds to anything else, or what it is handed is no place of each element.
+     * How many what {@code walk}, from nothing held, ends with holds, where its step
+     * {@code applied}, standing as {@code step}, adds to what it carried each value it is handed
+     * that what it carried does not hold yet ({@link AddsWhatItDoesNotHold}): how many different
+     * values it was handed over the occurrences the list it walks holds one value each of — or
+     * null where it adds to anything else, the list is no such run, or what it is handed is no
+     * place of each of them.
      *
      * <p>By induction over the walk, which hands every element to the step once: what it holds
      * after a step is what it held and the values that step handed it, each once, so what it ends
      * with holds every value handed it once, which is how many differ among them.
+     *
+     * <p>Where the values handed stand is read down the list the walk is handed as a fold filing
+     * under a key reads its keys ({@link InputReads#occurrencesOf}), so a list made by a map or put
+     * end to end out of the lists inside each element is one way to the same places. A list some
+     * of whose elements a statement kept is not crossed: how many different values meet a
+     * statement is no number this reads.
      */
-    private Sized differentOverAWalk(SeededWalk walk, DecisionSubject.AnInput held,
-                                     Denotation step, AnOperationApplied applied,
-                                     AddsWhatItDoesNotHold adds) {
-        if (!(Core.withoutStanding(applied.args().get(adds.holder().position()))
-                        instanceof Core.Read carried)
+    private Sized differentOverAWalk(SeededWalk walk, InputReads reads, Denotation step,
+                                     AnOperationApplied applied, AddsWhatItDoesNotHold adds) {
+        if (!(Core.withoutStanding(step.at().standing(
+                        applied.args().get(adds.holder().position()), read.rules().symbols(),
+                        read.rules().newtypes()).value()) instanceof Core.Read carried)
                 || !carried.binding().equals(walk.accumulator().binding())) {
             return null;
         }
-        return switch (adds) {
-            case AddsWhatItDoesNotHold.OneValue one ->
-                    step.at().pathOf(applied.args().get(one.value().position()),
-                            read.rules().newtypes()) instanceof PathResolution.At(TermPath value)
-                            && Quantity.HowManyDifferent.oneOfEach(held,
-                                    new DecisionSubject.AnInput(value))
-                            ? new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(
-                                    held, new DecisionSubject.AnInput(value))))
-                            : null;
+        Core handed = applied.args().get(switch (adds) {
+            case AddsWhatItDoesNotHold.OneValue one -> one.value().position();
+            case AddsWhatItDoesNotHold.TheElementsOf elements -> elements.from().position();
+        });
+        OnePerElement.ReadOff value = step.at().readOff(handed, walk.element().binding(),
+                read.rules().newtypes());        if (value == null
+                || !(reads.occurrencesOf(walk.container(), List.of(value), null,
+                        read.rules().symbols(), read.rules().newtypes())
+                        instanceof InputReads.Occurrences every)
+                || !(every.reads().getFirst() instanceof InputReads.Occurrences.Read.At(
+                        TermPath place, var _))) {
+            return null;
+        }
+        DecisionSubject.AnInput at = new DecisionSubject.AnInput(place);
+        Quantity different = switch (adds) {
+            case AddsWhatItDoesNotHold.OneValue _ -> switch (every) {
+                case InputReads.Occurrences.OfOneContainer(TermPath container, var _, var _) ->
+                        Quantity.HowManyDifferent.oneOfEach(
+                                new DecisionSubject.AnInput(container), at)
+                                ? new Quantity.HowManyDifferent(
+                                        new DecisionSubject.AnInput(container), at)
+                                : null;
+                // Every occurrence of the place, which stands in the lists inside the elements of
+                // the container they were put end to end from: the values inside those elements,
+                // where that container stands inside no other and so is one container of the row.
+                case InputReads.Occurrences.AcrossContainers(TermPath outer, var _, var _) ->
+                        outer.insideAContainer() ? null : new Quantity.HowManyDifferentAcross(
+                                new DecisionSubject.AnInput(outer), at);
+            };
             // Every value of a container inside the element, which is as many values as it holds.
-            case AddsWhatItDoesNotHold.TheElementsOf elements ->
-                    step.at().pathOf(applied.args().get(elements.from().position()),
-                            read.rules().newtypes()) instanceof PathResolution.At(TermPath inner)
-                            && inner.isAtOrUnder(held.at().element())
-                            && new DecisionSubject.AnInput(inner).howManyContainersHoldIt()
-                                    == held.howManyContainersHoldIt() + 1
-                            ? new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferentAcross(
-                                    held, new DecisionSubject.AnInput(inner.element()))))
+            case AddsWhatItDoesNotHold.TheElementsOf _ ->
+                    every instanceof InputReads.Occurrences.OfOneContainer(
+                            TermPath container, var _, var _)
+                            && Quantity.HowManyDifferentAcross.ofAContainerInside(
+                                    new DecisionSubject.AnInput(container), at.element())
+                            ? new Quantity.HowManyDifferentAcross(
+                                    new DecisionSubject.AnInput(container), at.element())
                             : null;
         };
+        return different == null ? null : new Sized.AsAForm(LinearForm.atom(different));
     }
 
     /**
@@ -5554,6 +5582,13 @@ final class Pullback {
             }
             case KeyedAccumulation.Filed.Summed summed -> gathered(whole, filed, summed.value(),
                     List.of(summed.added()), NumericTerm.GatheredUnderItsKey.Gathering.TOTAL);
+            case KeyedAccumulation.Filed.SummedSinceAPut since -> {
+                ElementsGathered gathered = elementsGathered(whole, filed, since.value(),
+                        List.of(since.added()));
+                NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut puts = gathered == null
+                        ? null : putsOf(whole, filed, since, gathered);
+                yield puts == null ? null : gathered(gathered, puts);
+            }
         };
     }
 
@@ -5564,17 +5599,33 @@ final class Pullback {
                                           List<Core> alike,
                                           NumericTerm.GatheredUnderItsKey.Gathering gathering) {
         ElementsGathered read = elementsGathered(whole, filed, value, alike);
-        NumericTerm term = read == null ? null
-                : NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
-                        read.number(), read.each(), gathering, read.selection());
+        return read == null ? null : gathered(read, gathering);
+    }
+
+    /**
+     * What the elements {@code read} reads come to by {@code gathering}, as a number of the input
+     * read on an order — or null where the term is not read on an order.
+     *
+     * <p>A number of the input beside every element is put back as many times as there are
+     * elements for a total, and once for an end. Where an element may put its number in place of
+     * the ones before, how many are added after it is no number of the row, so none is.
+     */
+    private LinearForm<Quantity> gathered(ElementsGathered read,
+                                          NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        if (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut
+                && !read.beside().equals(LinearForm.constant(ExactRatio.ZERO))) {
+            return null;
+        }
+        NumericTerm term = NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
+                read.number(), read.each(), gathering, read.selection());
         if (!readOnAnOrder(term)) {
             return null;
         }
         // What stands beside every element is put back as the gathering puts it back.
         LinearForm<NumericTerm> moved = new ElementComputation(read.number(), read.beside())
-                .gathered(gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.End
-                        ? ElementComputation.Gathering.AN_END
-                        : ElementComputation.Gathering.A_TOTAL, term);
+                .gathered(gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.Total
+                        ? ElementComputation.Gathering.A_TOTAL
+                        : ElementComputation.Gathering.AN_END, term);
         if (moved == null) {
             return null;
         }
@@ -5584,17 +5635,19 @@ final class Pullback {
     }
 
     /**
-     * The same elements gathered for the key an input holds at {@code asked}, which is the number
-     * the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where
-     * {@link #elementsGathered} reads none.
+     * The elements {@code read} reads gathered for the key an input holds at {@code asked}, which
+     * is the number the lookup of that key finds ({@link #valueLookedUpUnderAKey}) — or null where
+     * {@link #elementsGathered} read none.
      */
-    private NumericTerm.GatheredUnderAKey gatheredUnderAKey(
-            Denotation whole, KeyedAccumulation filed, Core value, List<Core> alike,
-            NumericTerm.GatheredUnderItsKey.Gathering gathering, TermPath asked) {
-        ElementsGathered read = elementsGathered(whole, filed, value, alike);
+    private static NumericTerm.GatheredUnderAKey gatheredUnderAKey(
+            ElementsGathered read, NumericTerm.GatheredUnderItsKey.Gathering gathering,
+            TermPath asked) {
         // A key asked for is counted among every occurrence, and says nothing of which a
-        // statement kept.
+        // statement kept; and a number beside every element after a put is added as many times
+        // as there are elements after it, which is no number of the row.
         return read == null || !read.beside().coefs().isEmpty() || read.selection() != null
+                || (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut
+                        && read.beside().constant().signum() != 0)
                 ? null : NumericTerm.GatheredUnderAKey.of(read.elements(), read.key(), read.number(),
                         read.each(), gathering, asked);
     }
@@ -5608,10 +5661,13 @@ final class Pullback {
      * @param each      what one element's number stands as
      * @param selection the occurrences filed where a statement keeps some of them, or null where
      *                  every one is
+     * @param walked    what each element the fold walks is made of, which every number of the
+     *                  element is read through
      */
     private record ElementsGathered(TermPath elements, ElementKey key,
                                     ElementValue number, LinearForm<NumericTerm> beside,
-                                    Type each, KeptOccurrences selection) {}
+                                    Type each, KeptOccurrences selection,
+                                    InputReads.WalkedElement walked) {}
 
     /**
      * Where the elements a fold files stand, and the key and the number of each — or null where
@@ -5638,7 +5694,8 @@ final class Pullback {
         if (walked == null || walked.keptBy().size() > 1) {
             return null;
         }
-        ElementKey key = whole.at().keyOf(filed.key(), walked, read.rules().newtypes());
+        ElementKey key = whole.at().keyOf(filed.key(), walked, read.rules().symbols(),
+                read.rules().newtypes());
         if (key == null) {
             return null;
         }
@@ -5664,7 +5721,7 @@ final class Pullback {
         }
         return new ElementsGathered(walked.elements(), key, number.relative(),
                 number.invariant(), TypeOps.base(value.type(), read.rules().inners()),
-                selection);
+                selection, walked);
     }
 
     /**
@@ -5723,11 +5780,24 @@ final class Pullback {
                             : counterLookedUp(lookup, applied, whole, filed, counted, at);
             case KeyedAccumulation.Filed.Kept kept -> gatheredLookedUp(applied, whole, filed,
                     kept.value(), kept.compared(),
-                    new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()), at);
+                    _ -> new NumericTerm.GatheredUnderItsKey.Gathering.End(kept.extreme()), at);
             case KeyedAccumulation.Filed.Summed summed -> gatheredLookedUp(applied, whole, filed,
                     summed.value(), List.of(summed.added()),
-                    NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, at);
+                    _ -> NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, at);
+            case KeyedAccumulation.Filed.SummedSinceAPut since -> gatheredLookedUp(applied,
+                    whole, filed, since.value(), List.of(since.added()),
+                    each -> putsOf(whole, filed, since, each), at);
         };
+    }
+
+    /** Where the elements {@code gathered} reads put their number in place of the ones before,
+     *  as {@code since} says, in the order the fold {@code filed} hands them
+     *  ({@link InputReads#putsOf}). */
+    private NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut putsOf(
+            Denotation whole, KeyedAccumulation filed,
+            KeyedAccumulation.Filed.SummedSinceAPut since, ElementsGathered gathered) {
+        return whole.at().putsOf(since.puts(), gathered.walked(), filed.walked(),
+                filed.inTheListsOrder(), read.rules().symbols(), read.rules().newtypes());
     }
 
     /**
@@ -5742,14 +5812,19 @@ final class Pullback {
      */
     private LinearForm<Quantity> gatheredLookedUp(
             AnOperationApplied applied, Denotation whole, KeyedAccumulation filed, Core value,
-            List<Core> alike, NumericTerm.GatheredUnderItsKey.Gathering gathering, InputReads at) {
+            List<Core> alike,
+            Function<ElementsGathered, NumericTerm.GatheredUnderItsKey.Gathering> gathering,
+            InputReads at) {
         if (applied.args().size() != 2
                 || !(at.pathOf(applied.args().getFirst(), read.rules().newtypes())
                         instanceof PathResolution.At(TermPath asked))) {
             return null;
         }
-        NumericTerm.GatheredUnderAKey term =
-                gatheredUnderAKey(whole, filed, value, alike, gathering, asked);
+        ElementsGathered gathered = elementsGathered(whole, filed, value, alike);
+        NumericTerm.GatheredUnderItsKey.Gathering by = gathered == null ? null
+                : gathering.apply(gathered);
+        NumericTerm.GatheredUnderAKey term = by == null ? null
+                : gatheredUnderAKey(gathered, by, asked);
         return term != null && readOnAnOrder(term)
                 ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
     }
@@ -5976,7 +6051,7 @@ final class Pullback {
         // Every occurrence across the containers, since a count of a value asked for says nothing
         // about which of them a statement kept.
         return keysOf(whole, filed) instanceof InputReads.Occurrences.AcrossContainers(
-                        List<InputReads.Occurrences.Read> reads, List<Denotation> keptBy)
+                        var _, List<InputReads.Occurrences.Read> reads, List<Denotation> keptBy)
                 && keptBy.isEmpty()
                 && reads.getFirst() instanceof InputReads.Occurrences.Read.At(
                         TermPath place, var _)

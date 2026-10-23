@@ -10,6 +10,7 @@ import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -41,8 +42,12 @@ import java.util.function.Predicate;
  * @param element the step's parameter each element of {@code walked} arrives on
  * @param key     the key the step files an element under, a number of the element alone
  * @param filed   what the map holds under a key, out of the elements that have it
+ * @param inTheListsOrder whether the walk hands the step the elements of {@code walked} in the
+ *                order the list holds them, rather than from the last of them: which element of
+ *                a key was handed last turns on it ({@link Filed.SummedSinceAPut})
  */
-public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Filed filed) {
+public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Filed filed,
+                                boolean inTheListsOrder) {
 
     public KeyedAccumulation {
         Objects.requireNonNull(filed, "a map built so holds something under each of its keys");
@@ -108,14 +113,37 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          *
          * @param value what the first element of a key files, read of the element
          * @param added what each further one adds to the value found, read of the element
-         * @param found the name the step gives the value found under the key
          */
-        record Summed(Core value, Core added, BindingId found) implements Filed {
+        record Summed(Core value, Core added) implements Filed {
 
             public Summed {
                 Objects.requireNonNull(value, "an element files a value");
                 Objects.requireNonNull(added, "and a further one adds one");
-                Objects.requireNonNull(found, "to what the step finds under the key");
+            }
+        }
+
+        /**
+         * The total of what {@code value} is for the elements that have the key, from the last of
+         * them whose arm puts its value in place of what was found: an element of an arm that
+         * adds files its value where it finds nothing and adds {@code added} to what it finds,
+         * and an element of an arm that puts files its value whatever it finds. Of a step that is
+         * a choice by the element's case, with some arm that puts.
+         *
+         * <p>Where no element of the key puts, the total of all of them, as {@link Summed}.
+         *
+         * @param value what an element files where it finds nothing, or puts: the choice by its
+         *              case, each arm answering its own
+         * @param added what an element of an arm that adds adds, and the value of one that puts:
+         *              the same choice, each to be the same number of the element as
+         *              {@code value}
+         * @param puts  the same choice, each arm answering whether it puts
+         */
+        record SummedSinceAPut(Core value, Core added, Core puts) implements Filed {
+
+            public SummedSinceAPut {
+                Objects.requireNonNull(value, "an element files a value");
+                Objects.requireNonNull(added, "and a further one adds or puts one");
+                Objects.requireNonNull(puts, "by an arm that says which");
             }
         }
     }
@@ -181,12 +209,15 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         }
         AStep<E> step = new AStep<>(walk.accumulator().binding(), sides, blockOf);
         ValueStanding.ReadThrough<E> body = sides.standing(walk.step().body(), at);
-        Filing filing = step.byAnOperation(body);
+        Filing filing = step.filingOf(body);
         if (filing == null) {
-            filing = step.afterALookup(body);
+            filing = step.byTheArmsOfAChoice(body);
         }
-        return filing == null ? null : new KeyedAccumulation(walk.container(), walk.element(),
-                filing.key(), filing.filed());
+        if (filing == null) {
+            return null;
+        }
+        return new KeyedAccumulation(walk.container(), walk.element(), filing.key(),
+                filing.filed(), walk.inTheContainersOrder());
     }
 
     /**
@@ -202,6 +233,103 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         /** What {@code e}, read in {@code at}, was given: past every name it was given. */
         Core valueOf(Core e, E at) {
             return sides.standing(e, at).value();
+        }
+
+        /** The filing {@code body} is: an operation that files under a key, or the same written
+         *  out as a lookup and a filing. */
+        Filing filingOf(ValueStanding.ReadThrough<E> body) {
+            Filing filing = byAnOperation(body);
+            return filing != null ? filing : afterALookup(body);
+        }
+
+        /**
+         * The filing {@code body} is, where it is a {@code match} each of whose arms files under a
+         * key of its own by one law: what the map holds under a key is what that law makes of the
+         * elements filed under it, each filing the key and the value its own arm says. So the key
+         * and what is filed are each that choice, a {@code match} with the same arms answering
+         * the key, or the value, its arm files ({@link Core.Case#answering}); a reader of the
+         * element reads which arm an element takes from its case.
+         *
+         * <p>A total on every arm, which is the law a reader of the elements reads a key chosen by
+         * their case under ({@link Filed.Summed}); or a total on some arms and on the others a
+         * value put in place of what was found, which makes what is under a key the total from
+         * the last element put ({@link Filed.SummedSinceAPut}). A counter is read off where the
+         * key stands, of which a choice has none, and arms keeping an end compare what they find
+         * against values of their own, each its own name for what was found. A choice reading the
+         * answer so far chooses where an element is filed by what came before, as a key reading it
+         * would.
+         */
+        Filing byTheArmsOfAChoice(ValueStanding.ReadThrough<E> body) {
+            if (!(Core.withoutStanding(body.value()) instanceof Core.Match written)
+                    || written.cases().size() < 2) {
+                return null;
+            }
+            // Chosen by what the scrutinee stands for, which a reader of the element reads where
+            // the walk stands rather than inside the step.
+            Core chosenBy = valueOf(written.scrutinee(), body.at());
+            if (WhatABodyReads.binding(chosenBy, accumulator)) {
+                return null;
+            }
+            Core.Match match = new Core.Match(chosenBy, written.cases(), written.place(),
+                    written.type(), written.pos());
+            List<Core> keys = new ArrayList<>();
+            List<Core> values = new ArrayList<>();
+            List<Core> added = new ArrayList<>();
+            List<Core> puts = new ArrayList<>();
+            boolean somePut = false;
+            for (Core.Case arm : match.cases()) {
+                ValueStanding.ReadThrough<E> filing = sides.standing(arm.body(), body.at());
+                Put put = putOf(filing);
+                if (put != null) {
+                    keys.add(put.key());
+                    values.add(put.value());
+                    added.add(put.value());
+                    somePut = true;
+                } else if (filingOf(filing) instanceof Filing(
+                        Core key, Filed.Summed(Core value, Core adds))) {
+                    keys.add(key);
+                    values.add(value);
+                    added.add(adds);
+                } else {
+                    return null;
+                }
+                puts.add(new Core.Bool(put != null, Type.BOOL, arm.pos()));
+            }
+            Core key = choosing(match, keys);
+            return somePut ? new Filing(key, new Filed.SummedSinceAPut(choosing(match, values),
+                            choosing(match, added), choosing(match, puts)))
+                    : new Filing(key, new Filed.Summed(choosing(match, values),
+                            choosing(match, added)));
+        }
+
+        /** A value put under a key in place of what is found there, each as written. */
+        private record Put(Core key, Core value) {}
+
+        /**
+         * What {@code body} puts under a key of the answer so far in place of what it finds
+         * there, where it inserts a value read of the element alone under a key read of it alone
+         * — or null where it does anything else.
+         */
+        private Put putOf(ValueStanding.ReadThrough<E> body) {
+            return AnOperationApplied.of(body.value()) instanceof AnOperationApplied filing
+                    && filing.operation().equals(INSERT) && filing.args().size() == 3
+                    && isThe(valueOf(filing.args().get(2), body.at()), accumulator)
+                    && !WhatABodyReads.binding(valueOf(filing.args().get(0), body.at()),
+                            accumulator)
+                    && !WhatABodyReads.binding(valueOf(filing.args().get(1), body.at()),
+                            accumulator)
+                    ? new Put(filing.args().get(0), filing.args().get(1)) : null;
+        }
+
+        /** {@code match} with each arm answering the value {@code answers} holds for it, in the
+         *  order of its arms. */
+        private static Core choosing(Core.Match match, List<Core> answers) {
+            List<Core.Case> arms = new ArrayList<>();
+            for (int i = 0; i < match.cases().size(); i++) {
+                arms.add(match.cases().get(i).answering(answers.get(i)));
+            }
+            return new Core.Match(match.scrutinee(), arms, match.place(),
+                    answers.getFirst().type(), match.pos());
         }
 
         /** The filing {@code body} is, where it applies an operation that files under a key. */
@@ -278,7 +406,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             }
             Core added = addedTo(moved, found, first, firstAt);
             if (added != null) {
-                return new Filed.Summed(first, added, found);
+                return new Filed.Summed(first, added);
             }
             List<Choice.ADefinitionCase> cases =
                     Extreme.casesOf(moved.value(), moved.at(), sides);

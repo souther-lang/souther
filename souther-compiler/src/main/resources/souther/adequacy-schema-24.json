@@ -950,6 +950,11 @@
       "required": [
         "kind"
       ],
+      "allOf": [
+        {
+          "$ref": "#/$defs/putByOfItsGathering"
+        }
+      ],
       "oneOf": [
         {
           "description": "The number a position holds.",
@@ -1067,7 +1072,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "What is computed of each element of one sequence: one value per element, each made of that element's own fields by `computation`. No position holds these values, so `elements` says where the elements stand and `computation` what is made of one of them.",
+                  "description": "What is computed of each element of one sequence: one value per element, each made of that element's own fields by `computation`. No position holds these values, so `elements` says where the elements stand and `computation` what is made of one of them. Where what is computed turns on where each element stands, `handed` says which end the walk was handed them from, since the same elements handed from the other end are another run; absent where it turns on no element's position.",
                   "required": [
                     "kind",
                     "elements",
@@ -1083,6 +1088,9 @@
                     },
                     "computation": {
                       "$ref": "#/$defs/elementComputation"
+                    },
+                    "handed": {
+                      "$ref": "#/$defs/handed"
                     }
                   }
                 },
@@ -1203,7 +1211,7 @@
           }
         },
         {
-          "description": "What the elements standing at `elements` come to, among the elements holding at `key` what the element under consideration holds there: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, in one container or in the containers inside another put end to end. No one position holds it.",
+          "description": "What the elements standing at `elements` come to, among the elements holding at `key` what the element under consideration holds there: the total of what `computation` makes of each, the same total from the last element that puts its number in place of the ones before (`put_by`), or the least or the greatest of it. The elements are every occurrence of the place, in one container or in the containers inside another put end to end. No one position holds it.",
           "required": [
             "gathering",
             "elements",
@@ -1219,8 +1227,12 @@
               "enum": [
                 "total",
                 "least",
-                "greatest"
+                "greatest",
+                "total_from_the_last_put"
               ]
+            },
+            "put_by": {
+              "$ref": "#/$defs/putBy"
             },
             "elements": {
               "type": "string"
@@ -1272,7 +1284,7 @@
           }
         },
         {
-          "description": "What the elements standing at `elements` come to, among those holding at `key` what the input holds at `asked`: the total of what `computation` makes of each, or the least or the greatest of it. The elements are every occurrence of the place, as for `gathered_under_its_key`. It is no number where no element holds the key, and no one position holds it.",
+          "description": "What the elements standing at `elements` come to, among those holding at `key` what the input holds at `asked`: the total of what `computation` makes of each, the same total from the last element that puts (`put_by`), or the least or the greatest of it. The elements are every occurrence of the place, as for `gathered_under_its_key`. It is no number where no element holds the key, and no one position holds it.",
           "required": [
             "gathering",
             "elements",
@@ -1289,8 +1301,12 @@
               "enum": [
                 "total",
                 "least",
-                "greatest"
+                "greatest",
+                "total_from_the_last_put"
               ]
+            },
+            "put_by": {
+              "$ref": "#/$defs/putBy"
             },
             "elements": {
               "type": "string"
@@ -1321,6 +1337,63 @@
             }
           }
         }
+      ]
+    },
+    "putBy": {
+      "type": "object",
+      "description": "Where `gathering` is `total_from_the_last_put`: an element whose value at `subject` is of one of the cases `taken` puts its number in place of the ones before, and what a key comes to is the total of its elements from the last such the walk was handed. Which was handed last is the order and not the elements, so `handed` says which end the walk was handed them from: the same elements handed from the other end come to another number. Absent for every other gathering.",
+      "required": [
+        "subject",
+        "taken",
+        "handed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "subject": {
+          "type": "string"
+        },
+        "taken": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "handed": {
+          "$ref": "#/$defs/handed"
+        }
+      }
+    },
+    "putByOfItsGathering": {
+      "description": "`put_by` is written exactly where the gathering is `total_from_the_last_put`: that gathering is not said without the elements that put, and no other gathering, nor a number gathered by none, has any. Stated once of every number a line is drawn on, rather than in each branch that writes a gathering, so the two numbers gathered under a key cannot come to say it two ways.",
+      "if": {
+        "properties": {
+          "gathering": {
+            "const": "total_from_the_last_put"
+          }
+        },
+        "required": [
+          "gathering"
+        ]
+      },
+      "then": {
+        "required": [
+          "put_by"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "put_by"
+          ]
+        }
+      }
+    },
+    "handed": {
+      "description": "Which end of the elements a walk whose number turns on their order was handed first: `as_written` from the first the row writes, `from_the_far_end` from the last of them.",
+      "enum": [
+        "as_written",
+        "from_the_far_end"
       ]
     },
     "elementComputation": {
@@ -6115,6 +6188,7 @@
                           "keys_placed_at_the_number_their_elements_come_to",
                           "keys_of_one_fold_asked_together",
                           "ends_of_a_key_written_as_one_element",
+                          "totals_from_a_put_written_as_one_element",
                           "elements_a_computed_total_is_solved_for",
                           "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count",

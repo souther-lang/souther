@@ -119,13 +119,35 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         assertTrue(alike.contains("List.sum({3·the element itself + 0 | xs[*]})"), alike);
     }
 
-    /** The same total over the list and over its reverse are two terms, not one. */
+    /** The same total over the list and over its reverse are two terms, not one, and the document
+     *  writes them as two: which end the walk was handed the elements from is said of the run. */
     @Test
     void aTotalFromTheFarEndIsNotTheTotalFromTheNearEnd() {
         String near = report(model(BRANCH, "xs"));
         String far = report(model(BRANCH, "List.reverse(xs)"));
         assertFalse(near.contains("from the far end"), near);
         assertTrue(far.contains("from the far end"), far);
+        assertEquals(List.of("as_written"), handedIn(model(BRANCH, "xs")));
+        assertEquals(List.of("from_the_far_end"), handedIn(model(BRANCH, "List.reverse(xs)")));
+    }
+
+    /** Which end each run computed of the elements the document writes was handed them from, one
+     *  word for each such run. */
+    private static List<String> handedIn(String source) {
+        Compilation compilation = measured(source);
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        DocumentShape.assertShapedLikeTheSchema(document);
+        List<String> out = new ArrayList<>();
+        handedIn(document, out);
+        return out.stream().distinct().toList();
+    }
+
+    private static void handedIn(JsonNode node, List<String> out) {
+        if (node.isObject() && node.path("kind").asString("").equals("computed_occurrences")) {
+            out.add(node.path("handed").asString("absent"));
+        }
+        node.forEach(child -> handedIn(child, out));
     }
 
     /** Elements handed in an order no operation declares are not read by where they stand, and

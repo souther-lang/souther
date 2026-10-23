@@ -549,12 +549,19 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (container == null || ofTheOccurrence == null) {
                 throw new IllegalArgumentException("the values are of containers inside elements");
             }
-            if (!ofTheOccurrence.isAtOrUnder(container.element())
-                    || ofTheOccurrence.howManyContainersHoldIt()
-                            != container.howManyContainersHoldIt() + 2) {
+            if (!ofAContainerInside(container, ofTheOccurrence)) {
                 throw new IllegalArgumentException(ofTheOccurrence + " is no value of a container"
                         + " inside the elements of " + container);
             }
+        }
+
+        /** Whether {@code ofTheOccurrence} is a value of a container inside each element of the
+         *  container at {@code container}, one container further in than the elements. */
+        public static boolean ofAContainerInside(DecisionSubject container,
+                                                 DecisionSubject ofTheOccurrence) {
+            return ofTheOccurrence.isAtOrUnder(container.element())
+                    && ofTheOccurrence.howManyContainersHoldIt()
+                            == container.howManyContainersHoldIt() + 2;
         }
 
         @Override

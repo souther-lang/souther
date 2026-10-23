@@ -78,6 +78,34 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
 
             behavior joinedCount : (s: Shelf) -> Int
             let joinedCount (s) = howManyTags(s)
+
+            data Box = { labels: List<Int> }
+            data Rack = { boxes: List<Box> }
+
+            let countsOfLabels (r: Rack): Map<Int, Int> =
+                List.fold((acc, l) -> Map.updateOrInsert(l, 1, n -> n + 1, acc), Map.empty,
+                          List.flatMap(b -> b.labels, r.boxes))
+
+            behavior labelled : (r: Rack) -> Bool
+            let labelled (r) = Map.size(countsOfLabels(r)) >= 2
+
+            behavior labelledCount : (r: Rack) -> Int
+            let labelledCount (r) = Map.size(countsOfLabels(r))
+
+            data Item = { account: Int, amount: Int }
+            data Ledger = { items: List<Item> }
+
+            let totalsOf (l: Ledger): Map<Int, Int> =
+                List.fold((acc, t) -> {
+                    let (account, amount) = t
+                    Map.updateOrInsert(account, amount, n -> n + amount, acc)
+                }, Map.empty, List.map(i -> (i.account, i.amount), l.items))
+
+            behavior accounted : (l: Ledger) -> Bool
+            let accounted (l) = Map.size(totalsOf(l)) >= 2
+
+            behavior accountedCount : (l: Ledger) -> Int
+            let accountedCount (l) = Map.size(totalsOf(l))
             """;
 
     private static final Compilation READ = compiled(MODEL);
@@ -139,6 +167,63 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
             shelf("two sets sharing one", List.of(Set.of(1, 2), Set.of(2, 3))),
             shelf("three sets of different ones", List.of(Set.of(1), Set.of(2), Set.of(3))));
 
+    private static Case rack(String says, List<List<Integer>> labels) {
+        return new Case(says, Map.of("r", Map.of("boxes", labels.stream()
+                .map(each -> Map.of("labels", each)).toList())));
+    }
+
+    private static final List<Case> RACKS = List.of(
+            rack("no box", List.of()),
+            rack("one box of none", List.of(List.of())),
+            rack("one box of two", List.of(List.of(1, 2))),
+            rack("one box holding one label twice", List.of(List.of(1, 1))),
+            rack("two boxes of the same one", List.of(List.of(1), List.of(1))),
+            rack("two boxes sharing one", List.of(List.of(1, 2), List.of(2, 3))));
+
+    /** A ledger of items, each written as its account and its amount. */
+    private static Case ledger(String says, int... accountsAndAmounts) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (int at = 0; at < accountsAndAmounts.length; at += 2) {
+            items.add(Map.of("account", accountsAndAmounts[at],
+                    "amount", accountsAndAmounts[at + 1]));
+        }
+        return new Case(says, Map.of("l", Map.of("items", items)));
+    }
+
+    private static final List<Case> LEDGERS = List.of(
+            ledger("no item"),
+            ledger("one item", 1, 5),
+            ledger("two items of one account and two amounts", 1, 5, 1, 7),
+            ledger("two items of two accounts and one amount", 1, 5, 2, 5),
+            ledger("three items of two accounts", 1, 5, 2, 7, 1, 9));
+
+    /**
+     * A fold filing a counter under each value of a list put end to end out of the lists inside
+     * each element holds as many entries as there are different values across those lists.
+     */
+    @Test
+    void howManyKeysAFoldOverAFlatteningFilesIsWhatTheFoldAnswers() {
+        Quantity read = theOnlyNumber("labelled");
+        assertInstanceOf(Quantity.HowManyDifferentAcross.class, read);
+        assertEquals(List.of(0, 0, 2, 1, 1, 3), counted(read, RACKS),
+                "the cases tell each part of the number apart");
+        answered("labelledCount", read, RACKS, inputs -> "(" + written(inputs.get("r")) + ")");
+    }
+
+    /**
+     * A fold filing a total under the key taken back out of a tuple a map made of each element
+     * holds as many entries as there are different keys among the elements, and not as many as
+     * there are different amounts.
+     */
+    @Test
+    void howManyKeysAFoldOverAMapIntoTuplesFilesIsWhatTheFoldAnswers() {
+        Quantity read = theOnlyNumber("accounted");
+        assertInstanceOf(Quantity.HowManyDifferent.class, read);
+        assertEquals(List.of(0, 1, 1, 2, 2), counted(read, LEDGERS),
+                "the cases tell each part of the number apart");
+        answered("accountedCount", read, LEDGERS, inputs -> "(" + written(inputs.get("l")) + ")");
+    }
+
     @Test
     void howManyDifferentValuesASearchCollectsIsWhatTheSearchAnswers() {
         Quantity read = theOnlyNumber("collected");
@@ -183,6 +268,8 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
     private static int counted(Quantity read, Map<String, Object> inputs) {
         Set<Object> different = new HashSet<>();
         switch (read) {
+            case Quantity.HowManyDifferent each ->
+                    different.addAll(valuesAt(inputs, place(each.ofTheElement())));
             case Quantity.HowManyDifferentAcross across ->
                     different.addAll(valuesAt(inputs, place(across.ofTheOccurrence())));
             case Quantity.HowManyDifferentBelow below -> {
@@ -253,6 +340,15 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
                     + String.join(", ", ((List<?>) record.get("tags")).stream()
                     .map(each -> "Set.fromList([" + String.join(", ", ((Set<?>) each).stream()
                             .map(String::valueOf).sorted().toList()) + "])").toList()) + "] }";
+            case Map<?, ?> record when record.containsKey("boxes") -> "Rack { boxes = ["
+                    + String.join(", ", ((List<?>) record.get("boxes")).stream()
+                    .map(each -> "Box { labels = " + ((Map<?, ?>) each).get("labels") + " }")
+                    .toList()) + "] }";
+            case Map<?, ?> record when record.containsKey("items") -> "Ledger { items = ["
+                    + String.join(", ", ((List<?>) record.get("items")).stream()
+                    .map(each -> "Item { account = " + ((Map<?, ?>) each).get("account")
+                            + ", amount = " + ((Map<?, ?>) each).get("amount") + " }")
+                    .toList()) + "] }";
             case Map<?, ?> map when map.isEmpty() -> "noForecasts";
             case Map<?, ?> map -> "Map.fromList([" + String.join(", ", map.entrySet().stream()
                     .map(entry -> "(\"" + entry.getKey() + "\", " + written(entry.getValue())
