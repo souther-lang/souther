@@ -303,8 +303,11 @@ final class FormReach<A> {
             } else if (was.isZero() && left != 0) {
                 weighsAfter++;
             }
-            unboundedAfter += (runsWithoutEnd(each.getKey(), left) ? 1 : 0)
-                    - (runsWithoutEnd(each.getKey(), was.signum()) ? 1 : 0);
+            // The position's range is read once for both weights: it is two lookups of the ends,
+            // and this is asked of every position of every premise a form is held against.
+            Reach range = rangeOf(each.getKey());
+            unboundedAfter += (runsWithoutEnd(range, left) ? 1 : 0)
+                    - (runsWithoutEnd(range, was.signum()) ? 1 : 0);
         }
         return weighsAfter >= 3 && unboundedAfter > 0;
     }
@@ -314,17 +317,17 @@ final class FormReach<A> {
     private int unboundedIn(Map<A, ExactRatio> coefs) {
         int unbounded = 0;
         for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
-            if (runsWithoutEnd(each.getKey(), each.getValue().signum())) {
+            if (runsWithoutEnd(rangeOf(each.getKey()), each.getValue().signum())) {
                 unbounded++;
             }
         }
         return unbounded;
     }
 
-    /** Whether a position weighed with the sign {@code sign} has no end the way that weight runs it
-     *  up — never where it is weighed nought. */
-    private boolean runsWithoutEnd(A position, int sign) {
-        return sign != 0 && rangeOf(position).endWeighedBy(sign, true) == null;
+    /** Whether a position whose ends are {@code range}, weighed with the sign {@code sign}, has no
+     *  end the way that weight runs it up — never where it is weighed nought. */
+    private static boolean runsWithoutEnd(Reach range, int sign) {
+        return sign != 0 && range.endWeighedBy(sign, true) == null;
     }
 
     /** How many of {@code coefs}' positions carry a weight. */

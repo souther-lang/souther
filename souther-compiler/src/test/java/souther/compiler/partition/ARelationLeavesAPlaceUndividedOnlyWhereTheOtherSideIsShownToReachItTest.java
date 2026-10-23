@@ -54,23 +54,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * The behavior {@code m} taking {@code inputs} and answering {@code body}, read for the lines
-     * its rules draw and no row composed at them: what is asked here is the word a place is left
-     * with and the classes it is parted into, which no composed row moves.
+     * The behavior {@code m} taking {@code inputs} and answering {@code body}, of type
+     * {@code answers}.
      */
-    private static Compilation measured(String inputs, String declarations, String body) {
-        return MEASURED.computeIfAbsent("""
+    private static Compilation measured(String inputs, String declarations, String answers,
+                                        String body) {
+        return measured("""
                 module w1
                 %s
-                behavior m : (%s) -> Bool
+                behavior m : (%s) -> %s
                 let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
-                source -> {
-                    Compilation compilation = Compilation.ofSource(source, "Main");
-                    compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-                    compilation.answerEverything();
-                    return compilation;
-                });
+                """.formatted(declarations, inputs, answers,
+                        inputs.replaceAll(": [A-Za-z<>]+", ""), body));
     }
 
     /**
@@ -80,7 +75,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static List<String> classesAt(String inputs, String declarations, String body,
                                           String path) {
-        Compilation compilation = measured(inputs, declarations, body);
+        return classesAt(inputs, declarations, "Bool", body, path);
+    }
+
+    /** The same, of a behavior answering {@code answers}. */
+    private static List<String> classesAt(String inputs, String declarations, String answers,
+                                          String body, String path) {
+        Compilation compilation = measured(inputs, declarations, answers, body);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))
@@ -93,7 +94,43 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static Map<String, String> left(String inputs, String declarations, String body,
                                             String at) {
-        Compilation compilation = measured(inputs, declarations, body);
+        return left(inputs, declarations, "Bool", body, at);
+    }
+
+    /** The same, of a behavior answering {@code answers}. */
+    private static Map<String, String> left(String inputs, String declarations, String answers,
+                                            String body, String at) {
+        return leftIn(measured(inputs, declarations, answers, body), at);
+    }
+
+    /** The same, of a model of module {@code w1} written out whole, whose behavior is {@code m}. */
+    private static Map<String, String> leftIn(String source, String at) {
+        return leftIn(measured(source), at);
+    }
+
+    /** The classes the axis at {@code path} of a model written out whole is divided into. */
+    private static List<String> classesIn(String source, String path) {
+        PartitionEvidence evidence = measured(source).db()
+                .ask(new Adequacy.Coverage("w1")).value().get("m");
+        return evidence.axes().stream().filter(axis -> axis.path().equals(path))
+                .flatMap(axis -> axis.classes().stream()).toList();
+    }
+
+    /**
+     * A model written out whole, read for the lines its rules draw and no row composed at them:
+     * what is asked here is the word a place is left with and the classes it is parted into, which
+     * no composed row moves.
+     */
+    private static Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source, written -> {
+            Compilation compilation = Compilation.ofSource(written, "Main");
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    private static Map<String, String> leftIn(Compilation compilation, String at) {
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> out = new LinkedHashMap<>();
@@ -481,6 +518,317 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "gross >= List.length(List.filter(n -> n.value > 3, ns))", 27));
     }
 
+    private static final String UNUSED = "data Unused = Int";
+
+    /** Each element of {@code xs} answered one where {@code test} holds of where it stands. */
+    private static final String STANDING = "List.mapIndexed((i, x) -> if %s then 1 else 0, xs)";
+
+    /**
+     * Where an element stands in a walk over a list lies from nought to one below how many the
+     * list holds, and a row of so many hands the walk every one of those. So at a list of one the
+     * one element is the last, and every longer list has a last element and one before it: the
+     * comparison is parted on the length at one, and where the element stands is not asked apart
+     * from it. Moved by two, the line moves with it; held two below, the list of one is the one
+     * whose element is never there.
+     */
+    @Test
+    void whereAnElementStandsPartsHowManyItsListHoldsWhereEveryPositionComesOutOneWay() {
+        String inputs = "xs: List<Int>";
+        for (String test : List.of("i == List.length(xs) - 1", "i + 1 >= List.length(xs)",
+                "i == List.length(xs) - 2")) {
+            assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+                    classesAt(inputs, UNUSED, "List<Int>", STANDING.formatted(test),
+                            "List.length(xs)"), test);
+        }
+        assertEquals(List.of("List.length(xs)/0 <= x <= 2", "List.length(xs)/2 < x"),
+                classesAt(inputs, UNUSED, "List<Int>",
+                        STANDING.formatted("List.length(xs) - i <= 2"), "List.length(xs)"));
+        String body = STANDING.formatted("i == List.length(xs) - 1");
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * What is said of a length is said of every position a row of it compares. With K a third of
+     * the greatest {@code Int} less one, {@code i + K * List.length(xs) - (M - 1) <= 0} holds at
+     * every position of a list of one or two. A list of three compares its first two positions —
+     * the third passes the type, and the walk stops there — and those come out one each way. A
+     * list of four passes it at its first. So the length is parted at two: a list of three is a row
+     * the comparison comes out both ways in, though not every position of it computes.
+     */
+    @Test
+    void aLengthSomeOfWhosePositionsComputeIsReadAtThose() {
+        String inputs = "xs: List<Int>";
+        String body = STANDING.formatted(
+                "i + 3074457345618258602 * List.length(xs) - 9223372036854775806 <= 0");
+        assertEquals(List.of("List.length(xs)/0 <= x <= 2", "List.length(xs)/2 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
+    }
+
+    /**
+     * And a line the model draws stands however long the lists at it are.
+     * {@code i - List.length(xs) + M - 1 <= 0}, M the greatest {@code Int}, fails at every
+     * position of a list shorter than M - 1: past two elements a list passes the type at its third
+     * position, and the first two it compares come out false. Only the lists that long hold it at
+     * the first, so the length is parted at M - 2. The line at M that the walk stopping draws is
+     * the arithmetic's, and none of the model's.
+     */
+    @Test
+    void aLineTheModelDrawsWhereFewPositionsComputeIsDrawn() {
+        String inputs = "xs: List<Int>";
+        String body = STANDING.formatted("i - List.length(xs) + 9223372036854775806 <= 0");
+        assertEquals(List.of("List.length(xs)/0 <= x <= 9223372036854775805",
+                        "List.length(xs)/9223372036854775805 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
+    }
+
+    /** A string of two characters that is three letters, which no value is, and which the reading
+     *  of the declarations does not refuse on its own. */
+    private static final String NO_STRING = "data Never = String invariant String.length(value) == 2"
+            + " && String.matches(\"[a-z]{3}\", value)";
+
+    /**
+     * How many a container holds is a count rows take only where an element can be written. The
+     * rules on the numbers leave a list of any length, and a list of elements no value is holds
+     * none: no row has a last element, so nothing is shown of the length, and no line is drawn on
+     * it.
+     */
+    @Test
+    void aCountOfElementsNoValueIsTakesNothingButNought() {
+        String inputs = "xs: List<Never>";
+        String body = STANDING.formatted("i == List.length(xs) - 1");
+        assertEquals(List.of(), classesAt(inputs, NO_STRING, "List<Int>", body,
+                "List.length(xs)"));
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, NO_STRING, "List<Int>",
+                body, atThe("==", NO_STRING, inputs, body)));
+    }
+
+    /**
+     * A rule reading inside the elements says how many can stand together, which no number does:
+     * every element one, and no two alike, leave a box one element at most. So nothing is shown of
+     * the lengths past that, and no line is drawn on them.
+     */
+    @Test
+    void aRuleReadingInsideTheElementsLeavesHowManyTheyCanBeUnshown() {
+        String box = "data Box = { xs: List<Int> }\n"
+                + "    invariant List.all(x -> x == 1, xs) && List.allDistinctBy(x -> x, xs)";
+        String inputs = "box: Box";
+        String body = "List.mapIndexed((i, x) -> if i == List.length(box.xs) - 1 then 1 else 0,"
+                + " box.xs)";
+        assertEquals(Map.of("List.length(box.xs)", NOT_SHOWN), left(inputs, box, "List<Int>",
+                body, atThe("==", box, inputs, body)));
+    }
+
+    /**
+     * Where the step works something else out of the position, that may stop the walk at a
+     * position before the comparison is reached there: {@code Int.max + i} passes the type at the
+     * second. Nothing is shown.
+     */
+    @Test
+    void aPositionWorkedOutBeforeTheComparisonLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> { let total = 9223372036854775807 + i\n"
+                + "    if i == List.length(xs) - 1 then total else 0 }, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                body, "5:10"));
+    }
+
+    /**
+     * Anything else the step works out stops the walk where it stops, made of the position or
+     * not: of the element, of the length, of nothing. A position past the first is compared only
+     * where the step got through at every position before, so where something says the step
+     * answers only somewhere, the length is not parted. Where the way to the comparison shows no
+     * row of a list holding anything gets there — past {@code Int.max} plus its length — that is
+     * what is said of it.
+     */
+    @Test
+    void anythingElseTheStepWorksOutLeavesTheLengthNotShownWhereItMayStop() {
+        String inputs = "xs: List<Int>";
+        for (String worked : List.of("9223372036854775807 + x",
+                "9223372036854775807 + List.length(xs)", "9223372036854775807 + 1")) {
+            String body = ("List.mapIndexed((i, x) -> { let total = %s\n"
+                    + "    if i == List.length(xs) - 1 then total else 0 }, xs)").formatted(worked);
+            Map<String, String> left = left(inputs, UNUSED, "List<Int>", body, "5:10");
+            assertTrue(left.containsKey("List.length(xs)"), () -> worked + ": " + left);
+        }
+        String ofAnElement = "List.mapIndexed((i, x) -> { let total = 9223372036854775807 + x\n"
+                + "    if i == List.length(xs) - 1 then total else 0 }, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                ofAnElement, "5:10"));
+        String after = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + (9223372036854775807 + x), xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                after, atThe("==", UNUSED, inputs, after)));
+    }
+
+    /**
+     * Where nothing says where it stops — a product of two values nothing bounds — the length is
+     * read, and what may stop the walk is on the way to the comparison as what may stop a run
+     * there, which is where it is for a comparison anywhere else.
+     */
+    @Test
+    void aStepNothingSaysWhereItStopsIsReadAndMayStopOnTheWay() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + x * x, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * And after it: the second position compares and then stops the walk, so no position past it
+     * is compared.
+     */
+    @Test
+    void aPositionWorkedOutAfterTheComparisonLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + (9223372036854775807 + i), xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                body, atThe("==", UNUSED, inputs, body)));
+    }
+
+    /** A list of one value over again, counted for how often it occurs, is no row either where the
+     *  value is none: no bar is parted by it. */
+    @Test
+    void howOftenAValueNoValueIsOccursTakesNothing() {
+        assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int",
+                LABELLED.replace("Set<String>", "Set<Never>")
+                        .replace("Set.toList(i.labels)", "List.map(l -> l.value, Set.toList(i.labels))")
+                        + "\n" + NO_STRING, BUSY, "atLeast"));
+    }
+
+    /**
+     * A way stating something of where the element stands picks some positions out as a way
+     * stating something of the elements does: under {@code i > 0} a list of one never reaches the
+     * comparison, and a list of two reaches it at its last position only. Nothing is shown.
+     */
+    @Test
+    void aWayStatingWhereTheElementStandsLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> if i > 0 then (if i == List.length(xs) - 1"
+                + " then 1 else 0) else 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * Where the step reads the position is asked of the one account of what runs when: in an arm
+     * of a match, or on the right of an operator that stops once its answer is settled, it is read
+     * at the applications that get there, and nothing is shown; in the body of a {@code let} it is
+     * read whenever the step runs, and the length is parted as with no {@code let} around it.
+     */
+    @Test
+    void aPositionReadInAnArmIsReadAtTheApplicationsThatEnterIt() {
+        String inputs = "xs: List<Int>";
+        String places = "data Later = { at: Int }\ndata First = { at: Int }\n"
+                + "data Place = Later | First";
+        String inAnArm = "List.mapIndexed((i, x) -> match (if i > 0 then Later { at = i } else"
+                + " First { at = i }) with | Later -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " | First -> 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, places, "List<Int>",
+                inAnArm, atThe("== List", places, inputs, inAnArm)));
+    }
+
+    /** The same on the right of an operator that stops once its answer is settled. */
+    @Test
+    void aPositionReadOnTheRightOfAStopEarlyOperatorIsReadWhereTheLeftLetsItRun() {
+        String inputs = "xs: List<Int>";
+        String onTheRight = "List.mapIndexed((i, x) -> x > 0 && i == List.length(xs) - 1, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Bool>",
+                onTheRight, atThe("== List", UNUSED, inputs, onTheRight)));
+    }
+
+    /** And in the body of a {@code let}, which runs whenever the step does. */
+    @Test
+    void aPositionReadInTheBodyOfALetIsReadWheneverTheStepRuns() {
+        String inputs = "xs: List<Int>";
+        String inALet = "List.mapIndexed((i, x) -> { let last = List.length(xs) - 1\n"
+                + "    if i == last then 1 else 0 }, xs)";
+        assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", inALet, "List.length(xs)"));
+    }
+
+    /**
+     * Against another list's length, where an element of the walked list stands is no number
+     * of it, and nothing is shown. Nor where the way picks out some of the elements: the walk is
+     * handed every position, and the comparison is asked at those of the elements the way lets
+     * through, which may leave out the last.
+     */
+    @Test
+    void whereAnElementStandsIsReadOnlyAgainstItsOwnListAllOfWhichTheWayLeaves() {
+        String inputs = "xs: List<Int>, ys: List<Int>";
+        String another = STANDING.formatted("i == List.length(ys) - 1");
+        assertEquals(Map.of("List.length(ys)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                another, atThe("==", UNUSED, inputs, another)));
+        String picked = "if List.all(x -> x > 0, xs) then "
+                + STANDING.formatted("i == List.length(xs) - 1") + " else []";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left("xs: List<Int>", UNUSED,
+                "List<Int>", picked, atThe("== List", UNUSED, "xs: List<Int>", picked)));
+    }
+
+    /** A rate a dependency keeps for each kind, and the one in force on a day. */
+    private static final String RATED = """
+            module w1
+            data Change = { from: Int, rate: Int }
+            behavior changesOf : (kind: Int) -> List<Change>
+            let rateAsOf (changes: List<Change>, on: Int): Option<Int> =
+                Option.map(c -> c.rate, List.find(c -> c.from <= on, changes))
+            behavior m : (xs: List<Int>, kind: Int, on: Int) -> List<Int>
+                depends on changesOf
+            let m (xs, kind, on, changesOf) =
+                match rateAsOf(changesOf(kind), %s) with
+                    | Some r -> List.mapIndexed((i, x) -> if i == List.length(xs) - 1 then r else 0, xs)
+                    | None -> []
+            """;
+
+    /**
+     * The arm a rate is found in is entered by what the dependency answered and the day asked
+     * about, which no row writes and nothing here takes in. That says nothing of the list the
+     * comparison inside it is about: the day is another parameter, and no declaration relates one
+     * parameter to another, so the list is parted at one as it is with no arm around it. Asked
+     * about the list's own length, the arm says something of the list nothing reads, and nothing
+     * is shown.
+     */
+    @Test
+    void anArmADependencysAnswerEntersLeavesTheParametersItNamesNothingOfAsTheyWere() {
+        String onADay = RATED.formatted("on");
+        assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+                classesIn(onADay, "List.length(xs)"));
+        assertEquals(Map.of(), leftIn(onADay, whereWritten(onADay, "== List")));
+        String onTheLength = RATED.formatted("List.length(xs)");
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN),
+                leftIn(onTheLength, whereWritten(onTheLength, "== List")));
+    }
+
+    /** Where {@code text} is first written in {@code source}, as a report names a place. */
+    private static String whereWritten(String source, String text) {
+        List<String> lines = source.lines().toList();
+        for (int i = 0; i < lines.size(); i++) {
+            int column = lines.get(i).indexOf(text);
+            if (column >= 0) {
+                return (i + 1) + ":" + (column + 1);
+            }
+        }
+        throw new IllegalArgumentException("`" + text + "` is not written in the model");
+    }
+
+    /**
+     * A relation that comes out one way at every value a term may hold comes out that way in every
+     * row, so it divides none of its places, as one a way decides does not: every element of a
+     * list stands below its length, and two lengths of strings add up to nought or more.
+     */
+    @Test
+    void aRelationSettledOneWayAtEveryValueDividesNothing() {
+        String body = STANDING.formatted("i < List.length(xs)");
+        assertEquals(Map.of("List.length(xs)", RELATES), left("xs: List<Int>", UNUSED,
+                "List<Int>", body, atThe("<", UNUSED, "xs: List<Int>", body)));
+        String lengths = "String.length(s) + String.length(t) >= 0";
+        assertEquals(Map.of("String.length(s)", RELATES, "String.length(t)", RELATES),
+                left("s: String, t: String", UNUSED, lengths,
+                        atThe(">=", UNUSED, "s: String, t: String", lengths)));
+    }
+
     /** A total held against a number, or against another total, is about what the runs come to
      *  and divides none of their values. */
     @Test
@@ -842,16 +1190,23 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Two choices on places apart are proved along every way of taking them together, and not
-     * along each alternative once: {@code y} reaches every {@code x} along three of the four, and
-     * along the last — {@code x} from twenty, {@code y} up to ten — it reaches none.
+     * along each alternative once: {@code y} reaches every {@code x} along three of the four.
+     * Along the last — {@code x} from twenty, {@code y} up to twenty-five — the values of
+     * {@code x} past twenty-five come out false whatever {@code y} is, and those below come out
+     * either way, so {@code x} is parted there and not left undivided. With {@code y} up to ten
+     * instead, the last comes out false in every row along it, and divides no value of {@code x}
+     * any more than a way deciding it does.
      */
     @Test
     void choicesOnPlacesApartAreProvedAlongEveryWayOfTakingThemTogether() {
+        String body = "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
+                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 25)"
+                + " then x == y else false";
         assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                left("x: Int, y: Int", "data Unused = Int", body, "4:112"));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
                 left("x: Int, y: Int", "data Unused = Int",
-                        "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
-                                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 10)"
-                                + " then x == y else false", "4:112"));
+                        body.replace("y <= 25", "y <= 10"), "4:112"));
     }
 
     /**

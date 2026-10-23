@@ -117,6 +117,30 @@ public final class Evaluated {
     }
 
     /**
+     * Whether {@code part}, a node of {@code root}'s tree, runs on every evaluation of
+     * {@code root}: it is reached from {@code root} through steps that always run, or through the
+     * body of a {@code let}, which runs once its value has whatever the value is.
+     *
+     * <p>Not through a branch, an arm, a right operand that runs only where the left comes out one
+     * way, or the body of a function value: each of them is entered on some evaluations and not on
+     * others. Asked by identity, so one node written twice is asked about where it stands.
+     */
+    public static boolean runsWhenever(Core root, Core part) {
+        if (root == part) {
+            return true;
+        }
+        if (Core.withoutStanding(root) instanceof Core.LetIn let && runsWhenever(let.body(), part)) {
+            return true;
+        }
+        for (Step each : inOrder(root)) {
+            if (each instanceof Step.Always(Core expression) && runsWhenever(expression, part)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The parts that are there, each a step that always runs.
      *
      * <p>A body the checker refused a clause of arrives with a hole where the clause was, and a

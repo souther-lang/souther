@@ -2799,6 +2799,12 @@ public final class FieldDomains {
      * ({@link #holdsAValueAt}). A certificate speaks for this value's own rules and for none of
      * those.
      */
+    public boolean shownToHoldAValue() {
+        return shownToHoldAValue(Set.of(named));
+    }
+
+    /** The same, where {@code asked} are the declarations already being asked, so that one holding
+     *  itself is not asked again. */
     private boolean shownToHoldAValue(Set<TypeSymbol.AtModule> asked) {
         if (!notGathered.isEmpty() || infeasible()) {
             return false;
