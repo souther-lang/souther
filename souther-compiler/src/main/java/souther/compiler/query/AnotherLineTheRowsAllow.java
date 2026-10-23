@@ -945,7 +945,8 @@ public sealed interface AnotherLineTheRowsAllow {
      * way, since it is the way the row arrived along.
      *
      * @param border    the line as this reading met it
-     * @param rows      the rows that reached this reading, read only when they are asked for
+     * @param read      the rows that reached this reading as they read here, worked out only when
+     *                  they are asked for
      * @param elsewhere the behavior's other lines, for preferring an input an author can see the
      *                  difference at
      * @param way       the conditions a row meets on its way to this reading
@@ -954,13 +955,13 @@ public sealed interface AnotherLineTheRowsAllow {
      *                  whether the line stands: an input is worked out by stepping along a line,
      *                  which knows the arithmetic and nothing of what a position's type refuses
      */
-    record Reading(Border border, Supplier<StandingAtAPoint.RowsRead> rows,
+    record Reading(Border border, Supplier<StandingAtAPoint.RowsRead> read,
                    List<OrderedAffineBoundary> elsewhere, WayToTheBorder way,
                    Predicate<Map<NumericTerm, Place>> refused) {
 
         public Reading {
             Objects.requireNonNull(border, "a reading is of a line");
-            Objects.requireNonNull(rows, "and reads the rows that reached it");
+            Objects.requireNonNull(read, "and reads the rows that reached it");
             elsewhere = List.copyOf(elsewhere);
             Objects.requireNonNull(way, "which came along some way");
             Objects.requireNonNull(refused, "under declarations that say what they refuse");
@@ -1063,7 +1064,7 @@ public sealed interface AnotherLineTheRowsAllow {
         List<Map<NumericTerm, Place>> refusing = new ArrayList<>();
         Set<ReadingGap> sideNotHeld = new LinkedHashSet<>();
         for (Reading one : readings) {
-            StandingAtAPoint.RowsRead read = one.rows().get();
+            StandingAtAPoint.RowsRead read = one.read().get();
             rows = rows == null ? read : rows.and(read);
             Sides here = new Sides(one, new ArrayList<>(), new ArrayList<>());
             for (Map<NumericTerm, Place> values : read.each()) {

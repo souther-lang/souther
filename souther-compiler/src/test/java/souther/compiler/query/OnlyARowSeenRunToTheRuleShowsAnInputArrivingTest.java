@@ -104,7 +104,7 @@ class OnlyARowSeenRunToTheRuleShowsAnInputArrivingTest {
         ARowTellingTheLinesApart.AtOneReading settled = searchedInto(List.of(first, second))
                 .settledBy(seen -> seen == second ? Optional.of(apart) : Optional.empty());
 
-        assertSame(second, settled.settling().row());
+        assertSame(second, settled.settling().seen());
         assertEquals(apart, settled.settling().at());
         assertSame(second, settled.composed().orElseThrow());
     }

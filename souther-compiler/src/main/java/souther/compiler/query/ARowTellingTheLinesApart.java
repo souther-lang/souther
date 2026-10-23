@@ -101,9 +101,9 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
                 throw new IllegalArgumentException("a row composed here was composed somewhere and"
                         + " a search that composed none was composed nowhere: " + composedAt);
             }
-            if (settling != null && !seenThere(searches).contains(settling.row())) {
+            if (settling != null && !seenThere(searches).contains(settling.seen())) {
                 throw new IllegalArgumentException("a row settling a line is one these searches"
-                        + " composed and saw run to the rule: " + settling.row());
+                        + " composed and saw run to the rule: " + settling.seen());
             }
         }
 
@@ -122,7 +122,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
          * nothing beside one that would have.
          */
         Optional<ItemAssessment.Attempt.Built> composed() {
-            return settling != null ? Optional.of(settling.row()) : searches.rowToOffer();
+            return settling != null ? Optional.of(settling.seen()) : searches.rowToOffer();
         }
 
         /** Every row these searches composed and saw run to the rule, in the order they were
@@ -164,14 +164,14 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     /**
      * A row seen ruling a line out, and the input it was read back at.
      *
-     * @param row the row, as its search came back with it
-     * @param at  the input its run read back, in the positions the line is drawn on: the input
-     *            that arrives and tells the two lines apart
+     * @param seen the search's answer, the row built and seen run to the rule
+     * @param at   the input its run read back, in the positions the line is drawn on: the input
+     *             that arrives and tells the two lines apart
      */
-    public record Settling(ItemAssessment.Attempt.Certified row, Map<NumericTerm, Place> at) {
+    public record Settling(ItemAssessment.Attempt.Certified seen, Map<NumericTerm, Place> at) {
 
         public Settling {
-            Objects.requireNonNull(row, "a row settles a line");
+            Objects.requireNonNull(seen, "a row settles a line");
             at = Collections.unmodifiableMap(new LinkedHashMap<>(at));
         }
     }
