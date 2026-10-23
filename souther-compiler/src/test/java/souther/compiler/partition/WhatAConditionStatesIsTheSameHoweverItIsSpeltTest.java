@@ -448,6 +448,24 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         assertEquals(2, all.parts().size());
     }
 
+    /**
+     * The cases of one condition are one statement whichever way they are written: an {@code if}
+     * on it, a list chosen by it, each case joined to its condition by "and" and the two by "or",
+     * and what follows from the condition and from its denial joined by "and".
+     */
+    @Test
+    void theCasesOfAConditionAreOneStatementInEverySpelling() {
+        String every = "i -> i.price >= 1";
+        Proposition chosen = stated("List.all(" + every
+                + ", if b.open then b.items else b.others)");
+        assertEquals(chosen, stated("if b.open then List.all(" + every + ", b.items)"
+                + " else List.all(" + every + ", b.others)"));
+        assertEquals(chosen, stated("(b.open && List.all(" + every + ", b.items))"
+                + " || (Bool.not(b.open) && List.all(" + every + ", b.others))"));
+        assertEquals(chosen, stated("(Bool.not(b.open) || List.all(" + every + ", b.items))"
+                + " && (b.open || List.all(" + every + ", b.others))"));
+    }
+
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */
     private static Proposition stated(String condition) {
         String model = "module demo\n\n" + INPUT + """

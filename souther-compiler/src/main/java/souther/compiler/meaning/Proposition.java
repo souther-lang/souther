@@ -13,6 +13,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -508,11 +509,95 @@ public sealed interface Proposition {
             key = "any" + parts.stream().map(Proposition::key).toList();
         }
 
+        /** Every part failing — which {@link #all} keeps as the cases of a condition where the
+         *  parts are cases of one ({@link #byTheCases}). */
         @Override
         public Proposition denied() {
             return SharedPropositions.denied(this,
                     () -> all(parts.stream().map(Proposition::denied).toList()));
         }
+    }
+
+    /**
+     * {@code conjuncts} as the cases of the first condition some of them say what follows from,
+     * or null where none does.
+     *
+     * <p>A conjunct one part of which is the denial of a condition {@code X} says what holds
+     * where {@code X} does — {@code ¬X ∨ A} is {@code X → A} — and one a part of which is {@code X}
+     * says what holds where it does not. Where both are among them, {@code (¬X ∨ A) ∧ (X ∨ B) ∧ R}
+     * holds exactly where {@code ((X ∧ A) ∨ (¬X ∧ B)) ∧ R} does: one statement, which an
+     * {@code if} on {@code X}, the denial of the cases of {@code X} and the two implications
+     * written out each state, and which comes to one proposition whichever of them wrote it. Kept
+     * as the cases of {@code X}, several such statements are chosen once per case of it, where
+     * each implication apart would be a choice of its own, every combination of which is a way.
+     *
+     * <p>Only of a condition whose denial holds wherever it fails ({@link
+     * #deniedWhereverItFails}): the cases of one that may answer nothing, or hold on one
+     * application and fail on another, are not every row. A conjunct with both {@code X} and its
+     * denial among its parts holds on every row, and is left out. Two conjuncts that are each no
+     * more than {@code X} and its denial are left as they stand: what is said of them is that the
+     * two are asked at once, which is a reader's to say and not something to be worked out here.
+     */
+    private static Proposition byTheCases(List<Proposition> conjuncts) {
+        List<Set<String>> partsOfEach = new ArrayList<>(conjuncts.size());
+        Set<String> anywhere = new HashSet<>();
+        for (Proposition conjunct : conjuncts) {
+            Set<String> keys = new HashSet<>();
+            disjunctsOf(conjunct).forEach(each -> keys.add(each.key()));
+            partsOfEach.add(keys);
+            anywhere.addAll(keys);
+        }
+        for (Proposition conjunct : conjuncts) {
+            for (Proposition against : disjunctsOf(conjunct)) {
+                Proposition condition = against.denied();
+                if (!anywhere.contains(condition.key()) || !deniedWhereverItFails(condition)) {
+                    continue;
+                }
+                List<Proposition> whereItHolds = new ArrayList<>();
+                List<Proposition> whereItFails = new ArrayList<>();
+                List<Proposition> rest = new ArrayList<>();
+                boolean saysMore = false;
+                boolean everyRow = false;
+                for (int at = 0; at < conjuncts.size(); at++) {
+                    Proposition each = conjuncts.get(at);
+                    boolean holding = partsOfEach.get(at).contains(against.key());
+                    boolean failing = partsOfEach.get(at).contains(condition.key());
+                    if (holding && failing) {
+                        everyRow = true;
+                    } else if (holding) {
+                        whereItHolds.add(without(each, against));
+                        saysMore |= each instanceof Any;
+                    } else if (failing) {
+                        whereItFails.add(without(each, condition));
+                        saysMore |= each instanceof Any;
+                    } else {
+                        rest.add(each);
+                    }
+                }
+                if (whereItHolds.isEmpty() || whereItFails.isEmpty() || !saysMore) {
+                    if (everyRow) {
+                        return all(conjuncts.stream().filter(each -> !(disjunctsOf(each)
+                                .contains(against) && disjunctsOf(each).contains(condition)))
+                                .toList());
+                    }
+                    continue;
+                }
+                rest.add(any(List.of(all(List.of(condition, all(whereItHolds))),
+                        all(List.of(against, all(whereItFails))))));
+                return all(rest);
+            }
+        }
+        return null;
+    }
+
+    private static List<Proposition> disjunctsOf(Proposition stated) {
+        return stated instanceof Any any ? any.parts() : List.of(stated);
+    }
+
+    /** What {@code stated} holds beside {@code part}, which fails where nothing else holds. */
+    private static Proposition without(Proposition stated, Proposition part) {
+        return any(disjunctsOf(stated).stream()
+                .filter(each -> !each.key().equals(part.key())).toList());
     }
 
     /**
@@ -1594,6 +1679,30 @@ public sealed interface Proposition {
     }
 
     /**
+     * Whether the denial of {@code stated} holds on every row it fails, and on no row it holds:
+     * whether the two are the two cases of one statement, as a condition and its denial are where
+     * {@code c || !c} holds and {@code c && !c} does not.
+     *
+     * <p>Not every statement and its denial are. What is read through an operation that answers
+     * only on some rows ({@link WhereItAnswers}) holds nowhere it answers nothing, and neither does
+     * its denial. What a condition states on the applications of a closure ({@link
+     * OnAnApplication}) holds where some application's statement does and is denied where some
+     * application's denial is, so on two applications that differ both hold. And of a part nothing
+     * read ({@link Unread}) nothing is known, that among the rest. A quantifier, a count and a
+     * search are of statements every row answers, which their constructors saw to, and say on
+     * each row how many elements or nodes meet them: a number, holding or failing.
+     */
+    static boolean deniedWhereverItFails(Proposition stated) {
+        return switch (stated) {
+            case WhereItAnswers _, OnAnApplication _, Unread _ -> false;
+            case All all -> all.parts().stream().allMatch(Proposition::deniedWhereverItFails);
+            case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
+                 Carried _, Some _, SoManyHold _, SomeReachable _ -> true;
+        };
+    }
+
+    /**
      * {@code then}, read where {@code first} answers: what a run that works {@code first} out before
      * anything {@code then} reads comes to. Where {@code first} stops, the run stops there, whatever
      * the rest would have decided — which is what a statement of both parts side by side cannot
@@ -1626,6 +1735,12 @@ public sealed interface Proposition {
                     continue;
                 }
                 kept.putIfAbsent(one.key(), one);
+            }
+        }
+        if (every && kept.size() > 1) {
+            Proposition byCases = byTheCases(List.copyOf(kept.values()));
+            if (byCases != null) {
+                return byCases;
             }
         }
         return switch (kept.size()) {
