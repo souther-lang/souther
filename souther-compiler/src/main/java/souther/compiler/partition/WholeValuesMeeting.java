@@ -7,6 +7,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
@@ -33,30 +34,64 @@ import java.util.function.Function;
  * numbers the statements of it and of the numbers already given leave it ({@link WholeNumbersLeft}),
  * within where the region puts it and the ends the declarations leave it.
  *
- * <p>What a statement still of several numbers not yet given — one that bounds a sum and does not
- * fix it — leaves the first of them is read off the region, which may put it wider: under
- * {@code z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0} the region need not put {@code z} at
- * one. A value taken there may leave the next no value, and then nothing is shown, never that no
- * value is. Every statement is worked out at the values built, and each value is held to the ends
- * the declarations leave it, so what is built is a proof wherever it comes back ({@link #holdsAt})
- * and the way it was built decides only whether one is found.
+ * <p>Among those statements are the ones the bounds on the numbers not given yet leave it, those
+ * numbers eliminated ({@link LaterNumbersEliminated}). A bound on a sum of numbers not given yet
+ * reaches the first of them only so: under
+ * {@code z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0} neither the region nor any one
+ * statement puts {@code z} at one, and the four with {@code w} eliminated do. So a value given
+ * leaves every later number some rational value, though not always a whole one, and where none is
+ * left nothing is shown, never that no value is. The value given is the one the statements alone
+ * leave first ({@link WholeNumbersLeft#one}) wherever the eliminated bounds leave it too, and
+ * only where they do not, the first they leave. Every value some choice of values from the
+ * statements alone reaches is then reached with the bounds, because the bounds are implied by the
+ * statements and so hold at any values that meet them: the elimination can add values found, and
+ * take none away. Every statement is worked out at the values built,
+ * and each value is held to the ends the declarations leave it, so what is built is a proof wherever
+ * it comes back ({@link #holdsAt}) and the way it was built decides only whether one is found.
  */
 final class WholeValuesMeeting {
 
     private WholeValuesMeeting() {
     }
 
+    /** What looking for values comes to, and how many pairs of bounds the elimination took. */
+    sealed interface Witness {
+
+        /** How many pairs of bounds the elimination put together
+         *  ({@link LaterNumbersEliminated#pairsCombined}). */
+        long pairsCombined();
+
+        /** A whole value for each number, at which every statement holds. */
+        record Found(Map<NumericTerm, ExactRatio> values, long pairsCombined) implements Witness {
+
+            public Found {
+                values = Map.copyOf(values);
+            }
+        }
+
+        /**
+         * None shown, which is not that none is.
+         *
+         * @param pastThePairs whether the elimination stopped short at the pairs it was allowed
+         *                     ({@link LaterNumbersEliminated.Why#PAIRS}), which may be why
+         */
+        record NotShown(boolean pastThePairs, long pairsCombined) implements Witness {
+        }
+    }
+
+    private static final Witness NONE_SHOWN = new Witness.NotShown(false, 0);
+
     /**
-     * A whole value for each number {@code statements} are of, at which every one of them holds —
-     * or null where none is shown.
+     * A whole value for each number {@code statements} are of, at which every one of them holds,
+     * where one is shown.
      *
      * @param region   where the way puts the numbers
      * @param declared the ends between which the declarations leave a number every value and no
      *                 other, or null where that is not shown, which shows nothing of it
+     * @param pairs    how many pairs of bounds the elimination may put together
      */
-    static Map<NumericTerm, ExactRatio> of(List<TakenConstraint.Affine> statements,
-                                           SearchRegion region,
-                                           Function<NumericTerm, NumericDomain.Bounds> declared) {
+    static Witness of(List<TakenConstraint.Affine> statements, SearchRegion region,
+                      Function<NumericTerm, NumericDomain.Bounds> declared, long pairs) {
         // A number's value turns on which numbers came before it, so they come in one order the
         // numbers themselves decide.
         CanonicalOrder<NumericTerm> inOrder = NumericTerm.inOneOrder();
@@ -69,20 +104,20 @@ final class WholeValuesMeeting {
             LinearForm<NumericTerm> standsAt = solvedFor(equality.form(), term);
             NumericDomain.Bounds ends = declared.apply(term);
             if (standsAt == null || ends == null) {
-                return null;
+                return NONE_SHOWN;
             }
             List<TakenConstraint.Affine> read = new ArrayList<>();
             for (TakenConstraint.Affine each : left) {
                 LinearForm<NumericTerm> form = each.form().over(one -> one.equals(term) ? standsAt
                         : LinearForm.atom(one));
                 if (form == null) {
-                    return null;
+                    return NONE_SHOWN;
                 }
                 read.add(new TakenConstraint.Affine(form, each.rel()));
             }
             List<TakenConstraint.Affine> within = between(standsAt, ends);
             if (within == null) {
-                return null;
+                return NONE_SHOWN;
             }
             read.addAll(within);
             left = read;
@@ -92,16 +127,48 @@ final class WholeValuesMeeting {
         left.forEach(each -> given.addAll(each.form().coefs().keySet()));
         fixedBy.forEach(each -> given.addAll(each.getValue().coefs().keySet()));
         fixedBy.forEach(each -> given.remove(each.getKey()));
-        Map<NumericTerm, ExactRatio> out = oneAtATime(inOrder.walking(given, term -> term),
-                left, region, declared);
+        List<NumericTerm> terms = inOrder.walking(given, term -> term);
+        List<LaterNumbersEliminated.Bound<NumericTerm>> bounds = new ArrayList<>();
+        left.forEach(each -> boundsOf(each, bounds));
+        for (NumericTerm term : terms) {
+            NumericDomain.Bounds ends = declared.apply(term);
+            List<TakenConstraint.Affine> within = ends == null ? null
+                    : between(LinearForm.atom(term), ends);
+            if (within == null) {
+                return NONE_SHOWN;
+            }
+            within.forEach(each -> boundsOf(each, bounds));
+        }
+        LaterNumbersEliminated<NumericTerm> eliminated =
+                LaterNumbersEliminated.of(bounds, terms, pairs);
+        Witness notShown = new Witness.NotShown(
+                eliminated instanceof LaterNumbersEliminated.StoppedShort<NumericTerm> stopped
+                        && stopped.why() == LaterNumbersEliminated.Why.PAIRS,
+                eliminated.pairsCombined());
+        List<List<LaterNumbersEliminated.Bound<NumericTerm>>> levels = new ArrayList<>();
+        switch (eliminated) {
+            case LaterNumbersEliminated.Eliminated<NumericTerm> all -> levels.addAll(all.levels());
+            // The numbers before the one not eliminated are given values where their own
+            // statements and the region put them, which is all that is known of them.
+            case LaterNumbersEliminated.StoppedShort<NumericTerm> stopped -> {
+                for (int place = 0; place < stopped.place(); place++) {
+                    levels.add(List.of());
+                }
+                levels.addAll(stopped.reached());
+            }
+            case LaterNumbersEliminated.NoneLeft<NumericTerm> _ -> {
+                return notShown;
+            }
+        }
+        Map<NumericTerm, ExactRatio> out = oneAtATime(terms, left, levels, region, declared);
         if (out == null) {
-            return null;
+            return notShown;
         }
         // Each fixed number is read of numbers given or fixed after it, so the last comes first.
         for (int each = fixedBy.size() - 1; each >= 0; each--) {
             ExactRatio at = valueOf(fixedBy.get(each).getValue(), out);
             if (at == null || !at.isWhole()) {
-                return null;
+                return notShown;
             }
             out.put(fixedBy.get(each).getKey(), at);
         }
@@ -111,7 +178,26 @@ final class WholeValuesMeeting {
                 && out.entrySet().stream().allMatch(each ->
                         declared.apply(each.getKey()) instanceof NumericDomain.Bounds ends
                                 && ends.admits(each.getValue()));
-        return met ? out : null;
+        return met ? new Witness.Found(out, eliminated.pairsCombined()) : notShown;
+    }
+
+    /** Adds to {@code into} the bounds {@code statement} states: none for a value held out, which
+     *  leaves a sum on either side of it. */
+    private static void boundsOf(TakenConstraint.Affine statement,
+                                 List<LaterNumbersEliminated.Bound<NumericTerm>> into) {
+        LinearForm<NumericTerm> form = statement.form();
+        switch (statement.rel()) {
+            case LT -> into.add(new LaterNumbersEliminated.Bound<>(form, true));
+            case LE -> into.add(new LaterNumbersEliminated.Bound<>(form, false));
+            case GT -> into.add(new LaterNumbersEliminated.Bound<>(form.negate(), true));
+            case GE -> into.add(new LaterNumbersEliminated.Bound<>(form.negate(), false));
+            case EQ -> {
+                into.add(new LaterNumbersEliminated.Bound<>(form, false));
+                into.add(new LaterNumbersEliminated.Bound<>(form.negate(), false));
+            }
+            case NE -> {
+            }
+        }
     }
 
     /** An equality among {@code statements} of two numbers or more, or null where none is. */
@@ -163,16 +249,18 @@ final class WholeValuesMeeting {
     /**
      * A whole number for each of {@code terms}, each where {@code region} puts it once the ones
      * before it stand at theirs, between the ends the declarations leave it, and among the whole
-     * numbers the statements of it and of the numbers already given leave it — or null where one
-     * is not shown to be a number the declarations leave every value between its ends, or none is
-     * left it.
+     * numbers the statements of it and of the numbers already given leave it, those at its own
+     * place in {@code levels} among them — or null where one is not shown to be a number the
+     * declarations leave every value between its ends, or none is left it.
      */
     private static Map<NumericTerm, ExactRatio> oneAtATime(
-            List<NumericTerm> terms, List<TakenConstraint.Affine> statements, SearchRegion region,
+            List<NumericTerm> terms, List<TakenConstraint.Affine> statements,
+            List<List<LaterNumbersEliminated.Bound<NumericTerm>>> levels, SearchRegion region,
             Function<NumericTerm, NumericDomain.Bounds> declared) {
         Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
         SearchRegion given = region;
-        for (NumericTerm term : terms) {
+        for (int place = 0; place < terms.size(); place++) {
+            NumericTerm term = terms.get(place);
             NumericDomain.Bounds ends = declared.apply(term);
             if (ends == null || !(given.projectionOf(term)
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds put))) {
@@ -185,7 +273,26 @@ final class WholeValuesMeeting {
                 }
                 left = leftBy(each, term, out, left);
             }
-            BigInteger whole = left == null ? null : left.one();
+            if (left == null) {
+                return null;
+            }
+            // The value the statements alone give is kept wherever the levels leave it, so a
+            // value found without the elimination is found with it.
+            BigInteger whole = left.one();
+            WholeNumbersLeft within = left;
+            for (LaterNumbersEliminated.Bound<NumericTerm> each : levels.get(place)) {
+                if (within == null) {
+                    return null;
+                }
+                within = leftBy(new TakenConstraint.Affine(each.form(), each.strict() ? Rel.LT
+                        : Rel.LE), term, out, within);
+            }
+            if (within == null) {
+                return null;
+            }
+            if (whole == null || !within.leaves(whole)) {
+                whole = within.one();
+            }
             if (whole == null) {
                 return null;
             }

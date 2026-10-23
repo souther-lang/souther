@@ -817,6 +817,7 @@ public final class Generator {
                              // nothing, and what it stopped is carried as what the relation says
                              // it stopped at.
                              WALKS_A_WAY_IS_READ_AGAIN_WITH,
+                             PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(

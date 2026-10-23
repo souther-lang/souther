@@ -1648,11 +1648,12 @@ public final class WhatARelationLeavesUndivided {
             free[other] = other != at && apart(terms, other, overlap)
                     && untied(terms, other, independent);
         }
+        HeldStill still = HeldStill.of(terms, free, constant);
         for (int other = 0; other < terms.size(); other++) {
             if (free[other] && (reaches(terms, other, at, within, constant, relation,
                     theConstantAlone(constant), arithmetic)
                     || reachesWithTheRestHeld(terms, other, at, within, constant, relation,
-                            free, arithmetic))) {
+                            free, still, arithmetic))) {
                 return true;
             }
         }
@@ -1660,7 +1661,50 @@ public final class WhatARelationLeavesUndivided {
                 || (within == null && reachedTogether(terms, at, constant, relation, free,
                         jointly))
                 || (within == null && reachedPieceByPiece(terms, at, constant, relation, free,
-                        arithmetic));
+                        still, arithmetic));
+    }
+
+    /**
+     * Where each term apart from the others can be held still ({@link #reachesWithTheRestHeld}):
+     * whether it takes nought, and the value it takes that brings the constant to nought, or null
+     * where it takes no such value. Each is a fact of the term and the constant alone, so it is
+     * worked out once for every pair of terms and every piece of a run it is asked for.
+     */
+    private static final class HeldStill {
+
+        private final boolean[] atNought;
+        private final ExactRatio[] cancelling;
+
+        private HeldStill(boolean[] atNought, ExactRatio[] cancelling) {
+            this.atNought = atNought;
+            this.cancelling = cancelling;
+        }
+
+        /** Where each of {@code terms} that is {@code free} can be held still, beside
+         *  {@code constant} — none where no term is held still, with fewer than three terms or no
+         *  constant. */
+        static <P> HeldStill of(List<Term<P>> terms, boolean[] free, ExactRatio constant) {
+            boolean[] atNought = new boolean[terms.size()];
+            ExactRatio[] cancelling = new ExactRatio[terms.size()];
+            for (int each = 0; each < terms.size(); each++) {
+                if (!free[each] || terms.size() < 3 || constant == null) {
+                    continue;
+                }
+                Term<P> term = terms.get(each);
+                atNought[each] = takesTheValue(term, ExactRatio.ZERO);
+                ExactRatio held = constant.negated().dividedBy(term.weight()).orNull();
+                cancelling[each] = held != null && takesTheValue(term, held) ? held : null;
+            }
+            return new HeldStill(atNought, cancelling);
+        }
+
+        boolean atNought(int term) {
+            return atNought[term];
+        }
+
+        ExactRatio cancelling(int term) {
+            return cancelling[term];
+        }
     }
 
     /**
@@ -1677,7 +1721,8 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> boolean reachedPieceByPiece(List<Term<P>> terms, int at,
                                                    ExactRatio constant, Rel relation,
-                                                   boolean[] free, Arithmetic arithmetic) {
+                                                   boolean[] free, HeldStill still,
+                                                   Arithmetic arithmetic) {
         Term<P> it = terms.get(at);
         Interval run = Interval.of(it.holds());
         if (constant == null || run == null || run.low() == null || run.high() == null
@@ -1733,7 +1778,7 @@ public final class WhatARelationLeavesUndivided {
                 reached = free[other] && (reaches(terms, other, at, piece, constant, relation,
                         theConstantAlone(constant), arithmetic)
                         || reachesWithTheRestHeld(terms, other, at, piece, constant, relation,
-                                free, arithmetic));
+                                free, still, arithmetic));
             }
             if (!reached) {
                 return false;
@@ -1757,7 +1802,7 @@ public final class WhatARelationLeavesUndivided {
     private static <P> boolean reachesWithTheRestHeld(List<Term<P>> terms, int by, int of,
                                                       Interval within, ExactRatio constant,
                                                       Rel relation, boolean[] free,
-                                                      Arithmetic arithmetic) {
+                                                      HeldStill still, Arithmetic arithmetic) {
         if (terms.size() < 3 || constant == null) {
             return false;
         }
@@ -1772,9 +1817,8 @@ public final class WhatARelationLeavesUndivided {
             rest.add(i);
         }
         for (int last : rest) {
-            ExactRatio held = constant.negated().dividedBy(terms.get(last).weight()).orNull();
-            if (held != null && takesTheValue(terms.get(last), held) && rest.stream()
-                    .allMatch(i -> i == last || takesTheValue(terms.get(i), ExactRatio.ZERO))) {
+            ExactRatio held = still.cancelling(last);
+            if (held != null && rest.stream().allMatch(i -> i == last || still.atNought(i))) {
                 ExactRatio beside = held.times(terms.get(last).weight()).orNull();
                 if (beside != null && reaches(List.of(terms.get(of), terms.get(by)), 1, 0,
                         within, ExactRatio.ZERO, relation, List.of(constant, beside),
