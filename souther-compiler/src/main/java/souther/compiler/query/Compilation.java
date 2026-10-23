@@ -197,14 +197,20 @@ public final class Compilation {
     }
 
     /**
-     * The same workspace after an edit: every source as it now reads, and which modules the caller
-     * is still holding back.
+     * The same workspace as it now is: every source as it now reads, which modules the caller is
+     * still holding back, and the day rows are now written on.
      *
      * <p>Nothing is thrown away. A source whose text is unchanged is unchanged, and an answer that
      * comes out the same as before leaves everything that read it alone — so what this costs is what
      * the edit actually reached.
+     *
+     * <p>The day with the sources, because a compilation brought up to date is one somebody keeps
+     * across requests — an editor's, across midnight — and the day it was made on is not the day
+     * a row it writes for this request is written on. Said with every update, so that no keeper
+     * can bring the sources up to date and leave the day behind; the same day sets nothing.
      */
-    public void update(Map<String, String> byId, Set<String> broken) {
+    public void update(Map<String, String> byId, Set<String> broken, LocalDate writtenOn) {
+        db.set(new Front.Day(), new Today(writtenOn));
         // A source that is gone is forgotten, along with the module it declared. Which module that
         // was has to be read before the layout is told the source is gone.
         for (SourceId gone : List.copyOf(held)) {

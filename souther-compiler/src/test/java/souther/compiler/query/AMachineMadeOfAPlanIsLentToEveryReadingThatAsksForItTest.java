@@ -154,14 +154,15 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
         // answer it had and changes nothing in it.
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("f0", PATTERNED);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         assertTrue(clean(compilation), "the model under test compiles clean before the edit");
         Db db = compilation.db();
         Map<Machines.OfDeclaration, StringFacts> before = answersIn(db);
         assertFalse(before.isEmpty(), "the declarations were read and answered");
 
         byId.put("f0", PATTERNED.replace("n = n + 1 }", "n = n + 2 }"));
-        compilation.update(byId, Set.of());
+        compilation.update(byId, Set.of(), TestDay.DATE);
         assertTrue(clean(compilation), "and after it");
 
         assertEquals(before, answersIn(db),

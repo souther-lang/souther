@@ -92,6 +92,8 @@ import souther.lsp.protocol.SignatureHelp;
 import souther.lsp.protocol.TextEdit;
 import souther.lsp.protocol.WorkspaceSymbol;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -167,6 +169,40 @@ public final class Analyzer {
      * asked of a compile — the answers are memoised, so a compile cannot be told halfway through.
      */
     private Adequacy.Asked measure = Adequacy.Asked.NOTHING;
+
+    /** Where the day rows are written on is read from. */
+    private final Clock clock;
+
+    /**
+     * The day the request being answered writes rows on, read off {@link #clock} as the request
+     * arrives ({@link #startAnswering}).
+     *
+     * <p>Handed to every compile this hands out, with the sources it is brought up to date with:
+     * a compile is kept across requests, and one made before midnight writes the rows a request
+     * after it asks for on the day of the request.
+     */
+    private LocalDate writtenOn;
+
+    /** An analyzer whose rows are written on the day where it runs. */
+    public Analyzer() {
+        this(Clock.systemDefaultZone());
+    }
+
+    /** An analyzer whose rows are written on the day {@code clock} says, as each request arrives. */
+    public Analyzer(Clock clock) {
+        this.clock = clock;
+        this.writtenOn = LocalDate.now(clock);
+    }
+
+    /**
+     * Reads the day off the clock for the request about to be answered.
+     *
+     * <p>Once a request, so that every compile one request asks for writes on one day however long
+     * it takes, and a request after midnight writes on the day after.
+     */
+    public void startAnswering() {
+        writtenOn = LocalDate.now(clock);
+    }
 
     /**
      * Whether the client will come back for an action's edit.
@@ -375,11 +411,12 @@ public final class Analyzer {
         readings.keySet().retainAll(graph.uris());
         ModulesOnThePath path = graph.onThePath();
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
-            workspaceCompile = Compilation.ofDocuments(sources, broken, path.path());
+            workspaceCompile = Compilation.ofDocuments(sources, broken, path.path())
+                    .writtenOn(writtenOn);
             workspaceCompile.measure(measure);
             compiledAgainst = path;
         } else {
-            workspaceCompile.update(sources, broken);
+            workspaceCompile.update(sources, broken, writtenOn);
         }
         // Told here rather than where the compile is made: what stops the walk is whichever unit of
         // work reached it, and a compile outlives every one of them.
@@ -405,7 +442,8 @@ public final class Analyzer {
     private Compilation compileOf(ModuleGraph graph) {
         if (workspaceCompile != null && graph == settledFor) {
             workspaceCompile.abandonWhen(abandonment);
-            return workspaceCompile;
+            // The documents are the ones it was brought up to date with; the day may not be.
+            return workspaceCompile.writtenOn(writtenOn);
         }
         return compileOf(graph, sorted(graph));
     }
@@ -436,12 +474,12 @@ public final class Analyzer {
         ModulesOnThePath path = graph.onThePath();
         if (composingCompile == null || !path.equals(composedAgainst)) {
             composingCompile = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
-                    path.path());
+                    path.path()).writtenOn(writtenOn);
             composingCompile.observe(RowObservation.RECORD_ARMS);
             composingCompile.measure(measure);
             composedAgainst = path;
         } else {
-            composingCompile.update(sorted.joining(), sorted.broken());
+            composingCompile.update(sorted.joining(), sorted.broken(), writtenOn);
         }
         composingCompile.abandonWhen(abandonment);
         return composingCompile;
@@ -1921,7 +1959,7 @@ public final class Analyzer {
         // asked about while its closing bracket is not typed, which is most of the time.
         SemanticProbe.Reading reading =
                 probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, buffer.parses(),
-                        cursor, abandonment);
+                        cursor, writtenOn, abandonment);
         Compilation compilation = reading == null ? compileOf(graph) : reading.compilation();
         String module = moduleOf(compilation, graph, uri);
         if (module == null) {
@@ -2242,7 +2280,7 @@ public final class Analyzer {
         rest.remove(uri);
         SemanticProbe.Reading reading =
                 probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, buffer.parses(),
-                        cursor, abandonment);
+                        cursor, writtenOn, abandonment);
         if (reading == null) {
             return List.of();
         }

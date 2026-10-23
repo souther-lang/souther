@@ -10,11 +10,22 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -501,6 +512,109 @@ class LspServerTest {
         assertTrue(resolved.has("edit"), "with the one property it asked to be filled in");
         assertTrue(resolved.get("edit").get("changes").get(uri).get(0).get("newText").asString()
                 .contains("-> <?>"), resolved.toString());
+    }
+
+    /**
+     * Rows a request asks for are written on the day of the request, and not on the day the
+     * server, or the compile it keeps, was started.
+     *
+     * <p>One session with the same documents, asked the same thing twice, on a clock a year later
+     * at every reading. A server that read the day once, or a compile that kept the day it was made
+     * on, answers the second request with the rows of the first.
+     */
+    @Test
+    void rowsAskedForAgainOnALaterDayAreWrittenOnThatDay() throws Exception {
+        Path dir = Files.createTempDirectory("day");
+        String text = """
+                module example.due
+
+                behavior late : (on: Date) -> Bool
+                let late (on) = if Date.year(on) >= 2500 then true else false
+                """;
+        Path source = dir.resolve("due.sou");
+        Files.writeString(source, text);
+        String uri = source.toUri().toString();
+        String initialize = message(1, "initialize", Map.of(
+                "rootUri", dir.toUri().toString(),
+                "initializationOptions", Map.of("souther", Map.of("adequacy", "witness")),
+                "capabilities", Map.of("textDocument", Map.of("codeAction", Map.of(
+                        "dataSupport", true,
+                        "resolveSupport", Map.of("properties", List.of("edit")))))));
+        String opened = message(null, "textDocument/didOpen", Map.of(
+                "textDocument", Map.of("uri", uri, "text", text)));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(frames(initialize,
+                message(null, "initialized", Map.of()), opened,
+                message(2, "textDocument/codeAction", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "range", Map.of("start", Map.of("line", 2, "character", 0),
+                                "end", Map.of("line", 2, "character", 0)),
+                        "context", Map.of("diagnostics", List.of()))))), out)).run();
+        JsonNode offered = responseFor(readFrames(out.toByteArray()), 2);
+        assertEquals(1, offered.size(), offered.toString());
+        Map<String, Object> taken = new LinkedHashMap<>();
+        offered.get(0).properties().forEach(p -> taken.put(p.getKey(), p.getValue()));
+
+        ByteArrayOutputStream back = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(frames(initialize,
+                message(null, "initialized", Map.of()), opened,
+                message(3, "codeAction/resolve", taken),
+                message(4, "codeAction/resolve", taken))), back),
+                new AYearAtEveryReading(LocalDate.of(2000, 6, 1))).run();
+        List<JsonNode> said = readFrames(back.toByteArray());
+
+        Set<Integer> first = yearsWrittenIn(responseFor(said, 3), uri);
+        Set<Integer> second = yearsWrittenIn(responseFor(said, 4), uri);
+        // The year nearest the day below the line is the day's own, so each request's day shows
+        // in its rows, and the later one's is later.
+        assertTrue(first.stream().anyMatch(year -> year < 2499), first.toString());
+        assertTrue(Collections.max(lessThan(second, 2499)) > Collections.max(lessThan(first, 2499)),
+                first + " then " + second);
+    }
+
+    private static Set<Integer> lessThan(Set<Integer> years, int bound) {
+        return years.stream().filter(year -> year < bound).collect(Collectors.toSet());
+    }
+
+    /** The years of the dates the rows a resolved action writes into {@code uri} hold. */
+    private static Set<Integer> yearsWrittenIn(JsonNode resolved, String uri) {
+        String written = resolved.get("edit").get("changes").get(uri).get(0).get("newText")
+                .asString();
+        Matcher date = Pattern.compile("Date\\(\"(\\d{4})-").matcher(written);
+        Set<Integer> years = new TreeSet<>();
+        while (date.find()) {
+            years.add(Integer.parseInt(date.group(1)));
+        }
+        assertFalse(years.isEmpty(), written);
+        return years;
+    }
+
+    /** A clock a year further on each time it is read. */
+    private static final class AYearAtEveryReading extends Clock {
+
+        private LocalDate day;
+
+        AYearAtEveryReading(LocalDate first) {
+            this.day = first;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            throw new UnsupportedOperationException("read in UTC only");
+        }
+
+        @Override
+        public Instant instant() {
+            Instant now = day.atStartOfDay(ZoneOffset.UTC).toInstant();
+            day = day.plusYears(1);
+            return now;
+        }
     }
 
     /** A folder the client adds after the handshake is searched, and one it removes is not. */
