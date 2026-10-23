@@ -102,7 +102,7 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
      * <p>The row at the line on {@code n} has to have come past {@code pay > 2024-05-15} first, and
      * nothing bounds {@code pay} above, so it is the first of the month nearest the day the rows
      * are written on. And the rows on either side of the line on the date itself are the first of a
-     * month on each side.
+     * month on each side, each the one nearest the day that its side leaves.
      */
     @Test
     void aPositionOnTheWayAndOneALineIsOnAreOfferedMembers() {
@@ -129,8 +129,11 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
 
                 let f (v) = v.value > Date("2024-05-10")
                 """);
+        // Below the line, the member of the class nearest the day that the side leaves, which is
+        // the last first of a month before the line; above it, the first of the month nearest the
+        // day.
         assertTrue(itself.contains("(V(Date(\"2024-05-01\")))"), itself);
-        assertTrue(itself.contains("(V(Date(\"2024-06-01\")))"), itself);
+        assertTrue(itself.contains("(V(Date(\"" + nearestTheDay(1) + "\")))"), itself);
     }
 
     /**

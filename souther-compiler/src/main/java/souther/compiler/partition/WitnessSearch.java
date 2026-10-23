@@ -4,13 +4,10 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import net.unit8.notation199x.pattern.Meter;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Today;
 import souther.compiler.numeric.UsualPlace;
-import souther.compiler.semantics.TakenAs;
 import souther.compiler.values.ValueSet;
 
-import java.time.LocalDate;
 import java.util.function.Supplier;
 
 /**
@@ -48,25 +45,10 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance, 
         return allowance.get();
     }
 
-    /**
-     * Where a value for {@code term} counted on {@code carrier} is looked for first, or null where
-     * the term has no such place and the range's own ends are where a search starts.
-     *
-     * <p>A date at today, and the year of a date at today's year, between the first and the last
-     * the calendar has. Neither has an end a reader would write a row at: the first day of the
-     * calendar is the end of the type and no case of anybody's domain.
-     */
+    /** Where a value for {@code term} counted on {@code carrier} is usually near on the day this
+     *  search is made on ({@link UsualPlaces}). */
     public UsualPlace startingAt(NumericTerm term, Carrier carrier) {
-        if (term instanceof NumericTerm.ValueOf) {
-            return carrier.usualPlace(today);
-        }
-        if (term instanceof NumericTerm.TakenOf taken
-                && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
-                && part == TakenAs.DatePart.YEAR) {
-            return new UsualPlace(Count.of(today.year()), Count.of(LocalDate.MIN.getYear()),
-                    Count.of(LocalDate.MAX.getYear()));
-        }
-        return null;
+        return UsualPlaces.of(term, carrier, today);
     }
 
     /**

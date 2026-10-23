@@ -5,11 +5,14 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.check.Carrier;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -21,6 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -250,7 +254,8 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 Endpoint.inclusive(Count.of(new BigDecimal("0.34"))),
                 Endpoint.inclusive(Count.of(new BigDecimal("0.35"))));
         List<Place> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                List.of(third, half), 1, new LinkedHashSet<>(), new LinkedHashSet<>());
+                List.of(third, half), 1, UsualPlace.NONE, new LinkedHashSet<>(),
+                new LinkedHashSet<>());
         assertFalse(chosen.isEmpty(), "a value between 0.34 and 0.35 is there to choose");
         for (Place each : chosen) {
             ExactRatio at = Count.number(each).exactly();
@@ -273,8 +278,8 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         ExactRatio half = ExactRatio.of(new BigDecimal("5E-1000000001"));
         List<ExactRatio> chosen = assertTimeoutPreemptively(Duration.ofSeconds(10), () ->
                 CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                        List.of(ExactRatio.of(-1), half), 1, new LinkedHashSet<>(),
-                        new LinkedHashSet<>()).stream()
+                        List.of(ExactRatio.of(-1), half), 1, UsualPlace.NONE,
+                        new LinkedHashSet<>(), new LinkedHashSet<>()).stream()
                         .map(each -> Count.number(each).exactly()).toList());
         assertTrue(chosen.contains(ExactRatio.ZERO), () -> "nought is chosen: " + chosen);
         assertTrue(chosen.contains(half), () -> "and the place it turns at inside: " + chosen);
@@ -291,7 +296,8 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 Endpoint.inclusive(Count.of(new BigDecimal("0.33"))),
                 Endpoint.inclusive(Count.of(new BigDecimal("0.34"))));
         List<ExactRatio> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                List.of(third), 1, new LinkedHashSet<>(), new LinkedHashSet<>()).stream()
+                List.of(third), 1, UsualPlace.NONE, new LinkedHashSet<>(),
+                new LinkedHashSet<>()).stream()
                 .map(each -> Count.number(each).exactly()).toList();
         assertTrue(chosen.stream().anyMatch(at -> at.compareTo(third) < 0
                         && at.compareTo(ExactRatio.of(new BigDecimal("0.33"))) >= 0),
@@ -299,6 +305,32 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         assertTrue(chosen.stream().anyMatch(at -> at.compareTo(third) > 0
                         && at.compareTo(ExactRatio.of(new BigDecimal("0.34"))) <= 0),
                 () -> "and one from past a third to 0.34: " + chosen);
+    }
+
+    /**
+     * Dates of elements in a run nobody bounded below are walked out from the day: in a run that
+     * ends before the day, down from its end, as many as are asked for; in a run with no end, the
+     * day and the days either side of it, the day after first.
+     *
+     * <p>Asked of the run with the calendar's first day as its low end, which is how a run a rule
+     * bounded only above can arrive: entered from below, the day is past its far end, and a walk
+     * up from there would find the end and nothing more.
+     */
+    @Test
+    void datesOfElementsAreWalkedOutFromTheDay() {
+        UsualPlace usual = Carrier.DATE.usualPlace(TestDay.TODAY);
+        NumericDomain.Bounds beforeTheDay = new NumericDomain.Bounds(
+                Endpoint.inclusive(Dates.dayOf(LocalDate.MIN)),
+                Endpoint.inclusive(Dates.dayOf(LocalDate.of(2020, 12, 31))));
+        assertEquals(List.of(LocalDate.of(2020, 12, 31), LocalDate.of(2020, 12, 30),
+                        LocalDate.of(2020, 12, 29)),
+                CardinalityComposer.valuesAlong(Carrier.DATE, beforeTheDay, List.of(), 3, usual,
+                        new LinkedHashSet<>(), new LinkedHashSet<>()).stream()
+                        .map(Dates::dateAt).toList());
+        assertEquals(List.of(TestDay.DATE, TestDay.DATE.plusDays(1), TestDay.DATE.minusDays(1)),
+                CardinalityComposer.valuesAlong(Carrier.DATE, NumericDomain.Bounds.OPEN,
+                        List.of(), 3, usual, new LinkedHashSet<>(), new LinkedHashSet<>())
+                        .stream().map(Dates::dateAt).toList());
     }
 
     /**
@@ -310,7 +342,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         ExactRatio thirtieth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(30));
         ExactRatio fifteenth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(15));
         List<Place> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE,
-                NumericDomain.Bounds.OPEN, List.of(thirtieth, fifteenth), 1,
+                NumericDomain.Bounds.OPEN, List.of(thirtieth, fifteenth), 1, UsualPlace.NONE,
                 new LinkedHashSet<>(), new LinkedHashSet<>());
         assertTrue(chosen.stream().map(each -> Count.number(each).exactly())
                         .anyMatch(at -> at.compareTo(thirtieth) > 0 && at.compareTo(fifteenth) < 0),

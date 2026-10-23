@@ -120,9 +120,18 @@ public final class Front {
      * The day this compilation writes rows on, which is where a date a rule leaves free is looked
      * for first.
      *
-     * <p>Read by what writes a row and by nothing that reads the model. Which points a rule owes and
-     * whether a row fills one are the source's alone, so a change of day reaches the rows written
-     * and leaves every reading of the declarations as it was.
+     * <p><b>Who reads it.</b> Every world a declaration's rules are read in is made with it
+     * ({@link souther.compiler.check.RuleReadingContext#today}), so every query that makes one asks
+     * for it: the readings of declarations and bodies as much as the measurement and the rows. A
+     * change of day puts all of those to work again. The readings that choose no value come back
+     * equal to what they were and the change stops there; the measurement does not, because the
+     * value it shows a class holds is one it chose, and the row offered for the class is written
+     * with that value. So a change of day reaches the inputs read, the measurement made of them
+     * and the rows, and recomputes them.
+     *
+     * <p><b>What it does not reach.</b> Which classes there are, which points a rule owes and
+     * whether a row fills one are read off the source alone: the values chosen differ by day, and
+     * what they are owed for does not.
      */
     public record Day() implements Input<Today> {}
 

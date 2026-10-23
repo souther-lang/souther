@@ -84,20 +84,21 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     }
 
     /** Worked out by hand: one step of each order from where an unbounded range is entered, which
-     *  for a date is the day the rows are written on. */
+     *  for a date is the day the rows are written on and for a date-time and a moment the start of
+     *  it — and outward from the day, the day after before the day before. */
     @Test
     void eachOrderStepsByItsOwnUnit() {
         assertEquals(List.of("Date(\"" + TestDay.DATE + "\")",
                         "Date(\"" + TestDay.DATE.plusDays(1) + "\")",
-                        "Date(\"" + TestDay.DATE.plusDays(2) + "\")"),
+                        "Date(\"" + TestDay.DATE.minusDays(1) + "\")"),
                 stepped(Type.DATE, 3));
         assertEquals(List.of("Time(\"00:00:00\")", "Time(\"00:00:01\")"),
                 stepped(Type.TIME, 2));
-        assertEquals(List.of("DateTime(\"1970-01-01T00:00:00\")",
-                        "DateTime(\"1970-01-01T00:00:01\")"),
+        assertEquals(List.of("DateTime(\"" + TestDay.DATE + "T00:00:00\")",
+                        "DateTime(\"" + TestDay.DATE + "T00:00:01\")"),
                 stepped(Type.DATETIME, 2));
-        assertEquals(List.of("Instant(\"1970-01-01T00:00:00Z\")",
-                        "Instant(\"1970-01-01T00:00:00.000000001Z\")"),
+        assertEquals(List.of("Instant(\"" + TestDay.DATE + "T00:00:00Z\")",
+                        "Instant(\"" + TestDay.DATE + "T00:00:00.000000001Z\")"),
                 stepped(Type.INSTANT, 2));
     }
 

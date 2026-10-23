@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +70,7 @@ public record Environment(Map<String, String> variables, Map<String, String> pro
             properties.put(name, system.getProperty(name));
         }
         return new Environment(System.getenv(), properties, Path.of(""), System.in, System.out,
-                System.err, true, LocalDate.now());
+                System.err, true, LocalDate.now(ZoneId.systemDefault()));
     }
 
     /** The variable {@code name}, or null where it is not set. */

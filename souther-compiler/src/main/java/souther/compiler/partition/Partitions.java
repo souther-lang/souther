@@ -46,6 +46,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Today;
+import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.regex.Language;
@@ -64,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -2121,7 +2123,7 @@ public final class Partitions {
             return index -> index == 0 ? only : null;
         }
         return index -> {
-            Place at = stepped(range, carrier, from, index);
+            Place at = stepped(range, carrier, from, index, carrier.usualPlace(reading.today()));
             return at == null ? null : standing(view, carrier, at, source);
         };
     }
@@ -2150,11 +2152,40 @@ public final class Partitions {
      * <p>Away from that end because a range bounded only above is entered at its end, and a step up
      * from there is a value the rules refuse. On the carrier's grid because a step past the end of
      * what the carrier holds — the second after the last of the day — is no value.
+     *
+     * <p>And outward from {@code from} where it is where the number is usually near, in a range left
+     * open on a side ({@link Carrier#aPlaceInside}): the {@code index}th place of the range taking
+     * the one above before the one below at each step out, as every outward walk here does. Stepped
+     * one way from there, a range whose far end is before today would hold today's nearest date and
+     * nothing else.
      */
     private static Place stepped(NumericDomain.Bounds range, Carrier carrier, Place from,
-                                 int index) {
-        boolean downwards = range != null && range.min() == null && range.max() != null;
+                                 int index, UsualPlace usual) {
         Count origin = Count.number(from);
+        if (usual instanceof UsualPlace.Near near
+                && near.leftOpenIn(range == null ? null : range.min(),
+                        range == null ? null : range.max())) {
+            int reached = 0;
+            for (long away = 0; ; away++) {
+                boolean inside = false;
+                for (Count each : away == 0 ? List.of(origin)
+                        : Arrays.asList(origin.plus(away), origin.minus(away))) {
+                    Place at = each == null ? null : carrier.onTheGrid(each);
+                    if (at != null && holdsCount(range, at)) {
+                        inside = true;
+                        if (reached++ == index) {
+                            return at;
+                        }
+                    }
+                }
+                // A range of a discrete carrier holds every place between two it holds, so one
+                // past which neither side holds a place is one past which none does.
+                if (!inside) {
+                    return null;
+                }
+            }
+        }
+        boolean downwards = range != null && range.min() == null && range.max() != null;
         Place at = carrier.onTheGrid(downwards ? origin.minus(index) : origin.plus(index));
         return at != null && holdsCount(range, at) ? at : null;
     }
@@ -2273,10 +2304,9 @@ public final class Partitions {
     }
 
     /**
-     * The member of the class {@code limits} holds the position to nearest the order's usual place
-     * where it has one and the range is open on a side ({@link Carrier#nearestInside}), and
-     * otherwise nearest the lower end of where it
-     * stops — or, with no lower end, nearest the order's own start — that the values the rules
+     * The member of the class {@code limits} holds the position to nearest the value standing for
+     * where it stops ({@link Carrier#aPlaceInside}) — the lower end of a run a rule closed, or
+     * where the order is usually near in one left open on a side — that the values the rules
      * admit there take in, written as the position writes it; or null where it is held to no class,
      * its order counts none, or the run holds no such member.
      *
@@ -2296,12 +2326,9 @@ public final class Partitions {
         FieldDomains.ConstructionLimits.ValuesNamed named = limits.valuesNamed();
         ValueSet admits = named.asASet();
         NumericDomain.Bounds run = TypeBounds.admissible(declared, limits.values());
-        UsualPlace usual = declared.carrier().usualPlace(reading.today());
-        Place near = usual == null ? null : declared.carrier().nearestInside(usual, run);
-        ClassMembers members = near instanceof Count count
-                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> from
-                ? held.nearest(from.value(), run, named.keptOut() + 1)
-                : held.within(run, null, named.keptOut() + 1);
+        Carrier carrier = declared.carrier();
+        ClassMembers members = held.standingIn(run, carrier, carrier.usualPlace(reading.today()),
+                named.keptOut() + 1);
         for (BigInteger each : members.values()) {
             Place at = new Count(new BigDecimal(each));
             if (declared.carrier().admitted(admits, at)) {
@@ -2323,11 +2350,12 @@ public final class Partitions {
             // No smallest step, so the only second count a range names is one inside both its ends —
             // and the one already on offer is that count where the range is open below.
             return min == null || max == null || !min.inclusive() ? null
-                    : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
+                    : carrier.somethingInside(Endpoint.exclusive(min.at()), max, Towards.ABOVE,
+                            UsualPlace.NONE);
         }
         // The step an element of a collection takes after the first, so a position's second value and
         // a set's second element are one value.
-        return stepped(range, carrier, from, 1);
+        return stepped(range, carrier, from, 1, carrier.usualPlace(today));
     }
 
     /** Whether a range holds a count, with no range holding everything. */
@@ -2948,16 +2976,12 @@ public final class Partitions {
     }
 
     /** A count the position holds, or null where it holds none. The ends decide it, so nothing here
-     * reads one of them as a number and loses whether the range reaches it. Nearest the order's
-     * usual place where it has one and no rule closes the range on both sides
-     * ({@link Carrier#nearestInside}), as a date is nearest today. */
+     * reads one of them as a number and loses whether the range reaches it. A value standing for
+     * the range ({@link Carrier#aPlaceInside}), as a date nobody bounded on a side is the date
+     * nearest today. */
     private static Place inside(NumericDomain.Bounds within, Carrier carrier, Today today) {
-        UsualPlace usual = carrier.usualPlace(today);
-        Place near = usual == null ? null : carrier.nearestInside(usual, within);
-        if (within == null && near == null) {
-            return Count.ZERO;
-        }
-        Place between = near != null ? near : carrier.somethingInside(within.min(), within.max());
+        Place between = carrier.aPlaceInside(within == null ? null : within.min(),
+                within == null ? null : within.max(), carrier.usualPlace(today));
         if (between == null) {
             return null;
         }

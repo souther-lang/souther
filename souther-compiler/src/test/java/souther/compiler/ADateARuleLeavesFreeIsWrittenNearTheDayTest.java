@@ -13,12 +13,14 @@ import souther.compiler.report.GeneratedRows;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -57,13 +59,18 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         return compilation;
     }
 
-    /** The dates of each row the block offers, in the order the row writes them. */
-    private static List<List<LocalDate>> rows(Compilation compilation) {
+    /** The block of rows offered for the module. */
+    private static String block(Compilation compilation) {
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("m"));
         assertNotNull(offering, "the model under test compiles");
-        String block = GeneratedRows.of(offering, Map.of(),
+        return GeneratedRows.of(offering, Map.of(),
                 SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+    }
+
+    /** The dates of each row the block offers, in the order the row writes them. */
+    private static List<List<LocalDate>> rows(Compilation compilation) {
+        String block = block(compilation);
         List<List<LocalDate>> out = new ArrayList<>();
         for (String line : block.lines().filter(each -> each.startsWith("    |")).toList()) {
             List<LocalDate> dates = new ArrayList<>();
@@ -137,26 +144,93 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
     }
 
     /** A year bounded below and a twenty-ninth of February are met in the leap year nearest the
-     *  day that the bound leaves — above the day before below it where two are as near. */
+     *  day that the bound leaves — the later where two are as near, as on a day of 2042, between
+     *  2040 and 2044. */
     @Test
     void aBoundedYearWithAMonthAndADayIsTheNearestOneThatHasThem() {
         String source = source("d: Date", "d",
                 "Date.year(d) >= 2030 && Date.month(d) == 2 && Date.day(d) == 29");
-        for (LocalDate day : DAYS) {
-            int from = Math.max(day.getYear(), 2030);
-            int leap = -1;
-            for (int away = 0; leap < 0; away++) {
-                for (int year : new int[] {from + away, from - away - 1}) {
-                    if (leap < 0 && year >= 2030 && Year.isLeap(year)) {
-                        leap = year;
-                    }
-                }
-            }
+        List<LocalDate> days = new ArrayList<>(DAYS);
+        days.add(LocalDate.of(2042, 3, 5));
+        for (LocalDate day : days) {
+            int leap = IntStream.rangeClosed(2030, day.getYear() + 8).filter(Year::isLeap).boxed()
+                    .min(Comparator.comparingInt((Integer year) -> Math.abs(year - day.getYear()))
+                            .thenComparing(Comparator.reverseOrder()))
+                    .orElseThrow();
             List<List<LocalDate>> rows = rows(source, day);
             assertTrue(rows.contains(List.of(LocalDate.of(leap, 2, 29))),
                     "on " + day + ": " + rows);
         }
     }
+
+    /** A value other than the one a rule singles out is near the day, and not beside the value:
+     *  a date other than one in 2300, a date-time other than one, and a year other than one. */
+    @Test
+    void whatARuleSinglesOutLeavesTheRestNearTheDay() {
+        for (LocalDate day : DAYS) {
+            List<List<LocalDate>> other = rows(source("d: Date", "d",
+                    "d == Date(\"2300-01-01\")"), day);
+            assertTrue(other.contains(List.of(day)), "on " + day + ": " + other);
+            assertTrue(other.stream().allMatch(row -> row.getFirst().equals(day)
+                            || Math.abs(row.getFirst().getYear() - 2300) <= 1),
+                    "every row is the day or beside the value, on " + day + ": " + other);
+            String moments = block(measured(source("t: DateTime", "t",
+                    "t == DateTime(\"2300-01-01T00:00:00\")"), day));
+            assertTrue(moments.contains("DateTime(\"" + day.atStartOfDay() + ":00\")"),
+                    "on " + day + ":\n" + moments);
+            List<List<LocalDate>> years = rows(source("d: Date", "d", "Date.year(d) == 2300"), day);
+            assertTrue(years.contains(List.of(day.withDayOfYear(1))), "on " + day + ": " + years);
+        }
+    }
+
+    /** The case the issue was raised over: a year other than the one a rule names, beside a month
+     *  it names, is the month in the day's year — and not the first year the calendar has. */
+    @Test
+    void aYearOtherThanTheOneNamedBesideANamedMonthIsThatMonthInTheDaysYear() {
+        String source = source("d: Date", "d", "Date.year(d) == 2031 && Date.month(d) == 3");
+        for (LocalDate day : DAYS) {
+            List<List<LocalDate>> rows = rows(source, day);
+            assertTrue(rows.contains(List.of(LocalDate.of(day.getYear(), 3, 1))),
+                    "on " + day + ": " + rows);
+            assertTrue(rows.stream().allMatch(row -> Math.abs(row.getFirst().getYear() - 2031) <= 2
+                            || row.getFirst().getYear() == day.getYear()),
+                    "on " + day + ": " + rows);
+        }
+    }
+
+    /** Elements a rule bounds above, before the day, are the bound and the days before it: a
+     *  collection of them holds as many as it is asked to, and not the one nearest the day. */
+    @Test
+    void elementsBoundedBeforeTheDayAreSteppedDownFromTheBound() {
+        String source = """
+                module m
+
+                data Past = Date
+                    invariant value <= Date("2020-12-31")
+
+                behavior f : (s: Set<Past>) -> Bool
+                let f (s) = if Set.size(s) >= 3 then true else false
+                """;
+        for (LocalDate day : DAYS) {
+            String expected = "[Past(Date(\"2020-12-31\")), Past(Date(\"2020-12-30\")),"
+                    + " Past(Date(\"2020-12-29\"))]";
+            String block = block(measured(source, day));
+            assertTrue(block.contains(expected), "on " + day + ":\n" + block);
+        }
+    }
+
+    /** Elements nothing bounds are the day and the days either side of it, the day after before
+     *  the day before, as every walk outward from a place takes them. */
+    @Test
+    void elementsNothingBoundsAreTheDayAndTheDaysEitherSideOfIt() {
+        String source = source("s: Set<Date>", "s", "Set.size(s) >= 3");
+        for (LocalDate day : DAYS) {
+            List<List<LocalDate>> rows = rows(source, day);
+            assertTrue(rows.contains(List.of(day, day.plusDays(1), day.minusDays(1))),
+                    "on " + day + ": " + rows);
+        }
+    }
+
 
     /** A date the calendar does not have is no row, whatever the day. */
     @Test
@@ -187,6 +261,26 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         }
     }
 
+    /** A date-time and a moment nothing fixes are the start of the day, the moment in UTC; and
+     *  one a rule bounds on one side is the start of the day where that side leaves it. */
+    @Test
+    void aDateTimeAndAMomentNothingFixesAreTheStartOfTheDay() {
+        String source = """
+                module m
+
+                behavior f : (at: DateTime, when: Instant, after: DateTime, n: Int) -> Bool
+                let f (at, when, after, n) =
+                    if n >= 3 && after >= DateTime("2000-01-01T00:00:00") then true else false
+                """;
+        for (LocalDate day : DAYS) {
+            String block = block(measured(source, day));
+            String start = day.atStartOfDay().toString() + ":00";
+            assertTrue(block.contains("DateTime(\"" + start + "\")"), "on " + day + ":\n" + block);
+            assertTrue(block.contains("Instant(\"" + start + "Z\")"), "on " + day + ":\n" + block);
+            assertFalse(block.contains("1970"), "on " + day + ":\n" + block);
+        }
+    }
+
     /** What a model owes does not turn on the day: its report is the same on both. */
     @Test
     void theDayMovesNothingTheRulesOwe() {
@@ -212,16 +306,30 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
     }
 
     /** A compilation told another day writes the rows one started on that day writes: what was
-     *  worked out on the first day is not what the second is answered with. */
+     *  worked out on the first day is not what the second is answered with. And what the model
+     *  owes, measured again on the same compilation, is what it owed the day before. */
     @Test
     void anotherDayIsAnsweredOnThatDay() {
-        String source = source("on: Date, birthday: Date", "on, birthday",
-                "Date.year(on) - Date.year(birthday) >= 40");
+        String source = """
+                module m
+
+                behavior f : (on: Date, birthday: Date) -> Bool
+                let f (on, birthday) =
+                    if Date.year(on) - Date.year(birthday) >= 40 then true else false
+
+                example f
+                    | (Date("2020-02-29"), Date("1990-05-01")) -> false
+                """;
         Compilation compilation = measured(source, DAYS.get(0));
         List<List<LocalDate>> first = rows(compilation);
+        String owedFirst = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
         compilation.writtenOn(DAYS.get(1));
         List<List<LocalDate>> second = rows(compilation);
+        String owedSecond = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(rows(source, DAYS.get(1)), second);
         assertFalse(first.equals(second), "the two days are years apart: " + first);
+        assertEquals(owedFirst, owedSecond);
     }
 }

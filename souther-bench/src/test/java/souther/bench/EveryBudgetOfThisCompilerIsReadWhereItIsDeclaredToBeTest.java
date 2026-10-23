@@ -412,7 +412,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
-                            + "Ljava/util/Set;)"
+                            + "Ljava/util/Set;Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
                             + " the figure it was cut at"),
@@ -852,17 +852,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "how many years the first year asked is walked over, and whether they were all"
                             + " of them; with no year asked, one cycle of the calendar is walked,"
                             + " which is every day there is"),
-            Map.entry("souther.compiler.partition.TermRealizations#wholeNumbersNear("
-                            + "Lsouther/compiler/partition/NumericSet;"
-                            + "Lsouther/compiler/check/Carrier;JJJI)"
-                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
-                    "names the figure as what left more of the set untried, where the walk out"
-                            + " from the year nearest today filled what it was allowed before"
-                            + " either side of the window ran out"),
             Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
                             + "Ljava/util/function/Predicate;"
-                            + "Ljava/math/BigInteger;Ljava/math/BigInteger;I)"
+                            + "Ljava/math/BigInteger;Ljava/math/BigInteger;I"
+                            + "Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "names the figure as what left more of the set untried, where the walk filled"
                             + " what it was allowed before the window ran out"),

@@ -28,6 +28,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -2363,7 +2364,9 @@ final class ContainersAddingUp {
             // A value of the carrier that the rules leave, which is the one reader of that question.
             // Read as "the least the range names", a range open below had no start and a dense one
             // held away from a value had the wrong one.
-            if (!(elements.somethingInside(runs.min(), runs.max()) instanceof Count from)) {
+            // A total adds up numbers, which are near nowhere in particular.
+            if (!(elements.aPlaceInside(runs.min(), runs.max(), UsualPlace.NONE)
+                    instanceof Count from)) {
                 return null;
             }
             return new Ends(from, inward(runs.min(), elements, true),

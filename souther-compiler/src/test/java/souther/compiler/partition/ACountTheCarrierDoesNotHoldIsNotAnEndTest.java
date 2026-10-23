@@ -163,13 +163,15 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         // What the type wraps still stands for it — a candidate is a proposal the decoder answers,
         // and this one is refused there. What is gone is the value from inside the range, which is
         // where a count past the calendar was being written from.
-        assertEquals(List.of("PastMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("PastMoment(DateTime(\"" + START_OF_THE_DAY + "\"))"),
+                representatives("""
                 module example.pastmoment
 
                 data PastMoment = DateTime
                     invariant value > DateTime("+999999999-12-31T23:59:59.999999999")
                 """, "PastMoment"));
-        assertEquals(List.of("BeforeMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("BeforeMoment(DateTime(\"" + START_OF_THE_DAY + "\"))"),
+                representatives("""
                 module example.beforemoment
 
                 data BeforeMoment = DateTime
@@ -178,18 +180,23 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
     }
 
     /** And a range inside the calendar still gives up a value from inside itself, so the two above
-     * are not short of one for some other reason. */
+     * are not short of one for some other reason. The range starts after the day the rows are
+     * written on, so the value from inside it is not the one that stands for what the type
+     * wraps. */
     @Test
     void aRuleInsideTheCalendarStillOffersAValueFromInsideIt() {
-        assertEquals(List.of("Ordinary(DateTime(\"2026-01-01T00:00:00\"))",
-                        "Ordinary(DateTime(\"1970-01-01T00:00:00\"))"),
+        assertEquals(List.of("Ordinary(DateTime(\"2040-01-01T00:00:00\"))",
+                        "Ordinary(DateTime(\"" + START_OF_THE_DAY + "\"))"),
                 representatives("""
                         module example.ordinary
 
                         data Ordinary = DateTime
-                            invariant value > DateTime("2025-12-31T23:59:59")
+                            invariant value > DateTime("2039-12-31T23:59:59")
                         """, "Ordinary"));
     }
+
+    /** Where a date-time nothing bounds is entered: the start of the day the rows are written on. */
+    private static final String START_OF_THE_DAY = TestDay.DATE.atStartOfDay() + ":00";
 
     /** What stands for a position of {@code name}, written. */
     private static List<String> representatives(String source, String name) {

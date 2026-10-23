@@ -26,6 +26,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Today;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -87,9 +88,10 @@ public final class Compilation {
         // says so with withEvaluationPolicy.
         db.set(new Front.Policy(), souther.compiler.execute.EvaluationPolicy.fromSettings());
         // The day rows are written on, read once as the compilation starts, so that every row of
-        // one compilation is written on the same day however long it runs. A caller with a day of
-        // its own says so with writtenOn.
-        db.set(new Front.Day(), new Today(LocalDate.now()));
+        // one compilation is written on the same day however long it runs. The day where this
+        // runs, which is the day the person reading the rows is on. A caller with a day of its own
+        // says so with writtenOn.
+        db.set(new Front.Day(), new Today(LocalDate.now(ZoneId.systemDefault())));
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
