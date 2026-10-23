@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -52,7 +53,7 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
     /** A reading of an input that takes one whole number, and nothing called {@code s}. */
     private static Quantities reading() {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()).quantities(RULES);

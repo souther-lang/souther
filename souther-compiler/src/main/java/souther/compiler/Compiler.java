@@ -14,6 +14,7 @@ import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -255,6 +256,14 @@ public final class Compiler {
         return answered(sources.compilation(path), warningsOut, measure);
     }
 
+    /** As above, with the rows written on {@code writtenOn} rather than on the day the
+     *  compilation starts ({@link Compilation#writtenOn}). */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       LocalDate writtenOn) {
+        return answered(sources.compilation(path).writtenOn(writtenOn), warningsOut, measure);
+    }
+
     /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, measuring
      *  nothing of what the rows cover. */
     public static Compilation analyzed(CompilationSources sources, ModulePath path,
@@ -274,6 +283,14 @@ public final class Compiler {
     public static Compilation analyzedModules(List<String> sources, ModulePath path,
                                               List<Located> warningsOut, Adequacy.Asked measure) {
         return analyzed(CompilationSources.modules(sources), path, warningsOut, measure);
+    }
+
+    /** As above, with the rows written on {@code writtenOn}. */
+    public static Compilation analyzedModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure,
+                                              LocalDate writtenOn) {
+        return analyzed(CompilationSources.modules(sources), path, warningsOut, measure,
+                writtenOn);
     }
 
     /**

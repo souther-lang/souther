@@ -11,6 +11,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.Type;
@@ -216,6 +217,8 @@ public final class FieldDomains {
      *  same way. A second reading of one declaration under another policy would answer a name
      *  differently while both stayed sound, and what moved would be read as what the rule did. */
     private final ReadingPolicy policy;
+    /** The day this value was read on, kept with the policy for the same reason. */
+    private final Today today;
     /** The atom a range is taken of at each name: what stands there, and the count of it where a
      *  count is taken. A name with neither has no range to be exact about. */
     private final Map<RuleKey, FactSubject> atomAt;
@@ -335,6 +338,7 @@ public final class FieldDomains {
         // (borrowing) — and nothing where no reading was made.
         this.source = readIn == null ? null : readIn.source();
         this.policy = readIn == null ? null : readIn.policy();
+        this.today = readIn == null ? null : readIn.today();
         this.revision = revision;
         this.byName = byName;
         this.heldByName = heldByName;
@@ -968,7 +972,8 @@ public final class FieldDomains {
     private FieldDomains counterfactual(LeftOut omitted) {
         return counterfactuals.computeIfAbsent(omitted, left -> of(named,
                 RuleReadingContext.of(source, policy,
-                        DeclarationReadings.borrowing(named.key(), stringMachines, revision)),
+                        DeclarationReadings.borrowing(named.key(), stringMachines, revision),
+                        today),
                 settled, left.reach()));
     }
 
@@ -2765,7 +2770,7 @@ public final class FieldDomains {
         deeper.add(element);
         return elements.computeIfAbsent(element, each -> of(each, RuleReadingContext.of(source,
                         policy, DeclarationReadings.borrowing(named.key(), stringMachines,
-                                revision))))
+                                revision), today)))
                 .shownToHoldAValue(deeper);
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -92,7 +93,8 @@ class HandedOnTest {
         return HandedOn.of(built, () -> written,
                 new ContentsAsked.ToHandOn(Set.of(LEVEL), Set.of(), Set.of()),
                 BehaviorInputs.of(READ),
-                RuleReadingContext.unshared(READ.rules(), ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(READ.rules(), ReadAs.THE_COMPILATION_DOES,
+                        TestDay.TODAY));
     }
 
     private static Map<TermPath, String> texts(HandedOn.Came came) {

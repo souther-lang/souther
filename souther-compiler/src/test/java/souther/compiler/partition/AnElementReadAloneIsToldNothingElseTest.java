@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.TermPath;
@@ -65,7 +66,7 @@ class AnElementReadAloneIsToldNothingElseTest {
     private static BorderQuantity.Observation aloneOf(ObservedValue value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         RuleReadingContext reading = RuleReadingContext.unshared(
-                RuleReadings.of(compilation, "p"), ReadAs.THE_COMPILATION_DOES);
+                RuleReadings.of(compilation, "p"), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         ElementValues values = ElementValues.of(ITEMS, Type.ref(FLAGS), reading, (_, _) -> null);
         assertNotNull(values, "every part of the element is listed");
         return values.alone(value);

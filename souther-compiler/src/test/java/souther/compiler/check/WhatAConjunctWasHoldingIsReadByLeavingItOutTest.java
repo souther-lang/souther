@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.query.Compilation;
@@ -129,6 +130,6 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
         return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                ReadAs.THE_COMPILATION_DOES)).bounds();
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).bounds();
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -199,7 +200,8 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                         souther.compiler.types.Type.ref(
                                 souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))),
                         RuleReadingContext.unshared(rules,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                                TestDay.TODAY))
                 .values().stream().map(FixtureTemplate::text).toList();
     }
 
@@ -213,7 +215,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         assertFalse(sigs.isEmpty(), "the model under test compiles");
         Map.Entry<String, DeclaredSig> declared = sigs.entrySet().iterator().next();
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(declared.getValue(), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);

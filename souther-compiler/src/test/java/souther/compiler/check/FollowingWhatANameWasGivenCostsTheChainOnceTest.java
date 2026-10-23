@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -49,7 +50,7 @@ class FollowingWhatANameWasGivenCostsTheChainOnceTest {
         PathEngine engine = new PathEngine(
                 RuleReadingContext.unshared(
                         RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
         Hir.Binders binders = new Hir.Binders(OWNER);
         Core.Binder first = CoreBinders.of(binders.binder("x0", POS));

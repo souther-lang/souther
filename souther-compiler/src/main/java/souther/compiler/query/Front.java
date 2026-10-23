@@ -34,6 +34,7 @@ import souther.compiler.check.Preserved;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
+import souther.compiler.numeric.Today;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -114,6 +115,30 @@ public final class Front {
      * <p>Absent means {@link souther.compiler.execute.EvaluationPolicy#DEFAULT}.
      */
     public record Policy() implements Input<souther.compiler.execute.EvaluationPolicy> {}
+
+    /**
+     * The day this compilation writes rows on, which is where a date a rule leaves free is looked
+     * for first.
+     *
+     * <p>Read by what writes a row and by nothing that reads the model. Which points a rule owes and
+     * whether a row fills one are the source's alone, so a change of day reaches the rows written
+     * and leaves every reading of the declarations as it was.
+     */
+    public record Day() implements Input<Today> {}
+
+    /**
+     * The day {@code db}'s compilation writes rows on.
+     *
+     * <p>Never absent: a compilation sets it as it starts, and a reading made without one would
+     * choose its values on whatever day a default named.
+     */
+    static Today dayOf(Db db) {
+        Today day = db.ask(new Day()).value();
+        if (day == null) {
+            throw new IllegalStateException("a compilation sets the day it writes rows on");
+        }
+        return day;
+    }
 
     /**
      * The standard library this compilation reads names against.

@@ -4,6 +4,7 @@ import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -520,6 +521,6 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(symbols.module(), name));
         return FieldDomains.of(at,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

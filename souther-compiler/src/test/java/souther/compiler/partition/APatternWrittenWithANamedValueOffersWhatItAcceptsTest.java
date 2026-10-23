@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredSig;
@@ -104,7 +105,8 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
         TypeSymbol at = TypeSymbols.declared(new TypeKey(rules.symbols().module(), "A"));
 
         StringOfferShortfall shortfall = Partitions.notOffered(Type.ref(at),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                        TestDay.TODAY));
 
         assertEquals(List.of("ended"), shortfall.these().stream()
                 .map(each -> each.of() instanceof StringOfferShortfall.Subject.ARule rule
@@ -128,7 +130,7 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("take"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning =

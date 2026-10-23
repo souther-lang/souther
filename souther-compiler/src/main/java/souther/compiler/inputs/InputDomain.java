@@ -24,6 +24,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
@@ -139,6 +140,9 @@ public final class InputDomain {
      * {@link RuleRoot}. */
     private final List<RuleRoot> roots;
     private final ReadingPolicy policy;
+    /** The day the values this reading proposes are chosen near, kept so that a world put back
+     *  together from this one chooses them on the same day ({@link RuleReadingContext#today}). */
+    private final Today today;
     /** Where a name written at one position stands, wherever that is not the position of the same
      * name one step down. Made by the walk that made the positions, so that what a name reaches and
      * what the reading produced are one answer. */
@@ -202,7 +206,7 @@ public final class InputDomain {
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
-                        NameReach reach,
+                        Today today, NameReach reach,
                         List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
                         DeclarationReadings machines,
@@ -222,6 +226,7 @@ public final class InputDomain {
         // and a reader asking how the names in it are read gets the policy it was read under
         // whatever the walk found.
         this.policy = Objects.requireNonNull(policy, "a reading is made under a policy");
+        this.today = Objects.requireNonNull(today, "a reading is made on a day");
         this.reach = Objects.requireNonNull(reach, "a reading says what its names reach");
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
@@ -251,6 +256,7 @@ public final class InputDomain {
                 && parameters.equals(that.parameters)
                 && roots.equals(that.roots)
                 && java.util.Objects.equals(policy, that.policy)
+                && today.equals(that.today)
                 && reach.equals(that.reach)
                 && placed.equals(that.placed)
                 && dependencies.equals(that.dependencies);
@@ -260,7 +266,7 @@ public final class InputDomain {
     public int hashCode() {
         int known = hash;
         if (known == 0) {
-            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed,
+            known = Objects.hash(positions, read, parameters, roots, policy, today, reach, placed,
                     dependencies);
             hash = known;
         }
@@ -379,7 +385,8 @@ public final class InputDomain {
         // was not: it holds the parameters it was given, the policy it was read under and the names
         // it reached. Answered with a value standing for no reading at all, an input nobody could
         // read would be the same value as an input there was nothing to read.
-        return new InputDomain(settled, read, parameters, roots, reading.policy(), observed.reach(),
+        return new InputDomain(settled, read, parameters, roots, reading.policy(),
+                reading.today(), observed.reach(),
                 account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
                 dependencies);
     }
@@ -488,6 +495,11 @@ public final class InputDomain {
     /** How the names in it are read, which is the policy this reading was made under. */
     public ReadingPolicy policy() {
         return policy;
+    }
+
+    /** The day this reading was made on. */
+    public Today today() {
+        return today;
     }
 
     /** Where this reading borrowed what had already been made of the declarations it read, for a
@@ -860,7 +872,7 @@ public final class InputDomain {
         // The world this reading was made in, put back together from what it kept: the same rules
         // under the same budget, borrowing what this reading's own walk made.
         RuleReadingContext world =
-                source == null ? null : RuleReadingContext.of(source, policy, machines);
+                source == null ? null : RuleReadingContext.of(source, policy, machines, today);
         Map<TermPath, OpenedRules> byRoot = new LinkedHashMap<>();
         for (RuleRoot root : roots) {
             // The first reading under a path stands, for the same reason the first reading of a

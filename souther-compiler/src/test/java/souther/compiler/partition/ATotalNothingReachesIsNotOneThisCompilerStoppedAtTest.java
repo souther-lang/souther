@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -45,7 +46,7 @@ class ATotalNothingReachesIsNotOneThisCompilerStoppedAtTest {
             souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     private static final RuleReadingContext READING =
-            RuleReadingContext.unshared(RULES, POLICY);
+            RuleReadingContext.unshared(RULES, POLICY, TestDay.TODAY);
 
     /** A list of whole numbers, which is what the rules below hold to three values either way. */
     private static final Type OF_WHOLE_NUMBERS = new Type.ListOf(Type.INT);

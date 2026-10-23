@@ -8,6 +8,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +31,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AValueHeldToAClassIsOfferedAMemberOfItTest {
 
+    /** The day of the month {@code dayOfMonth} in the month nearest {@link TestDay#DATE} — the
+     *  later where two are as near — which is the member of a class of days of the month a date
+     *  nothing bounds is offered. */
+    private static LocalDate nearestTheDay(int dayOfMonth) {
+        LocalDate same = TestDay.DATE.withDayOfMonth(dayOfMonth);
+        LocalDate other = same.isBefore(TestDay.DATE) ? same.plusMonths(1) : same.minusMonths(1);
+        long toSame = Math.abs(ChronoUnit.DAYS.between(TestDay.DATE, same));
+        long toOther = Math.abs(ChronoUnit.DAYS.between(TestDay.DATE, other));
+        return toSame < toOther || (toSame == toOther && same.isAfter(other)) ? same : other;
+    }
+
     private static String offered(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(
@@ -64,7 +77,7 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
 
                 let late (p) = p.n > 15
                 """);
-        assertTrue(day.contains("(P { pay = Date(\"2000-01-02\"), n = 16 })"), day);
+        assertTrue(day.contains("(P { pay = Date(\"" + nearestTheDay(2) + "\"), n = 16 })"), day);
     }
 
     /** A parameter the body never reads, whose own rules hold it to a class. */
@@ -87,9 +100,9 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
      * A position a row passes on the way to the line, and the position the line is on.
      *
      * <p>The row at the line on {@code n} has to have come past {@code pay > 2024-05-15} first, and
-     * the first date past that a value held to the first of each month can be is the first of June.
-     * And the rows on either side of the line on the date itself are the first of a month on each
-     * side.
+     * nothing bounds {@code pay} above, so it is the first of the month nearest the day the rows
+     * are written on. And the rows on either side of the line on the date itself are the first of a
+     * month on each side.
      */
     @Test
     void aPositionOnTheWayAndOneALineIsOnAreOfferedMembers() {
@@ -103,7 +116,8 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
 
                 let late (p) = p.pay > Date("2024-05-15") && p.n > 15
                 """);
-        assertTrue(onTheWay.contains("(P { pay = Date(\"2024-06-01\"), n = 20 })"), onTheWay);
+        assertTrue(onTheWay.contains("(P { pay = Date(\"" + nearestTheDay(1) + "\"), n = 20 })"),
+                onTheWay);
 
         String itself = offered("""
                 module m

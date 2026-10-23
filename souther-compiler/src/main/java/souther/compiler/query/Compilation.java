@@ -23,7 +23,9 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WhereCodeIsWritten;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.numeric.Today;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -84,6 +86,10 @@ public final class Compilation {
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
         db.set(new Front.Policy(), souther.compiler.execute.EvaluationPolicy.fromSettings());
+        // The day rows are written on, read once as the compilation starts, so that every row of
+        // one compilation is written on the same day however long it runs. A caller with a day of
+        // its own says so with writtenOn.
+        db.set(new Front.Day(), new Today(LocalDate.now()));
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
@@ -478,6 +484,18 @@ public final class Compilation {
      */
     public Compilation withEvaluationPolicy(souther.compiler.execute.EvaluationPolicy policy) {
         db.set(new Front.Policy(), policy);
+        return this;
+    }
+
+    /**
+     * The day this compilation writes rows on. Returns this compilation.
+     *
+     * <p>For a caller whose rows have to come out the same whatever day it runs — a test holding a
+     * generated row to the text it expects. What a rule owes does not turn on the day, so nothing
+     * but the rows written changes with it.
+     */
+    public Compilation writtenOn(LocalDate day) {
+        db.set(new Front.Day(), new Today(day));
         return this;
     }
 

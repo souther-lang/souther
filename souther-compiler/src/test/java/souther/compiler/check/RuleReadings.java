@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Shapes;
@@ -69,7 +70,8 @@ public final class RuleReadings {
         TypeSymbol.AtModule name = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(symbols.module(), "N"));
         return String.valueOf(FieldDomains.of(name, RuleReadingContext.unshared(of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).admits(RuleKey.THE_VALUE));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY))
+                        .admits(RuleKey.THE_VALUE));
     }
 
     /** A reading over the discharge tree of a scope no declaration of which wrote a clause, for a
@@ -78,6 +80,6 @@ public final class RuleReadings {
      *  and never by handing over a scope alone. */
     static Terms termsOfNoClauseFiled(Symbols symbols, ReadingPolicy policy) {
         return new Terms(Terms.Of.THE_DISCHARGE_TREE,
-                RuleReadingContext.unshared(ofNoClauseFiled(symbols), policy));
+                RuleReadingContext.unshared(ofNoClauseFiled(symbols), policy, TestDay.TODAY));
     }
 }

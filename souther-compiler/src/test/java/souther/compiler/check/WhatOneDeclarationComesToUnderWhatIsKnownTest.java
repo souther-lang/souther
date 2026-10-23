@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
@@ -65,7 +66,8 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 return CardinalityTransfer.upperOf(
                         TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def),
                         RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                                TestDay.TODAY),
                         Answers.settled(solution), Supposing.NOTHING);
             }
         }

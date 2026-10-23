@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -70,7 +71,8 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
         int deep = 0;
         for (Record record : recordsRead()) {
             RuleReadingContext reading =
-                    RuleReadingContext.of(record.source(), record.policy(), record.lent());
+                    RuleReadingContext.of(record.source(), record.policy(), record.lent(),
+                            TestDay.TODAY);
             FieldDomains base = FieldDomains.of(record.declared(), reading);
             List<RuleKey> coordinates = coordinatesOf(base, record.fields());
             for (Map<RuleKey, Count> settling : settlings(base, coordinates)) {

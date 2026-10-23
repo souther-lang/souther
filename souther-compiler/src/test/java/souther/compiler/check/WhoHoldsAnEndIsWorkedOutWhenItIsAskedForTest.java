@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -125,6 +126,6 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         return FieldDomains.of(held,
                 RuleReadingContext.unshared(
                         RuleReadings.of(compilation, compilation.modules().get(0)),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

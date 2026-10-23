@@ -16,7 +16,9 @@ import souther.compiler.numeric.Instants;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueOrder;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.ObservedValue;
@@ -814,6 +816,38 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Where a value of this order is looked for first where no rule says, or null where it has no
+     * such place and a value is taken from the ends of its range.
+     *
+     * <p>A date at {@code today}. The ends of a date's order are the first and the last day the
+     * calendar has, and a row written at either is no case of anybody's domain.
+     */
+    default UsualPlace usualPlace(Today today) {
+        if (!(this instanceof Days)) {
+            return null;
+        }
+        OrderedInterval own = extent();
+        return new UsualPlace(today.day(), own.low().at(), own.high().at());
+    }
+
+    /**
+     * The place inside {@code within} nearest {@code usual}: the place itself where the range holds
+     * it, and otherwise the end of the range on the side it lies — or null where a rule bounds the
+     * range on both sides, which is entered from its end as any range is
+     * ({@link UsualPlace#isOpenIn}), or where it holds nothing this composes
+     * ({@link #somethingInside}).
+     */
+    default Place nearestInside(UsualPlace usual, NumericDomain.Bounds within) {
+        if (!usual.isOpenIn(within)) {
+            return null;
+        }
+        Endpoint low = within == null ? null : within.min();
+        Endpoint high = within == null ? null : within.max();
+        Place above = somethingInside(Endpoint.lower(low, Endpoint.inclusive(usual.at())), high);
+        return above != null ? above : somethingInside(low, high, Towards.BELOW);
+    }
+
+    /**
      * The same, from whichever end of the range the caller wants the value nearest.
      *
      * <p>Which end is a question about the range and is asked here, where the arithmetic that
@@ -1016,6 +1050,21 @@ public sealed interface Carrier extends ValueOrder {
      */
     default Place somethingOtherThan(PlacesApart singled, NumericDomain.Bounds within,
                                      ValueSet admits, Meter meter) {
+        return somethingOtherThan(singled, within, admits, meter, null);
+    }
+
+    /**
+     * The same, with the place inside {@code within} nearest {@code startingAt} tried before the
+     * ends ({@link #nearestInside}).
+     *
+     * <p>For a number whose values have a place they are usually near — a date, and the year of
+     * one — where an end of the range is the type's and not a rule's. Taken from the ends, a date
+     * nothing bounds below is the first day the calendar has.
+     *
+     * @param startingAt where the number is looked for first, or null where it has no such place
+     */
+    default Place somethingOtherThan(PlacesApart singled, NumericDomain.Bounds within,
+                                     ValueSet admits, Meter meter, UsualPlace startingAt) {
         java.util.List<Place> stepped = new ArrayList<>();
         for (Place from : singled.places()) {
             if (from instanceof Count count) {
@@ -1042,6 +1091,10 @@ public sealed interface Carrier extends ValueOrder {
             }
         }
         java.util.List<Place> inside = new ArrayList<>();
+        Place usual = startingAt == null ? null : nearestInside(startingAt, within);
+        if (usual != null) {
+            inside.add(usual);
+        }
         if (within != null) {
             for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                 if (end != null && end.inclusive()) {

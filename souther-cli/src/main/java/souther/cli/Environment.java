@@ -4,6 +4,7 @@ import java.io.Console;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,16 +34,21 @@ import java.util.Properties;
  * @param properties the system properties, by name
  * @param workingDirectory where a project's version file is looked for from, what a relative path
  *        the run is given is read against, and where a process the run starts is started
+ * @param today the day the rows a run generates are written on, read off the clock once as the
+ *        process starts
  */
 public record Environment(Map<String, String> variables, Map<String, String> properties,
                           Path workingDirectory, InputStream in, PrintStream out, PrintStream err,
-                          boolean processStreams) {
+                          boolean processStreams, LocalDate today) {
 
     private static final List<String> NAMED = List.of("user.home", "java.home");
 
     public Environment {
         variables = Map.copyOf(variables);
         properties = Map.copyOf(properties);
+        if (today == null) {
+            throw new IllegalArgumentException("an environment says what day a run is made on");
+        }
         for (String property : NAMED) {
             String value = properties.get(property);
             if (value == null || value.isBlank()) {
@@ -54,7 +60,7 @@ public record Environment(Map<String, String> variables, Map<String, String> pro
 
     /**
      * What this process was started with: its environment, its system properties as they stand,
-     * the directory it runs in, and its standard streams as they stand.
+     * the directory it runs in, its standard streams as they stand, and the day it is.
      */
     public static Environment ofThisProcess() {
         Properties system = System.getProperties();
@@ -63,7 +69,7 @@ public record Environment(Map<String, String> variables, Map<String, String> pro
             properties.put(name, system.getProperty(name));
         }
         return new Environment(System.getenv(), properties, Path.of(""), System.in, System.out,
-                System.err, true);
+                System.err, true, LocalDate.now());
     }
 
     /** The variable {@code name}, or null where it is not set. */

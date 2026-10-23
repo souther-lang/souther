@@ -22,6 +22,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Dates;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -958,8 +959,7 @@ final class TermRealizations {
                     asks.add(new DatePartAsk(each.getValue(), moved.get(each.getKey()),
                             demands.get(each.getKey()).walking()));
                 }
-                return onMovedDates(asks, sourceType, rootOf(parts.keySet(), measuring),
-                        reading.source());
+                return onMovedDates(asks, sourceType, rootOf(parts.keySet(), measuring), reading);
             }
         }
 
@@ -2066,7 +2066,7 @@ final class TermRealizations {
             // nothing.
             case TakenAs.PartOfDate taken -> onMovedDates(
                     List.of(new DatePartAsk(taken.part(), from.translation(), wanted)),
-                    sourceType, orders.observed(), ruleSource);
+                    sourceType, orders.observed(), reading);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
@@ -2685,6 +2685,46 @@ final class TermRealizations {
             if (holds.test(place)) {
                 out.add(place);
             }
+        }
+        return out.size() > many
+                ? new Tried(List.copyOf(out.subList(0, many)),
+                        new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED))
+                : Tried.allOf(List.copyOf(out));
+    }
+
+    /**
+     * The same numbers, tried outward from the one nearest {@code near}: that one, then one a step
+     * above and one a step below it in turn, each side ending where the window does.
+     *
+     * <p>For a number with a place it is usually near, as the year of a date is near today's. Walked
+     * from the low end instead, a set nothing bounds below gives the first year the calendar has.
+     * A set its rules bound on both sides is walked up from its low end, as any set is: only a side
+     * the window ends is one nobody drew.
+     */
+    private static Tried wholeNumbersNear(NumericSet wanted, Carrier on, long from, long to,
+                                          long near, int many) {
+        NumericDomain.Bounds lies = wanted.extent();
+        BigInteger first = startOf(lies.min(), BigInteger.valueOf(from));
+        BigInteger last = endOf(lies.max(), BigInteger.valueOf(to));
+        if (first.compareTo(last) > 0) {
+            return Tried.allOf(List.of());
+        }
+        boolean open = first.equals(BigInteger.valueOf(from)) || last.equals(BigInteger.valueOf(to));
+        BigInteger centre = open ? BigInteger.valueOf(near).max(first).min(last) : first;
+        List<Place> out = new ArrayList<>();
+        BigInteger up = centre;
+        BigInteger down = centre.subtract(BigInteger.ONE);
+        while (out.size() <= many && (up.compareTo(last) <= 0 || down.compareTo(first) >= 0)) {
+            for (BigInteger at : new BigInteger[] {up, down}) {
+                if (first.compareTo(at) <= 0 && at.compareTo(last) <= 0 && out.size() <= many) {
+                    Count place = new Count(new BigDecimal(at));
+                    if (wanted.holds(place, on)) {
+                        out.add(place);
+                    }
+                }
+            }
+            up = up.add(BigInteger.ONE);
+            down = down.subtract(BigInteger.ONE);
         }
         return out.size() > many
                 ? new Tried(List.copyOf(out.subList(0, many)),
@@ -4379,12 +4419,13 @@ final class TermRealizations {
      * combination there is, and an answer of nothing is a statement about the calendar.
      */
     private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
-                                            Carrier observed, RuleReadingSource ruleSource) {
+                                            Carrier observed, RuleReadingContext reading) {
         if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Search found = dateAnsweringMovedParts(asks, observed);
+        RuleReadingSource ruleSource = reading.source();
+        Search found = dateAnsweringMovedParts(asks, observed, reading.today());
         if (found.on() == null) {
             return found.everyOne()
                     ? new Realization.None(
@@ -4405,19 +4446,20 @@ final class TermRealizations {
     }
 
     /**
-     * The first date every one of {@code asks} admits.
+     * The date nearest {@code today} that every one of {@code asks} admits, counted in years and
+     * then in days.
      *
-     * <p>Where a year is asked for, the years the first such ask leaves are walked, and the dates
-     * whose moved date is in one of them are a run of days.
+     * <p>Where a year is asked for, the years the first such ask leaves are walked outward from
+     * today's, and the dates whose moved date is in one of them are a run of days.
      *
-     * <p>Where none is, one cycle of the calendar is walked. The Gregorian calendar repeats every
+     * <p>Where none is, one cycle of the calendar is walked from the start of today's year. The Gregorian calendar repeats every
      * four hundred years, and those are a whole number of days, so a month or a day of a date moved
      * by a count of days is the same at every date a cycle away. Every combination the asks can
      * meet at is therefore met within one cycle of days they are all defined at, or within all of
      * those days where there are fewer than a cycle of them, and the walk is over every one there
      * is.
      */
-    static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+    static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed, Today today) {
         List<PutToTheDays> put = asks.stream().map(each -> each.putToTheDays(observed)).toList();
         if (put.stream().anyMatch(PutToTheDays::leavesNothing)) {
             return new Search(null, true);
@@ -4425,10 +4467,10 @@ final class TermRealizations {
         DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
                 .findFirst().orElse(null);
         if (lead == null) {
-            return new Search(dateInOneCycle(put), true);
+            return new Search(dateInOneCycle(put, today), true);
         }
-        Tried years = wholeNumbers(lead.wanted(), observed,
-                LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
+        Tried years = wholeNumbersNear(lead.wanted(), observed,
+                LocalDate.MIN.getYear(), LocalDate.MAX.getYear(), today.year(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
@@ -4457,11 +4499,13 @@ final class TermRealizations {
      * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
      * there is none.
      *
-     * <p>The cycle is the one from {@link #A_CYCLE_STARTS} where every ask is defined there, and
-     * otherwise the nearest one that is. It is walked a year of the date at a time, so that a date
-     * found early is found without cutting the rest of the cycle.
+     * <p>The cycle is the one from the first day of today's year where every ask is defined there,
+     * and otherwise the nearest one that is. Any day starts a cycle, and this one puts the dates
+     * offered in the years a reader is in; a twenty-ninth of February is met in the first leap year
+     * walked. It is walked a year of the date at a time, so that a date found early is found
+     * without cutting the rest of the cycle.
      */
-    private static LocalDate dateInOneCycle(List<PutToTheDays> asks) {
+    private static LocalDate dateInOneCycle(List<PutToTheDays> asks, Today today) {
         long first = asks.stream().mapToLong(each -> each.ask().moved().first()).max()
                 .orElseThrow();
         long last = asks.stream().mapToLong(each -> each.ask().moved().last()).min()
@@ -4469,7 +4513,7 @@ final class TermRealizations {
         if (first > last) {
             return null;
         }
-        long from = Math.max(first, Math.min(A_CYCLE_STARTS.toEpochDay(),
+        long from = Math.max(first, Math.min(today.firstOfItsYear(),
                 last - DAYS_OF_A_CYCLE + 1));
         long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
         for (long start = from; start <= to; ) {
@@ -4537,12 +4581,6 @@ final class TermRealizations {
     /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
      *  are leap years. */
     private static final long DAYS_OF_A_CYCLE = 400L * 365 + 97;
-
-    /** Where the cycle walked for a month or a day of a moved date starts, where every ask is
-     *  defined there. Any day starts a cycle; this one is the first of a leap year, so the dates
-     *  offered are near the ones a reader writes, and a month and a day asked of a date as it
-     *  stands are met in the first year walked, the twenty-ninth of February among them. */
-    private static final LocalDate A_CYCLE_STARTS = LocalDate.of(2000, 1, 1);
 
     /**
      * One value, wearing every name the position declares, or the reason there is none.

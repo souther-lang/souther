@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.TestDay;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -161,7 +162,7 @@ class ALineIsNamedByTheClauseThatDrewItTest {
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return Partitions.of("price", InputDomain.of(sigs.get("price"), context,
                 TypeCardinality.Counts.workedOutIn(context),
                 Membership.none()).reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)

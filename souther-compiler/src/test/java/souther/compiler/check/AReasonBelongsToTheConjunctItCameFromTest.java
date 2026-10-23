@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -42,7 +43,8 @@ class AReasonBelongsToTheConjunctItCameFromTest {
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Pair"));
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).accounting().values().stream()
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY))
+                .accounting().values().stream()
                 .flatMap(each -> each.answers().entrySet().stream())
                 .filter(e -> e.getKey().obligation() == CoverageObligation.BOUNDARY)
                 .map(e -> assertInstanceOf(RuleAccounting.Outcome.Unaccounted.class, e.getValue()))

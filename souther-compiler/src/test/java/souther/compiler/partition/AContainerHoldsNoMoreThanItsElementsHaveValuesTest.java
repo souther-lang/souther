@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ARuleNoReadingTakesIn;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -527,7 +528,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     private static RuleReadingContext pastTheFigures() {
         Compilation compilation = Compilation.ofSource(PAST_THE_FIGURES, "Main");
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
 
     private static Type declared(String name) {

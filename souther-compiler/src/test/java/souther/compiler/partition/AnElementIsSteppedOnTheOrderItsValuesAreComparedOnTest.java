@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeView;
@@ -82,11 +83,13 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
         }
     }
 
-    /** Worked out by hand: one step of each order from where an unbounded range is entered. */
+    /** Worked out by hand: one step of each order from where an unbounded range is entered, which
+     *  for a date is the day the rows are written on. */
     @Test
     void eachOrderStepsByItsOwnUnit() {
-        assertEquals(List.of("Date(\"1970-01-01\")", "Date(\"1970-01-02\")",
-                        "Date(\"1970-01-03\")"),
+        assertEquals(List.of("Date(\"" + TestDay.DATE + "\")",
+                        "Date(\"" + TestDay.DATE.plusDays(1) + "\")",
+                        "Date(\"" + TestDay.DATE.plusDays(2) + "\")"),
                 stepped(Type.DATE, 3));
         assertEquals(List.of("Time(\"00:00:00\")", "Time(\"00:00:01\")"),
                 stepped(Type.TIME, 2));
@@ -126,19 +129,19 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     private static final String NOT_THE_DAY = """
             module p
             data NotTheDay = Date
-              invariant value /= Date("1970-01-01")
+              invariant value /= Date("%s")
             behavior h : (d: NotTheDay) -> Int
             let h (d) = 1
-            """;
+            """.formatted(TestDay.DATE);
 
     /**
      * A position whose rule refuses the one value it is ordinarily offered is offered the one beside
      * it on the same order, a date as much as a whole number: the day after the day where an
-     * unbounded range of dates is entered.
+     * unbounded range of dates is entered, which is the day the rows are written on.
      */
     @Test
     void aDateItsRuleRefusesIsDisplacedAlongItsOrder() {
-        Compilation compilation = Compilation.ofSource(NOT_THE_DAY, "Main");
+        Compilation compilation = Compilation.ofSource(NOT_THE_DAY, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Adequacy.Filling filling = Adequacy.generatedOf(compilation.db(), "p").get("h");
@@ -147,7 +150,7 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
                 .map(row -> row.inputs().get(0).text())
                 .toList();
 
-        assertEquals(List.of("NotTheDay(Date(\"1970-01-02\"))"), written);
+        assertEquals(List.of("NotTheDay(Date(\"" + TestDay.DATE.plusDays(1) + "\"))"), written);
     }
 
     /**
@@ -189,7 +192,7 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
                 MODEL.formatted(TYPES, "Set<Date>", "Set.size(s)", 3), "Main");
         compilation.answerEverything();
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
 
     private static Type declared(String name) {

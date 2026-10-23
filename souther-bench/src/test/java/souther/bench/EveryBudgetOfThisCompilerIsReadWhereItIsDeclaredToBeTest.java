@@ -846,11 +846,19 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " may take: each is handed over as what stopped it where nothing was"
                             + " found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
-                            + "Ljava/util/List;Lsouther/compiler/check/Carrier;)"
+                            + "Ljava/util/List;Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/numeric/Today;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
                     "how many years the first year asked is walked over, and whether they were all"
                             + " of them; with no year asked, one cycle of the calendar is walked,"
                             + " which is every day there is"),
+            Map.entry("souther.compiler.partition.TermRealizations#wholeNumbersNear("
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/check/Carrier;JJJI)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "names the figure as what left more of the set untried, where the walk out"
+                            + " from the year nearest today filled what it was allowed before"
+                            + " either side of the window ran out"),
             Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
                             + "Ljava/util/function/Predicate;"
@@ -887,7 +895,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations#onMovedDates("
                             + "Ljava/util/List;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/check/Carrier;"
-                            + "Lsouther/compiler/check/RuleReadingSource;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "names the figure where no date was found and the years were not all walked"),
 

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -66,7 +67,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     private static List<String> declared(String source, String behavior) {
         Read read = of(source, behavior);
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return classesOf(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
@@ -96,7 +97,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         return ThresholdFixtures.withThresholds(base, inputs.quantities(read.rules()),
                 guards.thresholds(),
                 RuleReadingContext.unshared(read.rules(),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
     }
@@ -127,7 +128,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     private static List<String> declaredAt(String source, String behavior, String path) {
         Read read = of(source, behavior);
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return classesAt(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
@@ -344,7 +345,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                                            String path) {
         Read read = of(sources, behavior, nth);
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return classesAt(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
@@ -400,7 +401,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value"));
         Read read = of(model, "classify");
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         Partitions.Partitioning base =
                 Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
@@ -432,14 +433,14 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                         .get(read.behavior()),
                 read.rules());
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return ThresholdFixtures.withThresholds(base,
                 InputDomain.of(read.sig(), reading, TypeCardinality.Counts.workedOutIn(reading),
                         Membership.none())
                         .quantities(read.rules()),
                 guards.thresholds(),
                 RuleReadingContext.unshared(read.rules(),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
     }

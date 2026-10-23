@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
 
@@ -75,7 +76,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy)), symbols);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy,
+                        TestDay.TODAY)), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
@@ -100,7 +102,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     private static final Value A = Value.text("A");
