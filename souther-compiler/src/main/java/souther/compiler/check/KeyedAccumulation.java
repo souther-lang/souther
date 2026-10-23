@@ -113,14 +113,12 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          *
          * @param value what the first element of a key files, read of the element
          * @param added what each further one adds to the value found, read of the element
-         * @param found the name the step gives the value found under the key
          */
-        record Summed(Core value, Core added, BindingId found) implements Filed {
+        record Summed(Core value, Core added) implements Filed {
 
             public Summed {
                 Objects.requireNonNull(value, "an element files a value");
                 Objects.requireNonNull(added, "and a further one adds one");
-                Objects.requireNonNull(found, "to what the step finds under the key");
             }
         }
 
@@ -278,7 +276,6 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             List<Core> values = new ArrayList<>();
             List<Core> added = new ArrayList<>();
             List<Core> puts = new ArrayList<>();
-            BindingId found = null;
             boolean somePut = false;
             for (Core.Case arm : match.cases()) {
                 ValueStanding.ReadThrough<E> filing = sides.standing(arm.body(), body.at());
@@ -289,11 +286,10 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     added.add(put.value());
                     somePut = true;
                 } else if (filingOf(filing) instanceof Filing(
-                        Core key, Filed.Summed(Core value, Core adds, BindingId named))) {
+                        Core key, Filed.Summed(Core value, Core adds))) {
                     keys.add(key);
                     values.add(value);
                     added.add(adds);
-                    found = found == null ? named : found;
                 } else {
                     return null;
                 }
@@ -303,7 +299,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             return somePut ? new Filing(key, new Filed.SummedSinceAPut(choosing(match, values),
                             choosing(match, added), choosing(match, puts)))
                     : new Filing(key, new Filed.Summed(choosing(match, values),
-                            choosing(match, added), found));
+                            choosing(match, added)));
         }
 
         /** A value put under a key in place of what is found there, each as written. */
@@ -410,7 +406,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             }
             Core added = addedTo(moved, found, first, firstAt);
             if (added != null) {
-                return new Filed.Summed(first, added, found);
+                return new Filed.Summed(first, added);
             }
             List<Choice.ADefinitionCase> cases =
                     Extreme.casesOf(moved.value(), moved.at(), sides);

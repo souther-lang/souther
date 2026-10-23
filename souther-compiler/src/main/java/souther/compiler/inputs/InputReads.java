@@ -3425,7 +3425,7 @@ public final class InputReads {
         TermPath elementsOfTheLists = listAt.from(outer).element();
         List<TermPath> holdingTheElements = outer.containersHoldingIt();
         TermPath container = holdingTheElements.isEmpty() ? null : holdingTheElements.getLast();
-        return container != null && container.element().equals(outer)
+        return container != null
                 && Occurrences.AcrossContainers.inAListInsideAnElementOf(container,
                         elementsOfTheLists)
                 ? new Flattened(container, placedIn(sought, elementsOfTheLists)) : null;

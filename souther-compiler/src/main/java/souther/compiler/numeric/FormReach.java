@@ -235,15 +235,13 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
-        // Where each premise stands in the round, which is what the index of who names what is by.
-        int at = -1;
         for (Premise<A> each : premises().each()) {
-            at++;
             if (each.rule().equals(without)) {
                 continue;
             }
             AffineConstraint.HalfSpace<A> premise = each.half();
-            if (residualsAreRangedOnly && !naming.get(at) && passesOver(each, ranges)) {
+            if (residualsAreRangedOnly && !naming.get(each.place())
+                    && passesOver(each, ranges)) {
                 continue;
             }
             if (ranges != null && heldAlready(each, coefs, weighs)) {
@@ -541,10 +539,11 @@ final class FormReach<A> {
             Map<A, BitSet> naming = new HashMap<>();
             for (AffineConstraint<A> rule : rules) {
                 for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
+                    Premise<A> premise = new Premise<>(rule, half, out.size());
                     for (A position : half.form().atomsIn(order)) {
-                        naming.computeIfAbsent(position, _ -> new BitSet()).set(out.size());
+                        naming.computeIfAbsent(position, _ -> new BitSet()).set(premise.place());
                     }
-                    out.add(new Premise<>(rule, half));
+                    out.add(premise);
                 }
             }
             read = new Premises<>(List.copyOf(out), Map.copyOf(naming));
@@ -553,8 +552,8 @@ final class FormReach<A> {
         return read;
     }
 
-    /** {@link #premises}: each premise, and the places in it of the premises naming each
-     *  position. */
+    /** {@link #premises}: each premise, and the places of the premises naming each position
+     *  ({@link Premise#place}). */
     private record Premises<A>(List<Premise<A>> each, Map<A, BitSet> naming) {}
 
     /**
@@ -569,14 +568,23 @@ final class FormReach<A> {
 
         private final AffineConstraint<A> rule;
         private final AffineConstraint.HalfSpace<A> half;
+
+        /** Which premise of the round this is, in the order the rules are held: what the index
+         *  of the premises naming each position is by. */
+        private final int place;
         private Room room;
 
         /** {@link #heldEndOf}'s answer, empty where it is not such a bound, and null until asked. */
         private Optional<HeldEnd<A>> held;
 
-        Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half) {
+        Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half, int place) {
             this.rule = rule;
             this.half = half;
+            this.place = place;
+        }
+
+        int place() {
+            return place;
         }
 
         AffineConstraint<A> rule() {

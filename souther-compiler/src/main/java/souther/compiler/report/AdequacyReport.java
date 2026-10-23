@@ -93,6 +93,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.check.CheckSurface;
@@ -6536,7 +6537,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         over.put("elements", run.elements().discriminated());
                         elementComputation(over.putObject("computation"), run.computation());
                         if (run.order() != null) {
-                            over.put("handed", handed(run.order()));
+                            over.put("handed", wire(run.order().direction()));
                         }
                     }
                     case RunSource.ReachableNodes run -> {
@@ -6574,14 +6575,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ArrayNode taken = put.putArray("taken");
             puts.forEach(cases -> taken.add(subject.narrowedTo(cases).from(elements)
                     .discriminated()));
-            put.put("handed", handed(order));
+            put.put("handed", wire(order.direction()));
         }
     }
 
     /** Which end of the elements a walk whose number turns on their order was handed first, in
-     *  the one word every such number is written with. */
-    private static String handed(RunSource.TraversalOrder order) {
-        return switch (order.direction()) {
+     *  the one word every such number is written with. Written out for the reason the status's
+     *  word is: what a document says is not what a constant inside the compiler is called. */
+    public static String wire(TraversalDirection direction) {
+        return switch (direction) {
             case FORWARD -> "as_written";
             case REVERSE -> "from_the_far_end";
         };

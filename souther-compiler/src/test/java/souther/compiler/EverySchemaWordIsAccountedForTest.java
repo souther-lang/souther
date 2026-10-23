@@ -43,6 +43,7 @@ import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
 import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
@@ -662,6 +663,10 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "behavior", "properties", "rowObligations", "items",
                             "properties", "disposition"),
                     List.of(RowDisposition.class), rowDispositionWords(), Set.of()),
+            // Which end a walk whose number turns on the order was handed the elements from,
+            // spelled by the writer of every number that says it.
+            new Vocabulary("handed", List.of("$defs", "handed"),
+                    List.of(TraversalDirection.class), handedWords(), Set.of()),
             new Vocabulary("branch.obligations[].notCountedBecause",
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "notCountedBecause"),
@@ -953,6 +958,13 @@ class EverySchemaWordIsAccountedForTest {
     /** The dispositions a document may name, spelled by the one writer of the field. */
     private static Set<String> dispositionWords() {
         return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Which end a walk was handed its elements from, spelled by the one writer of the field. */
+    private static Set<String> handedWords() {
+        return Arrays.stream(TraversalDirection.values())
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
@@ -1565,14 +1577,12 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
                 + "/properties/standing");
         // Which code points a count of a string is of, which end of a key's values a number
-        // takes, how the numbers of a key are gathered, and which end a walk whose number turns
-        // on the order was handed its elements from: each written by a switch over a sealed
-        // type's or an enum's arms for the same reason.
+        // takes, and how the numbers of a key are gathered: each written by a switch over a
+        // sealed type's arms for the same reason.
         held.add("/$defs/termId/oneOf/3/properties/class");
         held.add("/$defs/termId/oneOf/5/properties/extreme");
         held.add("/$defs/termId/oneOf/6/properties/gathering");
         held.add("/$defs/termId/oneOf/7/properties/gathering");
-        held.add("/$defs/handed");
         // How a choice by position compares it, held to the relations by
         // `theWordsAPositionIsComparedByAreTheRelationsThereAre`.
         held.add("/" + String.join("/", A_POSITION_RELATION));
