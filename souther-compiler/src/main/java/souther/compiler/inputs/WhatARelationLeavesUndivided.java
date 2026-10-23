@@ -1159,10 +1159,10 @@ public final class WhatARelationLeavesUndivided {
 
         /** The ends of the form at a value v of the whole, the part's upper end being
          *  {@code slope}·v + {@code by}: the part at its least, and at that end. */
-        Ends upTo(BigInteger slope, BigInteger by) {
+        Lines upTo(BigInteger slope, BigInteger by) {
             return up
-                    ? new Ends(weight, offset.add(least), weight.add(slope), offset.add(by))
-                    : new Ends(weight.subtract(slope), offset.subtract(by), weight,
+                    ? new Lines(weight, offset.add(least), weight.add(slope), offset.add(by))
+                    : new Lines(weight.subtract(slope), offset.subtract(by), weight,
                             offset.subtract(least));
         }
 
@@ -1177,14 +1177,16 @@ public final class WhatARelationLeavesUndivided {
             return offset.signum() == (up ? 1 : -1) ? offset.abs() : BigInteger.ZERO;
         }
 
-        /** The two ends of the form, each {@code slope}·v + {@code offset}. */
-        record Ends(BigInteger lowSlope, BigInteger lowOffset, BigInteger highSlope,
-                    BigInteger highOffset) {}
+        /** The two ends of the form as lines over the whole, each {@code slope}·v +
+         *  {@code offset}. */
+        record Lines(BigInteger lowSlope, BigInteger lowOffset, BigInteger highSlope,
+                     BigInteger highOffset) {}
     }
 
     /** The runs of {@code values} at which the form between {@code ends} settles
      *  {@code relation}, either way, in order. */
-    private static List<SettledRun> settledWithin(WholeRun values, Rel relation, Form.Ends ends) {
+    private static List<SettledRun> settledWithin(WholeRun values, Rel relation,
+                                                  Form.Lines ends) {
         List<SettledRun> runs = new ArrayList<>();
         for (boolean holds : List.of(true, false)) {
             for (WholeRun each : whereEveryValueMeets(holds ? relation : relation.denied(),
