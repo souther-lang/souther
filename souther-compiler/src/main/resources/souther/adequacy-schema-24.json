@@ -138,6 +138,7 @@
         "ways_down_to_a_total_tried",
         "ways_under_the_cases_tried",
         "ways_a_way_is_looked_along",
+        "walks_a_way_is_read_again_with",
         "choices_on_a_way_looked_at",
         "pairs_of_input_numbers_and_an_answer_tried",
         "choices_of_input_numbers_looked_at",
