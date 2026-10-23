@@ -25,13 +25,14 @@ import java.util.Set;
  * both, and only two leaves {@code b} a whole number.
  *
  * <p>A bound below a number and one above it that are both of that number alone put together no
- * bound of another, so they are not put together: whether they leave the number a value is asked
- * where it is given one, from its own level. Numbers no bound holds together are eliminated with
- * no pairs at all.
+ * bound of another, only one of no number that holds or fails. They are not put together pair by
+ * pair: the tightest below is set beside the tightest above, which fails exactly where any pair
+ * would, and no pair is counted for it. Numbers no bound holds together are eliminated with no
+ * pairs at all.
  *
  * <p>Every other pair of a bound below a number and one above it is a bound, so the bounds may
- * multiply with each number eliminated. The pairs are counted, and the elimination stops before a
- * number that would take more than are allowed ({@link StoppedShort}).
+ * multiply with each number eliminated. The pairs are counted as they are put together, and the
+ * elimination stops before a number that would take more than are allowed ({@link StoppedShort}).
  *
  * @param <A> what a number is called
  */
@@ -134,6 +135,25 @@ public sealed interface LaterNumbersEliminated<A> {
             List<Bound<A>> level = new ArrayList<>(below);
             level.addAll(above);
             levels.set(place, List.copyOf(level));
+            Bound<A> floor = null;
+            Bound<A> ceiling = null;
+            for (Bound<A> each : below) {
+                floor = each.form().coefs().size() == 1 ? tighter(floor, each) : floor;
+            }
+            for (Bound<A> each : above) {
+                ceiling = each.form().coefs().size() == 1 ? tighter(ceiling, each) : ceiling;
+            }
+            if (floor != null && ceiling != null) {
+                LinearForm<A> between = between(ceiling.form(), floor.form(), number);
+                if (between == null) {
+                    return new StoppedShort<>(place, levels.subList(place, levels.size()),
+                            Why.ARITHMETIC, combined);
+                }
+                if (!taken(new Bound<>(between, floor.strict() || ceiling.strict()), placeOf,
+                        rest)) {
+                    return new NoneLeft<>(combined);
+                }
+            }
             if (place == 0) {
                 break;
             }
@@ -144,12 +164,12 @@ public sealed interface LaterNumbersEliminated<A> {
                 return new StoppedShort<>(place, levels.subList(place, levels.size()), Why.PAIRS,
                         combined);
             }
-            combined += these;
             for (Bound<A> up : above) {
                 for (Bound<A> down : below) {
                     if (up.form().coefs().size() == 1 && down.form().coefs().size() == 1) {
                         continue;
                     }
+                    combined++;
                     LinearForm<A> between = between(up.form(), down.form(), number);
                     if (between == null) {
                         return new StoppedShort<>(place, levels.subList(place, levels.size()),
@@ -164,6 +184,19 @@ public sealed interface LaterNumbersEliminated<A> {
             left = rest;
         }
         return new Eliminated<>(levels, combined);
+    }
+
+    /**
+     * The tighter of two bounds of one number alone, both normalised so the number weighs one
+     * either way round: the greater constant leaves the number less room, and of two at the same
+     * constant, the strict one does.
+     */
+    private static <A> Bound<A> tighter(Bound<A> one, Bound<A> other) {
+        if (one == null) {
+            return other;
+        }
+        int by = one.form().constant().compareTo(other.form().constant());
+        return by != 0 ? by > 0 ? one : other : other.strict() ? other : one;
     }
 
     /**

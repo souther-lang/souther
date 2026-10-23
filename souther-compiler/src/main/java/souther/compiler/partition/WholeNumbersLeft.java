@@ -104,45 +104,45 @@ record WholeNumbersLeft(BigInteger least, BigInteger most, Set<BigInteger> holes
     }
 
     /**
-     * One of these, or null where none is left: the one nearest nought, and of two as near, the
-     * one above it.
-     *
-     * <p>The first of these in one order of every whole number, which does not turn on these. So
-     * a statement taken in later moves it only where it leaves it out: the first of some numbers
-     * is the first of any of them that still hold it. Taking the least wherever there is a least
-     * would not be that, since a bound found below then puts the value at the bound though the
-     * one taken before is still left — and a value at a bound is where the numbers after it are
-     * held tightest.
+     * One of these — the least where they have a least, the greatest where they run down without
+     * end, and the nearest to nought otherwise — or null where none is left.
      *
      * <p>Only the values held out are ever passed over, so this looks at no more than one value
-     * past them on each side.
+     * past them.
      */
     BigInteger one() {
         if (least != null && most != null && least.compareTo(most) > 0) {
             return null;
         }
-        BigInteger from = least != null && least.signum() > 0 ? least
-                : most != null && most.signum() < 0 ? most : BigInteger.ZERO;
+        if (least != null) {
+            for (BigInteger at = least; most == null || at.compareTo(most) <= 0;
+                    at = at.add(BigInteger.ONE)) {
+                if (!holes.contains(at)) {
+                    return at;
+                }
+            }
+            return null;
+        }
+        if (most != null) {
+            for (BigInteger at = most; ; at = at.subtract(BigInteger.ONE)) {
+                if (!holes.contains(at)) {
+                    return at;
+                }
+            }
+        }
         for (BigInteger away = BigInteger.ZERO; ; away = away.add(BigInteger.ONE)) {
-            BigInteger above = from.add(away);
-            BigInteger below = from.subtract(away);
-            boolean aboveLeft = holds(above);
-            boolean belowLeft = holds(below);
-            if (!aboveLeft && !belowLeft) {
-                return null;
+            if (!holes.contains(away)) {
+                return away;
             }
-            if (aboveLeft && !holes.contains(above)) {
-                return above;
-            }
-            if (belowLeft && !holes.contains(below)) {
-                return below;
+            if (!holes.contains(away.negate())) {
+                return away.negate();
             }
         }
     }
 
-    /** Whether {@code value} lies between the two ends, held out or not. */
-    private boolean holds(BigInteger value) {
+    /** Whether {@code value} is one of these. */
+    boolean leaves(BigInteger value) {
         return (least == null || value.compareTo(least) >= 0)
-                && (most == null || value.compareTo(most) <= 0);
+                && (most == null || value.compareTo(most) <= 0) && !holes.contains(value);
     }
 }

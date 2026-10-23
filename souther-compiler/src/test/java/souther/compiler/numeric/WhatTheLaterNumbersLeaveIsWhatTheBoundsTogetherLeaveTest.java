@@ -131,6 +131,47 @@ class WhatTheLaterNumbersLeaveIsWhatTheBoundsTogetherLeaveTest {
         assertFalse(holdAt(levels(eliminated).getFirst(), Map.of("w", ExactRatio.of(4))));
     }
 
+    /**
+     * Bounds of one number alone are not put together pair by pair, and still say when no value
+     * meets them: the tightest below and the tightest above are set beside each other, whichever
+     * place the number has and however many bounds are there.
+     */
+    @Test
+    void boundsOfTheNumberAloneThatNoValueMeetsLeaveNoneLeft() {
+        for (String number : List.of("z", "w")) {
+            assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, LaterNumbersEliminated.of(
+                    List.of(atMost(0, Map.of(number, 1L), false),
+                            atMost(1, Map.of(number, -1L), false)), List.of("w", "z"), 0), number);
+        }
+        assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, LaterNumbersEliminated.of(List.of(
+                atMost(-5, Map.of("z", 1L), false), atMost(0, Map.of("z", 1L), false),
+                atMost(1, Map.of("z", -1L), false), atMost(-3, Map.of("z", -1L), false)),
+                List.of("w", "z"), 0));
+    }
+
+    /** {@code z <= 1} and {@code z > 1} leave nothing, and {@code z >= 1} leaves one. */
+    @Test
+    void boundsOfTheNumberAloneMeetingAtAValueLeaveNoneOnlyWhereOneIsStrict() {
+        assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, LaterNumbersEliminated.of(List.of(
+                atMost(-1, Map.of("z", 1L), false), atMost(1, Map.of("z", -1L), true)),
+                List.of("w", "z"), 0));
+        assertInstanceOf(LaterNumbersEliminated.Eliminated.class, LaterNumbersEliminated.of(
+                List.of(atMost(-1, Map.of("z", 1L), false), atMost(1, Map.of("z", -1L), false)),
+                List.of("w", "z"), 0));
+    }
+
+    /** Only the pairs put together are counted: the first of two that {@code z <= w} and
+     *  {@code z >= w + 1} are put together with is already none. */
+    @Test
+    void aPairIsCountedOnlyOnceItIsPutTogether() {
+        LaterNumbersEliminated<String> none = LaterNumbersEliminated.of(List.of(
+                atMost(0, Map.of("z", 1L, "w", -1L), false),
+                atMost(1, Map.of("z", -1L, "w", 1L), false),
+                atMost(-5, Map.of("z", 1L, "w", 1L), false)), List.of("w", "z"), 4);
+        assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, none);
+        assertEquals(1, none.pairsCombined());
+    }
+
     @Test
     void aBoundOfANumberOutsideTheOrderIsRefused() {
         assertThrows(IllegalArgumentException.class,

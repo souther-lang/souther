@@ -9,10 +9,14 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Values for the numbers a way asks apart from a relation are given where the statements together
@@ -72,6 +76,63 @@ class AWitnessApartIsGivenValuesWhereTheBoundsTogetherLeaveThemTest {
                         Map.of(B, ExactRatio.of(2), A, ExactRatio.of(-1))), Rel.GE),
                 new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(-201),
                         Map.of(B, ExactRatio.of(2), A, ExactRatio.of(-2))), Rel.LE)), 4));
+    }
+
+    private static TakenConstraint.Affine ofA(long constant, long a, long b, Rel rel) {
+        Map<NumericTerm, ExactRatio> weights = new HashMap<>();
+        if (a != 0) {
+            weights.put(A, ExactRatio.of(a));
+        }
+        if (b != 0) {
+            weights.put(B, ExactRatio.of(b));
+        }
+        return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant), weights), rel);
+    }
+
+    /**
+     * What is found without the elimination is found with it. {@code a} between minus three and
+     * minus one with {@code 4b == a + 3} is met at {@code a = -3}, which the least of the
+     * values {@code a} may be gives; the elimination leaves {@code a} all of them, so it moves
+     * nothing.
+     */
+    @Test
+    void whatIsFoundWithoutTheEliminationIsFoundWithIt() {
+        List<TakenConstraint.Affine> statements = List.of(
+                ofA(3, 1, 0, Rel.GE), ofA(1, 1, 0, Rel.LE),
+                ofA(-3, -1, 4, Rel.GE), ofA(-3, -1, 4, Rel.LE));
+        Map<NumericTerm, ExactRatio> expected = Map.of(A, ExactRatio.of(-3), B, ExactRatio.ZERO);
+        assertEquals(new WholeValuesMeeting.Witness.Found(expected, 0), sought(statements, 0));
+        assertEquals(expected, ((WholeValuesMeeting.Witness.Found) sought(statements, 4)).values());
+    }
+
+    /**
+     * The elimination takes no value away. Over systems of a few statements of two numbers with
+     * small weights, every one that is met without any pair put together is met with them, since
+     * the bounds are implied by the statements and the value given stays wherever they leave it.
+     */
+    @Test
+    void theEliminationOnlyAddsValuesFound() {
+        Rel[] rels = {Rel.LE, Rel.GE, Rel.LT, Rel.GT, Rel.EQ};
+        Random random = new Random(2693);
+        int metWithout = 0;
+        int metOnlyWith = 0;
+        for (int each = 0; each < 3000; each++) {
+            List<TakenConstraint.Affine> statements = new ArrayList<>();
+            for (int count = 2 + random.nextInt(3); count > 0; count--) {
+                long a = random.nextInt(7) - 3;
+                long b = random.nextInt(7) - 3;
+                if (a != 0 || b != 0) {
+                    statements.add(ofA(random.nextInt(13) - 6, a, b, rels[random.nextInt(5)]));
+                }
+            }
+            boolean without = sought(statements, 0) instanceof WholeValuesMeeting.Witness.Found;
+            boolean with = sought(statements, 4096) instanceof WholeValuesMeeting.Witness.Found;
+            assertTrue(with || !without, statements::toString);
+            metWithout += without ? 1 : 0;
+            metOnlyWith += with && !without ? 1 : 0;
+        }
+        assertTrue(metWithout > 0);
+        assertTrue(metOnlyWith > 0);
     }
 
     /** {@code z + w} above nought and below one leaves rational values and no whole ones, which

@@ -40,9 +40,12 @@ import java.util.function.Function;
  * {@code z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0} neither the region nor any one
  * statement puts {@code z} at one, and the four with {@code w} eliminated do. So a value given
  * leaves every later number some rational value, though not always a whole one, and where none is
- * left nothing is shown, never that no value is. The value given is the one nearest nought
- * ({@link WholeNumbersLeft#one}), so a bound the elimination adds moves it only where the bound
- * leaves it out. Every statement is worked out at the values built,
+ * left nothing is shown, never that no value is. The value given is the one the statements alone
+ * leave first ({@link WholeNumbersLeft#one}) wherever the eliminated bounds leave it too, and
+ * only where they do not, the first they leave. Every value some choice of values from the
+ * statements alone reaches is then reached with the bounds, because the bounds are implied by the
+ * statements and so hold at any values that meet them: the elimination can add values found, and
+ * take none away. Every statement is worked out at the values built,
  * and each value is held to the ends the declarations leave it, so what is built is a proof wherever
  * it comes back ({@link #holdsAt}) and the way it was built decides only whether one is found.
  */
@@ -263,19 +266,33 @@ final class WholeValuesMeeting {
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds put))) {
                 return null;
             }
-            List<TakenConstraint.Affine> leaving = new ArrayList<>(statements);
-            for (LaterNumbersEliminated.Bound<NumericTerm> each : levels.get(place)) {
-                leaving.add(new TakenConstraint.Affine(each.form(), each.strict() ? Rel.LT
-                        : Rel.LE));
-            }
             WholeNumbersLeft left = WholeNumbersLeft.of(put.meet(ends));
-            for (TakenConstraint.Affine each : leaving) {
+            for (TakenConstraint.Affine each : statements) {
                 if (left == null) {
                     return null;
                 }
                 left = leftBy(each, term, out, left);
             }
-            BigInteger whole = left == null ? null : left.one();
+            if (left == null) {
+                return null;
+            }
+            // The value the statements alone give is kept wherever the levels leave it, so a
+            // value found without the elimination is found with it.
+            BigInteger whole = left.one();
+            WholeNumbersLeft within = left;
+            for (LaterNumbersEliminated.Bound<NumericTerm> each : levels.get(place)) {
+                if (within == null) {
+                    return null;
+                }
+                within = leftBy(new TakenConstraint.Affine(each.form(), each.strict() ? Rel.LT
+                        : Rel.LE), term, out, within);
+            }
+            if (within == null) {
+                return null;
+            }
+            if (whole == null || !within.leaves(whole)) {
+                whole = within.one();
+            }
             if (whole == null) {
                 return null;
             }
