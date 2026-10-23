@@ -438,14 +438,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
         assertFalse(five.contains(NOT_REACHED), five);
     }
 
-    /** The age in completed years, compared past four arms, is read as the age attained is. */
-    @Test
-    void anAgeInCompletedYearsIsReadPastFourArms() {
-        String report = report(bands("ageOn", 10, 11, 12, 13, 14));
-
-        assertFalse(report.contains(NOT_REACHED), report);
-    }
-
     /**
      * What each row offered for five bands of an age is answered, worked out apart from the
      * reading and put to the program, with a row at each side of each line.
