@@ -437,14 +437,14 @@ final class AStatementAtARow {
     /**
      * What an element of {@code container} answers of this turns on, where the elements are held
      * as groups under one value at {@code under}, or each on its own where it is null: the most
-     * any number it reads turns on ({@link #turnsOn(NumericTerm, TermPath, TermPath)}), and other
+     * any number it reads turns on ({@link #readOf}), and other
      * elements where it asks a position holding the container, or says something of the
      * container's elements itself.
      */
     TurnsOn turnsOnAmong(TermPath container, TermPath under) {
         TurnsOn out = TurnsOn.THE_ELEMENT;
         for (NumericTerm each : numbers()) {
-            out = out.orMore(turnsOn(each, container, under));
+            out = out.orMore(readOf(each, container, under).turnsOn());
         }
         for (TermPath each : positions) {
             if (container.isAtOrUnder(each)) {
@@ -460,17 +460,15 @@ final class AStatementAtARow {
 
     /**
      * Whether what an element of {@code container} answers of this may turn on which value stands
-     * at {@code at}, and not only on which elements hold one value there: some number of the
-     * element alone it reads, or some position it asks of its own value, is that place, inside it
-     * or holds it — or it reads other elements, of which nothing is shown. How often a value
-     * occurs there, and what the elements holding one value come to, read only which elements
-     * hold one value.
+     * at {@code at}, and not only on which elements hold one value there: some number it reads
+     * reads that place ({@link WhatItReads#theValue}), or some position it asks of its own value
+     * is that place, inside it or holds it — or it reads other elements, of which nothing is
+     * shown.
      */
     boolean readsTheValueAt(TermPath container, TermPath at) {
         for (NumericTerm each : numbers()) {
-            TurnsOn turns = turnsOn(each, container, at);
-            if (turns == TurnsOn.OTHER_ELEMENTS || (turns == TurnsOn.THE_ELEMENT
-                    && (each.subjectPath().isAtOrUnder(at) || at.isAtOrUnder(each.subjectPath())))) {
+            WhatItReads read = readOf(each, container, at);
+            if (read.turnsOn() == TurnsOn.OTHER_ELEMENTS || read.theValue()) {
                 return true;
             }
         }
@@ -484,49 +482,91 @@ final class AStatementAtARow {
     }
 
     /**
-     * What {@code term}, read of an element of {@code container}, turns on where the elements are
-     * held as groups under one value at {@code under}, or each on its own where it is null: by
-     * what each kind of number is read among. A number of one position is the element's; one read
-     * among the elements of a container is the element's where that container is inside it or
-     * elsewhere, and turns on other elements where it is this one or holds it — save how often
-     * the value at {@code under} occurs and what is gathered under it, which turn on those
-     * holding that value.
+     * What a number of an element reads, among the elements of a container held as groups under
+     * one value at a place inside each.
+     *
+     * @param turnsOn  what the number turns on
+     * @param theValue whether it reads the value at that place itself, and not only which
+     *                 elements hold one value there
      */
-    static TurnsOn turnsOn(NumericTerm term, TermPath container, TermPath under) {
+    record WhatItReads(TurnsOn turnsOn, boolean theValue) {
+
+        /** What the two read between them. */
+        WhatItReads and(WhatItReads other) {
+            return new WhatItReads(turnsOn.orMore(other.turnsOn), theValue || other.theValue);
+        }
+    }
+
+    /**
+     * What {@code term}, read of an element of {@code container}, reads where the elements are held
+     * as groups under one value at {@code under}, or each on its own where it is null — of every
+     * part it is made of: where it is read among, the key it is gathered under, the value it
+     * gathers, and the statement keeping the elements it is of.
+     *
+     * <p>A number of one position is the element's, and reads the value where it is that place. One
+     * read among the elements of a container is the element's where that container is inside it
+     * or elsewhere, and turns on other elements where it is this one or holds it — save how often
+     * the value at {@code under} occurs and what is gathered under it, which turn on those holding
+     * that value, and read the value where what they gather stands at it. What keeps the elements
+     * such a number is of is asked of each of them, and the number reads what that reads.
+     */
+    static WhatItReads readOf(NumericTerm term, TermPath container, TermPath under) {
         return switch (term) {
-            case NumericTerm.FromOnePosition _ -> TurnsOn.THE_ELEMENT;
-            case NumericTerm.TakenOver taken -> overTheRun(taken.source(), container);
-            case NumericTerm.Multiplicity often -> underItsValue(often.container(), container,
-                    often.place().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE);
-            case NumericTerm.ExtremeOfItsKey end -> underItsValue(end.container(), container,
-                    end.key().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE);
+            case NumericTerm.FromOnePosition one ->
+                    new WhatItReads(TurnsOn.THE_ELEMENT, overlaps(one.subjectPath(), under));
+            case NumericTerm.TakenOver taken ->
+                    new WhatItReads(overTheRun(taken.source(), container), false);
+            case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(often.container(),
+                    container, often.place().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE), false);
+            case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(end.container(),
+                    container, end.key().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE),
+                    overlaps(end.value(), under));
             case NumericTerm.OccurrencesOfItsValue often -> {
                 List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
-                yield ranged.size() == 1 ? underItsValue(ranged.getFirst(), container,
-                        often.subjectPath().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE)
-                        : overTheRun(often.run(), container);
+                yield new WhatItReads(ranged.size() == 1 ? underItsValue(ranged.getFirst(),
+                        container, often.subjectPath().equals(under),
+                        TurnsOn.THOSE_UNDER_ITS_VALUE) : overTheRun(often.run(), container), false)
+                        .and(keeping(often.selection(), container, under));
             }
-            case NumericTerm.OccurrencesOfAKey often -> overTheRun(often.run(), container);
+            case NumericTerm.OccurrencesOfAKey often ->
+                    new WhatItReads(overTheRun(often.run(), container), false);
             case NumericTerm.GatheredUnderItsKey gathered -> {
                 List<TermPath> ranged = gathered.elements().containersHoldingIt();
+                boolean readsIt = gathered.value().reads().stream()
+                        .anyMatch(each -> overlaps(each.from(gathered.elements()), under));
                 if (ranged.size() != 1) {
-                    yield among(ranged, container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+                    yield new WhatItReads(among(ranged, container) ? TurnsOn.OTHER_ELEMENTS
+                            : TurnsOn.THE_ELEMENT, readsIt)
+                            .and(keeping(gathered.selection(), container, under));
                 }
                 boolean underIt = gathered.key() instanceof ElementKey.At(ElementProjection way)
                         && way.from(gathered.elements()).equals(under);
-                yield underItsValue(ranged.getFirst(), container, underIt,
+                yield new WhatItReads(underItsValue(ranged.getFirst(), container, underIt,
                         switch (gathered.gathering()) {
                             case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
                                  NumericTerm.GatheredUnderItsKey.Gathering.End _ ->
                                     TurnsOn.THOSE_UNDER_ITS_VALUE;
                             case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
                                     TurnsOn.THE_ORDER_OF_THOSE_UNDER_ITS_VALUE;
-                        });
+                        }), readsIt).and(keeping(gathered.selection(), container, under));
             }
-            case NumericTerm.GatheredUnderAKey gathered -> among(
+            case NumericTerm.GatheredUnderAKey gathered -> new WhatItReads(among(
                     gathered.gathered().elements().containersHoldingIt(), container)
-                    ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+                    ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT, false);
         };
+    }
+
+    /** What the statement keeping some elements, asked of each, reads among the elements of
+     *  {@code container} grouped at {@code under} — nothing where every element is kept. */
+    private static WhatItReads keeping(KeptOccurrences kept, TermPath container, TermPath under) {
+        return kept == null ? new WhatItReads(TurnsOn.THE_ELEMENT, false)
+                : new WhatItReads(kept.perElement().turnsOnAmong(container, under),
+                        under != null && kept.perElement().readsTheValueAt(container, under));
+    }
+
+    /** Whether {@code path} is the place at {@code under}, inside it or holds it. */
+    private static boolean overlaps(TermPath path, TermPath under) {
+        return under != null && (path.isAtOrUnder(under) || under.isAtOrUnder(path));
     }
 
     /** What a number read among the elements of {@code counted} turns on: {@code grouped} where
