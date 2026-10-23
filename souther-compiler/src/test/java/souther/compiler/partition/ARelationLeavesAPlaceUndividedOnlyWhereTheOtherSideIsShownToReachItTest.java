@@ -549,20 +549,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * What is said of a length is said of every position at it, so it is said only of the lengths
-     * whose every row computes. {@code i - List.length(xs) + M - 1 <= 0}, M the greatest
-     * {@code Int}, fails at every position of a list shorter than M - 1, and only a list of one or
-     * two computes at all of its positions: past those, {@code i + M - 1} passes the type. Over the
-     * lengths that compute it fails at every position, which is every row, so no line is drawn on
-     * the length, and none at M - 2, where no row stands.
+     * What is said of a length is said of every position a row of it compares. With K a third of
+     * the greatest {@code Int} less one, {@code i + K * List.length(xs) - (M - 1) <= 0} holds at
+     * every position of a list of one or two. A list of three compares its first two positions —
+     * the third passes the type, and the walk stops there — and those come out one each way. A
+     * list of four passes it at its first. So the length is parted at two: a list of three is a row
+     * the comparison comes out both ways in, though not every position of it computes.
      */
     @Test
-    void whatALengthSettlesIsAskedOnlyOfTheLengthsWhoseEveryPositionComputes() {
+    void aLengthSomeOfWhosePositionsComputeIsReadAtThose() {
+        String inputs = "xs: List<Int>";
+        String body = STANDING.formatted(
+                "i + 3074457345618258602 * List.length(xs) - 9223372036854775806 <= 0");
+        assertEquals(List.of("List.length(xs)/0 <= x <= 2", "List.length(xs)/2 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
+    }
+
+    /**
+     * And a line the model draws stands however long the lists at it are.
+     * {@code i - List.length(xs) + M - 1 <= 0}, M the greatest {@code Int}, fails at every
+     * position of a list shorter than M - 1: past two elements a list passes the type at its third
+     * position, and the first two it compares come out false. Only the lists that long hold it at
+     * the first, so the length is parted at M - 2. The line at M that the walk stopping draws is
+     * the arithmetic's, and none of the model's.
+     */
+    @Test
+    void aLineTheModelDrawsWhereFewPositionsComputeIsDrawn() {
         String inputs = "xs: List<Int>";
         String body = STANDING.formatted("i - List.length(xs) + 9223372036854775806 <= 0");
-        assertEquals(List.of(), classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
-        assertEquals(Map.of("List.length(xs)", RELATES), left(inputs, UNUSED, "List<Int>", body,
-                atThe("<=", UNUSED, inputs, body)));
+        assertEquals(List.of("List.length(xs)/0 <= x <= 9223372036854775805",
+                        "List.length(xs)/9223372036854775805 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
     }
 
     /** A string of two characters that is three letters, which no value is, and which the reading

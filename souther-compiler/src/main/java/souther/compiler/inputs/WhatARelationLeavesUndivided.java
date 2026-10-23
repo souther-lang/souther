@@ -1074,11 +1074,14 @@ public final class WhatARelationLeavesUndivided {
      * the part at one value of the whole, so the rows at the part's two ends computing is every row
      * there computing. And from the least value of the whole on, no addend shrinks as the whole
      * grows, so the values whose rows all compute are a run from the least up, found by halving
-     * ({@link #computedUpTo}). Where that run is short of the whole's values, the relation is read
-     * over it as {@link #leavesOf} reads one cut to the rows that compute: the runs settling it
-     * there are kept, and a line only the cut draws is the arithmetic's and none of the model's
-     * ({@link Leaves.Settled#ofTheTypeAlone}). Where no run settles it there, nothing is shown of
-     * the values past the cut.
+     * ({@link #computedUpTo}). Past them a row is evaluated at the part's values in order and stops
+     * at the first whose addends pass the greatest, so it compares the part from its least to an
+     * end that is a straight function of the whole — the greatest less what the whole and the
+     * constant add on the part's side — and the relation is read there over those values. Past the
+     * values where even the part's least does not compute, no row reaches it, and nothing is said
+     * there ({@link #reachedUpTo}). So the answer is of the values some row reaches the relation
+     * at, every one of them; a line it draws that the model's own reading does not is the
+     * arithmetic's ({@link Leaves.Settled#ofTheTypeAlone}).
      *
      * @param greatest the greatest value the type the form is worked out in holds, or null where it
      *                 holds no greatest
@@ -1115,41 +1118,77 @@ public final class WhatARelationLeavesUndivided {
         }
         BigInteger computed = computedUpTo(values, within, whole.weight(), part.weight(),
                 constant, arithmetic);
-        // The form at a value v of the whole runs between two ends, each a number of v: the part at
-        // its least and at v less how far below, weighed by one or minus one.
-        boolean up = part.weight().signum() > 0;
-        BigInteger lowSlope = up ? weight : weight.subtract(BigInteger.ONE);
-        BigInteger lowOffset = up ? offset.add(within.least())
-                : offset.add(within.belowTheWhole());
-        BigInteger highSlope = up ? weight.add(BigInteger.ONE) : weight;
-        BigInteger highOffset = up ? offset.subtract(within.belowTheWhole())
-                : offset.subtract(within.least());
-        List<SettledRun> free = settledWithin(values, relation, lowSlope, lowOffset, highSlope,
-                highOffset);
+        Form form = new Form(part.weight().signum() > 0, weight, offset, within.least());
+        // The model's own reading: the part at every value from its least to the whole's value
+        // less how far below, whatever the arithmetic does.
+        BigInteger below = within.belowTheWhole();
+        List<SettledRun> free = settledWithin(values, relation,
+                form.upTo(BigInteger.ONE, below.negate()));
         if (computed == null || (values.high != null && computed.compareTo(values.high) >= 0)) {
             return free.isEmpty() ? new Leaves.Undivided()
                     : Leaves.Settled.ofWhole(free, values.low, values.high);
         }
-        WholeRun cut = new WholeRun(values.low, computed);
-        List<SettledRun> runs = settledWithin(cut, relation, lowSlope, lowOffset, highSlope,
-                highOffset);
+        // Past the values whose every row computes, a row computes at the part's values from its
+        // least up to where the addends on the part's side pass the greatest — a run of them that
+        // shrinks as the whole grows — and stops at the first that does not, those before it read.
+        // Past the values where even the least computes, no row reaches the relation at all.
+        BigInteger reached = reachedUpTo(values, computed, within, whole.weight(), part.weight(),
+                constant, arithmetic);
+        WholeRun all = new WholeRun(values.low, computed);
+        List<SettledRun> runs = new ArrayList<>(settledWithin(all, relation,
+                form.upTo(BigInteger.ONE, below.negate())));
+        if (reached.compareTo(computed) > 0) {
+            runs = joined(runs, settledWithin(new WholeRun(computed.add(BigInteger.ONE), reached),
+                    relation, form.upTo(form.sameSideSlope().negate(),
+                            arithmetic.greatest().subtract(form.sameSideOffset()))));
+        }
         if (runs.isEmpty()) {
-            return null;
+            return new Leaves.Undivided();
         }
         List<Line> model = free.isEmpty() ? List.of()
                 : Leaves.Settled.ofWhole(free, values.low, values.high).lines();
-        return Leaves.Settled.ofWhole(runs, cut.low, cut.high).besideWhatTheModelDraws(model);
+        return Leaves.Settled.ofWhole(runs, values.low, reached).besideWhatTheModelDraws(model);
     }
 
-    /** The runs of {@code values} at which the form between its two ends settles
+    /**
+     * A form of a whole weighed by {@code weight}, a part weighed by one, up where {@code up},
+     * and {@code offset}, the part taking every whole number from {@code least} to an upper end
+     * that is a straight function of the whole.
+     */
+    private record Form(boolean up, BigInteger weight, BigInteger offset, BigInteger least) {
+
+        /** The ends of the form at a value v of the whole, the part's upper end being
+         *  {@code slope}·v + {@code by}: the part at its least, and at that end. */
+        Ends upTo(BigInteger slope, BigInteger by) {
+            return up
+                    ? new Ends(weight, offset.add(least), weight.add(slope), offset.add(by))
+                    : new Ends(weight.subtract(slope), offset.subtract(by), weight,
+                            offset.subtract(least));
+        }
+
+        /** How much of the whole's addend grows on the part's side of nought for each value: all
+         *  of it where the two have one sign, and none where they have two. */
+        BigInteger sameSideSlope() {
+            return weight.signum() == (up ? 1 : -1) ? weight.abs() : BigInteger.ZERO;
+        }
+
+        /** And of the constant's. */
+        BigInteger sameSideOffset() {
+            return offset.signum() == (up ? 1 : -1) ? offset.abs() : BigInteger.ZERO;
+        }
+
+        /** The two ends of the form, each {@code slope}·v + {@code offset}. */
+        record Ends(BigInteger lowSlope, BigInteger lowOffset, BigInteger highSlope,
+                    BigInteger highOffset) {}
+    }
+
+    /** The runs of {@code values} at which the form between {@code ends} settles
      *  {@code relation}, either way, in order. */
-    private static List<SettledRun> settledWithin(WholeRun values, Rel relation,
-                                                  BigInteger lowSlope, BigInteger lowOffset,
-                                                  BigInteger highSlope, BigInteger highOffset) {
+    private static List<SettledRun> settledWithin(WholeRun values, Rel relation, Form.Ends ends) {
         List<SettledRun> runs = new ArrayList<>();
         for (boolean holds : List.of(true, false)) {
             for (WholeRun each : whereEveryValueMeets(holds ? relation : relation.denied(),
-                    lowSlope, lowOffset, highSlope, highOffset)) {
+                    ends.lowSlope(), ends.lowOffset(), ends.highSlope(), ends.highOffset())) {
                 WholeRun here = each.meet(values);
                 if (here.holdsAWholeNumber()) {
                     runs.add(SettledRun.whole(here.low, here.high, holds));
@@ -1157,6 +1196,48 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return inOrder(runs, true);
+    }
+
+    /** {@code before} then {@code after}, the last of the one and the first of the other made one
+     *  run where they settle it the same way and meet. */
+    private static List<SettledRun> joined(List<SettledRun> before, List<SettledRun> after) {
+        List<SettledRun> out = new ArrayList<>(before);
+        for (SettledRun each : after) {
+            SettledRun last = out.isEmpty() ? null : out.getLast();
+            ExactRatio next = last == null ? null : last.to().at().plus(ExactRatio.ONE).orNull();
+            if (last != null && last.holds() == each.holds() && next != null
+                    && next.equals(each.from().at())) {
+                out.set(out.size() - 1, new SettledRun(last.from(), each.to(), each.holds()));
+            } else {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The greatest value of the whole past {@code computed} at which a row computes with the part
+     * at its least — {@code computed} where there is none. Past it no row reaches the relation:
+     * the addends grow with the whole, so a value at which the least does not compute has none
+     * past it that does.
+     */
+    private static BigInteger reachedUpTo(WholeRun values, BigInteger computed,
+                                          WithinTheWhole within, ExactRatio wholeWeight,
+                                          ExactRatio partWeight, ExactRatio constant,
+                                          Arithmetic arithmetic) {
+        BigInteger high = values.high == null ? arithmetic.greatest()
+                : values.high.min(arithmetic.greatest());
+        BigInteger low = computed;
+        while (low.compareTo(high) < 0) {
+            BigInteger middle = low.add(high).add(BigInteger.ONE).shiftRight(1);
+            if (arithmetic.computes(weighedAt(ExactRatio.of(middle), wholeWeight),
+                    weighedAt(ExactRatio.of(within.least()), partWeight), constant)) {
+                low = middle;
+            } else {
+                high = middle.subtract(BigInteger.ONE);
+            }
+        }
+        return low;
     }
 
     /**
