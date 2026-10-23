@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Offering;
@@ -141,13 +142,39 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
     }
 
     /** The nearest year is looked for from the day's own outward, so a day in the calendar's
-     *  last year meets the last day of a year in that year and not centuries before it. */
+     *  last year meets the last day of a year in that year and not centuries before it, and a day
+     *  in its first year meets the first day of a year in that year and not centuries after. */
     @Test
-    void aMonthAndADayAreMetInTheDaysYearAtTheEndOfTheCalendar() {
-        String source = source("d: Date", "d", "Date.month(d) == 12 && Date.day(d) == 31");
-        LocalDate day = LocalDate.MAX.minusMonths(6);
-        List<List<LocalDate>> rows = rows(source, day);
-        assertTrue(rows.contains(List.of(LocalDate.MAX)), "on " + day + ": " + rows);
+    void aMonthAndADayAreMetInTheDaysYearAtTheEndsOfTheCalendar() {
+        LocalDate last = LocalDate.MAX.minusMonths(6);
+        List<List<LocalDate>> atTheEnd = rows(
+                source("d: Date", "d", "Date.month(d) == 12 && Date.day(d) == 31"), last);
+        assertTrue(atTheEnd.contains(List.of(LocalDate.MAX)), "on " + last + ": " + atTheEnd);
+        LocalDate first = LocalDate.MIN.plusMonths(6);
+        List<List<LocalDate>> atTheStart = rows(
+                source("d: Date", "d", "Date.month(d) == 1 && Date.day(d) == 1"), first);
+        assertTrue(atTheStart.contains(List.of(LocalDate.MIN)), "on " + first + ": " + atTheStart);
+    }
+
+    /** Of each finding, what it is owed for and how it is classed: its subject, its kind, the
+     *  obligation it is about, what weakens it, what is left open and, for a point of a line, what
+     *  covers it. */
+    private static List<List<Object>> owed(List<Adequacy.Finding> findings) {
+        List<List<Object>> out = new ArrayList<>();
+        for (Adequacy.Finding each : findings) {
+            List<Object> parts = new ArrayList<>(List.of(each.subject(), each.kind(),
+                    each.weakenedBy(), each.open()));
+            if (each.about() instanceof About.OfAnObligation obligation) {
+                parts.add(obligation.obligationIdentity());
+            }
+            if (each.about() instanceof About.ABorderObligation border) {
+                parts.add(border.role());
+                parts.add(border.item().coverage());
+                parts.add(border.item().open());
+            }
+            out.add(parts);
+        }
+        return out;
     }
 
     private static int nearestLeapYear(int from) {
@@ -340,14 +367,24 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
                 """;
         Compilation compilation = measured(source, DAYS.get(0));
         List<List<LocalDate>> first = rows(compilation);
-        String owedFirst = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        AdequacyReport owedFirst = AdequacyReport.of(compilation);
+        String saidFirst = owedFirst.human(SourceRendering.namedByIdentity(compilation.texts()));
         compilation.writtenOn(DAYS.get(1));
         List<List<LocalDate>> second = rows(compilation);
-        String owedSecond = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        AdequacyReport owedSecond = AdequacyReport.of(compilation);
+        String saidSecond = owedSecond.human(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(rows(source, DAYS.get(1)), second);
         assertFalse(first.equals(second), "the two days are years apart: " + first);
-        assertEquals(owedFirst, owedSecond);
+        // What is owed, as the values the report is made of and not only as it reads: the same
+        // obligations, each classed the same way, and the same verdict. The rows a search found
+        // for each are written on the day, and are what the first assertions above are about.
+        assertFalse(owedFirst.findings().isEmpty(), "the model owes rows");
+        assertEquals(owed(owedFirst.findings()), owed(owedSecond.findings()));
+        assertEquals(owed(owedFirst.adequacyGaps()), owed(owedSecond.adequacyGaps()));
+        assertEquals(owedFirst.adequacy(), owedSecond.adequacy());
+        assertEquals(owed(owedFirst.assessment().gaps()), owed(owedSecond.assessment().gaps()));
+        assertEquals(owedFirst.assessment().uncertainties(),
+                owedSecond.assessment().uncertainties());
+        assertEquals(saidFirst, saidSecond);
     }
 }
