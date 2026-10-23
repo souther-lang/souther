@@ -16,6 +16,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.ObligationIdentity;
@@ -24,6 +25,7 @@ import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.RowDemand;
+import souther.compiler.partition.SingledAffineBoundary;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
@@ -38,7 +40,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 /**
@@ -111,6 +116,42 @@ public sealed interface AnotherLineTheRowsAllow {
         public List<Stands> standing() {
             return each.stream().filter(Stands.class::isInstance).map(Stands.class::cast)
                     .toList();
+        }
+
+        /**
+         * The lines a row is looked for to rule out, in the family's order: the ones the rows
+         * leave standing, and the ones they leave where nothing showed an input arriving
+         * ({@link Unsettled.NoReachableDistinguisher}), which a row composed there and run may
+         * show.
+         */
+        public List<Stands> lookedFor() {
+            List<Stands> out = new ArrayList<>();
+            for (Direction one : each) {
+                switch (one) {
+                    case Stands standing -> out.add(standing);
+                    case Undecided(var _, Unsettled.NoReachableDistinguisher(var left)) ->
+                            out.add(left);
+                    case Undecided _, RuledOut _ -> { }
+                }
+            }
+            return out;
+        }
+
+        /**
+         * The same lines, with each one nothing showed an input arriving at put where the rows
+         * leave it, where {@code arriving} names an input for it: one a row composed there was
+         * seen run to this rule at. A run is what shows an input arrives, so the line is then one
+         * the rows leave standing, at that input; every other line is as it was.
+         */
+        public ByDirection shownArriving(Map<QuantityKey, Map<NumericTerm, Place>> arriving) {
+            List<Direction> out = new ArrayList<>();
+            for (Direction one : each) {
+                Map<NumericTerm, Place> at = arriving.get(one.direction());
+                out.add(at != null && one instanceof Undecided(var _,
+                        Unsettled.NoReachableDistinguisher(var left))
+                        ? left.toldApartAt(at) : one);
+            }
+            return new ByDirection(out);
         }
 
         /** The lines the question was put of and could not be settled for. */
@@ -186,42 +227,78 @@ public sealed interface AnotherLineTheRowsAllow {
      * is what travels ({@link #onTheRefusedSide}, {@link #onTheKeptSide}), and the place is what the
      * measurement saw.
      *
-     * @param direction    the line one step from the model's that every row answers alike under
-     * @param cut          the furthest along it of the rows the model keeps, which is the
-     *                     tightest threshold that keeps every one of them
-     * @param refusedFrom  the nearest along it of the rows the model refuses, or null where the
-     *                     rows read on this line hold none
-     * @param keptOn       the side of the threshold this line keeps a row on, which is the side the
-     *                     model's own rule is satisfied on
+     * <p><b>And a line the model's rule singles one value out on is left at one value.</b> Every
+     * row the rule's value is singled out for stands at one place along it, and no other row does
+     * ({@link AtOneValue}); a row away from that place on the one side, or at it on the other,
+     * rules it out.
+     *
+     * @param left         where the rows leave the line, which every question about it is folded
+     *                     from
      * @param tellsApartAt an input that would rule this line out, or null where none was worked
      *                     out or every one that was is one the declarations are shown to leave
      *                     nothing at. What the measurement itself reached, and never where a row has
      *                     to be written: it is a witness of the condition and not the condition
      */
-    record Stands(QuantityKey direction, ExactRatio cut, ExactRatio refusedFrom, Towards keptOn,
-                  Map<NumericTerm, Place> tellsApartAt) implements Direction {
+    record Stands(Fold left, Map<NumericTerm, Place> tellsApartAt) implements Direction {
 
         public Stands {
-            if (direction == null || cut == null || keptOn == null) {
-                throw new IllegalArgumentException("a line the rows allow is a direction, a"
-                        + " place along it and a side it keeps: " + direction + " " + cut + " "
-                        + keptOn);
+            Objects.requireNonNull(left, "a line the rows allow is left somewhere");
+            if (left.at() == null) {
+                throw new IllegalArgumentException("a line the rows allow is at a place the rows"
+                        + " put it: " + left);
             }
-            if (!new Ends(direction, keptOn, cut, refusedFrom).apart()) {
-                throw new IllegalArgumentException("a line standing where a row the model refuses"
-                        + " is no further along it than one it keeps: " + cut + " and "
-                        + refusedFrom);
+            if (!left.apart()) {
+                throw new IllegalArgumentException("a line standing where the rows tell it from the"
+                        + " model's: " + left);
             }
             tellsApartAt = tellsApartAt == null ? null
                     : Collections.unmodifiableMap(new LinkedHashMap<>(tellsApartAt));
         }
 
-        private Stands(Ends ends, Map<NumericTerm, Place> tellsApartAt) {
-            this(ends.direction(), ends.kept(), ends.refused(), ends.keptOn(), tellsApartAt);
+        /**
+         * A line kept on one side of a threshold.
+         *
+         * @param direction   the line one step from the model's that every row answers alike under
+         * @param cut         the furthest along it of the rows the model keeps, which is the
+         *                    tightest threshold that keeps every one of them
+         * @param refusedFrom the nearest along it of the rows the model refuses, or null where the
+         *                    rows read on this line hold none
+         * @param keptOn      the side of the threshold this line keeps a row on, which is the side
+         *                    the model's own rule is satisfied on
+         */
+        public Stands(QuantityKey direction, ExactRatio cut, ExactRatio refusedFrom, Towards keptOn,
+                      Map<NumericTerm, Place> tellsApartAt) {
+            this(new Ends(Objects.requireNonNull(direction, "a line runs some way"),
+                    Objects.requireNonNull(keptOn, "and keeps a side"), cut, refusedFrom),
+                    tellsApartAt);
         }
 
-        private Ends ends() {
-            return new Ends(direction, keptOn, cut, refusedFrom);
+        @Override
+        public QuantityKey direction() {
+            return left.direction();
+        }
+
+        /** Where along the line the rows put it: the tightest threshold keeping every row the model
+         *  keeps, or the one value every row it singles out stands at. */
+        public ExactRatio cut() {
+            return left.at();
+        }
+
+        /** The nearest along a threshold line of the rows the model refuses, or null where the rows
+         *  hold none, or where the line is left at one value and has no such end. */
+        public ExactRatio refusedFrom() {
+            return left instanceof Ends ends ? ends.refused() : null;
+        }
+
+        /** The same line, with {@code input} the input that would rule it out. */
+        Stands toldApartAt(Map<NumericTerm, Place> input) {
+            return new Stands(left, input);
+        }
+
+        /** Whether the line is left at one value rather than on a side of a threshold, which is
+         *  where a row that rules it out is looked for at the line as well as beside it. */
+        public boolean atOneValue() {
+            return left instanceof AtOneValue;
         }
 
         /**
@@ -235,46 +312,22 @@ public sealed interface AnotherLineTheRowsAllow {
          * else, from the line itself: handed in as a yes or no, a sum the exact arithmetic could not
          * hold came in as a no, and a row the model keeps ruled the line out as one it refuses.
          */
-        public ExactAnswer<Boolean> ruledOutBy(OrderedAffineBoundary drawn,
+        public ExactAnswer<Boolean> ruledOutBy(DrawnBoundary drawn,
                                                Map<NumericTerm, Place> values) {
-            return ends().with(drawn, values).map(after -> !after.apart());
+            return left.with(drawn, values).map(after -> !after.apart());
         }
 
-        /**
-         * Where a row the model refuses has to stand to rule this line out, as a refinement of
-         * {@code within}.
-         *
-         * <p>Within reach of the near end: a refused row there is one every threshold on this line
-         * keeps, and none of them can keep it and the rows the model keeps apart. Which also says
-         * why the rows already written are outside it: every row the model refuses is past {@code
-         * cut} by the arithmetic that put {@code cut} where it is.
-         */
-        public SearchRegion onTheRefusedSide(SearchRegion within) {
-            // The region is asked to take the line in and carries it, which the direction's own
-            // type has already settled: a boundary of this kind exists only where every term of
-            // the quantity has a carrier that counts (OrderedAffineBoundary.weighable), and a
-            // region refuses a form only for a term with no carrier at all.
-            return within.assuming(new LinearForm<>(cut.negated(), direction.direction()),
-                    keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
+        /** Where a row the model refuses can stand to rule this line out, each a refinement of a
+         *  region to look in on its own ({@link Fold#onTheRefusedSide}). */
+        public List<UnaryOperator<SearchRegion>> onTheRefusedSide() {
+            return left.onTheRefusedSide();
         }
 
-        /**
-         * Where a row the model keeps has to stand to rule this line out, as a refinement of a
-         * region, or empty where the rows hold no row the model refuses for a kept one to be past.
-         *
-         * <p>At or past the far end, and not merely past {@code cut}. A kept row between the two is
-         * kept by a threshold drawn at itself, which still refuses every row the model refuses —
-         * so the line survives it, and a row offered there would be answered by the next run with
-         * the same line at another place.
-         */
-        public Optional<UnaryOperator<SearchRegion>> onTheKeptSide() {
-            if (refusedFrom == null) {
-                return Optional.empty();
-            }
-            LinearForm<NumericTerm> past =
-                    new LinearForm<>(refusedFrom.negated(), direction.direction());
-            Rel rel = keptOn == Towards.BELOW ? Rel.GE : Rel.LE;
-            return Optional.of(within -> within.assuming(past, rel).taken());
+        /** Where a row the model keeps can stand to rule this line out, each a refinement of a
+         *  region to look in on its own, and none where nothing the rows hold says where
+         *  ({@link Fold#onTheKeptSide}). */
+        public List<UnaryOperator<SearchRegion>> onTheKeptSide() {
+            return left.onTheKeptSide();
         }
 
         /**
@@ -285,14 +338,14 @@ public sealed interface AnotherLineTheRowsAllow {
          * declarations can give differently.
          */
         public boolean isTheLineOf(Stands other) {
-            return direction.equals(other.direction) && cut.equals(other.cut)
-                    && Objects.equals(refusedFrom, other.refusedFrom) && keptOn == other.keptOn;
+            return left.equals(other.left);
         }
 
         /** How a report names the line, which is the direction spelled as an author writes a form,
-         *  at the tightest threshold the rows leave it. */
+         *  at the place the rows leave it. */
         public String label() {
-            return OrderedAffineBoundary.spelled(direction.direction()) + " = " + cut.spelled();
+            return OrderedAffineBoundary.spelled(direction().direction()) + " = "
+                    + left.at().spelled();
         }
 
         /**
@@ -311,27 +364,49 @@ public sealed interface AnotherLineTheRowsAllow {
         }
 
         /**
-         * The range of thresholds the rows read so far leave on one line, by its two ends.
+         * Where the rows read so far leave one line, folded one row at a time.
          *
          * <p>One fold for every question about it. The measurement folds every row in and asks
-         * whether a range is left; a row offered for the line is folded into what the measurement
-         * left and asked the same; a step taken to name an input is asked it too. Which way along
-         * the line is "further" turns on the side the line keeps, and it is turned here and nowhere
-         * else.
-         *
-         * @param kept    the furthest along of the rows the model keeps, or null before one
-         * @param refused the nearest along of the rows the model refuses, or null before one
+         * whether the line is still left; a row offered for the line is folded into what the
+         * measurement left and asked the same; a step taken to name an input is asked it too.
          */
-        private record Ends(QuantityKey direction, Towards keptOn, ExactRatio kept,
-                            ExactRatio refused) {
+        sealed interface Fold permits Ends, AtOneValue {
 
-            /** No row read yet. */
-            static Ends none(QuantityKey direction, Towards keptOn) {
-                return new Ends(direction, keptOn, null, null);
-            }
+            /** The line of the family this is about. */
+            QuantityKey direction();
+
+            /** Where along it the rows put it, or null before a row puts it anywhere. */
+            ExactRatio at();
+
+            /** Whether the rows read leave the line standing. */
+            boolean apart();
+
+            /** The same, with a row folded in that the model keeps or refuses, already read as how
+             *  far along the line it is. */
+            Fold withAt(boolean modelKeeps, ExactRatio at);
+
+            /** Where along the line a row on the side {@code kept} says has to be moved to rule
+             *  the line out, or null where nothing the rows hold says. */
+            ExactRatio toward(boolean kept);
 
             /**
-             * These ends with a row whose positions read as {@code values} folded in, on the side
+             * Where a row the model refuses can stand to rule this line out, each a refinement of a
+             * region a row is looked for in on its own.
+             *
+             * <p>A list and not one region, because where a row can stand need not be one region a
+             * search can be narrowed to: off a value is below it or above it, and a region holds
+             * either as an end and the two as no hole. Each is looked for apart, so a way to the
+             * border that leaves rows only on one side of it is not looked for on the other alone.
+             */
+            List<UnaryOperator<SearchRegion>> onTheRefusedSide();
+
+            /** Where a row the model keeps can stand to rule this line out, each a refinement of a
+             *  region looked in on its own ({@link #onTheRefusedSide}), and none where nothing the
+             *  rows hold says where. */
+            List<UnaryOperator<SearchRegion>> onTheKeptSide();
+
+            /**
+             * The same, with a row whose positions read as {@code values} folded in, on the side
              * of {@code drawn} — the model's own line — that it falls; or why either sum, the
              * model's or this line's, could not be held.
              *
@@ -339,14 +414,115 @@ public sealed interface AnotherLineTheRowsAllow {
              * says about this one, and a fold handed that half by its caller is a fold that takes
              * whatever the caller made of a sum it could not hold.
              */
-            ExactAnswer<Ends> with(OrderedAffineBoundary drawn, Map<NumericTerm, Place> values) {
-                return drawn.satisfies(values).flatMap(modelKeeps ->
-                        OrderedAffineBoundary.along(direction, values)
-                                .map(at -> withAt(modelKeeps, at)));
+            default ExactAnswer<Fold> with(DrawnBoundary drawn, Map<NumericTerm, Place> values) {
+                return read(drawn, values).map(row -> withAt(row.modelKeeps(), row.at()));
             }
 
-            /** The same, for a row already read as how far along the line it is. */
-            Ends withAt(boolean modelKeeps, ExactRatio at) {
+            /** The same, with every one of {@code rows} folded in. */
+            default Fold withAll(List<Read> rows) {
+                Fold out = this;
+                for (Read row : rows) {
+                    out = out.withAt(row.modelKeeps(), row.at());
+                }
+                return out;
+            }
+
+            /** What a row whose positions read as {@code values} says to this line: which side of
+             *  {@code drawn} it is on, and how far along this line it is — or why either sum could
+             *  not be held. */
+            default ExactAnswer<Read> read(DrawnBoundary drawn, Map<NumericTerm, Place> values) {
+                return read(drawn.satisfies(values), values);
+            }
+
+            /** The same, with which side of the model's line the row is on already read as
+             *  {@code side}: it is the same whichever line of the family asks, so the rows of a
+             *  measurement are put to the model's line once and not once per line. */
+            default ExactAnswer<Read> read(ExactAnswer<Boolean> side,
+                                           Map<NumericTerm, Place> values) {
+                return side.flatMap(modelKeeps -> OrderedAffineBoundary.along(direction(), values)
+                        .map(at -> new Read(modelKeeps, at)));
+            }
+
+            /** No row read yet against {@code direction}, beside {@code drawn}. */
+            static Fold none(DrawnBoundary drawn, QuantityKey direction) {
+                return switch (drawn) {
+                    case OrderedAffineBoundary order ->
+                            new Ends(direction, order.satisfiedOn(), null, null);
+                    case SingledAffineBoundary singled ->
+                            AtOneValue.none(direction, singled.holdsAtTheValue());
+                };
+            }
+        }
+
+        /**
+         * One row as a line beside the model's reads it.
+         *
+         * @param modelKeeps whether the model's own rule keeps the row
+         * @param at         how far along the line beside it the row is
+         */
+        record Read(boolean modelKeeps, ExactRatio at) {}
+
+        /**
+         * The range of thresholds the rows read so far leave on one line, by its two ends. Which
+         * way along the line is "further" turns on the side the line keeps, and it is turned here
+         * and nowhere else.
+         *
+         * @param kept    the furthest along of the rows the model keeps, or null before one
+         * @param refused the nearest along of the rows the model refuses, or null before one
+         */
+        record Ends(QuantityKey direction, Towards keptOn, ExactRatio kept, ExactRatio refused)
+                implements Fold {
+
+            @Override
+            public ExactRatio at() {
+                return kept;
+            }
+
+            /** A row the model keeps is moved to the nearest it refuses, and one it refuses to
+             *  within reach of the furthest it keeps. */
+            @Override
+            public ExactRatio toward(boolean modelKeeps) {
+                return modelKeeps ? refused : kept;
+            }
+
+            /**
+             * Within reach of the near end: a refused row there is one every threshold on this line
+             * keeps, and none of them can keep it and the rows the model keeps apart. Which also
+             * says why the rows already written are outside it: every row the model refuses is past
+             * {@code kept} by the arithmetic that put {@code kept} where it is. One region, since
+             * one side of a threshold is.
+             */
+            @Override
+            public List<UnaryOperator<SearchRegion>> onTheRefusedSide() {
+                // The region is asked to take the line in and carries it, which the direction's
+                // own type has already settled: a boundary of this kind exists only where every
+                // term of the quantity has a carrier that counts (OrderedAffineBoundary.weighable),
+                // and a region refuses a form only for a term with no carrier at all.
+                LinearForm<NumericTerm> near = new LinearForm<>(kept.negated(), direction.direction());
+                Rel rel = keptOn == Towards.BELOW ? Rel.LE : Rel.GE;
+                return List.of(within -> within.assuming(near, rel).taken());
+            }
+
+            /**
+             * At or past the far end, and not merely past {@code kept}. A kept row between the two
+             * is kept by a threshold drawn at itself, which still refuses every row the model
+             * refuses — so the line survives it, and a row offered there would be answered by the
+             * next run with the same line at another place. Empty where the rows hold no row the
+             * model refuses for a kept one to be past.
+             */
+            @Override
+            public List<UnaryOperator<SearchRegion>> onTheKeptSide() {
+                if (refused == null) {
+                    return List.of();
+                }
+                LinearForm<NumericTerm> past =
+                        new LinearForm<>(refused.negated(), direction.direction());
+                Rel rel = keptOn == Towards.BELOW ? Rel.GE : Rel.LE;
+                return List.of(within -> within.assuming(past, rel).taken());
+            }
+
+            @Override
+            public Ends withAt(boolean modelKeeps, ExactRatio at) {
                 if (modelKeeps) {
                     return new Ends(direction, keptOn, kept == null ? at : further(kept, at),
                             refused);
@@ -362,13 +538,154 @@ public sealed interface AnotherLineTheRowsAllow {
              * <p>The threshold itself is kept, so a refused row exactly at the furthest kept one
              * leaves none: the line would keep it, and the two would not answer alike at it.
              */
-            boolean apart() {
+            @Override
+            public boolean apart() {
                 return kept == null || refused == null || !keeps(keptOn, kept, refused);
             }
 
             /** Whichever of the two is further along the side the line keeps a row on. */
             private ExactRatio further(ExactRatio a, ExactRatio b) {
                 return keeps(keptOn, a, b) ? a : b;
+            }
+        }
+
+        /**
+         * Where the rows leave a line beside one whose rule singles a value out: at the one place
+         * along it every row on the side the value is singled out for stands, and away from every
+         * row on the other side.
+         *
+         * <p>Which side that is is the rule's. An equality keeps the value it names, so the line
+         * beside it keeps one place and every row the model keeps has to be there; its denial
+         * refuses the value, and every row the model refuses has to be. A second place on that
+         * side, or a row of the other side at the place, leaves no line standing.
+         *
+         * <p><b>What the other side is kept as is one answer once the place is known.</b> A row of
+         * the other side matters only by being at the place or not, so once a row of the naming side
+         * has put the place somewhere, the other side is one yes or no. Before that, where each of
+         * its rows stood is what has to be held, to be asked of the place when it comes; and it is
+         * folded into the yes or no then and not kept. So a line standing — which has a place —
+         * takes one more row in constant work, and the rows of a measurement are taken in together
+         * ({@link #withAll}) rather than one copy of what was held at a time.
+         *
+         * @param keepsTheValue whether the model's rule keeps the value it names, which is which
+         *                      side of the model's line names the place here
+         * @param named         where the rows on that side stand, or null before one
+         * @param apartOnIt     whether two rows on that side stand at different places
+         * @param besideAtIt    whether a row of the other side stands at {@code named}, which is
+         *                      false while {@code named} is null
+         * @param before        where the rows of the other side stood before {@code named} was
+         *                      known, and nothing once it is
+         */
+        record AtOneValue(QuantityKey direction, boolean keepsTheValue, ExactRatio named,
+                          boolean apartOnIt, boolean besideAtIt, SortedSet<ExactRatio> before)
+                implements Fold {
+
+            AtOneValue {
+                if (named != null && !before.isEmpty()) {
+                    throw new IllegalArgumentException("where the other side stood is asked of the"
+                            + " place once it is known, and not held beside it: " + before);
+                }
+                if (named == null && besideAtIt) {
+                    throw new IllegalArgumentException("no row stands at a place nobody put");
+                }
+                before = Collections.unmodifiableSortedSet(new TreeSet<>(before));
+            }
+
+            /** No row read yet against {@code direction}. */
+            static AtOneValue none(QuantityKey direction, boolean keepsTheValue) {
+                return new AtOneValue(direction, keepsTheValue, null, false, false,
+                        Collections.emptySortedSet());
+            }
+
+            @Override
+            public ExactRatio at() {
+                return named;
+            }
+
+            @Override
+            public boolean apart() {
+                return !apartOnIt && !besideAtIt;
+            }
+
+            @Override
+            public AtOneValue withAt(boolean modelKeeps, ExactRatio at) {
+                return withAll(List.of(new Read(modelKeeps, at)));
+            }
+
+            /** Every one of {@code rows} taken in at once, holding where the other side stood only
+             *  while no place is known. */
+            @Override
+            public AtOneValue withAll(List<Read> rows) {
+                ExactRatio place = named;
+                boolean apartThere = apartOnIt;
+                boolean besideThere = besideAtIt;
+                SortedSet<ExactRatio> stood = new TreeSet<>(before);
+                for (Read row : rows) {
+                    if (row.modelKeeps() == keepsTheValue) {
+                        if (place == null) {
+                            place = row.at();
+                        } else if (place.compareTo(row.at()) != 0) {
+                            apartThere = true;
+                        }
+                    } else if (place == null) {
+                        stood.add(row.at());
+                    } else if (place.compareTo(row.at()) == 0) {
+                        besideThere = true;
+                    }
+                }
+                if (place != null && !stood.isEmpty()) {
+                    besideThere |= stood.contains(place);
+                    stood = Collections.emptySortedSet();
+                }
+                return new AtOneValue(direction, keepsTheValue, place, apartThere, besideThere,
+                        stood);
+            }
+
+            /** A row on the side naming the place is moved off it — one step either way is off
+             *  it — and a row on the other side onto it. */
+            @Override
+            public ExactRatio toward(boolean modelKeeps) {
+                if (named == null) {
+                    return null;
+                }
+                return modelKeeps == keepsTheValue ? named.plus(ExactRatio.ONE).orNull() : named;
+            }
+
+            /** At the place where the model's rule keeps the value, so the refused row is one the
+             *  line keeps; off it where the rule refuses the value ({@link #off}). */
+            @Override
+            public List<UnaryOperator<SearchRegion>> onTheRefusedSide() {
+                return keepsTheValue ? atIt() : off();
+            }
+
+            /** Off the place where the model's rule keeps the value, so the kept row is one the
+             *  line refuses ({@link #off}); at it where the rule refuses the value. */
+            @Override
+            public List<UnaryOperator<SearchRegion>> onTheKeptSide() {
+                if (named == null) {
+                    return List.of();
+                }
+                return keepsTheValue ? off() : atIt();
+            }
+
+            /** At the place, as one region. */
+            private List<UnaryOperator<SearchRegion>> atIt() {
+                return List.of(within -> within.assuming(atThePlace(), Rel.EQ).taken());
+            }
+
+            /**
+             * Off the place: below it, and above it, each a region of its own. Either side rules the
+             * line out, and the way to the border may leave rows on only one of them, so both are
+             * looked in. Asked as one hole, a region may hold no hole at all, and come back
+             * narrowed by nothing for a row to be composed at the place.
+             */
+            private List<UnaryOperator<SearchRegion>> off() {
+                return List.of(within -> within.assuming(atThePlace(), Rel.LT).taken(),
+                        within -> within.assuming(atThePlace(), Rel.GT).taken());
+            }
+
+            private LinearForm<NumericTerm> atThePlace() {
+                return new LinearForm<>(named.negated(), direction.direction());
             }
         }
     }
@@ -480,21 +797,19 @@ public sealed interface AnotherLineTheRowsAllow {
          * nothing. So an input is named only where the conditions on the way to the rule answer the
          * same at it as at a row that reached — and where one of them could not be read, or the
          * arithmetic does not come out in whole steps, this is what is left.
-         */
-        record NoReachableDistinguisher() implements Unsettled {}
-
-        /**
-         * There is a line beside this one and this compiler holds no border against it.
          *
-         * <p>A limit of the strategy and not of the model. A rule that names a value divides the
-         * quantity at the value it names, and weighing one of its positions differently is as much
-         * a fault there as it is at a rule that orders the values — what is missing is a side to
-         * keep a row on, which is a thing to write rather than a thing that does not exist.
+         * <p>What the conditions could not show, a row composed on the far side of the line and run
+         * still may: one seen run to this rule there is an input that arrives, and the line is then
+         * one the rows leave standing ({@link ByDirection#shownArriving}). Until a run shows that,
+         * the line is neither.
+         *
+         * @param left where the rows leave the line, which a row composed for it is looked for
+         *             beside
          */
-        record NoStrategyForIt(Strategy which) implements Unsettled {
+        record NoReachableDistinguisher(Stands left) implements Unsettled {
 
-            public NoStrategyForIt {
-                Objects.requireNonNull(which, "a strategy that is missing is named");
+            public NoReachableDistinguisher {
+                Objects.requireNonNull(left, "a line the rows leave is left somewhere");
             }
         }
 
@@ -513,9 +828,8 @@ public sealed interface AnotherLineTheRowsAllow {
          * The values beside this line were not worked out, so there is no inequality to hold
          * against the lines beside it.
          *
-         * <p>Not {@link NoStrategyForIt}, which is a rule that names a value and orders nothing: this
-         * rule orders the values, and what stopped the reading is the exact arithmetic on the numbers
-         * beside its line. And not a row whose sum could not be held, on this line or on one beside
+         * <p>What stopped the reading is the exact arithmetic on the numbers beside the rule's line.
+         * Not a row whose sum could not be held, on this line or on one beside
          * it: that is a row read in part ({@link RowsIncomplete}), and is said in the words a
          * reading short of a number answers in.
          *
@@ -527,12 +841,6 @@ public sealed interface AnotherLineTheRowsAllow {
                 Objects.requireNonNull(why, "a line not worked out says why");
             }
         }
-    }
-
-    /** Which shape of border this compiler holds against no line beside it. */
-    enum Strategy {
-        /** A rule that names a value rather than ordering the values around it. */
-        A_RULE_THAT_NAMES_A_VALUE
     }
 
     /**
@@ -637,27 +945,60 @@ public sealed interface AnotherLineTheRowsAllow {
     }
 
     /**
-     * What the rows leave standing beside {@code boundary}.
+     * One reading of a line, as the lines beside it are asked of it.
+     *
+     * <p>A line a helper draws is read once per call, and what is a reading's own is the rows that
+     * got to that call and the way they took there. A step from one of those rows is held to that
+     * way, since it is the way the row arrived along.
+     *
+     * @param border    the line as this reading met it
+     * @param read      the rows that reached this reading as they read here, worked out only when
+     *                  they are asked for
+     * @param elsewhere the behavior's other lines, for preferring an input an author can see the
+     *                  difference at
+     * @param way       the conditions a row meets on its way to this reading
+     * @param refused   whether the declarations of the positions are shown to leave nothing at an
+     *                  input under that way. It decides which input is named for a line and never
+     *                  whether the line stands: an input is worked out by stepping along a line,
+     *                  which knows the arithmetic and nothing of what a position's type refuses
+     */
+    record Reading(Border border, Supplier<StandingAtAPoint.RowsRead> read,
+                   List<OrderedAffineBoundary> elsewhere, WayToTheBorder way,
+                   Predicate<Map<NumericTerm, Place>> refused) {
+
+        public Reading {
+            Objects.requireNonNull(border, "a reading is of a line");
+            Objects.requireNonNull(read, "and reads the rows that reached it");
+            elsewhere = List.copyOf(elsewhere);
+            Objects.requireNonNull(way, "which came along some way");
+            Objects.requireNonNull(refused, "under declarations that say what they refuse");
+        }
+    }
+
+    /**
+     * What the rows leave standing beside a line, over every reading of it.
      *
      * <p>Every line of the family, each answered on its own ({@link ByDirection}). A row that rules
      * one of them out need not rule out another, so a pass that stopped at the first one standing
      * would hand a reader one row to write and leave the next line for the run after it.
      *
-     * <p>{@code refused} says whether the declarations of the positions are shown to leave nothing
-     * at an input. It decides which input is named for the line and never whether the line stands:
-     * an input is worked out by stepping along a line, which knows the arithmetic and nothing of
-     * what a position's type refuses.
+     * <p><b>One answer for the line, from every reading's rows together.</b> A line beside this one
+     * is one line however many calls read it: a fault in a helper is one threshold at every call,
+     * so it stands only where some threshold keeps and refuses what the rows of every call have the
+     * model keep and refuse. Answered per reading and the answers put together, two readings each
+     * leaving it standing at places apart would leave it standing where no threshold keeps both;
+     * and a reading short of the rows its points need, or whose rows all fall on one side, would
+     * have its rows dropped from the question rather than counted in it. What stays a reading's own
+     * is where a step from its rows may go, which is that reading's way.
+     *
+     * @param readings      every reading of one line, in the order they were read
+     * @param everyPointMet whether a row is at every point the line owes one at, by any reading
      */
-    static AnotherLineTheRowsAllow of(Border border,
-                                      boolean everyPointMet,
-                                      java.util.function.Supplier<StandingAtAPoint.RowsRead> read,
-                                      List<OrderedAffineBoundary> elsewhere,
-                                      WayToTheBorder way,
-                                      Predicate<Map<NumericTerm, Place>> refused) {
-        // The two ways a border is not a line another line can be written beside, told apart. A
-        // rule that names a value orders nothing and has no side to keep a row on; a rule on an
-        // order with no numbers has no weights to write differently. Read off one answer, either
-        // would be published under the other's word.
+    static AnotherLineTheRowsAllow of(List<Reading> readings, boolean everyPointMet) {
+        if (readings.isEmpty()) {
+            throw new IllegalArgumentException("a line asked about is read somewhere");
+        }
+        Border border = readings.getFirst().border();
         // What the line is, before what its rule states about it. Whether there is a line one step
         // from this one is the line's own answer and is the same whichever way the rule reads it —
         // so a bound on one position comes back as a question that does not arise, and never as one
@@ -693,8 +1034,9 @@ public sealed interface AnotherLineTheRowsAllow {
         // And a side to refuse a row on. Where no value stands on the side the border refuses,
         // nothing a row is written at could rule a line of the family out, and that is a proof read
         // off the model rather than anything the rows or a search came to — so it is asked before
-        // either of them, and whether the points are met is beside the point.
-        if (noValueStandsOnTheFarSide(border)) {
+        // either of them, and whether the points are met is beside the point. At every reading,
+        // since a row refused at any of them is one a line of the family could keep.
+        if (readings.stream().allMatch(one -> noValueStandsOnTheFarSide(one.border()))) {
             return new NotApplicable(family, NotOwedReason.NO_VALUE_CAN_STAND_THERE);
         }
         // And the rows have met its points. Asked sooner, a border the rows have not caught up with
@@ -703,46 +1045,61 @@ public sealed interface AnotherLineTheRowsAllow {
         if (!everyPointMet) {
             return new NotDueYet(family);
         }
-        // And now the rule. There is a line one step from this one, and a rule that names a value
-        // orders nothing — so it has no side to keep a row on and nothing here holds it against its
-        // neighbours. A strategy nobody wrote, and not a question the model does not raise: the
-        // second would settle a verdict on something nobody established.
-        ExactAnswer<Optional<OrderedAffineBoundary>> drawn = OrderedAffineBoundary.of(border);
-        if (drawn instanceof ExactAnswer.Unheld<Optional<OrderedAffineBoundary>> unheld) {
+        // And now the rule: one that orders the values either side of a threshold, or one that
+        // singles a value out, each held against its neighbours by the fold of its own shape
+        // ({@link Stands.Fold}).
+        ExactAnswer<Optional<DrawnBoundary>> drawn = DrawnBoundary.of(border);
+        if (drawn instanceof ExactAnswer.Unheld<Optional<DrawnBoundary>> unheld) {
             return new CouldNotTell(new Unsettled.TheLineWasNotWorkedOut(unheld.why()));
         }
-        Optional<OrderedAffineBoundary> held =
-                ((ExactAnswer.Held<Optional<OrderedAffineBoundary>>) drawn).value();
-        if (held.isEmpty()) {
-            return new CouldNotTell(
-                    new Unsettled.NoStrategyForIt(Strategy.A_RULE_THAT_NAMES_A_VALUE));
-        }
-        OrderedAffineBoundary boundary = held.get();
+        // A line is drawn for either claim on a quantity that is a form and weighed by numbers, and
+        // the two questions above that answered otherwise have returned.
+        DrawnBoundary boundary = ((ExactAnswer.Held<Optional<DrawnBoundary>>) drawn).value()
+                .orElseThrow(() -> new IllegalStateException(
+                        "a weighable form draws a line whichever claim is on it: " + border));
         // The rows read here and not before. Reading them is a walk of its own over every row, and
         // every question above is about the line alone — so a border with no line beside it, which
         // is every bound on a position, pays nothing for being asked.
-        StandingAtAPoint.RowsRead rows = read.get();
-        // The rows on each side, for the steps an input is named by. A row whose sum on the model's
-        // own line could not be held is on neither: the fold below meets it again and says what it
-        // leaves undecided.
+        //
+        // Every reading's rows, which is what the line is asked of, and each reading's rows on each
+        // side apart, which is what a step naming an input is taken from. A row whose sum on the
+        // model's own line could not be held is on neither: the fold below meets it again and says
+        // what it leaves undecided.
+        StandingAtAPoint.RowsRead rows = null;
+        List<Sides> sides = new ArrayList<>();
+        List<OnTheModelsLine> sided = new ArrayList<>();
         List<Map<NumericTerm, Place>> satisfying = new ArrayList<>();
         List<Map<NumericTerm, Place>> refusing = new ArrayList<>();
         Set<ReadingGap> sideNotHeld = new LinkedHashSet<>();
-        for (Map<NumericTerm, Place> values : rows.each()) {
-            switch (boundary.satisfies(values)) {
-                case ExactAnswer.Held<Boolean> side ->
-                        (side.value() ? satisfying : refusing).add(values);
-                case ExactAnswer.Unheld<Boolean> unheld ->
-                        sideNotHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
+        for (Reading one : readings) {
+            StandingAtAPoint.RowsRead read = one.read().get();
+            rows = rows == null ? read : rows.and(read);
+            Sides here = new Sides(one, new ArrayList<>(), new ArrayList<>());
+            for (Map<NumericTerm, Place> values : read.each()) {
+                ExactAnswer<Boolean> keeps = boundary.satisfies(values);
+                sided.add(new OnTheModelsLine(values, keeps));
+                switch (keeps) {
+                    case ExactAnswer.Held<Boolean> side ->
+                            (side.value() ? here.satisfying() : here.refusing()).add(values);
+                    case ExactAnswer.Unheld<Boolean> unheld ->
+                            sideNotHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
+                }
             }
+            satisfying.addAll(here.satisfying());
+            refusing.addAll(here.refusing());
+            sides.add(here);
         }
         // No row the rule keeps, so there is nothing a threshold on any other line has to keep, and
         // the tightest one there is falls below every row instead of at one of them — which is a
         // place this cannot name without a step of the other line's own. Where the rows are all on
         // the kept side the tightest threshold is the furthest of them, so that side is answered
         // below like any other. And where a row this could not place may be the one the rule keeps,
-        // the rows were read in part, in the words a reading short of a number answers in.
-        if (satisfying.isEmpty()) {
+        // the rows were read in part, in the words a reading short of a number answers in. A rule
+        // refusing the value it names is the other way round: what puts a line beside it anywhere
+        // is the rows it refuses, which all stand at the value.
+        boolean namedByTheRefused = boundary instanceof SingledAffineBoundary singled
+                && !singled.holdsAtTheValue();
+        if ((namedByTheRefused ? refusing : satisfying).isEmpty()) {
             if (!sideNotHeld.isEmpty()) {
                 Set<ReadingGap> met = new LinkedHashSet<>(rows.why());
                 met.addAll(sideNotHeld);
@@ -753,11 +1110,17 @@ public sealed interface AnotherLineTheRowsAllow {
         }
         List<Direction> each = new ArrayList<>();
         for (QuantityKey other : family) {
-            each.add(assessed(boundary, other, rows, satisfying, refusing, elsewhere, way,
-                    refused));
+            each.add(assessed(boundary, other, rows, sided, sides));
         }
         return new ByDirection(each);
     }
+
+    /** One reading's rows on each side of the model's line, with the reading they reached. */
+    record Sides(Reading reading, List<Map<NumericTerm, Place>> satisfying,
+                         List<Map<NumericTerm, Place>> refusing) {}
+
+    /** A row's values, with whether the model's own line keeps it, or why that was not held. */
+    record OnTheModelsLine(Map<NumericTerm, Place> values, ExactAnswer<Boolean> keeps) {}
 
     /**
      * Whether no value is shown to stand at any point the border has on the side it refuses.
@@ -788,34 +1151,39 @@ public sealed interface AnotherLineTheRowsAllow {
     /**
      * What the rows come to about one line of the family.
      *
-     * <p>Every row folded into the range of thresholds the line could be drawn at ({@link
-     * Stands.Ends}), and the line ruled out where none is left. Every row the model keeps has to be
-     * kept, so the threshold is at least as far along as the furthest of them; every row it refuses
-     * has to be refused, so the threshold is short of the nearest of those. Where the first is not
-     * short of the second there is nowhere to put it, and the rows have told the two lines apart.
+     * <p>Every row folded into where the line could be drawn ({@link Stands.Fold}), and the line
+     * ruled out where nowhere is left. Beside a threshold, every row the model keeps has to be kept,
+     * so the line's own is at least as far along as the furthest of them; every row it refuses has
+     * to be refused, so it is short of the nearest of those. Where the first is not short of the
+     * second there is nowhere to put it, and the rows have told the two lines apart. Beside a value
+     * singled out, the rows the value is singled out for have to stand at one place, and the rest
+     * away from it ({@link Stands.AtOneValue}).
      *
      * <p>A row the exact arithmetic cannot hold — its sum on the model's own line, which says which
      * side it is on, or its sum along this one — is left out of the fold and remembered as a row
      * read in part. Ruled out without it, the line is ruled out — a row read leaves fewer lines
      * standing, never more — and otherwise that row is what leaves the line undecided, and never
      * what rules it out.
+     *
+     * <p>{@code rows} are every reading's, and the fold is theirs together. An input is named from
+     * one reading's rows along that reading's way ({@code sides}), and it rules out the line as all
+     * the rows leave it: the fold it is stepped against is that one. {@code sided} is the same rows
+     * with the side of the model's line each is on, read once for every line of the family.
      */
-    private static Direction assessed(OrderedAffineBoundary boundary, QuantityKey other,
+    private static Direction assessed(DrawnBoundary boundary, QuantityKey other,
                                       StandingAtAPoint.RowsRead rows,
-                                      List<Map<NumericTerm, Place>> satisfying,
-                                      List<Map<NumericTerm, Place>> refusing,
-                                      List<OrderedAffineBoundary> elsewhere,
-                                      WayToTheBorder way,
-                                      Predicate<Map<NumericTerm, Place>> refused) {
-        Stands.Ends ends = Stands.Ends.none(other, boundary.satisfiedOn());
+                                      List<OnTheModelsLine> sided, List<Sides> sides) {
+        Stands.Fold none = Stands.Fold.none(boundary, other);
         Set<ReadingGap> notHeld = new LinkedHashSet<>();
-        for (Map<NumericTerm, Place> values : rows.each()) {
-            switch (ends.with(boundary, values)) {
-                case ExactAnswer.Held<Stands.Ends> held -> ends = held.value();
-                case ExactAnswer.Unheld<Stands.Ends> unheld ->
+        List<Stands.Read> read = new ArrayList<>();
+        for (OnTheModelsLine row : sided) {
+            switch (none.read(row.keeps(), row.values())) {
+                case ExactAnswer.Held<Stands.Read> held -> read.add(held.value());
+                case ExactAnswer.Unheld<Stands.Read> unheld ->
                         notHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
             }
         }
+        Stands.Fold ends = none.withAll(read);
         if (!ends.apart()) {
             return new RuledOut(other);
         }
@@ -837,12 +1205,22 @@ public sealed interface AnotherLineTheRowsAllow {
         }
         // And an input that rules the line out and that the rules do send a row to. Where nothing
         // could show one, the question stands rather than being answered by whichever way it fell.
-        Distinguisher parting =
-                partingAt(boundary, ends, satisfying, refusing, elsewhere, way, refused);
-        if (parting == null) {
-            return new Undecided(other, new Unsettled.NoReachableDistinguisher());
+        // Asked of each reading in turn, from its rows and along its way, and the first that names
+        // an input the declarations leave room for is the one named.
+        Distinguisher parting = null;
+        for (Sides one : sides) {
+            Distinguisher here = partingAt(boundary, ends, one.satisfying(), one.refusing(),
+                    one.reading().elsewhere(), one.reading().way(), one.reading().refused());
+            if (here != null && here.named() != null) {
+                return new Stands(ends, here.named());
+            }
+            parting = parting == null ? here : parting;
         }
-        return new Stands(ends, parting.named());
+        if (parting == null) {
+            return new Undecided(other,
+                    new Unsettled.NoReachableDistinguisher(new Stands(ends, null)));
+        }
+        return new Stands(ends, null);
     }
 
     /**
@@ -877,7 +1255,7 @@ public sealed interface AnotherLineTheRowsAllow {
      * that arrives is one of them the answer is still one, with none named: the two lines part
      * company, and nothing here says where an author could write a row.
      */
-    private static Distinguisher partingAt(OrderedAffineBoundary boundary, Stands.Ends ends,
+    private static Distinguisher partingAt(DrawnBoundary boundary, Stands.Fold ends,
                                            List<Map<NumericTerm, Place>> satisfying,
                                            List<Map<NumericTerm, Place>> refusing,
                                            List<OrderedAffineBoundary> elsewhere,
@@ -947,15 +1325,16 @@ public sealed interface AnotherLineTheRowsAllow {
 
     /** Whatever {@code values} reaches by stepping along the model's own line, collected into
      *  {@code found}. */
-    private static void partings(OrderedAffineBoundary boundary, Stands.Ends ends,
+    private static void partings(DrawnBoundary boundary, Stands.Fold ends,
                                  Map<NumericTerm, Place> values,
                                  Map<NumericTerm, ExactRatio> along, ExactRatio moves,
                                  boolean kept, Reaches reaches,
                                  List<OrderedAffineBoundary> elsewhere,
                                  List<Parting> found) {
-        // The end of the range a row on this side has to reach. A kept row with no refused row to
-        // reach has nothing it could cross to rule the line out.
-        ExactRatio toward = kept ? ends.refused() : ends.kept();
+        // Where a row on this side has to be moved to: beside a threshold, the end of the range it
+        // has to reach, and a kept row with no refused row to reach has nothing it could cross to
+        // rule the line out; beside a value singled out, off the place or onto it.
+        ExactRatio toward = ends.toward(kept);
         if (toward == null) {
             return;
         }
@@ -1303,7 +1682,7 @@ public sealed interface AnotherLineTheRowsAllow {
 
     /** The row's positions moved {@code steps} steps along {@code step}, or null where one of them
      *  has no value where it lands. */
-    private static Map<NumericTerm, Place> movedBy(OrderedAffineBoundary boundary,
+    private static Map<NumericTerm, Place> movedBy(DrawnBoundary boundary,
                                                    Map<NumericTerm, Place> values,
                                                    Map<NumericTerm, ExactRatio> step,
                                                    ExactRatio steps) {

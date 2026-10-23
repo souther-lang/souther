@@ -18,7 +18,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * What looking for a row that tells this line from the line beside it came to, at each reading of
@@ -61,30 +63,36 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * What one reading's search for a row ruling out one line of the family came to, on one side of
      * the model's line, and the input it composed its row at.
      *
-     * <p>One entry per side searched: a row the model refuses within reach of the rows it keeps, and
-     * a row it keeps at or past the rows it refuses ({@link AnotherLineTheRowsAllow.Stands}). Each is
-     * kept whatever the other came to, so a line nothing was composed for says what was tried on
-     * both sides, and a line with a candidate on each hands both to the offering.
+     * <p>One entry per region searched, each side of the model's line naming its own: a row the
+     * model refuses within reach of the rows it keeps, and a row it keeps at or past the rows it
+     * refuses ({@link AnotherLineTheRowsAllow.Stands}) — and beside a value singled out, off the
+     * place below it and above it apart. Each is kept whatever the others came to, so a line nothing
+     * was composed for says what was tried in each, and a line with a candidate in several hands
+     * them all to the offering.
      *
      * @param reading    the line as that reading met it, which is what says at which positions
      *                   {@code composedAt} is written and where a row is read back
-     * @param direction  the line of the family the row is for
+     * @param line       the line of the family the row is for, where every reading's rows leave
+     *                   it together, which is what a row read back here is asked to rule out
      * @param composedAt the input this search composed a row at, in the positions the line is drawn
      *                   on at this reading, or null where nothing was composed. What the realizer
      *                   asked for, which is what the row was built from — and so the one thing
      *                   there is to name for a row nothing read back
      * @param searches   what each search made at this reading came to
+     * @param settling   a row these searches composed, saw run to the rule and, read back, found
+     *                   ruling the line out, or null where none of them was
      */
-    public record AtOneReading(Border reading, QuantityKey direction,
-                               Map<NumericTerm, Place> composedAt, SearchOutcomes searches) {
+    public record AtOneReading(Border reading, AnotherLineTheRowsAllow.Stands line,
+                               Map<NumericTerm, Place> composedAt, SearchOutcomes searches,
+                               Settling settling) {
 
         public AtOneReading {
             composedAt = composedAt == null ? null
                     : Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
-            if (reading == null || direction == null || searches == null) {
+            if (reading == null || line == null || searches == null) {
                 throw new IllegalArgumentException(
                         "a search is of a line against a line beside it, and says what it came to: "
-                                + reading + " " + direction);
+                                + reading + " " + line);
             }
             // Both ways round, so that neither can be read as the other's absence. An input with no
             // row built from it is a place nothing composed; a row with nowhere named is one a
@@ -93,11 +101,78 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
                 throw new IllegalArgumentException("a row composed here was composed somewhere and"
                         + " a search that composed none was composed nowhere: " + composedAt);
             }
+            if (settling != null && !seenThere(searches).contains(settling.seen())) {
+                throw new IllegalArgumentException("a row settling a line is one these searches"
+                        + " composed and saw run to the rule: " + settling.seen());
+            }
         }
 
-        /** The search of this reading that composed a row, where one did. */
+        /** The line of the family the row is for. */
+        public QuantityKey direction() {
+            return line.direction();
+        }
+
+        /**
+         * The row to offer for the line from this reading's searches, where one was composed: the
+         * one seen ruling it out where there is one, and otherwise the row the searches offer.
+         *
+         * <p>The searches of one place build a row for each way of standing in what the behavior
+         * depends on, and they arrive differently. Which of them rules the line out is known of a
+         * row that ran there, and offering another in its place hands a reader a row that settles
+         * nothing beside one that would have.
+         */
         Optional<ItemAssessment.Attempt.Built> composed() {
-            return searches.rowToOffer();
+            return settling != null ? Optional.of(settling.seen()) : searches.rowToOffer();
+        }
+
+        /** Every row these searches composed and saw run to the rule, in the order they were
+         *  made: the ones whose read-back says what they do to the line. */
+        List<ItemAssessment.Attempt.Certified> seenThere() {
+            return seenThere(searches);
+        }
+
+        /**
+         * The same, settled by the first row these searches saw run to the rule that {@code
+         * rulesOut} finds ruling the line out, at the input it answers; or the same where none
+         * does.
+         *
+         * <p>Every such row is asked and not the first. The rows of one search stand in what the
+         * behavior depends on each its own way, so they can run differently from one input, and the
+         * one that settles nothing being asked first is no reason to leave the next unasked.
+         */
+        AtOneReading settledBy(Function<ItemAssessment.Attempt.Certified,
+                Optional<Map<NumericTerm, Place>>> rulesOut) {
+            for (ItemAssessment.Attempt.Certified seen : seenThere()) {
+                Optional<Map<NumericTerm, Place>> at = rulesOut.apply(seen);
+                if (at.isPresent()) {
+                    return new AtOneReading(reading, line, composedAt, searches,
+                            new Settling(seen, at.get()));
+                }
+            }
+            return this;
+        }
+
+        private static List<ItemAssessment.Attempt.Certified> seenThere(SearchOutcomes searches) {
+            return searches.each().stream()
+                    .filter(each -> each instanceof ItemAssessment.Attempt.Certified certified
+                            && certified.ranThere())
+                    .map(ItemAssessment.Attempt.Certified.class::cast)
+                    .toList();
+        }
+    }
+
+    /**
+     * A row seen ruling a line out, and the input it was read back at.
+     *
+     * @param seen the search's answer, the row built and seen run to the rule
+     * @param at   the input its run read back, in the positions the line is drawn on: the input
+     *             that arrives and tells the two lines apart
+     */
+    public record Settling(ItemAssessment.Attempt.Certified seen, Map<NumericTerm, Place> at) {
+
+        public Settling {
+            Objects.requireNonNull(seen, "a row settles a line");
+            at = Collections.unmodifiableMap(new LinkedHashMap<>(at));
         }
     }
 
@@ -118,10 +193,10 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * <p>The realization and the outcomes together, because they are one answer. Taken apart, a
      * caller could hand over the place one asking reached beside the row another one composed.
      */
-    static AtOneReading of(Border reading, QuantityKey direction, Realization.Found composed,
-                           SearchOutcomes searches) {
+    static AtOneReading of(Border reading, AnotherLineTheRowsAllow.Stands line,
+                           Realization.Found composed, SearchOutcomes searches) {
         if (composed == null || searches.rowToOffer().isEmpty()) {
-            return new AtOneReading(reading, direction, null, searches);
+            return new AtOneReading(reading, line, null, searches, null);
         }
         Map<NumericTerm, Place> byTerm = new HashMap<>();
         composed.fixing().forEach((target, place) -> {
@@ -139,7 +214,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
         for (Map.Entry<NumericTerm, Place> each : NumericTerms.entriesInOrder(byTerm)) {
             at.put(each.getKey(), each.getValue());
         }
-        return new AtOneReading(reading, direction, at, searches);
+        return new AtOneReading(reading, line, at, searches, null);
     }
 
     /**
