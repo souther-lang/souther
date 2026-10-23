@@ -2,8 +2,16 @@ package souther.compiler.core;
 
 import souther.compiler.types.BindingId;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Which names a tree reads, asked of the tree that runs.
@@ -26,15 +34,84 @@ public final class WhatABodyReads {
         return found[0];
     }
 
-    /** Whether every read of {@code binding} inside {@code e} is {@code read}, the one node asked
-     *  about: there is no other place that binding's value goes. */
-    public static boolean onlyAt(Core e, BindingId binding, Core.Read read) {
-        if (e instanceof Core.Read here && here.binding().equals(binding)) {
-            return here == read;
+    /**
+     * The names {@code read} reads, and the names the values {@code e} binds them to read, on
+     * down: every name whose value goes into what {@code read} answers. Nothing where it is null.
+     */
+    public static Set<BindingId> namesReadBy(Core e, Core read) {
+        Set<BindingId> out = new HashSet<>();
+        if (read == null) {
+            return out;
         }
-        boolean[] only = {true};
-        Core.forEachChild(e, child -> only[0] = only[0] && onlyAt(child, binding, read));
-        return only[0];
+        Map<BindingId, Core> values = new HashMap<>();
+        boundIn(e, values);
+        Deque<Core> left = new ArrayDeque<>(List.of(read));
+        while (!left.isEmpty()) {
+            readsIn(left.pop(), name -> {
+                if (out.add(name) && values.containsKey(name)) {
+                    left.push(values.get(name));
+                }
+            });
+        }
+        return out;
+    }
+
+    private static void boundIn(Core e, Map<BindingId, Core> values) {
+        if (e instanceof Core.LetIn let && let.binder() != null
+                && let.binder().binding() != null) {
+            values.put(let.binder().binding(), let.value());
+        }
+        Core.forEachChild(e, child -> boundIn(child, values));
+    }
+
+    private static void readsIn(Core e, Consumer<BindingId> each) {
+        if (e instanceof Core.Read read) {
+            each.accept(read.binding());
+        }
+        Core.forEachChild(e, child -> readsIn(child, each));
+    }
+
+    /** Whether {@code read}, the one node, is {@code e} or anywhere inside it. */
+    public static boolean holds(Core e, Core.Read read) {
+        if (e == read) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || holds(child, read));
+        return found[0];
+    }
+
+    /** Whether {@code e} reads any of {@code bindings} anywhere inside it. */
+    public static boolean anyOf(Core e, Set<BindingId> bindings) {
+        if (e instanceof Core.Read read && bindings.contains(read.binding())) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || anyOf(child, bindings));
+        return found[0];
+    }
+
+    /**
+     * {@code from}, and every name {@code e} binds to a value that reads one of them: what a read
+     * of any of these reads of {@code from}, through the names inside {@code e} as well.
+     */
+    public static Set<BindingId> namesMadeOf(Core e, Set<BindingId> from) {
+        Set<BindingId> out = new HashSet<>(from);
+        madeOf(e, out);
+        return out;
+    }
+
+    private static void madeOf(Core e, Set<BindingId> out) {
+        if (e instanceof Core.LetIn let) {
+            madeOf(let.value(), out);
+            if (let.binder() != null && let.binder().binding() != null
+                    && anyOf(let.value(), out)) {
+                out.add(let.binder().binding());
+            }
+            madeOf(let.body(), out);
+            return;
+        }
+        Core.forEachChild(e, child -> madeOf(child, out));
     }
 
     /** Whether {@code e} reads any binding anywhere inside it: a value that reads none is made of

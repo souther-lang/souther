@@ -476,6 +476,12 @@ final class Pullback {
      * alone.
      */
     private SearchRegion onTheWay;
+    /**
+     * Whether this reading is asking where a walk's step answers, for the reading of what the walk
+     * hands it ({@link #handedToTheStep}): what it hands is read as handed here, since this is
+     * where that is being asked.
+     */
+    private boolean askingWhereAStepAnswers;
 
     /** What a value a walk or a recursion hands back to itself is supposed to be. */
     private sealed interface Supposed permits Carried, Descending, Reaching {}
@@ -980,39 +986,70 @@ final class Pullback {
      * than what has to hold, and never more.
      */
     static Proposition whereItsOperatorsAnswer(Core body, InputReads reads, InputReading read) {
-        Pullback reading = new Pullback(read, Optional.empty());
-        List<Derivation> answers = reading.inAComparisonsScope(true, () -> {
-            reading.operatorsIn(body, reads);
-            return whereEachOperatorAnswers(reading.operated);
+        return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
+                null);
+    }
+
+    /** The same, leaving out the comparison {@code apart} is read in, where it is not null, and
+     *  the values of the names it reads: that arithmetic is the relation it states. */
+    private Proposition whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
+                                                        Core.Read apart) {
+        Set<BindingId> ofTheRelation = apart == null ? Set.of()
+                : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
+        List<Derivation> answers = inAComparisonsScope(true, () -> {
+            operatorsIn(body, reads, apart, ofTheRelation);
+            return whereEachOperatorAnswers(operated);
         });
         Derivation answered = null;
         for (Derivation one : answers) {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
-        return answered == null ? null : reading.pulled(answered).proposition();
+        return answered == null ? null : pulled(answered).proposition();
     }
 
     /** Every operator {@code e} works out on every run that works {@code e} out, told to
-     *  {@link #operated} as the arithmetic composes it. */
-    private void operatorsIn(Core standing, InputReads reads) {
+     *  {@link #operated} as the arithmetic composes it — but those of the comparison
+     *  {@code apart} is read in, and of the values of {@code ofTheRelation}. */
+    private void operatorsIn(Core standing, InputReads reads, Core.Read apart,
+                             Set<BindingId> ofTheRelation) {
         Core e = Core.withoutStanding(standing);
         switch (e) {
+            case Core.Binary binary when apart != null && binary.op().compares()
+                    && WhatABodyReads.holds(binary, apart) -> { }
             case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
                     || binary.op() == BinOp.MUL -> AffineForms.outcome(e, reads, quantities());
             case Core.Neg _ -> AffineForms.outcome(e, reads, quantities());
             case Core.LetIn li -> {
-                operatorsIn(li.value(), reads);
-                operatorsIn(li.body(), quantities().inside(li, reads));
+                if (li.binder() == null || !ofTheRelation.contains(li.binder().binding())) {
+                    operatorsIn(li.value(), reads, apart, ofTheRelation);
+                }
+                operatorsIn(li.body(), quantities().inside(li, reads), apart, ofTheRelation);
             }
             default -> {
                 for (Evaluated.Step step : Evaluated.inOrder(e)) {
                     if (step instanceof Evaluated.Step.Always(Core part)) {
-                        operatorsIn(part, reads);
+                        operatorsIn(part, reads, apart, ofTheRelation);
                     }
                 }
             }
         }
+    }
+
+    /** The comparison inside {@code e} that {@code read} is read in, or null where it is in
+     *  none. */
+    private static Core comparisonHolding(Core e, Core.Read read) {
+        if (Core.withoutStanding(e) instanceof Core.Binary binary && binary.op().compares()
+                && WhatABodyReads.holds(binary, read)) {
+            return binary;
+        }
+        Core[] found = {null};
+        Core.forEachChild(e, child -> {
+            if (found[0] == null) {
+                found[0] = comparisonHolding(child, read);
+            }
+        });
+        return found[0];
     }
 
     /** The rules that take a comparison the source wrote, in the order they are tried. */
@@ -6464,11 +6501,31 @@ final class Pullback {
         return new LinearForm<>(added.seed(), coefs);
     }
 
-    /** What a walk hands its step as {@code name}: the end it kept of what it carried, or where the
-     *  element stands — or empty where it is neither. */
+    /**
+     * What a walk hands its step as {@code name}: the end it kept of what it carried, or where the
+     * element stands — or empty where it is neither.
+     *
+     * <p>Either is handed past the first element only by a run that got through the whole step at
+     * every element before, so where something says the step answers only somewhere
+     * ({@link #whereItsOperatorsAnswer}) — {@code Int.max + i} anywhere in it, before the reading
+     * or after it — the values read are not all handed, and it is neither. The comparison it is
+     * read in is left out: what its arithmetic does is the relation's form. What may stop the walk
+     * where nothing here says where is filed on the way to the reading as what may stop a run
+     * there ({@code PathReachability}), as anywhere else.
+     */
     private Optional<Quantity.HandedToTheStep> handedToTheStep(Core.Read name, InputReads at) {
         Optional<Quantity.KeptSoFar> kept = keptSoFar(name, at);
-        return kept.isPresent() ? Optional.of(kept.get()) : positionInTheWalk(name, at);
+        Optional<Quantity.HandedToTheStep> handed = kept.isPresent() ? Optional.of(kept.get())
+                : positionInTheWalk(name, at);
+        if (handed.isEmpty() || askingWhereAStepAnswers) {
+            return handed;
+        }
+        Pullback inside = new Pullback(read, Optional.empty());
+        inside.askingWhereAStepAnswers = true;
+        Core.Block step = at.usesOfTheClosureTaking(name.binding()).applications().getFirst()
+                .step();
+        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name) == null ? handed
+                : Optional.empty();
     }
 
     /**
@@ -6488,12 +6545,9 @@ final class Pullback {
      * enter it — under {@code i > 0} at none of a list of one — which are some of the positions and
      * not every one.
      *
-     * <p>And read there and nowhere else in the step ({@link WhatABodyReads#onlyAt}). Anything else
-     * the step works out of the position runs at every application, before the reading or after
-     * it, and may stop the walk there — {@code Int.max + i} at the second position, a division by
-     * one less than it — and every position past that one is then read by no row. What the
-     * reading's own arithmetic does to the walk is the relation's to work out, since it is the
-     * relation's form; anything else made of the position is not, so it is not read past.
+     * <p>And a position past the first is read only by a run that got through the whole step at
+     * every element before it, which is asked of what the walk hands the step whichever it is
+     * ({@link #handedToTheStep}).
      */
     private Optional<Quantity.HandedToTheStep> positionInTheWalk(Core.Read name,
                                                                  InputReads at) {
@@ -6505,7 +6559,6 @@ final class Pullback {
         if (!name.binding().equals(applied.position())
                 || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
                 || !Evaluated.runsWhenever(applied.step().body(), name)
-                || !WhatABodyReads.onlyAt(applied.step().body(), name.binding(), name)
                 || !(subjectOf(applied.container(), at) instanceof DecisionSubject.AnInput(
                         TermPath container))
                 || container.insideAContainer()

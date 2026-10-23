@@ -2141,19 +2141,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * shown at all; a rule reading the container for how many it holds is a rule on the count,
      * which the region holds. And the rules of the element's own type may leave it no value, so
      * past nought the run is taken only where a value of the element is shown to exist
-     * ({@link #aValueIsShownToExist}). Then a list of so many copies of one such value is a row
+     * ({@link #aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
+     * asked each of these. Then a list of so many copies of one such value is a row
      * at every count the region leaves. A set, or the keys of a map, holds a value once, and how
      * many different values the element has is not asked here, so past one nothing is shown of
      * those.
      */
-    private static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
-                                                       SearchRegion region) {
-        if (namedDownTo(container.element(), container.steps().size(), read, null)
-                != Named.NOT) {
-            return null;
-        }
+    static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
+                                               SearchRegion region) {
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
+        // What one entry holds: the element, and the key a map files it under.
+        List<TermPath> entry = type instanceof Type.MapOf
+                ? List.of(container.element(), container.key()) : List.of(container.element());
+        for (TermPath part : entry) {
+            if (namedDownTo(part, container.steps().size(), read, null) != Named.NOT) {
+                return null;
+            }
+        }
         NumericTerm.TakenOf count = type == null ? null
                 : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
                         container, type, rules.inners(), rules.symbols());
@@ -2162,7 +2167,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         int most;
-        if (!aValueIsShownToExist(read.domain().typeAt(container.element(), rules), read)) {
+        if (!entry.stream().allMatch(part ->
+                aValueIsShownToExist(read.domain().typeAt(part, rules), read))) {
             most = 0;
         } else if (!read.domain().holdsAnElementOverAgain(container, rules)) {
             most = 1;

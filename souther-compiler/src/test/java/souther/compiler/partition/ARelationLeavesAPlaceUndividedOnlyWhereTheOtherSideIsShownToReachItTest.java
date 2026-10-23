@@ -634,6 +634,48 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * Anything else the step works out stops the walk where it stops, made of the position or
+     * not: of the element, of the length, of nothing. A position past the first is compared only
+     * where the step got through at every position before, so where something says the step
+     * answers only somewhere, the length is not parted. Where the way to the comparison shows no
+     * row of a list holding anything gets there — past {@code Int.max} plus its length — that is
+     * what is said of it.
+     */
+    @Test
+    void anythingElseTheStepWorksOutLeavesTheLengthNotShownWhereItMayStop() {
+        String inputs = "xs: List<Int>";
+        for (String worked : List.of("9223372036854775807 + x",
+                "9223372036854775807 + List.length(xs)", "9223372036854775807 + 1")) {
+            String body = ("List.mapIndexed((i, x) -> { let total = %s\n"
+                    + "    if i == List.length(xs) - 1 then total else 0 }, xs)").formatted(worked);
+            Map<String, String> left = left(inputs, UNUSED, "List<Int>", body, "5:10");
+            assertTrue(left.containsKey("List.length(xs)"), () -> worked + ": " + left);
+        }
+        String ofAnElement = "List.mapIndexed((i, x) -> { let total = 9223372036854775807 + x\n"
+                + "    if i == List.length(xs) - 1 then total else 0 }, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                ofAnElement, "5:10"));
+        String after = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + (9223372036854775807 + x), xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                after, atThe("==", UNUSED, inputs, after)));
+    }
+
+    /**
+     * Where nothing says where it stops — a product of two values nothing bounds — the length is
+     * read, and what may stop the walk is on the way to the comparison as what may stop a run
+     * there, which is where it is for a comparison anywhere else.
+     */
+    @Test
+    void aStepNothingSaysWhereItStopsIsReadAndMayStopOnTheWay() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + x * x, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
      * And after it: the second position compares and then stops the walk, so no position past it
      * is compared.
      */

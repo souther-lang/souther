@@ -87,7 +87,8 @@ final class ClosureEntries {
                         .add(new ClosureUses.Application(called.operation(), called.lineage(),
                                 handed.container(), handed.applied(), e,
                                 handed.position() == null ? null
-                                        : handed.position().binding(), handed.step()));
+                                        : handed.position().binding(), handed.step(),
+                                held(handed)));
                 Core.forEachChild(e, child -> visit(child,
                         Core.withoutStanding(child) == Core.withoutStanding(handed.closure())
                                 ? Standing.THE_CLOSURE_OF_AN_OPERATION : Standing.ELSEWHERE));
@@ -128,6 +129,18 @@ final class ClosureEntries {
      * what it is handed.
      */
     private record Called(ValueName operation, OccurrenceLineage lineage, List<Core> args) {}
+
+    /** The bindings the closure is handed what the container holds on: the element, and the key
+     *  where the operation hands one. */
+    private static Set<BindingId> held(Combinators.Handed handed) {
+        Set<BindingId> out = new HashSet<>();
+        for (Core.Binder each : new Core.Binder[] {handed.element(), handed.key()}) {
+            if (each != null && each.binding() != null) {
+                out.add(each.binding());
+            }
+        }
+        return out;
+    }
 
     /** The call {@code e} is, or null where it is no call of something a name reached. */
     private static Called calledAt(Core e) {
