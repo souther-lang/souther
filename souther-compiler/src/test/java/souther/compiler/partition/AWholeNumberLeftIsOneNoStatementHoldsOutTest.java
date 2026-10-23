@@ -10,6 +10,8 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -24,6 +26,15 @@ class AWholeNumberLeftIsOneNoStatementHoldsOutTest {
     private static WholeNumbersLeft meeting(WholeNumbersLeft left, long weight, String constant,
                                             Rel rel) {
         return left.meeting(ExactRatio.of(weight), ExactRatio.of(new BigDecimal(constant)), rel);
+    }
+
+    /** Between the ends and not held out. */
+    @Test
+    void aValueIsLeftBetweenTheEndsAndNotHeldOut() {
+        WholeNumbersLeft left = meeting(meeting(meeting(WholeNumbersLeft.EVERY, 1, "3", Rel.GE),
+                1, "-2", Rel.LE), 1, "-1", Rel.NE);
+        assertEquals(List.of(false, true, false, true, false), Stream.of(-4, -3, 1, 2, 3)
+                .map(at -> left.leaves(BigInteger.valueOf(at))).toList());
     }
 
     @Test
