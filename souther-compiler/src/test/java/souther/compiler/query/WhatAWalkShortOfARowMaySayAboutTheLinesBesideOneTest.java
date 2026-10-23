@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -122,16 +123,12 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     }
 
     /**
-     * A shortfall that is not a reading: the rows were read in full and a walk that went without
-     * nothing still could not put the question.
-     *
-     * <p>Said as a question that could not be settled rather than as one that does not arise. A rule
-     * that names a value divides the quantity at the value it names, so there is a line one step
-     * from it and weighing a position differently is as much a fault there — what is missing is a
-     * side to keep a row on, which is a thing to write.
+     * A rule that names a value divides the quantity at the value it names, so there is a line one
+     * step from it and weighing a position differently is as much a fault there. The question is
+     * put of it as of a rule ordering the values, and the rows answer each line of the family.
      */
     @Test
-    void aRuleThatNamesAValueIsAQuestionNobodyHereCanPut() {
+    void aRuleThatNamesAValueIsHeldAgainstEachLineBesideIt() {
         Border names = TheLinesBesideABorder.aBorderThatNamesAValue();
 
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(names, MET,
@@ -139,11 +136,10 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
                 List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
-        AnotherLineTheRowsAllow.CouldNotTell open =
-                assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
-                        () -> "there is a line one step from it: " + said);
-        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.NoStrategyForIt.class, open.why(),
-                "and what is missing is a strategy rather than the question");
+        AnotherLineTheRowsAllow.ByDirection lines =
+                assertInstanceOf(AnotherLineTheRowsAllow.ByDirection.class, said,
+                        () -> "there is a line one step from it, and the rows answer it: " + said);
+        assertFalse(lines.family().isEmpty(), said::toString);
     }
 
     /** A line on one position, which has no line one step from it however the rows fall. */

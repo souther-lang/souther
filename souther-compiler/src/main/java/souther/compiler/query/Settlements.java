@@ -15,7 +15,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
-import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.observe.AnswerObservation;
@@ -621,7 +621,7 @@ public record Settlements(List<ObligationIdentity> requested,
                             }
                             besides.computeIfAbsent(item, _ -> new ArrayList<>())
                                     .add(new ALineBesideOne(subject.at(one.reading()),
-                                            OrderedAffineBoundary.of(one.reading())
+                                            DrawnBoundary.of(one.reading())
                                                     .orFail("a line the rows allow beside one"
                                                             + " whose values were not worked out")
                                                     .orElse(null), standing, one));
@@ -1280,12 +1280,12 @@ public record Settlements(List<ObligationIdentity> requested,
      * of the behavior and reading the inequality folds the quantity's own step, once per row for an
      * answer that was the same every time. And the line put to rows, for the same reason.
      */
-    private record ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+    private record ALineBesideOne(MeasuredInput.BorderReading reading, DrawnBoundary drawn,
                                   AnotherLineTheRowsAllow.Stands beside,
                                   ARowTellingTheLinesApart.AtOneReading toldApart,
                                   StandingAtAPoint.AtALine toRows) {
 
-        ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+        ALineBesideOne(MeasuredInput.BorderReading reading, DrawnBoundary drawn,
                        AnotherLineTheRowsAllow.Stands beside,
                        ARowTellingTheLinesApart.AtOneReading toldApart) {
             this(reading, drawn, beside, toldApart, StandingAtAPoint.putToRows(reading,
@@ -1294,12 +1294,12 @@ public record Settlements(List<ObligationIdentity> requested,
 
         ALineBesideOne {
             if (drawn == null) {
-                // A rule that names a value orders nothing, so no line beside it is ever named.
-                // Refused where the pair is put together rather than where a row is weighed against
-                // it: what it says is that the measurement and this account disagree about the
-                // line, which is true of the pair whether or not a row is ever offered.
-                throw new IllegalStateException("a line the rows allow beside a rule that orders"
-                        + " nothing: " + reading.border().obligation());
+                // A line beside one is named only where its rule reads as a line. Refused where the
+                // pair is put together rather than where a row is weighed against it: what it says
+                // is that the measurement and this account disagree about the line, which is true
+                // of the pair whether or not a row is ever offered.
+                throw new IllegalStateException("a line the rows allow beside a rule that reads as"
+                        + " no line: " + reading.border().obligation());
             }
         }
     }

@@ -1087,13 +1087,20 @@ final class Coverages {
             // not yet evidence — it may come back unread, or arrive somewhere that settles nothing
             // — so it is no reason to leave the other side unlooked at; which of the two the block
             // keeps is the offering's to say.
-            if (refused != null) {
-                out.add(search.tellingApart(refused, label, line.direction(),
+            //
+            // Beside a value singled out, the side the value is singled out for is the value
+            // itself, which has no run beside the line: a row there is a row at the line.
+            Criterion refusedHere = refused == null && line.atOneValue()
+                    ? atTheLine(border.border(), false) : refused;
+            Criterion keptHere = kept == null && line.atOneValue()
+                    ? atTheLine(border.border(), true) : kept;
+            if (refusedHere != null) {
+                out.add(search.tellingApart(refusedHere, label, line.direction(),
                         line::onTheRefusedSide));
             }
             Optional<UnaryOperator<SearchRegion>> keptSide = line.onTheKeptSide();
-            if (kept != null && keptSide.isPresent()) {
-                out.add(search.tellingApart(kept, label, line.direction(), keptSide.get()));
+            if (keptHere != null && keptSide.isPresent()) {
+                out.add(search.tellingApart(keptHere, label, line.direction(), keptSide.get()));
             }
         }
         return new ARowTellingTheLinesApart(out);
@@ -1121,6 +1128,18 @@ final class Coverages {
             if (border.demand(point) instanceof Demand.Owed owed
                     && owed.criterion() instanceof Criterion.Within in) {
                 return new Criterion.Within(in.band(), null, in.away());
+            }
+        }
+        return null;
+    }
+
+    /** What a row at {@code border}'s line on the side {@code kept} says is owed, or null where no
+     *  point at the line on that side is owed one. */
+    private static Criterion atTheLine(Border border, boolean kept) {
+        for (DomainPoint point : border.answers().keySet()) {
+            if (point.againstTheLine() && border.roleOf(point).inside() == kept
+                    && border.demand(point) instanceof Demand.Owed owed) {
+                return owed.criterion();
             }
         }
         return null;
