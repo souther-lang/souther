@@ -2030,8 +2030,12 @@ final class CardinalityComposer {
                                  TermPath container, TermPath at, List<Asked> asked, boolean once,
                                  boolean oneEach, Set<CompositionBudget> refused) {
             boolean alike = asked.stream().noneMatch(each -> each.readsTheValueAt(container, at));
+            boolean byItsElements = readOffItsElements(asked, container, at);
             UnderEachValue out = new UnderEachValue(values, listedUnder, alike);
             Groups<HeldUnder> every = Groups.none();
+            // What each listed element comes to alone, by the value it is listed under: read once
+            // and put together for every group holding it, where that is what a group comes to.
+            Map<Integer, List<AStatementAtARow.HowManyAtARow[]>> alone = new HashMap<>();
             int[] left = {CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.maximum()};
             listing:
             for (int size = 1; size <= (oneEach ? 1 : MOST_ELEMENTS); size++) {
@@ -2039,6 +2043,9 @@ final class CardinalityComposer {
                 for (int value = 0; value < (alike ? Math.min(values, 1) : values); value++) {
                     List<ObservedValue> of = out.listing(value);
                     int under = value;
+                    List<AStatementAtARow.HowManyAtARow[]> each = !byItsElements ? null
+                            : alone.computeIfAbsent(value, v -> eachAlone(of, holding, container,
+                                    asked));
                     boolean walked = eachChoice(of.size(), size, !once, picked -> {
                         if (left[0]-- == 0) {
                             return false;
@@ -2049,8 +2056,12 @@ final class CardinalityComposer {
                             places.add(one);
                             elements.add(of.get(one));
                         }
-                        add(every, new HeldUnder(under, places), holding.apply(elements),
-                                container, asked);
+                        HeldUnder group = new HeldUnder(under, places);
+                        if (byItsElements) {
+                            addOfItsElements(every, group, each, asked);
+                        } else {
+                            add(every, group, holding.apply(elements), container, asked);
+                        }
                         return true;
                     });
                     // A choice was turned away for the figure, which is the one thing that does.
@@ -2107,6 +2118,85 @@ final class CardinalityComposer {
                     return;
                 }
                 counted[i] = read.meet();
+            }
+            into.add(group, group.picked().size(), counted);
+        }
+
+        /**
+         * Whether what a group of the elements of {@code container} under one value at {@code at}
+         * comes to of every one of {@code asked} is what its elements come to alone, put together:
+         * what each element answers turns on the element alone, and every count is of the
+         * elements meeting a statement or of the different values at {@code at} they hold — one
+         * value for the whole group, held where some element of it meets the statement.
+         */
+        private static boolean readOffItsElements(List<Asked> asked, TermPath container,
+                                                  TermPath at) {
+            for (Asked each : asked) {
+                if (each.turnsOnAmong(container, at) != AStatementAtARow.TurnsOn.THE_ELEMENT) {
+                    return false;
+                }
+                if (each instanceof Asked.SoManyMeeting(var _, var _,
+                        Optional<TermPath> differentAt)
+                        && differentAt.isPresent() && !differentAt.get().equals(at)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** What each of {@code of} comes to of every one of {@code asked}, read at a row holding
+         *  it alone — null where the walk could not reach the container. */
+        private static List<AStatementAtARow.HowManyAtARow[]> eachAlone(
+                List<ObservedValue> of,
+                Function<List<ObservedValue>, BorderQuantity.Observation> holding,
+                TermPath container, List<Asked> asked) {
+            List<AStatementAtARow.HowManyAtARow[]> out = new ArrayList<>();
+            for (ObservedValue element : of) {
+                BorderQuantity.Observation row = holding.apply(List.of(element));
+                AStatementAtARow.HowManyAtARow[] read =
+                        new AStatementAtARow.HowManyAtARow[asked.size()];
+                for (int i = 0; i < asked.size(); i++) {
+                    read[i] = asked.get(i).among(container, row);
+                }
+                out.add(read);
+            }
+            return out;
+        }
+
+        /**
+         * {@code group} put with those coming to what it does of every count, as its elements
+         * come to it alone ({@link #readOffItsElements}): as many as meet a statement, or one value
+         * where some element meets it and none where none does — or in none where one could not
+         * be read.
+         */
+        private static void addOfItsElements(Groups<HeldUnder> into, HeldUnder group,
+                                             List<AStatementAtARow.HowManyAtARow[]> alone,
+                                             List<Asked> asked) {
+            int[] counted = new int[asked.size()];
+            for (int i = 0; i < asked.size(); i++) {
+                boolean ofTheValue = asked.get(i) instanceof Asked.SoManyMeeting(var _, var _,
+                        Optional<TermPath> differentAt) && differentAt.isPresent();
+                int meet = 0;
+                int unread = 0;
+                Set<ReadingGap> why = new LinkedHashSet<>();
+                for (int one : group.picked()) {
+                    AStatementAtARow.HowManyAtARow read = alone.get(one)[i];
+                    if (read == null) {
+                        into.unread().add(ReadingGap.COULD_NOT_WALK);
+                        return;
+                    }
+                    meet = ofTheValue ? Math.max(meet, read.meet()) : meet + read.meet();
+                    unread = ofTheValue ? Math.max(unread, read.unread()) : unread + read.unread();
+                    why.addAll(read.why());
+                }
+                if (ofTheValue && meet > 0) {
+                    unread = 0;
+                }
+                if (unread > 0) {
+                    into.unread().addAll(why);
+                    return;
+                }
+                counted[i] = meet;
             }
             into.add(group, group.picked().size(), counted);
         }
