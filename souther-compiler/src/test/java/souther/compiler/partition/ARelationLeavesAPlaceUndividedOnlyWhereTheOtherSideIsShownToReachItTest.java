@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -17,6 +18,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -646,6 +648,55 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             assertEquals(expected, left.undivided().contains(FilingCoordinate.of(length))
                     || left.settled().containsKey(length), statement.toString());
         });
+    }
+
+    /**
+     * A figure a search stopped at is said at the places of the relation it searched for, and at
+     * no other. Of two relations read of one comparison, about two places, the count's search for
+     * a witness stops at a figure and the other relation asks for none: the length the count is
+     * read against is shown nothing of at that figure, and the other place is told nothing of it.
+     */
+    @Test
+    void aFigureASearchStoppedAtIsSaidOnlyAtThePlacesOfTheRelationItSearchedFor() {
+        Compilation compilation = reported(FORECAST);
+        InputReading read = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("m")
+                .reading(RuleReadings.of(compilation, "w1"));
+        NumericTerm.TakenOf deals = lengthOf(TermPath.of("deals"), read);
+        NumericTerm.TakenOf rates = lengthOf(TermPath.of("rates").then("rates"), read);
+        Quantity.HowManyMeet count = new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(TermPath.of("deals")),
+                new Proposition.SameValue(new DecisionSubject.AnInput(
+                        TermPath.of("deals").element().then("currency")),
+                        new DecisionSubject.AnInput(TermPath.of("rates").then("base")), true));
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        CountWitnesses.Lookup stoppedShort =
+                _ -> new CountWitnesses.Sought(Optional.empty(), Set.of(stopped));
+        UndividedByARelation counted = UndividedByARelation.ofAForm(
+                new LinearForm<>(ExactRatio.ZERO, Map.of(count, ExactRatio.ONE,
+                        new DecisionAtom.OfTheInput(deals), ExactRatio.ONE.negated())),
+                Rel.EQ);
+        UndividedByARelation sized = UndividedByARelation.ofAForm(
+                new LinearForm<>(ExactRatio.of(-3), Map.of(new DecisionAtom.OfTheInput(rates),
+                        ExactRatio.ONE)), Rel.GE);
+        ComparisonAssessment.AgainstAnotherValue both =
+                new ComparisonAssessment.AgainstAnotherValue(
+                        List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
+                        List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of())
+                        .whereRowsArrive(read, List.of(), stoppedShort);
+        Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
+        both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
+        assertEquals(new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped)),
+                left.get(FilingCoordinate.of(deals)));
+        assertFalse(left.get(FilingCoordinate.of(rates))
+                instanceof BlockReason.RelationNotShownWhereTheSearchStopped, left.toString());
+    }
+
+    /** How many {@code container} holds, as a term read off the position. */
+    private static NumericTerm.TakenOf lengthOf(TermPath container, InputReading read) {
+        Type list = read.domain().typeAt(container, read.rules());
+        return NumericTerm.TakenOf.howManyHeldAt(
+                NumericMeasures.takenOf(list, read.rules().inners()), container, list,
+                read.rules().inners(), read.rules().symbols());
     }
 
     /**

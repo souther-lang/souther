@@ -285,20 +285,24 @@ sealed interface ComparisonAssessment {
      * @param settling  the lines on single positions that part the values settling it from the
      *                  rest, each no line of the author's
      * @param beside    what those lines are drawn beside, or empty where none is drawn
-     * @param stoppedAt the figures a search for what would have shown more of {@code relations}
-     *                  stopped at
+     * @param stoppedAt for each of {@code filedAt} some relation about it was stopped at a figure
+     *                  searching for what would have shown more, those figures: a place is told
+     *                  only what was stopped for it
      */
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
                                Set<FilingCoordinate> undivided, List<AtAPosition> settling,
-                               Optional<DrawnBeside> beside, Set<Figure> stoppedAt)
+                               Optional<DrawnBeside> beside,
+                               Map<FilingCoordinate, Set<Figure>> stoppedAt)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
             filedAt = List.copyOf(filedAt);
             relations = List.copyOf(relations);
             undivided = Set.copyOf(undivided);
-            stoppedAt = Set.copyOf(stoppedAt);
+            Map<FilingCoordinate, Set<Figure>> held = new LinkedHashMap<>();
+            stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
+            stoppedAt = Collections.unmodifiableMap(held);
             settling = List.copyOf(settling);
             Objects.requireNonNull(beside, "drawn beside something, or nothing");
             if (beside.isEmpty() && !settling.isEmpty()) {
@@ -312,7 +316,7 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Set.of()).whereRowsArrive(reading, List.of(), witnesses);
+                    beside, Map.of()).whereRowsArrive(reading, List.of(), witnesses);
         }
 
         /** The same, with what it leaves undivided over the rows that arrive along {@code ways}. */
@@ -341,8 +345,18 @@ sealed interface ComparisonAssessment {
             }
             List<AtAPosition> lines = beside.map(drawn -> settlingLines(drawn,
                     settledByEvery(about, leaves), reading, witnesses)).orElse(List.of());
-            Set<Figure> stopped = new LinkedHashSet<>();
-            leaves.forEach(each -> stopped.addAll(each.stoppedAt()));
+            // What a search for more stopped at, at the places of the relation it was for, and at
+            // no other: a place every relation about it showed nothing of for a reason of its own
+            // is not one a run allowed more would show anything of.
+            Map<FilingCoordinate, Set<Figure>> stopped = new LinkedHashMap<>();
+            for (FilingCoordinate at : filedAt) {
+                for (int i = 0; i < relations.size(); i++) {
+                    if (about.get(i).contains(at) && !leaves.get(i).stoppedAt().isEmpty()) {
+                        stopped.computeIfAbsent(at, _ -> new LinkedHashSet<>())
+                                .addAll(leaves.get(i).stoppedAt());
+                    }
+                }
+            }
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped);
         }
 
@@ -1623,9 +1637,15 @@ sealed interface ComparisonAssessment {
                     yield sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
                 }
                 Set<FilingCoordinate> divided = across.dividedBySettling();
+                // What the relation's search stopped at is for the places it is about.
+                Map<FilingCoordinate, Set<Figure>> stopped = new LinkedHashMap<>();
+                if (!across.left().stoppedAt().isEmpty()) {
+                    across.relation().places().forEach(at ->
+                            stopped.put(at, across.left().stoppedAt()));
+                }
                 yield relatingAt(filedAt().stream()
                         .filter(place -> !divided.contains(place)).toList(), across.undivided(),
-                        across.left().stoppedAt());
+                        stopped);
             }
             // Another value is no position, and what the rule says is the same thing it says
             // against one: where the value here stands against it. A place a line parts the
@@ -1718,18 +1738,23 @@ sealed interface ComparisonAssessment {
      * It is not that every value the type holds has a row on each side the run can hold, and a
      * reader wanting that asks it of the rows.
      *
-     * <p>Where a search for what would have shown more stopped at some of {@code stoppedAt}, a
-     * place nothing is shown of says so, with the figures.
+     * <p>Where a search for what would have shown more of a place stopped at some figures
+     * ({@code stoppedAt}, by place), the place says so, with those figures; a place no search
+     * stopped for is not shown as ever.
      */
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided,
-                                   Set<Figure> stoppedAt) {
-        BlockReason.RuleWithoutLineReason notShown = stoppedAt.isEmpty()
-                ? new BlockReason.RelationNotShownToReachEveryValue()
+                                   Map<FilingCoordinate, Set<Figure>> stoppedAt) {
+        return places.stream().distinct().map(at -> new LeftAt(at, undivided.contains(at)
+                ? new BlockReason.ComparisonRelatingTwoValues()
+                : notShownAt(stoppedAt.getOrDefault(at, Set.of())))).toList();
+    }
+
+    /** Nothing shown of a place, and the figures a search for more of it stopped at. */
+    private static BlockReason.RuleWithoutLineReason notShownAt(Set<Figure> stoppedAt) {
+        return stoppedAt.isEmpty() ? new BlockReason.RelationNotShownToReachEveryValue()
                 : new BlockReason.RelationNotShownWhereTheSearchStopped(
                         Figure.inOrder(stoppedAt));
-        return places.stream().distinct().map(at -> new LeftAt(at, undivided.contains(at)
-                ? new BlockReason.ComparisonRelatingTwoValues() : notShown)).toList();
     }
 
     /** {@code why} at every one of {@code places}, each once, in the order they were given. */
