@@ -1113,6 +1113,7 @@ final class Pullback {
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAWalkKeepingAnEnd(stated, at, reads),
+                () -> ofAWalkChoosingAnElement(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
                 () -> throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get()),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
@@ -9265,6 +9266,146 @@ final class Pullback {
         }
         return new Derivation.AComparisonOfAChoice(
                 comparedCase(left, right, stated.claim().statedRelation(), at));
+    }
+
+    /**
+     * A comparison one side of which is a field of what a walk over a container written out ends
+     * with, where the step answers the element when a condition of it holds and what it carried
+     * when it does not.
+     *
+     * <p>The walk ends with the last element the condition holds of, or with the seed where it
+     * holds of none. So the comparison holds exactly where, for some element, the condition holds
+     * of it and of no element after it and the field of that element stands as the comparison
+     * says — or the condition holds of none and the field of the seed does. Each condition is read
+     * on the application that hands it its element, once, and every case is built of those.
+     * Nothing is assumed of the order the elements are written in.
+     */
+    private Derivation ofAWalkChoosingAnElement(StatedComparison stated, Denotation at,
+                                                InputReads reads) {
+        boolean onTheLeft = true;
+        ChosenField chosen = chosenField(stated.left(), reads);
+        if (chosen == null) {
+            onTheLeft = false;
+            chosen = chosenField(stated.right(), reads);
+        }
+        if (chosen == null) {
+            return null;
+        }
+        SeededWalk walk = chosen.walk();
+        Denotation call = chosen.call();
+        Denotation container = call.at().standing(walk.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
+        if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+            return null;
+        }
+        WhyUnread past = splitInto(call.at(), occurrences.size() + 1L);
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, false));
+        }
+        List<Derivation> conditions = new ArrayList<>();
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            InputReads handing = call.at().handingTheElement(walk.step(), walk.container(),
+                    occurrence.value(), read.rules().newtypes());
+            if (handing == null) {
+                return null;
+            }
+            conditions.add(truth(chosen.condition(), handing));
+        }
+        List<Derivation> picks = new ArrayList<>();
+        List<Derivation> passes = new ArrayList<>();
+        for (Derivation condition : conditions) {
+            Derivation denied = new Derivation.UnderADenial(condition, true);
+            picks.add(chosen.pickedWhereItHolds() ? condition : denied);
+            passes.add(chosen.pickedWhereItHolds() ? denied : condition);
+        }
+        Rel states = stated.claim().statedRelation();
+        Denotation other = new Denotation(onTheLeft ? stated.right() : stated.left(), reads);
+        // The walk after k elements ends with the k-th where its condition picks it and with what
+        // it ended with after k - 1 where it does not, so the comparison of the end after k is
+        // built of the one after k - 1: one case and one carrying on for each element.
+        Derivation reached = comparedField(walk.seed(), call.at(), chosen, other, onTheLeft,
+                states, at);
+        for (int i = 0; i < occurrences.size() && reached != null; i++) {
+            Denotation value = occurrences.get(i).value();
+            Derivation compared = comparedField(value.value(), value.at(), chosen, other,
+                    onTheLeft, states, at);
+            reached = joined(ConditionJoin.EITHER,
+                    joined(ConditionJoin.BOTH, picks.get(i), compared),
+                    joined(ConditionJoin.BOTH, passes.get(i), reached));
+        }
+        return reached == null ? null : partOf(at, reached);
+    }
+
+    /** The comparison of the field {@code chosen} takes of {@code row}, standing at {@code where},
+     *  with {@code other}. */
+    private Derivation comparedField(Core row, InputReads where, ChosenField chosen,
+                                     Denotation other, boolean onTheLeft, Rel states,
+                                     Denotation at) {
+        Denotation field = new Denotation(chosen.fieldOf(row), where);
+        return onTheLeft ? comparedCase(field, other, states, at)
+                : comparedCase(other, field, states, at);
+    }
+
+    /**
+     * A field of what a walk from a seed ends with, and how the walk's step chooses.
+     *
+     * @param walk    the walk
+     * @param call    the call of it, where it stands
+     * @param fields  the fields taken of what it ends with, outermost first
+     * @param condition the condition the step chooses by
+     * @param pickedWhereItHolds whether the element is the answer where the condition holds, and
+     *                what was carried where it does not — or the other way round
+     */
+    private record ChosenField(SeededWalk walk, Denotation call, List<Core.FieldAccess> fields,
+                               Core condition, boolean pickedWhereItHolds) {
+
+        /** The same fields taken of {@code row}. */
+        Core fieldOf(Core row) {
+            Core taken = row;
+            for (Core.FieldAccess field : fields.reversed()) {
+                taken = new Core.FieldAccess(taken, field.field(), field.type(), field.pos());
+            }
+            return taken;
+        }
+    }
+
+    /**
+     * The walk {@code side} takes a field of, where the walk's step answers the element or what
+     * was carried by a condition that reads nothing of what was carried — or null where it is
+     * anything else.
+     */
+    private ChosenField chosenField(Core side, InputReads reads) {
+        List<Core.FieldAccess> fields = new ArrayList<>();
+        Core node = Core.withoutStanding(side);
+        while (node instanceof Core.FieldAccess access) {
+            fields.add(access);
+            node = Core.withoutStanding(access.target());
+        }
+        if (fields.isEmpty()) {
+            return null;
+        }
+        Denotation call = reads.standing(node, read.rules().symbols(), read.rules().newtypes());
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        if (walk == null || !walk.inTheContainersOrder()
+                || !(Core.withoutStanding(walk.step().body()) instanceof Core.If iff)
+                || WhatABodyReads.binding(iff.cond(), walk.accumulator().binding())) {
+            return null;
+        }
+        BindingId element = walk.element().binding();
+        BindingId carried = walk.accumulator().binding();
+        boolean elementThen = aReadOf(iff.then(), element) && aReadOf(iff.els(), carried);
+        boolean elementElse = aReadOf(iff.els(), element) && aReadOf(iff.then(), carried);
+        return elementThen == elementElse ? null
+                : new ChosenField(walk, call, fields, iff.cond(), elementThen);
+    }
+
+    private static boolean aReadOf(Core e, BindingId binding) {
+        return Core.withoutStanding(e) instanceof Core.Read name && binding.equals(name.binding());
     }
 
     /**

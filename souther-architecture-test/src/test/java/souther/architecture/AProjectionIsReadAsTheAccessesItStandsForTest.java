@@ -560,6 +560,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
+        row(out, c + "inputs/ElementValue$Reader$Names", "readsThrough",
+                "(L" + CORE + "$FieldAccess;Ljava/util/Map;)Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"
                 + c + "inputs/Denotation;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback", "aWayInto", "(L" + c + "inputs/Denotation;"
@@ -576,6 +578,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
+        row(out, c + "partition/Pullback", "chosenField", "(" + core + reads + ")L" + c
+                        + "partition/Pullback$ChosenField;", Reading.STRUCTURE,
+                "takes the field accesses over the call of a walk one at a time, and asks of the"
+                        + " call what its step answers: a projection over the call is a field"
+                        + " taken of a field, which is no walk to ask it of, and it is not read");
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);

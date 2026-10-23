@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.Location;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -1525,9 +1526,15 @@ public sealed interface ElementValue {
                 return null;
             }
 
+            /**
+             * A newtype's value read off something that is no place of the element is the thing
+             * itself: what a {@code match} on the element answers as an amount is the amount, and
+             * its value is read case by case as the amount is.
+             */
             @Override
             public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
-                return false;
+                return placeOf(fa.target(), at) == null
+                        && !Location.isStep(fa.target().type(), fa.field(), source.newtypes());
             }
         }
     }
