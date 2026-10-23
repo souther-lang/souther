@@ -82,6 +82,9 @@ public final class WrittenOfANode {
             case Quantity.HowManyHold held -> held.each().stream().allMatch(this::reads);
             case Quantity.HowManyDifferent different -> reads(different.container())
                     && reads(different.ofTheElement());
+            case Quantity.HowManyDifferentMeet different -> reads(different.container())
+                    && reads(different.ofTheElement())
+                    && reads(different.meeting().statement());
             case Quantity.HowManyDifferentAcross across -> reads(across.container())
                     && reads(across.ofTheOccurrence());
             case Quantity.HowManyDifferentBelow below -> reads(below.root()) && reads(below.map());

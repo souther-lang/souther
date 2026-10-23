@@ -188,15 +188,29 @@ public record TermPath(String head, List<Step> steps) {
             return had;
         }
 
+        /**
+         * Two of these are compared step by step on the lists they hold. Equal hashes are what a
+         * table hands over, so this is asked once for every hit; walked through an iterator of this
+         * list, it would ask the size and each step through this wrapper at every step.
+         */
         @Override
         public boolean equals(Object other) {
             if (other == this) {
                 return true;
             }
-            if (other instanceof Steps steps && steps.hashCode() != hashCode()) {
+            if (!(other instanceof Steps steps)) {
+                return super.equals(other);
+            }
+            int size = of.size();
+            if (steps.hashCode() != hashCode() || steps.of.size() != size) {
                 return false;
             }
-            return super.equals(other);
+            for (int at = 0; at < size; at++) {
+                if (!of.get(at).equals(steps.of.get(at))) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 

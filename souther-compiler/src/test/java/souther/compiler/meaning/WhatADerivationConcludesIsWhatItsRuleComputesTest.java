@@ -606,14 +606,17 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 (LawProposition.Observed<?>) other, new Derivation.PresentInASubject(
                         new DecisionSubject.AnInput(B.element())));
         assertEquals(true, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting, count,
-                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsIt)), call));
+                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsIt,
+                        Optional.empty())), call));
         // Counted as the reading says it was, and still not of the law's statement or container.
         Quantity countOfTheOther = new Quantity.HowManyMeet(new DecisionSubject.AnInput(B), new Proposition.Present(
                 new DecisionSubject.AnInput(B.element()), true));
         assertEquals(false, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting,
-                countOfTheOther, new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsTheOther)), call));
+                countOfTheOther, new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsTheOther,
+                        Optional.empty())), call));
         assertEquals(false, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting, count,
-                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(A), meetsIt)), call));
+                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(A), meetsIt,
+                        Optional.empty())), call));
         // Every element settling the statement alike: all of the container, or none of it.
         LawProposition<DeclaredArgument> ofTheClosure = new LawProposition.Observed<>(
                 new LawSubject.WhatTheClosureAnswers<>(index), new SideAnswered(
@@ -633,7 +636,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             Map<LawNumber<?>, LinearForm<Quantity>> numbers = Map.of(
                     countingByTheClosure.form().coefs().keySet().iterator().next(), stated.count());
             Derivation read = Derivation.ALawComparison.of(countingByTheClosure, numbers, Map.of(),
-                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled())));
+                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled(),
+                            Optional.empty())));
             assertEquals(stated.reads(), Derivation.ByALaw.readsTheLaw(countingByTheClosure, read,
                     call), () -> "a count read as " + stated);
         }
@@ -691,7 +695,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static Derivation countedAs(LawProposition.Compared<DeclaredArgument> law,
                                         Quantity count, Derivation.AComparisonRead.Counted how) {
         return Derivation.ALawComparison.of(law, Map.of(law.form().coefs().keySet().iterator()
-                .next(), LinearForm.atom(count)), Map.of((Quantity.HowManyMeet) count, how),
+                .next(), LinearForm.atom(count)), Map.of(count, how),
                 List.of());
     }
 

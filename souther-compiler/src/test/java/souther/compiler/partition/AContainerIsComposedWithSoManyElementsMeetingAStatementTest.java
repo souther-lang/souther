@@ -98,6 +98,25 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         assertComposedAtEveryPointButBelowNone(count);
     }
 
+    /**
+     * A count reached only where every element is not nought: the container the count composes is
+     * chosen holding no nought, though the region can hold nothing that keeps a value out — the
+     * element at nought is the first one meeting the count's statement, and is not taken.
+     */
+    @Test
+    void whatEveryElementOfTheCountedContainerIsAskedIsAskedWhereItsElementsAreChosen() {
+        JsonNode count = only(countBorders(reportOf("""
+                module probe
+
+                behavior noneNought : (xs: List<Int>) -> Int
+                let noneNought (xs) =
+                    if List.all(x -> x /= 0, xs) then
+                        if List.length(List.filter(x -> x >= 0, xs)) == 1 then 1 else 0
+                    else 2
+                """)));
+        assertComposedAtEveryPointButBelowNone(count);
+    }
+
     /** How many a container holds beside how many of them meet a statement: one container. */
     @Test
     void aCountBesideHowManyTheContainerHoldsIsComposedInOneContainer() {

@@ -761,7 +761,8 @@ public sealed interface RowDemand {
      * other count of that container a row is asked for ({@link CardinalityComposer}).
      *
      * @param count             what is counted: the container, and what an element is counted
-     *                          for meeting
+     *                          for meeting — each element, or each different value those meeting
+     *                          it hold ({@link Quantity.HowManyDifferentMeet})
      * @param met               how the count stands to {@code level} on every row this holds of
      * @param level             the number the count, with {@code against} added to it, is held
      *                          against
@@ -772,12 +773,17 @@ public sealed interface RowDemand {
      *                          and what it hands on to another container, where it is either
      *                          ({@link DemandReading#anElementMeeting})
      */
-    record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level,
+    record SoMany(Quantity count, Rel met, ExactRatio level,
                   LinearForm<NumericTerm> against, AnElementMeeting anElementMeeting)
             implements OfACondition {
 
         public SoMany {
             Objects.requireNonNull(count, "a count of the elements of some container");
+            if (!(count instanceof Quantity.HowManyMeet
+                    || count instanceof Quantity.HowManyDifferentMeet)) {
+                throw new IllegalArgumentException("a count of the elements meeting something, or"
+                        + " of the values they hold, and not " + count);
+            }
             Objects.requireNonNull(met, "a count held against a number some way");
             Objects.requireNonNull(level, "a count held against some number");
             Objects.requireNonNull(against, "what is added to the count, or nothing");
@@ -839,15 +845,20 @@ public sealed interface RowDemand {
         @Override
         public Set<NumericTerm> terms() {
             Set<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
-                    count.ofTheElement()));
+                    AStatementAtARow.meetingOf(count)));
             out.addAll(against.coefs().keySet());
             return Collections.unmodifiableSet(out);
         }
 
+        /** The container, the place whose values are counted where values are what is counted,
+         *  and the place of every number read. */
         @Override
         public Set<TermPath> positions() {
             Set<TermPath> out = new LinkedHashSet<>();
-            out.add(count.container().inputPosition());
+            out.add(AStatementAtARow.elementsOf(count).container().inputPosition());
+            if (count instanceof Quantity.HowManyDifferentMeet different) {
+                out.add(different.ofTheElement().inputPosition());
+            }
             terms().forEach(term -> out.add(term.subjectPath()));
             return Collections.unmodifiableSet(out);
         }

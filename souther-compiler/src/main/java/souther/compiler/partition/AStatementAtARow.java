@@ -3,10 +3,13 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -148,8 +151,8 @@ final class AStatementAtARow {
                         || productIn(affine) != null
                         || remainderByAnInputIn(affine) != null
                         || remainderOfADividendIn(affine) != null
-                        || (countIn(affine) instanceof Quantity.HowManyMeet count
-                                && askable(count.ofTheElement()));
+                        || (countIn(affine) instanceof Quantity count
+                                && askable(meetingOf(count)));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
@@ -161,11 +164,43 @@ final class AStatementAtARow {
         };
     }
 
-    /** The one count {@code affine} weighs where it weighs one and nothing else, or null. */
-    static Quantity.HowManyMeet countIn(Relation.Affine affine) {
-        return affine.form().coefs().size() == 1
-                && affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyMeet count ? count : null;
+    /**
+     * The one count {@code affine} weighs where it weighs one and nothing else, or null: how many
+     * elements of a container meet a statement, or how many different values those hold
+     * ({@link Quantity.HowManyDifferentMeet}).
+     */
+    static Quantity countIn(Relation.Affine affine) {
+        if (affine.form().coefs().size() != 1) {
+            return null;
+        }
+        Quantity only = affine.form().coefs().keySet().iterator().next();
+        return only instanceof Quantity.HowManyMeet || only instanceof Quantity.HowManyDifferentMeet
+                ? only : null;
+    }
+
+    /** What an element of {@code count}, one {@link #countIn} answers, is counted for meeting. */
+    static Proposition meetingOf(Quantity count) {
+        return elementsOf(count).ofTheElement();
+    }
+
+    /**
+     * How many elements meet what {@code count}, one {@link #countIn} answers, counts them for,
+     * each of them counted: the count itself, or the count of the elements whose different values
+     * it is.
+     */
+    static Quantity.HowManyMeet elementsOf(Quantity count) {
+        return switch (count) {
+            case Quantity.HowManyMeet meeting -> meeting;
+            case Quantity.HowManyDifferentMeet different -> different.elementsMeetingIt();
+            default -> throw new IllegalArgumentException(count + " is no count of elements");
+        };
+    }
+
+    /** Where the values {@code count}, one {@link #countIn} answers, counts once each stand, where
+     *  it counts values rather than elements. */
+    static Optional<TermPath> differentAt(Quantity count) {
+        return count instanceof Quantity.HowManyDifferentMeet different
+                ? Optional.of(different.ofTheElement().inputPosition()) : Optional.empty();
     }
 
     /** The one remainder by an input's number {@code affine} weighs where it weighs one and
@@ -274,13 +309,13 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
-                            of(some.ofTheElement(), behavior, quantities)));
+                            of(some.ofTheElement(), behavior, quantities), Optional.empty()));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    && countIn(affine) instanceof Quantity count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
-                            count.container().inputPosition(),
-                            of(count.ofTheElement(), behavior, quantities)));
+                            elementsOf(count).container().inputPosition(),
+                            of(meetingOf(count), behavior, quantities), differentAt(count)));
             case Proposition.Compared compared when askable(compared) ->
                     into.computeIfAbsent(compared.relation(),
                             relation -> OneRelation.of(relation, behavior, quantities));
@@ -315,8 +350,8 @@ final class AStatementAtARow {
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
-                    gatherNumbers(count.ofTheElement(), into);
+                    && countIn(affine) instanceof Quantity count ->
+                    gatherNumbers(meetingOf(count), into);
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> {
@@ -353,9 +388,12 @@ final class AStatementAtARow {
         return some.container() + " [" + some.ofTheElement().key() + "]";
     }
 
-    /** What a count of the elements of a container meeting a statement is read as. */
-    private static String keyOf(Quantity.HowManyMeet count) {
-        return count.container() + " [" + count.ofTheElement().key() + "]";
+    /** What a count of the elements of a container meeting a statement is read as, or of the
+     *  different values they hold. */
+    private static String keyOf(Quantity count) {
+        Quantity.HowManyMeet elements = elementsOf(count);
+        return differentAt(count).map(at -> "different " + at + " of ").orElse("")
+                + elements.container() + " [" + elements.ofTheElement().key() + "]";
     }
 
     /**
@@ -367,6 +405,197 @@ final class AStatementAtARow {
         relations.values().forEach(each -> out.addAll(each.terms()));
         elements.values().forEach(each -> out.addAll(each.ofTheElement().numbers()));
         return NumericTerms.inOrder(out);
+    }
+
+    /**
+     * What one element's answer to a statement turns on, among the elements of a container held
+     * as groups under one value at a place inside each — or each on its own where there is no such
+     * place. Each takes in the ones before it.
+     */
+    enum TurnsOn {
+
+        /** The element's own values, and values outside the container. */
+        THE_ELEMENT,
+
+        /** Which elements hold its value at the place, and what they come to: how often the
+         *  value occurs, a total or an end gathered under it. */
+        THOSE_UNDER_ITS_VALUE,
+
+        /** Which of the elements holding its value was handed last, as a total from the last one
+         *  put does. */
+        THE_ORDER_OF_THOSE_UNDER_ITS_VALUE,
+
+        /** Elements under other values: something of the container as a whole, a value gathered
+         *  under one key whichever element is asked, or what elements are grouped by elsewhere. */
+        OTHER_ELEMENTS;
+
+        TurnsOn orMore(TurnsOn other) {
+            return compareTo(other) >= 0 ? this : other;
+        }
+    }
+
+    /**
+     * What an element of {@code container} answers of this turns on, where the elements are held
+     * as groups under one value at {@code under}, or each on its own where it is null: the most
+     * any number it reads turns on ({@link #readOf}), and other
+     * elements where it asks a position holding the container, or says something of the
+     * container's elements itself.
+     */
+    TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+        TurnsOn out = TurnsOn.THE_ELEMENT;
+        for (NumericTerm each : numbers()) {
+            out = out.orMore(readOf(each, container, under).turnsOn());
+        }
+        for (TermPath each : positions) {
+            if (container.isAtOrUnder(each)) {
+                out = TurnsOn.OTHER_ELEMENTS;
+            }
+        }
+        for (OverTheElements each : elements.values()) {
+            out = out.orMore(among(List.of(each.container()), container) ? TurnsOn.OTHER_ELEMENTS
+                    : each.ofTheElement().turnsOnAmong(container, under));
+        }
+        return out;
+    }
+
+    /**
+     * Whether what an element of {@code container} answers of this may turn on which value stands
+     * at {@code at}, and not only on which elements hold one value there: some number it reads
+     * reads that place ({@link WhatItReads#theValue}), or some position it asks of its own value
+     * is that place, inside it or holds it — or it reads other elements, of which nothing is
+     * shown.
+     */
+    boolean readsTheValueAt(TermPath container, TermPath at) {
+        for (NumericTerm each : numbers()) {
+            WhatItReads read = readOf(each, container, at);
+            if (read.turnsOn() == TurnsOn.OTHER_ELEMENTS || read.theValue()) {
+                return true;
+            }
+        }
+        for (TermPath each : positions) {
+            if (each.isAtOrUnder(at) || at.isAtOrUnder(each)) {
+                return true;
+            }
+        }
+        return elements.values().stream()
+                .anyMatch(each -> each.ofTheElement().readsTheValueAt(container, at));
+    }
+
+    /**
+     * What a number of an element reads, among the elements of a container held as groups under
+     * one value at a place inside each.
+     *
+     * @param turnsOn  what the number turns on
+     * @param theValue whether it reads the value at that place itself, and not only which
+     *                 elements hold one value there
+     */
+    record WhatItReads(TurnsOn turnsOn, boolean theValue) {
+
+        /** What the two read between them. */
+        WhatItReads and(WhatItReads other) {
+            return new WhatItReads(turnsOn.orMore(other.turnsOn), theValue || other.theValue);
+        }
+    }
+
+    /**
+     * What {@code term}, read of an element of {@code container}, reads where the elements are held
+     * as groups under one value at {@code under}, or each on its own where it is null — of every
+     * part it is made of: where it is read among, the key it is gathered under, the value it
+     * gathers, and the statement keeping the elements it is of.
+     *
+     * <p>A number of one position is the element's, and reads the value where it is that place. One
+     * read among the elements of a container is the element's where that container is inside it
+     * or elsewhere, and turns on other elements where it is this one or holds it — save how often
+     * the value at {@code under} occurs and what is gathered under it, which turn on those holding
+     * that value, and read the value where what they gather stands at it. What keeps the elements
+     * such a number is of is asked of each of them, and the number reads what that reads.
+     */
+    static WhatItReads readOf(NumericTerm term, TermPath container, TermPath under) {
+        return switch (term) {
+            case NumericTerm.FromOnePosition one ->
+                    new WhatItReads(TurnsOn.THE_ELEMENT, overlaps(one.subjectPath(), under));
+            case NumericTerm.TakenOver taken ->
+                    new WhatItReads(overTheRun(taken.source(), container), false);
+            case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(often.container(),
+                    container, often.place().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE), false);
+            case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(end.container(),
+                    container, end.key().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE),
+                    overlaps(end.value(), under));
+            case NumericTerm.OccurrencesOfItsValue often -> {
+                List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
+                yield new WhatItReads(ranged.size() == 1 ? underItsValue(ranged.getFirst(),
+                        container, often.subjectPath().equals(under),
+                        TurnsOn.THOSE_UNDER_ITS_VALUE) : overTheRun(often.run(), container), false)
+                        .and(keeping(often.selection(), container, under));
+            }
+            case NumericTerm.OccurrencesOfAKey often ->
+                    new WhatItReads(overTheRun(often.run(), container), false);
+            case NumericTerm.GatheredUnderItsKey gathered -> {
+                List<TermPath> ranged = gathered.elements().containersHoldingIt();
+                boolean readsIt = gathered.value().reads().stream()
+                        .anyMatch(each -> overlaps(each.from(gathered.elements()), under));
+                if (ranged.size() != 1) {
+                    yield new WhatItReads(among(ranged, container) ? TurnsOn.OTHER_ELEMENTS
+                            : TurnsOn.THE_ELEMENT, readsIt)
+                            .and(keeping(gathered.selection(), container, under));
+                }
+                boolean underIt = gathered.key() instanceof ElementKey.At(ElementProjection way)
+                        && way.from(gathered.elements()).equals(under);
+                yield new WhatItReads(underItsValue(ranged.getFirst(), container, underIt,
+                        switch (gathered.gathering()) {
+                            case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
+                                 NumericTerm.GatheredUnderItsKey.Gathering.End _ ->
+                                    TurnsOn.THOSE_UNDER_ITS_VALUE;
+                            case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
+                                    TurnsOn.THE_ORDER_OF_THOSE_UNDER_ITS_VALUE;
+                        }), readsIt).and(keeping(gathered.selection(), container, under));
+            }
+            case NumericTerm.GatheredUnderAKey gathered -> new WhatItReads(among(
+                    gathered.gathered().elements().containersHoldingIt(), container)
+                    ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT, false);
+        };
+    }
+
+    /** What the statement keeping some elements, asked of each, reads among the elements of
+     *  {@code container} grouped at {@code under} — nothing where every element is kept. */
+    private static WhatItReads keeping(KeptOccurrences kept, TermPath container, TermPath under) {
+        return kept == null ? new WhatItReads(TurnsOn.THE_ELEMENT, false)
+                : new WhatItReads(kept.perElement().turnsOnAmong(container, under),
+                        under != null && kept.perElement().readsTheValueAt(container, under));
+    }
+
+    /** Whether {@code path} is the place at {@code under}, inside it or holds it. */
+    private static boolean overlaps(TermPath path, TermPath under) {
+        return under != null && (path.isAtOrUnder(under) || under.isAtOrUnder(path));
+    }
+
+    /** What a number read among the elements of {@code counted} turns on: {@code grouped} where
+     *  that is {@code container} and the number is of the value the elements are grouped under. */
+    private static TurnsOn underItsValue(TermPath counted, TermPath container,
+                                         boolean ofTheValue, TurnsOn grouped) {
+        if (counted.equals(container)) {
+            return ofTheValue ? grouped : TurnsOn.OTHER_ELEMENTS;
+        }
+        return among(List.of(counted), container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    }
+
+    /** What a number taken over every value of {@code run} turns on: other elements where the run
+     *  reaches across the elements of {@code container}, and the element's own otherwise. */
+    private static TurnsOn overTheRun(RunSource run, TermPath container) {
+        if (run instanceof RunSource.ReachableNodes nodes) {
+            return nodes.root().isAtOrUnder(container.element()) ? TurnsOn.THE_ELEMENT
+                    : container.isAtOrUnder(nodes.root()) ? TurnsOn.OTHER_ELEMENTS
+                    : TurnsOn.THE_ELEMENT;
+        }
+        return among(run.subjectPath().containersHoldingIt(), container)
+                ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    }
+
+    /** Whether reading across the elements of any of {@code counted} reads across those of
+     *  {@code container}: one of them is it, or holds it inside its elements. */
+    private static boolean among(List<TermPath> counted, TermPath container) {
+        return counted.stream().anyMatch(each -> each.equals(container)
+                || container.isAtOrUnder(each.element()));
     }
 
     /**
@@ -481,6 +710,61 @@ final class AStatementAtARow {
     }
 
     /**
+     * How many elements of {@code container} the row wrote meet this statement, as
+     * {@link #howManyMeetIn} counts them — or, where {@code differentAt} names a place of each,
+     * how many different values the elements meeting it hold there: the least it can be, and how
+     * many more it may be where an element, or its value, could not be read.
+     *
+     * <p>A value one meeting element holds is counted once however many others hold it. An element
+     * nothing could say of adds one more at most, and none where its value is one a meeting element
+     * already holds.
+     *
+     * @return null where the walk could not reach the container
+     */
+    HowManyAtARow howManyIn(TermPath container, Optional<TermPath> differentAt,
+                            BorderQuantity.Observation row) {
+        return differentAt.isPresent()
+                ? row.keptOf(new DifferentMeetingIn(this, container, differentAt.get()))
+                : howManyMeetIn(container, row);
+    }
+
+    /** How many different values the elements of a container meeting one statement hold, by the
+     *  statement, the container and where the value stands. */
+    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container, TermPath at)
+            implements BorderQuantity.ReadAlike<HowManyAtARow> {
+
+        @Override
+        public HowManyAtARow readAt(BorderQuantity.Observation row) {
+            if (!(row.eachElementOf(container)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            Set<ObservedValue> meeting = new HashSet<>();
+            Set<ObservedValue> maybe = new HashSet<>();
+            int unreadValues = 0;
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (BorderQuantity.Observation element : reached.value()) {
+                Answer answer = statement.at(element);
+                if (answer instanceof Answer.Fails) {
+                    continue;
+                }
+                if (answer instanceof Answer.CouldNotTell(var stopped)) {
+                    why.addAll(stopped);
+                }
+                if (!(element.at(at) instanceof WalkResult.Reached<ObservationAtPoint>(
+                        ObservationAtPoint.Value(ObservedValue value)))) {
+                    why.add(ReadingGap.COULD_NOT_WALK);
+                    unreadValues++;
+                    continue;
+                }
+                (answer instanceof Answer.Holds ? meeting : maybe).add(value);
+            }
+            maybe.removeAll(meeting);
+            return new HowManyAtARow(meeting.size(), maybe.size() + unreadValues, why);
+        }
+    }
+
+    /**
      * How many elements meet a statement at one row.
      *
      * <p>An element the statement could not be read at is neither counted nor left out: the count
@@ -580,9 +864,8 @@ final class AStatementAtARow {
             }
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count -> {
-                OverTheElements over = elements.get(keyOf(count));
-                HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
+                    && countIn(affine) instanceof Quantity count -> {
+                HowManyAtARow counted = elements.get(keyOf(count)).howManyIn(row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
@@ -659,9 +942,13 @@ final class AStatementAtARow {
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
-                    overElementsOf(count.container().inputPosition(), about, read)
-                            && readsOf(count.ofTheElement(), about, read);
+                    && countIn(affine) instanceof Quantity count -> {
+                if (differentAt(count).isPresent()) {
+                    read.add(differentAt(count).get());
+                }
+                yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
+                        && readsOf(meetingOf(count), about, read);
+            }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) -> {
                 read.add(at);
                 yield true;
@@ -1298,8 +1585,20 @@ final class AStatementAtARow {
         return out;
     }
 
-    /** A statement about the elements of a container: the container, and what each is asked. */
-    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement) {}
+    /**
+     * A statement about the elements of a container: the container, what each is asked, and,
+     * where how many different values those meeting it hold is what is counted, where the values
+     * stand.
+     */
+    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement,
+                                   Optional<TermPath> differentAt) {
+
+        /** How many elements meet what each is asked at {@code row}, or how many different values
+         *  they hold; null where the walk could not reach the container. */
+        HowManyAtARow howManyIn(BorderQuantity.Observation row) {
+            return ofTheElement.howManyIn(container, differentAt, row);
+        }
+    }
 
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
     private sealed interface OneRelation {

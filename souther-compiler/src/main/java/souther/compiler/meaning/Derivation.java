@@ -1454,8 +1454,7 @@ public sealed interface Derivation {
          */
         public static ALawComparison of(LawProposition.Compared<?> part,
                                         Map<LawNumber<?>, LinearForm<Quantity>> numbers,
-                                        Map<Quantity.HowManyMeet, AComparisonRead.Counted>
-                                                counting,
+                                        Map<Quantity, AComparisonRead.Counted> counting,
                                         List<AComparisonRead.Counted> alike) {
             return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike);
         }
@@ -3032,7 +3031,8 @@ public sealed interface Derivation {
             counts.forEach(count -> read.add(count.counted(numbering)));
             List<Quantity> named = switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
-                        .filter(quantity -> quantity instanceof Quantity.HowManyMeet).toList();
+                        .filter(quantity -> quantity instanceof Quantity.HowManyMeet
+                                || quantity instanceof Quantity.HowManyDifferentMeet).toList();
                 case Relation.Ordered _ -> List.of();
             };
             if (!read.containsAll(named) || !named.containsAll(read)) {
@@ -3044,20 +3044,40 @@ public sealed interface Derivation {
 
         /**
          * How many elements of the container at {@code container} meet what {@code ofTheElement}
-         * was read as.
+         * was read as — or, where {@code different} says so, how many different values stand
+         * there over the elements meeting it ({@link Quantity.HowManyDifferentMeet}).
          */
-        public record Counted(DecisionSubject container, Derivation ofTheElement) {
+        public record Counted(DecisionSubject container, Derivation ofTheElement,
+                              Optional<Different> different) {
 
             public Counted {
                 Objects.requireNonNull(container, "a count is of a container");
                 Objects.requireNonNull(ofTheElement, "of the elements meeting something");
+                Objects.requireNonNull(different, "each element is counted, or each value");
+            }
+
+            /**
+             * Where the values counted once each stand, and whether what {@code ofTheElement} was
+             * read as is asked of each value rather than of each element.
+             */
+            public record Different(DecisionSubject at, boolean ofEachValue) {
+
+                public Different {
+                    Objects.requireNonNull(at, "the values counted stand somewhere");
+                }
             }
 
             /** The count this reads: of the elements it holds on, which on a row every element
-             *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}). */
-            public Quantity.HowManyMeet counted(Conclusion numbering) {
-                return new Quantity.HowManyMeet(container,
-                        Proposition.whereItHolds(numbering.of(ofTheElement)));
+             *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}), or of their
+             *  different values. */
+            public Quantity counted(Conclusion numbering) {
+                Proposition meeting = Proposition.whereItHolds(numbering.of(ofTheElement));
+                return different.<Quantity>map(values -> new Quantity.HowManyDifferentMeet(
+                        container, values.at(), values.ofEachValue()
+                                ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(meeting)
+                                : new Quantity.HowManyDifferentMeet.Selection.OfEachElement(
+                                        meeting)))
+                        .orElseGet(() -> new Quantity.HowManyMeet(container, meeting));
             }
         }
     }
