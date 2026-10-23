@@ -3895,6 +3895,10 @@ public final class Adequacy {
         if (points == null || ruleReading == null || policy == null) {
             return new BorderAccount(module, scope, resolved);
         }
+        // One world for every point below, since every declaration a point is owed to is read in
+        // it.
+        RuleReadingContext declaring =
+                RuleReadingContext.of(ruleReading, policy, db.readings(), Front.dayOf(db));
         // What the declarations wrote their lines on, for the points that have a declaration.
         // Reading a declaration costs no search, so an account of one behavior pays nothing here
         // for the rest of the module; what it would pay for is asking the declarations' own
@@ -3916,8 +3920,7 @@ public final class Adequacy {
             resolved.put(debt.point(), new BorderAccount.Answer(debt,
                     debt.id().owedToTheDeclaration().isPresent()
                             ? axisOf(debt.id(), declarations, Shapes.publishedDeclarations(db),
-                                    Shapes.declarationCitations(db),
-                                    RuleReadingContext.of(ruleReading, policy, db.readings(), Front.dayOf(db)))
+                                    Shapes.declarationCitations(db), declaring)
                             : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
                             reading -> readingOf(db, module, scope, debt, reading))));
