@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.query.Shapes;
@@ -172,6 +173,7 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.forms", name));
         return DeclaredBorders.of(named, Shapes.publishedDeclarations(compilation.db()),
                 Shapes.declarationCitations(compilation.db()),
-                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy));
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy,
+                        TestDay.TODAY));
     }
 }

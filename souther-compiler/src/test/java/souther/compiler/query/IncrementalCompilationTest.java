@@ -8,6 +8,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.ArmObservation;
+import souther.compiler.TestDay;
 
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +68,7 @@ class IncrementalCompilationTest {
 
     private static Compilation started() {
         Compilation c = Compilation.ofDocuments(workspace(PRICES, CART, CUSTOMERS), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         return c;
@@ -87,7 +88,7 @@ class IncrementalCompilationTest {
         c.update(workspace(PRICES + """
 
                 data Discount = Int
-                """, CART, CUSTOMERS), Set.of());
+                """, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
@@ -106,7 +107,7 @@ class IncrementalCompilationTest {
         c.update(workspace(PRICES + """
 
                 data Discount = { off: Int }
-                """, CART, CUSTOMERS), Set.of());
+                """, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
         Answer<?> once = c.db().ask(new Output.Classes("shop.cart"));
         assertSame(cart, once, "declaring `Discount` is not shop.cart's business");
@@ -114,7 +115,7 @@ class IncrementalCompilationTest {
         c.update(workspace(PRICES + """
 
                 data Discount = { off: Int, until: Date }
-                """, CART, CUSTOMERS), Set.of());
+                """, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(once, c.db().ask(new Output.Classes("shop.cart")),
@@ -147,7 +148,7 @@ class IncrementalCompilationTest {
         c.update(workspace(PRICES, CART, CUSTOMERS + """
                 data Email = String
                     invariant matches("[^@]+@[^@]+", value)
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(before, c.db().ask(new Output.Classes("shop.customers")));
@@ -162,7 +163,7 @@ class IncrementalCompilationTest {
         c.update(workspace(PRICES, CART, CUSTOMERS + """
                 data Email = String
                     invariant matches("[^@]+@[^@]+", value)
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(prices, c.db().ask(new Output.Classes("shop.prices")));
@@ -184,7 +185,7 @@ class IncrementalCompilationTest {
                 behavior twice : (n: Amount) -> Amount
                     constructs Amount
                 let twice (n) = Amount(n.value * 2)
-                """, CART, CUSTOMERS), Set.of());
+                """, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(prices(c), null, "the edited module is still compiled");
@@ -233,7 +234,8 @@ class IncrementalCompilationTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", PRICES_WITH_HELPERS);
         byId.put("cart.sou", CART_OF_AMOUNT);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
@@ -241,7 +243,7 @@ class IncrementalCompilationTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", PRICES_WITH_HELPERS.replace("Int = n\n", "Int = n + 1\n"));
         edited.put("cart.sou", CART_OF_AMOUNT);
-        c.update(edited, Set.of());
+        c.update(edited, Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
@@ -376,7 +378,7 @@ class IncrementalCompilationTest {
 
     private static Compilation orders(String source) {
         Compilation c = Compilation.ofDocuments(Map.of("orders.sou", source), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
@@ -408,7 +410,7 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
         Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice")));
 
-        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
@@ -427,7 +429,7 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
         Answer<?> thrice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice"));
 
-        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
@@ -448,7 +450,8 @@ class IncrementalCompilationTest {
         Answer<?> callee = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "viaTwice"));
 
-        c.update(Map.of("orders.sou", CALLS.replace("n.value * 2)", "n.value * 20)")), Set.of());
+        c.update(Map.of("orders.sou", CALLS.replace("n.value * 2)", "n.value * 20)")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(callee, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
@@ -468,7 +471,7 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
 
         c.update(Map.of("orders.sou", ORDERS.replace("let doubled (n) = n * 2",
-                "let doubled (n) = n * 2 + 0")), Set.of());
+                "let doubled (n) = n * 2 + 0")), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
@@ -485,7 +488,7 @@ class IncrementalCompilationTest {
 
                 data Amount = Int
                     invariant value >= 1
-                """, CART, CUSTOMERS), Set.of());
+                """, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(cart, c.db().ask(new Output.Classes("shop.cart")),
@@ -497,7 +500,7 @@ class IncrementalCompilationTest {
         Compilation c = started();
         Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
 
-        c.update(workspace(PRICES, CART, CUSTOMERS), Set.of());
+        c.update(workspace(PRICES, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(cart, c.db().ask(new Output.Classes("shop.cart")));
@@ -507,12 +510,12 @@ class IncrementalCompilationTest {
     void aProblemThatWasFixedStopsBeingReported() {
         Compilation c = Compilation.ofDocuments(
                 workspace(PRICES, CART, "module shop.customers\ndata Name = Nope\n"), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().stream().anyMatch(f -> f.report().isError()),
                 "an unknown type is an error to begin with");
 
-        c.update(workspace(PRICES, CART, CUSTOMERS), Set.of());
+        c.update(workspace(PRICES, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertTrue(c.db().allReports().isEmpty(), "the fixed error is not still listed");
@@ -526,7 +529,7 @@ class IncrementalCompilationTest {
         Map<String, String> without = new LinkedHashMap<>();
         without.put("prices.sou", PRICES);
         without.put("cart.sou", CART);
-        c.update(without, Set.of());
+        c.update(without, Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertFalse(c.db().isComputed(new Output.Classes("shop.customers")),
@@ -568,7 +571,7 @@ class IncrementalCompilationTest {
 
     private static Compilation stating() {
         Compilation c = Compilation.ofDocuments(Map.of("orders.sou", STATING), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
@@ -586,7 +589,8 @@ class IncrementalCompilationTest {
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
 
         c.update(Map.of("orders.sou", STATING.replace(
-                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
@@ -600,7 +604,8 @@ class IncrementalCompilationTest {
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
 
         c.update(Map.of("orders.sou", STATING.replace(
-                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of());
+                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
@@ -651,7 +656,8 @@ class IncrementalCompilationTest {
     }
 
     private static Compilation borrowing() {
-        Compilation c = Compilation.ofDocuments(borrowing(CALC), Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(borrowing(CALC), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         return c;
@@ -668,7 +674,8 @@ class IncrementalCompilationTest {
         Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
 
         c.update(borrowing(CALC.replace(
-                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
@@ -681,7 +688,8 @@ class IncrementalCompilationTest {
         Answer<?> viaTripled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled"));
 
         c.update(borrowing(CALC.replace(
-                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(viaTripled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled")),
@@ -701,7 +709,7 @@ class IncrementalCompilationTest {
 
         c.update(Map.of("orders.sou",
                 STATING.replace("let uncalled (n) = Amount(n.value * 3)\n",
-                        "let uncalled (n) = Amount(n.value * 3)\n\n")), Set.of());
+                        "let uncalled (n) = Amount(n.value * 3)\n\n")), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
@@ -715,7 +723,7 @@ class IncrementalCompilationTest {
         Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
 
         c.update(borrowing(CALC.replace("let tripled (n) = Amount(n.value * 3)\n",
-                "let tripled (n) = Amount(n.value * 3)\n\n")), Set.of());
+                "let tripled (n) = Amount(n.value * 3)\n\n")), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
@@ -753,14 +761,15 @@ class IncrementalCompilationTest {
     @Test
     void editingAnInjectedEnsuresRechecksTheBodyItIsInjectedIntoAndNothingBeside() {
         Compilation c = Compilation.ofDocuments(Map.of("injecting.sou", INJECTING), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         Answer<?> use = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use"));
         Answer<?> beside = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "beside"));
 
         c.update(Map.of("injecting.sou", INJECTING.replace(
-                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of());
+                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(use, c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use")),
@@ -789,7 +798,7 @@ class IncrementalCompilationTest {
                 behavior added : (n: Amount) -> Amount
                     constructs Amount
                 let added (n) = Amount(n.value * 4)
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertEquals(meant, c.db().ask(new Names.Meanings("shop.orders")),
@@ -815,7 +824,7 @@ class IncrementalCompilationTest {
                 behavior added : (n: Amount) -> Amount
                     constructs Amount
                 let added (n) = Amount(n.value * 4)
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
@@ -840,7 +849,7 @@ class IncrementalCompilationTest {
         c.update(Map.of("orders.sou", STATING + """
 
                 data Discount = Int
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
@@ -860,7 +869,7 @@ class IncrementalCompilationTest {
                 behavior writing : (n: Amount) -> Amount
                     constructs Amount
                 let writing (n) = Amount(Discount(n.value).value)
-                """), Set.of(), ModulePath.EMPTY);
+                """), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertFalse(c.db().allReports().isEmpty(), "`Discount` denotes nothing to begin with");
         Answer<?> writing = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing"));
@@ -873,7 +882,7 @@ class IncrementalCompilationTest {
                 behavior writing : (n: Amount) -> Amount
                     constructs Amount
                 let writing (n) = Amount(Discount(n.value).value)
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(writing, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing")),
@@ -904,7 +913,7 @@ class IncrementalCompilationTest {
         c.update(Map.of("orders.sou", STATING + """
 
                 data Discount = Int
-                """), Set.of());
+                """), Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertTrue(held.scope().inScope("Discount"),
@@ -947,12 +956,13 @@ class IncrementalCompilationTest {
     @Test
     void declaringADataRechecksTheBodyWhoseReportIsReadOffEveryNameInSight() {
         Compilation c = Compilation.ofDocuments(Map.of("offering.sou", OFFERING), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         assertFalse(c.db().allReports().isEmpty(), "`Q` is not a case of `Inner`, which is reported");
         Answer<?> run = c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run"));
 
-        c.update(Map.of("offering.sou", OFFERING + "\ndata Discount = Int\n"), Set.of());
+        c.update(Map.of("offering.sou", OFFERING + "\ndata Discount = Int\n"), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(run, c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run")),
@@ -988,7 +998,7 @@ class IncrementalCompilationTest {
                 "the fixture is the two declarations in this order");
         c.update(Map.of("orders.sou",
                 STATING.replace(uncalled, "").replace(called, called + "\n" + uncalled.strip() + "\n")),
-                Set.of());
+                Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
@@ -1006,7 +1016,8 @@ class IncrementalCompilationTest {
                 "behavior called : (n: Amount, m: Amount) -> Amount").replace(
                 "let called (n) = Amount(n.value * 2)",
                 "let called (n, m) = Amount(n.value * 2 + m.value)").replace(
-                "let caller (n) = called(n)", "let caller (n) = called(n, n)")), Set.of());
+                "let caller (n) = called(n)", "let caller (n) = called(n, n)")), Set.of(),
+                TestDay.DATE);
         c.answerEverything();
 
         assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),

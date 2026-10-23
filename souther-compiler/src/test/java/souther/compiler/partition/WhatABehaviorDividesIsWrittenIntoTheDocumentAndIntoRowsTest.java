@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -88,7 +89,8 @@ class WhatABehaviorDividesIsWrittenIntoTheDocumentAndIntoRowsTest {
         List<String> written = new ArrayList<>();
         for (PartitionClass each : axis.classes()) {
             List<FixtureTemplate> made = Partitions.standingFor(each.representatives(),
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Set.of())
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY), Set.of())
                     .values();
             assertFalse(made.isEmpty(), "a row can be composed for `" + each.label() + "`");
             made.forEach(one -> written.add(one.text()));

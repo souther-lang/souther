@@ -711,7 +711,7 @@ public final class Bodies {
             // One world for every behavior of the module, since every rule of every one of them is
             // read in it.
             RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
-                    db.ask(new Front.Reading()).value(), db.readings());
+                    db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             stated.value().forEach((behavior, rules) ->
                     out.put(behavior, ContractDischarge.of(rules, ruleReading)));
             return Answer.of(Ordered.map(out));
@@ -3364,7 +3364,7 @@ public final class Bodies {
                                             Shapes.declarationNewtypes(db),
                                             Shapes.fieldBindings(db),
                                             Shapes.clauseLocations(db)),
-                                    policy, db.readings()),
+                                    policy, db.readings(), Front.dayOf(db)),
                             contracts.present() ? contracts.value() : Map.of(),
                             templates.value())
                     : null;
@@ -3464,7 +3464,7 @@ public final class Bodies {
         Map<String, Claims> out = new LinkedHashMap<>();
         // One world for every behavior of the module, since every walk below reads in it.
         RuleReadingContext ruleReading =
-                RuleReadingContext.of(reading.value(), policy, db.readings());
+                RuleReadingContext.of(reading.value(), policy, db.readings(), Front.dayOf(db));
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             Core body = bodies.get(behavior.name());
             // What this compilation worked out about the behavior's boundary, read off the one

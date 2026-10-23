@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -52,7 +53,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).accounting();
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).accounting();
     }
 
     /** What the author called the clause, of a rule that is a declaration's invariant. */
@@ -132,7 +133,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY))
                 .at(RuleKey.of("len")).bounds().min().at().toString();
     }
 
@@ -376,7 +377,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         FieldDomains read = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
 
         assertFalse(read.projection().isCertified(), "the bounds hold no hole");
         assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),

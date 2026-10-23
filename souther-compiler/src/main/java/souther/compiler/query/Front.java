@@ -34,6 +34,7 @@ import souther.compiler.check.Preserved;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
+import souther.compiler.numeric.Today;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -114,6 +115,39 @@ public final class Front {
      * <p>Absent means {@link souther.compiler.execute.EvaluationPolicy#DEFAULT}.
      */
     public record Policy() implements Input<souther.compiler.execute.EvaluationPolicy> {}
+
+    /**
+     * The day this compilation writes rows on, which is where a date a rule leaves free is looked
+     * for first.
+     *
+     * <p><b>Who reads it.</b> Every world a declaration's rules are read in is made with it
+     * ({@link souther.compiler.check.RuleReadingContext#today}), so every query that makes one asks
+     * for it: the readings of declarations and bodies as much as the measurement and the rows. A
+     * change of day puts all of those to work again. The readings that choose no value come back
+     * equal to what they were and the change stops there; the measurement does not, because the
+     * value it shows a class holds is one it chose, and the row offered for the class is written
+     * with that value. So a change of day reaches the inputs read, the measurement made of them
+     * and the rows, and recomputes them.
+     *
+     * <p><b>What it does not reach.</b> Which classes there are, which points a rule owes and
+     * whether a row fills one are read off the source alone: the values chosen differ by day, and
+     * what they are owed for does not.
+     */
+    public record Day() implements Input<Today> {}
+
+    /**
+     * The day {@code db}'s compilation writes rows on.
+     *
+     * <p>Never absent: a compilation sets it as it starts, and a reading made without one would
+     * choose its values on whatever day a default named.
+     */
+    static Today dayOf(Db db) {
+        Today day = db.ask(new Day()).value();
+        if (day == null) {
+            throw new IllegalStateException("a compilation sets the day it writes rows on");
+        }
+        return day;
+    }
 
     /**
      * The standard library this compilation reads names against.

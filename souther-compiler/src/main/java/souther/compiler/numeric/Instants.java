@@ -24,11 +24,12 @@ public final class Instants {
     private static final BigInteger PER_SECOND_NANOS = BigInteger.valueOf(1_000_000_000L);
 
     /** The first and last counts a moment can be written as. */
-    public static final Count MIN = countAt(Instant.MIN);
+    public static final Count MIN = nanoOf(Instant.MIN);
 
-    public static final Count MAX = countAt(Instant.MAX);
+    public static final Count MAX = nanoOf(Instant.MAX);
 
-    private static Count countAt(Instant at) {
+    /** The nanosecond {@code at} counts to. */
+    public static Count nanoOf(Instant at) {
         return Count.of(BigDecimal.valueOf(at.getEpochSecond()).multiply(PER_SECOND)
                 .add(BigDecimal.valueOf(at.getNano())));
     }
@@ -39,7 +40,7 @@ public final class Instants {
             return null;
         }
         try {
-            return countAt(Instant.parse(iso));
+            return nanoOf(Instant.parse(iso));
         } catch (DateTimeParseException _) {
             return null;
         }

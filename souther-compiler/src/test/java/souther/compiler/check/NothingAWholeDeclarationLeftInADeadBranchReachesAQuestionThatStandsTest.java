@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -307,6 +308,6 @@ class NothingAWholeDeclarationLeftInADeadBranchReachesAQuestionThatStandsTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name, RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                ReadAs.THE_COMPILATION_DOES));
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

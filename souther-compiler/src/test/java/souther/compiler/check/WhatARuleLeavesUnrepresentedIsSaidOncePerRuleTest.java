@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -76,6 +77,6 @@ class WhatARuleLeavesUnrepresentedIsSaidOncePerRuleTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                ReadAs.THE_COMPILATION_DOES)).projection().causes();
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).projection().causes();
     }
 }

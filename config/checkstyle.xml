@@ -22,6 +22,7 @@
     ArrayTypeStyle         MixedArrayDimensions
     MatchXpath             NonApiType
     MatchXpath             OperatorPrecedence
+    MatchXpath             JavaTimeDefaultTimeZone
 
   What a rule here refuses is never more than what the check it mirrors refuses, because a rule
   that is stricter stops a commit CI would have accepted. It may refuse less, and where it does the
@@ -166,6 +167,26 @@
                      value="an operation of another precedence written as an operand with no
                             parentheses reads as either grouping: write the parentheses
                             (Error Prone OperatorPrecedence)"/>
+        </module>
+        <!--
+          A reading of the clock that takes the zone from the machine without saying so: `now()`
+          with no argument on a calendar type named by its simple name, and
+          `Clock.systemDefaultZone()`. A zone passed, `ZoneId.systemDefault()` included, is said,
+          and so is a clock. What it leaves to CI: a `now()` imported statically or written with
+          its package, and `dateNow()` on a chronology.
+        -->
+        <module name="MatchXpath">
+            <property name="id" value="JavaTimeDefaultTimeZone"/>
+            <property name="query"
+                      value="//METHOD_CALL[not(ELIST/*)]
+                                [DOT[IDENT[1][@text=('LocalDate', 'LocalDateTime', 'LocalTime', 'MonthDay', 'OffsetDateTime', 'OffsetTime', 'Year', 'YearMonth', 'ZonedDateTime')]]
+                                    [IDENT[2][@text='now']]]
+                             | //METHOD_CALL[not(ELIST/*)]
+                                [DOT[IDENT[1][@text='Clock']][IDENT[2][@text='systemDefaultZone']]]"/>
+            <message key="matchxpath.match"
+                     value="a reading of the clock with no zone takes the machine's without
+                            saying so: pass ZoneId.systemDefault(), or a Clock
+                            (Error Prone JavaTimeDefaultTimeZone)"/>
         </module>
     </module>
 </module>

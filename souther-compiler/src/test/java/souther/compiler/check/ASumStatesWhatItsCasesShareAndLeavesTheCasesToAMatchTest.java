@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -77,7 +78,8 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private final Symbols symbols = rules.symbols();
 
     private final PathEngine engine = new PathEngine(
-            RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+            RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                    TestDay.TODAY),
             Terms.Of.THE_DISCHARGE_TREE);
 
     private final GuaranteeWalk walk =

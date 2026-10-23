@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -51,7 +52,8 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
             """;
 
     private static Compilation started(String source) {
-        Compilation c = Compilation.ofDocuments(Map.of("demo.sou", source), Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(Map.of("demo.sou", source), Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.answerEverything();
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
@@ -68,7 +70,7 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
                 c.db().ask(new Bodies.RequiredRecursiveDefs("demo"));
         assertEquals(List.of("ping", "pong"), rendered(before.value()));
 
-        c.update(Map.of("demo.sou", PONG_FIRST), Set.of());
+        c.update(Map.of("demo.sou", PONG_FIRST), Set.of(), TestDay.DATE);
         Answer<List<souther.compiler.types.ReachName.Declaration>> after =
                 c.db().ask(new Bodies.RequiredRecursiveDefs("demo"));
 
@@ -98,7 +100,7 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
         assertEquals(List.of("List.foldFrom", "ping", "pong"),
                 rendered(before.value().graph().recursive()));
 
-        c.update(Map.of("demo.sou", PONG_FIRST), Set.of());
+        c.update(Map.of("demo.sou", PONG_FIRST), Set.of(), TestDay.DATE);
         Answer<Bodies.Expanding.Of> after = c.db().ask(
                 new Bodies.Expanding("demo", souther.compiler.check.InliningPolicy.FULL));
 

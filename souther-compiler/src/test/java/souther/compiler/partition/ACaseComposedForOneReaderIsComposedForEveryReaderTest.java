@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -51,7 +52,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
 
     private final RuleReadingSource rules = RuleReadings.ofSource(MODULE);
     private final RuleReadingContext reading = RuleReadingContext.unshared(rules,
-            souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
 
     private Type named(String name) {
         return Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), name)));

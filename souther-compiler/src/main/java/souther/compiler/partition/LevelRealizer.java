@@ -620,7 +620,8 @@ public final class LevelRealizer {
             return null;
         }
         PlacesApart apart = within.apartAt(anchored);
-        Place first = carrier.somethingOtherThan(apart, together, admits, looking.meter());
+        Place first = carrier.somethingOtherThan(apart, together, admits, looking.meter(),
+                looking.startingAt(anchored, carrier));
         return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
                         HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT, HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT,

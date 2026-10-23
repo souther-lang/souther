@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -52,7 +53,7 @@ class ABudgetIsNamedByThePlaceItStopsTest {
             souther.compiler.values.AsACompilationAllows.admittedValues(),
             souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
     private static final RuleReadingContext READING =
-            RuleReadingContext.unshared(RULES, POLICY);
+            RuleReadingContext.unshared(RULES, POLICY, TestDay.TODAY);
 
     /** The position of this type as the builder is asked about it: what it is, and what the rules
      *  every name it wears carries say of it. */

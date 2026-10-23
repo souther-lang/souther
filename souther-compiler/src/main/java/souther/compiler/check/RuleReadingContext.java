@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Today;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.values.StringFacts;
@@ -28,6 +29,9 @@ import souther.compiler.values.StringMachineAnswers;
  * keeps what it needs of this ({@link #retainedReadings}) and not the context: held in a result,
  * the rules and the budget would be carried into what somebody else compares.
  *
+ * <p>And the day a value it proposes is chosen near ({@link #today}), which travels with the
+ * three because every reader that proposes a value is handed this and nothing else.
+ *
  * <p>What it was made of and nothing else: the rules, the budget, and the lender — once for a
  * reader under the walk that uses it and once for a result that keeps it past the walk. A context
  * that answered questions of its own — what a name
@@ -49,22 +53,24 @@ public final class RuleReadingContext {
     private final RuleReadingSource source;
     private final ReadingPolicy policy;
     private final DeclarationReadings readings;
+    private final Today today;
 
     private RuleReadingContext(RuleReadingSource source, ReadingPolicy policy,
-                               DeclarationReadings readings) {
-        if (source == null || policy == null || readings == null) {
-            throw new IllegalArgumentException(
-                    "a reading is made of rules, under a budget, and from what is lent to it");
+                               DeclarationReadings readings, Today today) {
+        if (source == null || policy == null || readings == null || today == null) {
+            throw new IllegalArgumentException("a reading is made of rules, under a budget, from"
+                    + " what is lent to it, and on a day");
         }
         this.source = source;
         this.policy = policy;
         this.readings = readings;
+        this.today = today;
     }
 
     /** The world a reader with a lender to hand reads in. */
     public static RuleReadingContext of(RuleReadingSource source, ReadingPolicy policy,
-                                        DeclarationReadings readings) {
-        return new RuleReadingContext(source, policy, readings);
+                                        DeclarationReadings readings, Today today) {
+        return new RuleReadingContext(source, policy, readings, today);
     }
 
     /**
@@ -77,8 +83,9 @@ public final class RuleReadingContext {
      * pays for it once per arrival. So it is asked for here rather than supplied by an overload
      * that leaves the lender out.
      */
-    public static RuleReadingContext unshared(RuleReadingSource source, ReadingPolicy policy) {
-        return new RuleReadingContext(source, policy, DeclarationReadings.NONE);
+    public static RuleReadingContext unshared(RuleReadingSource source, ReadingPolicy policy,
+                                              Today today) {
+        return new RuleReadingContext(source, policy, DeclarationReadings.NONE, today);
     }
 
     /** Where the rules are read from. */
@@ -89,6 +96,17 @@ public final class RuleReadingContext {
     /** What the reading may spend. */
     public ReadingPolicy policy() {
         return policy;
+    }
+
+    /**
+     * The day a value chosen in this world is chosen near, where nothing the rules say fixes it.
+     *
+     * <p>Every value a reading proposes — the one a measurement shows a class holds, and the one a
+     * row is written with — is chosen on this day, so a row offers the value its class was shown to
+     * hold. Which values the rules leave is not read off it.
+     */
+    public Today today() {
+        return today;
     }
 
     /**
@@ -142,7 +160,7 @@ public final class RuleReadingContext {
      */
     public RuleReadingContext whileTheAnswerIsMade(TypeKey named, StringMachineAnswers recorder) {
         return new RuleReadingContext(source, policy,
-                readings.whileTheAnswerIsMade(named, recorder));
+                readings.whileTheAnswerIsMade(named, recorder), today);
     }
 
     /**
@@ -155,6 +173,6 @@ public final class RuleReadingContext {
      */
     RuleReadingContext forACounterfactual(TypeKey named, StringFacts machines) {
         return new RuleReadingContext(source, policy,
-                DeclarationReadings.borrowing(named, machines, readings.revision()));
+                DeclarationReadings.borrowing(named, machines, readings.revision()), today);
     }
 }

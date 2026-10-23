@@ -143,14 +143,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + " epoch days before this line, so the value is a whole number inside"
                             + " long, whatever scale it was written at."),
             new Permission(
-                    "souther/compiler/numeric/Instants#countAt(Ljava/time/Instant;)Lsouther/"
+                    "souther/compiler/numeric/Instants#nanoOf(Ljava/time/Instant;)Lsouther/"
                             + "compiler/numeric/Count; add(Ljava/math/BigDecimal;)Ljava/math/"
                             + "BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
                     "Both operands are BigDecimal.valueOf(long/int) — always scale nought — so the"
                             + " sum needs no room past either side's own, already-valid scale."),
             new Permission(
-                    "souther/compiler/numeric/Instants#countAt(Ljava/time/Instant;)Lsouther/"
+                    "souther/compiler/numeric/Instants#nanoOf(Ljava/time/Instant;)Lsouther/"
                             + "compiler/numeric/Count; multiply(Ljava/math/BigDecimal;)Ljava/math/"
                             + "BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,

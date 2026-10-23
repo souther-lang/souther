@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -65,7 +66,8 @@ class ACountOfWhatACaseConversionAnswersIsAskedOfTheAnswerTest {
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
             AsACompilationAllows.admittedValues(), AsACompilationAllows.whatARuleLeaves());
-    private static final RuleReadingContext READING = RuleReadingContext.unshared(RULES, POLICY);
+    private static final RuleReadingContext READING =
+            RuleReadingContext.unshared(RULES, POLICY, TestDay.TODAY);
     private static final NewtypeInners INNERS = ScopedDeclarations.wrapsOf(SYMBOLS);
     private static final TermPath AT = TermPath.of("t");
 
@@ -251,7 +253,7 @@ class ACountOfWhatACaseConversionAnswersIsAskedOfTheAnswerTest {
                 checked.plan(),
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get("f"), rules);
         RuleReadingContext ruleReading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(sigs.get("f"), ruleReading,
                 TypeCardinality.Counts.workedOutIn(ruleReading), Membership.none());
         Quantities reading = read.quantities(rules);

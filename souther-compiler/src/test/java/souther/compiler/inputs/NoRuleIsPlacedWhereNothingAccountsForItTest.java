@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -264,7 +265,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
                 for (DeclaredSig.Input input : declared.inputs()) {
                     out.add(PlacedRules.of(TermPath.of("p"), input.type(),
                             RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                                    RepositoryModels.knownTo(compilation))));
+                                    RepositoryModels.knownTo(compilation), TestDay.TODAY)));
                 }
             }
         }

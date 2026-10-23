@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -29,7 +30,7 @@ class OneEngineWorksOutEachClosureOnceTest {
         Compilation compilation = Compilation.ofSource("module demo\n", "Main");
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         PathEngine engine = new PathEngine(
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
         FactSubject x = FactSubject.of(NAMES.written("x"));
         LinearForm<FactSubject> form = LinearForm.atom(x);

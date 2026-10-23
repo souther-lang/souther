@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Compilation;
@@ -135,7 +136,7 @@ class WhatOneReadingDecidesIsLentWithItTest {
         FieldDomains canonical = asTheCompilationReads(compilation, "Held");
         FieldDomains settled = FieldDomains.of(declared("Held"),
                 RuleReadingContext.of(RuleReadings.of(compilation, "demo"),
-                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()),
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings(), TestDay.TODAY),
                 Map.of(RuleKey.of("lo"), Count.of(500)));
 
         assertNotSame(canonical, settled,
@@ -156,7 +157,7 @@ class WhatOneReadingDecidesIsLentWithItTest {
         TypeSymbol.AtModule held = declared("Held");
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         RuleReadingContext reading = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
-                compilation.db().readings());
+                compilation.db().readings(), TestDay.TODAY);
         Supposing supposing = Supposing.of(Set.of(declared("Common")),
                 new Supposing.Across(source));
         FieldDomains granting = FieldDomains.of(supposing.readingOf(held, reading), reading,
@@ -183,7 +184,7 @@ class WhatOneReadingDecidesIsLentWithItTest {
                 StoreWork.UNWATCHED);
 
         RuleReadingContext reading =
-                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES, lender);
+                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES, lender, TestDay.TODAY);
         FieldDomains read = FieldDomains.of(declared("Held"), reading);
         assertSame(read, FieldDomains.of(declared("Held"), reading),
                 "what this world's reading came to is handed on while it is this world");
@@ -220,7 +221,8 @@ class WhatOneReadingDecidesIsLentWithItTest {
         FieldDomains lent = asTheCompilationReads(compilation, "Held");
         FieldDomains ofItsOwn = FieldDomains.of(declared("Held"),
                 RuleReadingContext.of(RuleReadings.of(compilation, "demo"),
-                        ReadAs.THE_COMPILATION_DOES, borrowingMachinesAndNoReading(compilation)));
+                        ReadAs.THE_COMPILATION_DOES, borrowingMachinesAndNoReading(compilation),
+                        TestDay.TODAY));
 
         assertNotSame(lent, ofItsOwn, "the reader of its own read for itself");
         assertFalse(lent.movedEnds().isEmpty(),
@@ -271,7 +273,7 @@ class WhatOneReadingDecidesIsLentWithItTest {
                                                      String declaration) {
         return FieldDomains.of(declared(declaration),
                 RuleReadingContext.of(RuleReadings.of(compilation, "demo"),
-                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()));
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings(), TestDay.TODAY));
     }
 
     private static TypeSymbol.AtModule declared(String declaration) {

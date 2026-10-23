@@ -12,6 +12,7 @@ import souther.compiler.query.Abandonment;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 
+import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
@@ -279,16 +280,20 @@ final class SemanticProbe {
      * documents that can join a compile and the modules of those that cannot. Sorted once and handed
      * over, because which of the two a document is is a question with one answer, and a second
      * reading of it here would be a second answer free to differ.
+     *
+     * <p>{@code writtenOn} is the day the rows the compile writes are written on, handed over with
+     * the sources because the compile is kept from one request to the next.
      */
     Reading of(Map<String, String> joining, Set<String> broken, ModulesOnThePath path, String uri,
-               String text, int cursor, Abandonment abandonment) {
+               String text, int cursor, LocalDate writtenOn, Abandonment abandonment) {
         return of(joining, broken, path, uri, text, text != null && parses(text) != null, cursor,
-                abandonment);
+                writtenOn, abandonment);
     }
 
     /** The same, for a caller that has already parsed the buffer and says whether it parsed. */
     Reading of(Map<String, String> joining, Set<String> broken, ModulesOnThePath path, String uri,
-               String text, boolean parses, int cursor, Abandonment abandonment) {
+               String text, boolean parses, int cursor, LocalDate writtenOn,
+               Abandonment abandonment) {
         Repair repair = repair(text, parses, cursor);
         if (repair == null) {
             return null;
@@ -296,10 +301,10 @@ final class SemanticProbe {
         Map<String, String> sources = new LinkedHashMap<>(joining);
         sources.put(uri, repair.text());
         if (compile == null || !path.equals(compiledAgainst)) {
-            compile = Compilation.ofDocuments(sources, broken, path.path());
+            compile = Compilation.ofDocuments(sources, broken, path.path()).writtenOn(writtenOn);
             compiledAgainst = path;
         } else {
-            compile.update(sources, broken);
+            compile.update(sources, broken, writtenOn);
         }
         compile.abandonWhen(abandonment);
         // In the document it was inserted into, and said so: a place that names no text is in the

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -69,7 +70,8 @@ class AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest {
         Reading(String source) {
             Compilation compilation = Compilation.ofSource(source, "Main");
             rules = RuleReadings.of(compilation, compilation.modules().get(0));
-            engine = new PathEngine(RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+            engine = new PathEngine(RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                    TestDay.TODAY),
                     Terms.Of.THE_DISCHARGE_TREE);
             walk = new GuaranteeWalk(engine.guarantees(),
                     DeclarationNewtypes.asWritten(rules.symbols()));

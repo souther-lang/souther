@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
@@ -217,6 +218,7 @@ class WhatARuleLeavesDoesNotTurnOnHowItsAuthorSpeltTheBooleanTest {
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Box"));
-        return FieldDomains.of(named, RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+        return FieldDomains.of(named,
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -48,7 +49,7 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return Partitions.of(behavior, InputDomain.of(sigs.get(behavior), context,
                         TypeCardinality.Counts.workedOutIn(context), Membership.none())
                 .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

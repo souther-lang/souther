@@ -7,6 +7,7 @@ import souther.compiler.coverage.Numberings;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -53,7 +54,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
      *  on. */
     private static souther.compiler.inputs.InputReading readingOf(String parameter, Type type) {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(parameter, null, type)),
                 reading, TypeCardinality.Counts.workedOutIn(reading),

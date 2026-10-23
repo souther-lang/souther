@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,6 +120,23 @@ public sealed interface Criterion {
             LevelSpace space = LevelSpace.onACarrier(carrier);
             for (LevelInterval look : runsInside(region, carrier, min, max)) {
                 Level found = space.witness(look, away).level();
+                if (found instanceof Level.OnACarrier on) {
+                    return on.at();
+                }
+            }
+            return null;
+        }
+
+        /**
+         * The same, of a value standing for {@code region} rather than one beside a line: wanted
+         * near no end of a run, and so near where the number is usually near where a run is left
+         * open ({@link LevelSpace#standingFor}).
+         */
+        static Place standingIn(LevelRegion region, Carrier carrier, Endpoint min, Endpoint max,
+                                UsualPlace usual) {
+            LevelSpace space = LevelSpace.onACarrier(carrier);
+            for (LevelInterval look : runsInside(region, carrier, min, max)) {
+                Level found = space.standingFor(look, usual).level();
                 if (found instanceof Level.OnACarrier on) {
                     return on.at();
                 }

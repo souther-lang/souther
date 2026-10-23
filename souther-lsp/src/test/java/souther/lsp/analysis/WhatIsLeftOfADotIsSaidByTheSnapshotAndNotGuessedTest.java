@@ -9,6 +9,7 @@ import souther.compiler.sites.SemanticSnapshot;
 import souther.compiler.sites.TypeFact;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.Type;
+import souther.test.WrittenOn;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -366,7 +367,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
         joining.put(LIB_URI, LIB);
         int cursor = text.lastIndexOf(".\n") + 1;
         SemanticProbe.Reading reading = new SemanticProbe().of(joining, Set.of(), ModulesOnThePath.NONE,
-                MODEL_URI, text, cursor, Abandonment.NEVER);
+                MODEL_URI, text, cursor, WrittenOn.DAY, Abandonment.NEVER);
         if (reading == null) {
             throw new AssertionError("the half-written line is one the probe finishes off");
         }

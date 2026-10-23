@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -289,7 +290,7 @@ class AFixingIsSettledOverTheRulesOfEveryValueTogetherTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingContext reading =
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES);
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(sigs.get("read"), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
