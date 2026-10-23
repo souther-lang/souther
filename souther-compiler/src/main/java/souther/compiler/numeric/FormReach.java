@@ -342,17 +342,18 @@ final class FormReach<A> {
      * Which premises, by their place in {@link #premises}, name one of the positions {@code coefs}
      * holds, weighed or not — a position held at nought is still one a merge would combine. Null for
      * a form of one position or none, which {@link #highest} answers without a premise.
+     *
+     * <p>Made for the one form and let go after it, and no longer than the round has premises.
      */
     private BitSet namingAnyOf(Map<A, ExactRatio> coefs) {
         if (coefs.size() <= 1) {
             return null;
         }
-        Map<A, BitSet> naming = premises().naming();
+        Map<A, List<Integer>> naming = premises().naming();
         BitSet out = new BitSet();
         for (A position : coefs.keySet()) {
-            BitSet these = naming.get(position);
-            if (these != null) {
-                out.or(these);
+            for (int place : naming.getOrDefault(position, List.of())) {
+                out.set(place);
             }
         }
         return out;
@@ -536,17 +537,24 @@ final class FormReach<A> {
         Premises<A> read = premises;
         if (read == null) {
             List<Premise<A>> out = new ArrayList<>();
-            Map<A, BitSet> naming = new HashMap<>();
+            Map<A, List<Integer>> naming = new HashMap<>();
             for (AffineConstraint<A> rule : rules) {
                 for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
                     Premise<A> premise = new Premise<>(rule, half, out.size());
                     for (A position : half.form().atomsIn(order)) {
-                        naming.computeIfAbsent(position, _ -> new BitSet()).set(premise.place());
+                        naming.computeIfAbsent(position, _ -> new ArrayList<>())
+                                .add(premise.place());
                     }
                     out.add(premise);
                 }
             }
-            read = new Premises<>(List.copyOf(out), Map.copyOf(naming));
+            // Each position holds the places of the premises that name it and no more, so the
+            // index holds as many places as the premises name positions: one set of bits per
+            // position would be as long as the last place that names it, which over positions
+            // each named once is the square of the round.
+            Map<A, List<Integer>> places = new HashMap<>();
+            naming.forEach((position, named) -> places.put(position, List.copyOf(named)));
+            read = new Premises<>(List.copyOf(out), Map.copyOf(places));
             premises = read;
         }
         return read;
@@ -554,7 +562,7 @@ final class FormReach<A> {
 
     /** {@link #premises}: each premise, and the places of the premises naming each position
      *  ({@link Premise#place}). */
-    private record Premises<A>(List<Premise<A>> each, Map<A, BitSet> naming) {}
+    private record Premises<A>(List<Premise<A>> each, Map<A, List<Integer>> naming) {}
 
     /**
      * One half-space of a rule, and where its room stands once a form has asked.

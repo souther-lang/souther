@@ -180,6 +180,7 @@ class SchemaEvolutionTest {
     void aBranchGrowsOnlyWhereNoOtherBranchCanShareADocument() {
         String toldApart = """
                 {
+                  "type": "object",
                   "required": ["kind"],
                   "oneOf": [
                     { "properties": { "kind": { "const": "a" }, "v": { "enum": ["x"] } } },
@@ -188,6 +189,7 @@ class SchemaEvolutionTest {
                 }""";
         assertEquals(List.of(), narrowings(toldApart, """
                 {
+                  "type": "object",
                   "required": ["kind"],
                   "oneOf": [
                     { "properties": { "kind": { "const": "a" }, "v": { "enum": ["x", "z"] } } },
@@ -221,6 +223,7 @@ class SchemaEvolutionTest {
     void aBranchIsAddedOnlyWhereNoOtherBranchCanShareADocument() {
         String toldApart = """
                 {
+                  "type": "object",
                   "required": ["kind"],
                   "oneOf": [
                     { "properties": { "kind": { "const": "a" } } },
@@ -229,6 +232,7 @@ class SchemaEvolutionTest {
                 }""";
         assertEquals(List.of(), narrowings(toldApart, """
                 {
+                  "type": "object",
                   "required": ["kind"],
                   "oneOf": [
                     { "properties": { "kind": { "const": "a" } } },
@@ -239,6 +243,7 @@ class SchemaEvolutionTest {
         assertEquals(List.of("/oneOf/2: added where another branch can take what it takes"),
                 narrowings(toldApart, """
                         {
+                          "type": "object",
                           "required": ["kind"],
                           "oneOf": [
                             { "properties": { "kind": { "const": "a" } } },
@@ -249,6 +254,7 @@ class SchemaEvolutionTest {
         assertEquals(List.of("/oneOf/2: added where another branch can take what it takes"),
                 narrowings(toldApart, """
                         {
+                          "type": "object",
                           "required": ["kind"],
                           "oneOf": [
                             { "properties": { "kind": { "const": "a" } } },
@@ -258,6 +264,7 @@ class SchemaEvolutionTest {
                         }"""), "a branch that says no kind takes documents of every kind");
         assertEquals(List.of("/oneOf: 2 branches shipped and 1 now"), narrowings(toldApart, """
                 {
+                  "type": "object",
                   "required": ["kind"],
                   "oneOf": [
                     { "properties": { "kind": { "const": "a" } } }
@@ -436,6 +443,7 @@ class SchemaEvolutionTest {
 
     private static final String KINDS = """
             {
+              "type": "object",
               "properties": { "kind": { "enum": ["a", "b"] } },
               "allOf": [
                 {
@@ -449,6 +457,7 @@ class SchemaEvolutionTest {
     private static String kindsWith(String words, String wrapped) {
         return """
                 {
+                  "type": "object",
                   "properties": { "kind": { "enum": %s } },
                   "allOf": [
                     {
@@ -517,6 +526,7 @@ class SchemaEvolutionTest {
     /** Two kinds of object, one with a discriminator held to an enum and one without it. */
     private static final String BRANCHES = """
             {
+              "type": "object",
               "required": ["kind"],
               "oneOf": [
                 {
@@ -539,6 +549,7 @@ class SchemaEvolutionTest {
     private static String branchesWith(String word, String refused) {
         return """
                 {
+                  "type": "object",
                   "required": ["kind"],
                   "allOf": [
                     {
@@ -590,6 +601,45 @@ class SchemaEvolutionTest {
                 .replace("\"required\": [\"kind\", \"g\"]", "\"required\": [\"kind\"]")
                 .replace("\"g\": { \"enum\": [\"t\", \"l\", \"s\"] }", "\"g\": { \"enum\": [\"s\"] }");
         assertEquals(List.of(), narrowings(without, current));
+    }
+
+    /**
+     * What a condition or a {@code const} says of the keys of an object it says of nothing else:
+     * a value that is no object meets an {@code if} of them, and the {@code const} of every
+     * branch. So where what shipped took such values, neither shows a document that shipped to be
+     * kept as it was.
+     */
+    @Test
+    void whatIsReadOffTheKeysOfAnObjectHoldsOnlyWhereOnlyObjectsShipped() {
+        // A string was taken, meets the condition, and is refused by its `then`.
+        assertEquals(false, narrowings("""
+                { "properties": { "kind": { "enum": ["a"] } } }""", """
+                {
+                  "properties": { "kind": { "enum": ["a", "b"] } },
+                  "allOf": [
+                    {
+                      "if": { "properties": { "kind": { "const": "b" } }, "required": ["kind"] },
+                      "then": { "type": "object" }
+                    }
+                  ]
+                }""").isEmpty());
+        // A string matched the one branch that takes it, and matches the added one as well.
+        assertEquals(false, narrowings("""
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "type": "object", "properties": { "kind": { "const": "a" } } },
+                    { "properties": { "kind": { "const": "b" } } }
+                  ]
+                }""", """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "type": "object", "properties": { "kind": { "const": "a" } } },
+                    { "properties": { "kind": { "const": "b" } } },
+                    { "properties": { "kind": { "const": "c" } } }
+                  ]
+                }""").isEmpty());
     }
 
     /** Its {@code else} refusing a key some branch took refuses a document that shipped. */

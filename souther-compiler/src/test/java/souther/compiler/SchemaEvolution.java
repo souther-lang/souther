@@ -214,6 +214,12 @@ public final class SchemaEvolution {
         if (!is.isArray() || (!noneShipped && (!was.isArray() || is.size() < was.size()))) {
             return current;
         }
+        // What a condition asks of the keys of an object it asks of nothing else: a value that is
+        // no object meets its `if` whatever words shipped, and is held to its `then`. So none of
+        // this holds unless every document that shipped here was an object.
+        if (!takesObjectsAlone(shipped, roots.shipped(), new HashSet<>())) {
+            return current;
+        }
         Set<String> asked = new LinkedHashSet<>();
         for (JsonNode each : is) {
             JsonNode held = followed(each, roots.current(), new HashSet<>());
@@ -416,8 +422,9 @@ public final class SchemaEvolution {
     /**
      * Whether no other branch of {@code branches} accepts a document branch {@code at} does.
      *
-     * <p>Shown one of two ways. By a key the document must carry to match the branch, held there to
-     * one value no other branch allows: every other branch holds the same key to a different
+     * <p>Shown one of two ways, each among objects and so only where the branch takes objects
+     * alone. By a key the document must carry to match the branch, held there to one value no
+     * other branch allows: every other branch holds the same key to a different
      * {@code const}. Or by a key the document must carry that no other branch lets an object carry
      * at all, where the branch takes objects alone ({@link #refusesAnObjectHolding}). Either way a
      * document the branch comes to accept is refused by every other branch, and the {@code oneOf}
@@ -428,7 +435,7 @@ public final class SchemaEvolution {
      * @param root  the schema the {@code oneOf} is in, which a {@code $ref} is followed into
      */
     private static boolean exclusive(JsonNode branches, int at, JsonNode owner, JsonNode root) {
-        return toldApartByAConst(branches, at, owner)
+        return toldApartByAConst(branches, at, owner, root)
                 || toldApartByAKeyNoOtherAdmits(branches, at, owner, root);
     }
 
@@ -453,6 +460,44 @@ public final class SchemaEvolution {
                 }
             }
             if (onlyHere) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether every value {@code schema} accepts is an object: it says so, every branch of a
+     * {@code oneOf} or an {@code anyOf} it holds does, or some part of an {@code allOf} does.
+     *
+     * <p>Asked before anything is read off the keys a schema names. {@code properties},
+     * {@code required} and a {@code const} under them ask nothing of a value that is no object, so
+     * what they tell apart, or what an {@code if} of them refuses, is told apart only among
+     * objects. False wherever that is not shown, as {@link #refusesAnObjectHolding} is.
+     *
+     * @param followed the definitions already followed on the way here
+     */
+    private static boolean takesObjectsAlone(JsonNode schema, JsonNode root, Set<String> followed) {
+        JsonNode held = followed(schema, root, followed);
+        if (held == null) {
+            return false;
+        }
+        if ("object".equals(held.path("type").asString(""))) {
+            return true;
+        }
+        for (String keyword : List.of("oneOf", "anyOf")) {
+            if (held.has(keyword) && !held.get(keyword).isEmpty()) {
+                boolean every = true;
+                for (JsonNode each : held.get(keyword)) {
+                    every &= takesObjectsAlone(each, root, new HashSet<>(followed));
+                }
+                if (every) {
+                    return true;
+                }
+            }
+        }
+        for (JsonNode each : held.path("allOf")) {
+            if (takesObjectsAlone(each, root, new HashSet<>(followed))) {
                 return true;
             }
         }
@@ -519,8 +564,18 @@ public final class SchemaEvolution {
         return followed(root.get("$defs").get(definition), root, followed);
     }
 
-    private static boolean toldApartByAConst(JsonNode branches, int at, JsonNode owner) {
+    /**
+     * Whether branch {@code at} requires a key no other branch lets hold the value it does, among
+     * objects — where every value it, or the owner, takes is one ({@link #takesObjectsAlone}): a
+     * value that is no object is held to no key, and meets the {@code const} of every branch.
+     */
+    private static boolean toldApartByAConst(JsonNode branches, int at, JsonNode owner,
+                                             JsonNode root) {
         JsonNode branch = branches.get(at);
+        if (!"object".equals(owner.path("type").asString(""))
+                && !takesObjectsAlone(branch, root, new HashSet<>())) {
+            return false;
+        }
         Set<String> required = words(branch.path("required"));
         required.addAll(words(owner.path("required")));
         for (String key : branch.path("properties").propertyNames()) {
