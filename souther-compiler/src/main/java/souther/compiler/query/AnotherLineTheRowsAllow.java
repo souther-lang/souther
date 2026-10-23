@@ -561,21 +561,30 @@ public sealed interface AnotherLineTheRowsAllow {
             }
 
             /** At the place where the model's rule keeps the value, so the refused row is one the
-             *  line keeps; away from it where the rule refuses the value. */
+             *  line keeps; off it where the rule refuses the value ({@link #off}). */
             @Override
             public SearchRegion onTheRefusedSide(SearchRegion within) {
-                return within.assuming(atThePlace(), keepsTheValue ? Rel.EQ : Rel.NE).taken();
+                return within.assuming(atThePlace(), keepsTheValue ? Rel.EQ : off()).taken();
             }
 
-            /** Away from the place where the model's rule keeps the value, so the kept row is one
-             *  the line refuses; at it where the rule refuses the value. */
+            /** Off the place where the model's rule keeps the value, so the kept row is one the
+             *  line refuses ({@link #off}); at it where the rule refuses the value. */
             @Override
             public Optional<UnaryOperator<SearchRegion>> onTheKeptSide() {
                 if (named == null) {
                     return Optional.empty();
                 }
-                Rel rel = keepsTheValue ? Rel.NE : Rel.EQ;
+                Rel rel = keepsTheValue ? off() : Rel.EQ;
                 return Optional.of(within -> within.assuming(atThePlace(), rel).taken());
+            }
+
+            /**
+             * Off the place, asked as past it on one side. Either side rules the line out, and a
+             * region holds a side as an end where it may hold no hole at all, so asked as a hole
+             * the region could come back narrowed by nothing and a row be composed at the place.
+             */
+            private static Rel off() {
+                return Rel.GT;
             }
 
             private LinearForm<NumericTerm> atThePlace() {
