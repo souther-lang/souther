@@ -1015,6 +1015,26 @@ final class Coverages {
     }
 
     /**
+     * {@code beside}, with each line nothing showed an input arriving at put where the rows leave
+     * it, where a row composed to rule it out was seen run to this rule: the input that row was
+     * composed at is one that arrives. The run is the evidence, so a row composed and not seen
+     * there, or not read back at all, leaves the line where it was.
+     */
+    private static AnotherLineTheRowsAllow shownArriving(AnotherLineTheRowsAllow beside,
+                                                         ARowTellingTheLinesApart toldApart) {
+        if (!(beside instanceof AnotherLineTheRowsAllow.ByDirection lines)) {
+            return beside;
+        }
+        Map<QuantityKey, Map<NumericTerm, Place>> arriving = new LinkedHashMap<>();
+        for (ARowTellingTheLinesApart.AtOneReading one : toldApart.each()) {
+            if (one.composedAt() != null && one.searches().ranThere()) {
+                arriving.putIfAbsent(one.direction(), one.composedAt());
+            }
+        }
+        return arriving.isEmpty() ? beside : lines.shownArriving(arriving);
+    }
+
+    /**
      * What looking for a row that rules out each line the rows leave standing beside this one came
      * to, or that nobody asked where none is standing.
      *
@@ -1044,11 +1064,15 @@ final class Coverages {
      * <p>Asked whether or not a row already stands in there. A row at a point shows the line has
      * not moved and says nothing about which way it runs, which is what raised this question: the
      * points being met is what makes the question due rather than what answers it.
+     *
+     * <p>And for each line the rows leave where nothing showed an input arriving
+     * ({@link AnotherLineTheRowsAllow.ByDirection#lookedFor}): a row composed there and run is what
+     * may show one.
      */
     private static ARowTellingTheLinesApart tellingApart(BorderAssessment border,
                                                          OneSearchOfABorder search) {
         if (!(border.beside() instanceof AnotherLineTheRowsAllow.ByDirection lines)
-                || lines.standing().isEmpty()) {
+                || lines.lookedFor().isEmpty()) {
             return ARowTellingTheLinesApart.notAsked();
         }
         Criterion refused = runBeside(border.border(), false);
@@ -1058,7 +1082,7 @@ final class Coverages {
         // to say once it is read back, and that is asked where every offered row is weighed, in
         // Settlements — which also drops a row another one already answers for.
         List<ARowTellingTheLinesApart.AtOneReading> out = new ArrayList<>();
-        for (AnotherLineTheRowsAllow.Stands line : lines.standing()) {
+        for (AnotherLineTheRowsAllow.Stands line : lines.lookedFor()) {
             // Both sides, whatever the first came to. A row composed on one side is a candidate and
             // not yet evidence — it may come back unread, or arrive somewhere that settles nothing
             // — so it is no reason to leave the other side unlooked at; which of the two the block
@@ -1444,7 +1468,13 @@ final class Coverages {
         }
         List<BorderAssessment> out = new ArrayList<>();
         for (List<BorderAssessment> ofOneLine : byLine.values()) {
-            out.add(asOneLine(ofOneLine));
+            // What a run showed arriving is said of the line, once its readings are one: a
+            // reading the rows rule a line out at settles it for both, and the line is only then
+            // known to be one nothing settled.
+            BorderAssessment line = asOneLine(ofOneLine);
+            out.add(new BorderAssessment(line.border(), line.items(),
+                    shownArriving(line.beside(), line.toldApart()), line.toldApart(),
+                    line.readAt(), line.saidOnTheWay()));
         }
         return List.copyOf(out);
     }

@@ -113,6 +113,42 @@ public sealed interface AnotherLineTheRowsAllow {
                     .toList();
         }
 
+        /**
+         * The lines a row is looked for to rule out, in the family's order: the ones the rows
+         * leave standing, and the ones they leave where nothing showed an input arriving
+         * ({@link Unsettled.NoReachableDistinguisher}), which a row composed there and run may
+         * show.
+         */
+        public List<Stands> lookedFor() {
+            List<Stands> out = new ArrayList<>();
+            for (Direction one : each) {
+                switch (one) {
+                    case Stands standing -> out.add(standing);
+                    case Undecided(var _, Unsettled.NoReachableDistinguisher(var left)) ->
+                            out.add(left);
+                    case Undecided _, RuledOut _ -> { }
+                }
+            }
+            return out;
+        }
+
+        /**
+         * The same lines, with each one nothing showed an input arriving at put where the rows
+         * leave it, where {@code arriving} names an input for it: one a row composed there was
+         * seen run to this rule at. A run is what shows an input arrives, so the line is then one
+         * the rows leave standing, at that input; every other line is as it was.
+         */
+        public ByDirection shownArriving(Map<QuantityKey, Map<NumericTerm, Place>> arriving) {
+            List<Direction> out = new ArrayList<>();
+            for (Direction one : each) {
+                Map<NumericTerm, Place> at = arriving.get(one.direction());
+                out.add(at != null && one instanceof Undecided(var _,
+                        Unsettled.NoReachableDistinguisher(var left))
+                        ? left.toldApartAt(at) : one);
+            }
+            return new ByDirection(out);
+        }
+
         /** The lines the question was put of and could not be settled for. */
         public List<Undecided> undecided() {
             return each.stream().filter(Undecided.class::isInstance).map(Undecided.class::cast)
@@ -222,6 +258,11 @@ public sealed interface AnotherLineTheRowsAllow {
 
         private Ends ends() {
             return new Ends(direction, keptOn, cut, refusedFrom);
+        }
+
+        /** The same line, with {@code input} the input that would rule it out. */
+        Stands toldApartAt(Map<NumericTerm, Place> input) {
+            return new Stands(direction, cut, refusedFrom, keptOn, input);
         }
 
         /**
@@ -480,8 +521,21 @@ public sealed interface AnotherLineTheRowsAllow {
          * nothing. So an input is named only where the conditions on the way to the rule answer the
          * same at it as at a row that reached — and where one of them could not be read, or the
          * arithmetic does not come out in whole steps, this is what is left.
+         *
+         * <p>What the conditions could not show, a row composed on the far side of the line and run
+         * still may: one seen run to this rule there is an input that arrives, and the line is then
+         * one the rows leave standing ({@link ByDirection#shownArriving}). Until a run shows that,
+         * the line is neither.
+         *
+         * @param left where the rows leave the line, which a row composed for it is looked for
+         *             beside
          */
-        record NoReachableDistinguisher() implements Unsettled {}
+        record NoReachableDistinguisher(Stands left) implements Unsettled {
+
+            public NoReachableDistinguisher {
+                Objects.requireNonNull(left, "a line the rows leave is left somewhere");
+            }
+        }
 
         /**
          * There is a line beside this one and this compiler holds no border against it.
@@ -840,7 +894,8 @@ public sealed interface AnotherLineTheRowsAllow {
         Distinguisher parting =
                 partingAt(boundary, ends, satisfying, refusing, elsewhere, way, refused);
         if (parting == null) {
-            return new Undecided(other, new Unsettled.NoReachableDistinguisher());
+            return new Undecided(other,
+                    new Unsettled.NoReachableDistinguisher(new Stands(ends, null)));
         }
         return new Stands(ends, parting.named());
     }
