@@ -1025,7 +1025,7 @@ final class Pullback {
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
-                leaveUnsaidWhatMayEndARunUnder(body, reads);
+                leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated;
             return whereEachOperatorAnswers(operated);
@@ -1081,31 +1081,73 @@ final class Pullback {
      * rows of the others — which is no narrowing, since it is not known which, and is a place the
      * run may stop on.
      */
-    private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads) {
+    private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
                 && !WhatARunMayEndFor.itself(e).endsNone()) {
             boolean[] hasOperands = {false};
             Core.forEachChild(e, operand -> {
                 hasOperands[0] = true;
-                leaveUnsaidOverWhatItReads(operand, reads);
+                leaveUnsaidOverWhatItReads(operand, reads, bound);
             });
             if (!hasOperands[0]) {
                 operated.leaveUnsaidOverUnreadOperands();
             }
         }
         if (e instanceof Core.LetIn li) {
-            leaveUnsaidWhatMayEndARunUnder(li.value(), reads);
-            leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads));
+            leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
+            leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
         } else {
-            Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads));
+            Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
+                    Core.withoutStanding(child) instanceof Core.Block block
+                            ? boundInside(e, block, reads, bound) : bound));
         }
     }
+
+    /**
+     * The names {@code block}, an argument of {@code applied}, binds, and the places they stand
+     * for: what an operation of the library applies a closure to is what its other arguments hold,
+     * so a name the closure binds is read off the places those read — and none this can name where
+     * the closure is not an argument of such a call, which is applied to what its applications
+     * say.
+     */
+    private Bound boundInside(Core applied, Core.Block block, InputReads reads, Bound outer) {
+        Set<BindingId> names = new HashSet<>(outer == null ? Set.of() : outer.names());
+        block.params().forEach(binder -> names.add(binder.binding()));
+        Set<TermPath> standFor = null;
+        if (applied instanceof Core.Call || applied instanceof Core.PreservedCall) {
+            Operators held = operated;
+            Operators others = new Operators();
+            operated = others;
+            try {
+                Core.forEachChild(applied, part -> {
+                    if (!(Core.withoutStanding(part) instanceof Core.Block)) {
+                        leaveUnsaidOverWhatItReads(part, reads, outer);
+                    }
+                });
+            } finally {
+                operated = held;
+            }
+            if (!others.unsaidElsewhere && (outer == null || outer.standFor() != null)) {
+                standFor = new LinkedHashSet<>(others.unsaidAt);
+                if (outer != null) {
+                    standFor.addAll(outer.standFor());
+                }
+            }
+        }
+        return new Bound(names, standFor);
+    }
+
+    /**
+     * The names the closures around a part bind, and the places they stand for, or null where
+     * they stand for nothing this can name.
+     */
+    private record Bound(Set<BindingId> names, Set<TermPath> standFor) {}
 
     /** The places {@code operand} reads, as the ones what is worked out over it may stop a run
      *  on: those of the numbers its form is over, or else those it stands at, and no place this
      *  can name where it is neither. */
-    private void leaveUnsaidOverWhatItReads(Core operand, InputReads reads) {
+    private void leaveUnsaidOverWhatItReads(Core operand, InputReads reads, Bound bound) {
         // Reading a form tells the operators in it, which are worked out on some runs only here.
         Operators held = operated;
         operated = null;
@@ -1116,13 +1158,18 @@ final class Pullback {
             operated = held;
         }
         if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            operated.leaveUnsaid(form.coefs().keySet());
+            operated.leaveUnsaid(form.coefs().keySet(), bound);
         } else {
-            leaveUnsaidOverWhereItStands(operand, reads);
+            leaveUnsaidOverWhereItStands(operand, reads, bound);
         }
     }
 
-    private void leaveUnsaidOverWhereItStands(Core operand, InputReads reads) {
+    private void leaveUnsaidOverWhereItStands(Core operand, InputReads reads, Bound bound) {
+        if (Core.withoutStanding(operand) instanceof Core.Block) {
+            // A closure is made here and applied elsewhere: what its body may stop on is asked
+            // of the body, under the names it binds ({@link #boundInside}).
+            return;
+        }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
             case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
             case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
@@ -1130,10 +1177,10 @@ final class Pullback {
                 boolean[] hasParts = {false};
                 Core.forEachChild(Core.withoutStanding(operand), part -> {
                     hasParts[0] = true;
-                    leaveUnsaidOverWhereItStands(part, reads);
+                    leaveUnsaidOverWhereItStands(part, reads, bound);
                 });
-                if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read) {
-                    operated.leaveUnsaidOverUnreadOperands();
+                if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read name) {
+                    operated.leaveUnsaidOver(name.binding(), bound);
                 }
             }
         }
@@ -5351,13 +5398,25 @@ final class Pullback {
         /** An operator that may stop a run where nothing is said, over {@code reads}: the places
          *  of the numbers among them are the ones it may stop on, and a quantity that is no
          *  number of a place leaves it stopping on no place this can name. */
-        void leaveUnsaid(Collection<? extends Quantity> reads) {
+        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
             for (Quantity each : reads) {
                 if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
                     unsaidAt.add(term.subjectPath());
+                } else if (each instanceof Quantity.OfABinding named) {
+                    leaveUnsaidOver(named.binding(), bound);
                 } else {
                     unsaidElsewhere = true;
                 }
+            }
+        }
+
+        /** The same, over a name: the places of what a closure around binds it to where it is a
+         *  name of one, and no place this can name where it is not. */
+        void leaveUnsaidOver(BindingId name, Bound bound) {
+            if (bound != null && bound.standFor() != null && bound.names().contains(name)) {
+                unsaidAt.addAll(bound.standFor());
+            } else {
+                unsaidElsewhere = true;
             }
         }
 
@@ -5419,7 +5478,7 @@ final class Pullback {
                     || form.coefs().keySet().stream().anyMatch(quantity ->
                             quantity instanceof Quantity.HowManyMeet
                                     || quantity instanceof Quantity.HowManyDifferentMeet)) {
-                operated.leaveUnsaid(form.coefs().keySet());
+                operated.leaveUnsaid(form.coefs().keySet(), null);
                 continue;
             }
             if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
@@ -5432,7 +5491,7 @@ final class Pullback {
                         aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
                                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
             } else {
-                operated.leaveUnsaid(form.coefs().keySet());
+                operated.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
         return out;

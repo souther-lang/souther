@@ -399,25 +399,34 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * And a run that may stop on something no place names ties every place to every other: the
-     * body of a closure applied by the library reads a name only its application gives a value,
-     * so nothing is shown to take any pair of values.
+     * And a run that may stop on something no place names ties every place to every other: a join
+     * of a string the body wrote may end a run for its length, which no place of the input holds,
+     * so nothing is shown to take any pair of values. A closure handed to the library is read off
+     * what that call's other arguments hold, and does not.
      */
     @Test
     void aRunThatMayStopOnWhatNoPlaceNamesLeavesNoPairIndependent() {
         String small = "data Yen = Int invariant value >= 0 && value <= 1000000";
         String plain = "{\n    let unused = 0\n    a.value + b.value >= 30\n}";
-        String closure = "{\n    let unused = List.map(x -> Int.floorMod(x, 7), [1, 2])\n"
+        String applied = "{\n    let unused = List.map(x -> Int.floorMod(1, x), [1, 2])\n"
                 + "    a.value + b.value >= 30\n}";
-        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED), leftWithClasses("a: Yen, b: Yen", small, plain));
+        String joined = "{\n    let s = \"ab\"\n    let unused = s ++ s\n"
+                + "    a.value + b.value >= 30\n}";
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
+                leftWithClasses("a: Yen, b: Yen", small, plain));
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
+                leftWithClasses("a: Yen, b: Yen", small, applied));
         assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
-                leftWithClasses("a: Yen, b: Yen", small, closure));
+                leftWithClasses("a: Yen, b: Yen", small, joined));
     }
 
     private static Map<String, String> leftWithClasses(String inputs, String declarations,
                                                        String body) {
-        int col = body.lines().toList().get(2).indexOf(">=") + 1;
-        Map<String, String> out = new LinkedHashMap<>(left(inputs, declarations, body, "6:" + col));
+        List<String> lines = body.lines().toList();
+        int last = lines.size() - 2;
+        int col = lines.get(last).indexOf(">=") + 1;
+        Map<String, String> out = new LinkedHashMap<>(left(inputs, declarations, body,
+                (declarations.lines().count() + 3 + last) + ":" + col));
         for (String place : List.of("a", "b")) {
             List<String> classes = classesAt(inputs, declarations, body, place);
             if (classes.size() == 2 && classes.get(0).equals(place + "/0 <= x < 30")) {

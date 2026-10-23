@@ -769,15 +769,14 @@ final class DemandReading {
             if (endsOfTheInts(constraint)) {
                 continue;
             }
-            // What a region carries it is told, and whatever it ties more than one place to is
-            // told as well: the region says how far each number runs given the others, and not
-            // that the numbers are no longer free of one another.
+            // What a region carries it is told, and the places a way ties by it are worked out
+            // against the region it narrows ({@link Reachability.Reaching#gettingPast}): a
+            // condition the declarations already hold ties nothing.
             if (constraint.terms().stream().allMatch(term ->
                     term instanceof NumericTerm.ValueOf value
                             && !value.position().insideAContainer())) {
                 narrowing.add(constraint);
-            }
-            if (constraint.terms().size() != 1 || !narrowing.contains(constraint)) {
+            } else {
                 Set<TermPath> places = new LinkedHashSet<>();
                 constraint.terms().forEach(term -> places.add(term.subjectPath()));
                 tied.add(places);
