@@ -1,34 +1,48 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ClosureUses;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
- * Whether every row a count is read over gets past what a run works out before the comparison
- * reading it, as the witness of the count did.
+ * Whether every row a count is read over gets through what a run works out up to the comparison
+ * reading it, the comparison included, as the witness of the count did.
  *
  * <p>The rows are the witness's two elements over again, so many of each, with everything else the
- * witness holds. What a run works out before the comparison and reads nothing of the container is
- * worked out on what the witness holds, and comes out as it did there. What reads the container
- * is allowed in one shape only: the walk whose kept elements the comparison counts, applying a
- * step to every element and handing it the element alone, with nothing carried from one
- * application to the next and nothing of the container read inside it. Each application is then
- * of an element the witness held, on what the witness held besides, and comes out as it did
- * there; and what the walk keeps is never more than the container holds. Anything else read off
- * the container before the comparison — a fold, a lookup, a helper walking it — is worked out on
- * a container the witness never held, and nothing here says it comes out at all.
+ * witness holds. What the run works out is everything before the comparison — the value of each
+ * {@code let} it is under, each operand and condition evaluated before the part it is in — and the
+ * comparison itself, operands and operator alike: a count written inline is worked out inside the
+ * comparison, and so is anything beside it there. Each part of that is one of four things.
+ *
+ * <p>A part that reads nothing of the container is worked out on what the witness holds, and comes
+ * out as it did there. A name read works nothing out. The walk the count was read off applies a
+ * step to every element, handing it the element alone, with nothing carried from one application
+ * to the next and nothing of the container read inside it: each application is of an element the
+ * witness held, on what the witness held besides, and comes out as it did there, and what the walk
+ * keeps is the count, never more than the container holds ({@link Quantity.HowManyMeet}). Which
+ * walk that is, is not spelled out anywhere a reading of the count leaves it: it is a walk of the
+ * container's elements the comparison reads, so it is among these parts, and where it is the only
+ * one there it is that one — where there are several, nothing is shown. Anything else reading the
+ * container is worked out on a container
+ * the witness never held, and is let through only where what it is ends no run on its own
+ * ({@link WhatARunMayEndFor#itself}) and every part of it is one of the four in turn — a size taken
+ * of the container, the comparison of two numbers. A fold, a lookup, a helper walking the
+ * container, a walk that keeps a number of elements other than the count, is none of them.
  *
  * <p>Of the tree the analysis reads, where the language's operations stand as the calls they are.
  */
@@ -37,27 +51,60 @@ final class WhatARunWorksOutBeforeACount {
     private WhatARunWorksOutBeforeACount() {}
 
     /**
-     * {@code witnesses}, kept for a count only where every row it is read over gets past what a
-     * run works out before {@code comparison}, a node of {@code root}'s tree; none where
+     * {@code witnesses}, kept for a count only where every row it is read over gets through what a
+     * run works out up to {@code comparison}, a node of {@code root}'s tree; none where
      * {@code comparison} is not in it, or stands in a closure, whose applications are not the one
      * run a witness is of.
      *
+     * <p>Worked out where a count is first asked about, and once for each count: every comparison
+     * of a body is read with this beside it, and few of them read a count.
+     *
+     * @param reads      the names as they stand at the comparison
      * @param parameters the binding each parameter of the behavior is read on, by its name
      */
     static CountWitnesses.Lookup past(Core root, Core comparison, InputReads reads,
                                       Map<BindingId, String> parameters,
                                       CountWitnesses.Lookup witnesses) {
-        List<Before> before = root == null ? null : before(root, comparison);        if (before == null) {
+        if (root == null) {
             return CountWitnesses.Lookup.NONE;
         }
-        return count -> count.container() instanceof DecisionSubject.AnInput(TermPath container)
-                && getsPast(before, comparison, root, reads, parameterOf(container, parameters))
-                ? witnesses.of(count) : CountWitnesses.Sought.NOTHING;
+        Map<Quantity.HowManyMeet, Boolean> getsThrough = new HashMap<>();
+        List<Optional<List<Core>>> worked = new ArrayList<>(1);
+        return count -> {
+            if (worked.isEmpty()) {
+                worked.add(Optional.ofNullable(workedOutUpTo(root, comparison)));
+            }
+            boolean through = worked.getFirst().isPresent()
+                    && getsThrough.computeIfAbsent(count, asked -> getsThrough(
+                            worked.getFirst().get(), asked, root, reads, parameters));
+            return through ? witnesses.of(count) : CountWitnesses.Sought.NOTHING;
+        };
     }
 
-    /** What a run works out before the comparison: an expression, and the name a {@code let}
-     *  gives it, or null where it is given none. */
-    private record Before(Core value, BindingId named) {}
+    /** Whether every one of {@code parts} is let through for {@code count}. */
+    private static boolean getsThrough(List<Core> parts, Quantity.HowManyMeet count, Core root,
+                                       InputReads reads, Map<BindingId, String> parameters) {
+        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container))) {
+            return false;
+        }
+        BindingId parameter = parameterOf(container, parameters);
+        if (parameter == null) {
+            return false;
+        }
+        Set<BindingId> ofTheContainer = WhatABodyReads.namesMadeOf(root, Set.of(parameter));
+        // The count was read off a walk over the container that the comparison reads, which is
+        // worked out among these parts wherever it is written; where one such walk is, it is that
+        // one, and where several are, which of them it is is not known here.
+        List<Core> walks = new ArrayList<>();
+        Within finding = new Within(parameter, ofTheContainer, reads, null);
+        parts.forEach(each -> finding.walksIn(each, walks));
+        if (walks.size() > 1) {
+            return false;
+        }
+        Within asked = new Within(parameter, ofTheContainer, reads,
+                walks.isEmpty() ? null : walks.getFirst());
+        return parts.stream().allMatch(asked::letsThrough);
+    }
 
     /** The binding of the parameter {@code container} is under, or null where none is. */
     private static BindingId parameterOf(TermPath container, Map<BindingId, String> parameters) {
@@ -70,62 +117,110 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
-     * Whether every part of {@code before} reading the container on {@code parameter} is the walk
-     * whose kept elements {@code comparison} counts.
+     * What a part is judged against, for a count of the elements of the container on
+     * {@code parameter}.
+     *
+     * @param parameter      the binding of the parameter the container is under
+     * @param ofTheContainer that binding, and every name the body binds to a value reading it
+     * @param reads          the names as they stand at the comparison
+     * @param counted        the walk the count was read off, or null where none is let through
      */
-    private static boolean getsPast(List<Before> before, Core comparison, Core root,
-                                    InputReads reads, BindingId parameter) {
-        if (parameter == null) {
-            return false;
-        }
-        Set<BindingId> ofTheContainer = WhatABodyReads.namesMadeOf(root, Set.of(parameter));
-        for (Before each : before) {
-            if (WhatABodyReads.anyOf(each.value(), ofTheContainer)
-                    && !keptAndCounted(each, comparison, reads, parameter, ofTheContainer)) {
-                return false;
-            }
-        }
-        return true;
-    }
+    private record Within(BindingId parameter, Set<BindingId> ofTheContainer, InputReads reads,
+                          Core counted) {
 
-    /**
-     * Whether {@code each} is a walk over the container on {@code parameter} that the comparison
-     * reads what it kept of: a call handed the container as it is and one closure, which the call
-     * alone applies, to every element, handed the element and nothing an application before it
-     * made, and reading nothing of the container.
-     */
-    private static boolean keptAndCounted(Before each, Core comparison, InputReads reads,
-                                          BindingId parameter, Set<BindingId> ofTheContainer) {
-        Core call = Core.withoutStanding(each.value());
-        List<Core> args = switch (call) {
-            case Core.Call applying -> applying.args();
-            case Core.PreservedCall applying -> applying.args();
-            default -> null;
-        };
-        if (each.named() == null || !WhatABodyReads.binding(comparison, each.named())
-                || args == null) {
-            return false;
-        }
-        Core.Block step = null;
-        for (Core arg : args) {
-            Core bare = Core.withoutStanding(arg);
-            if (bare instanceof Core.Block block && step == null) {
-                step = block;
-            } else if (!offTheParameter(bare, parameter)
-                    && WhatABodyReads.anyOf(arg, ofTheContainer)) {
+        /** Whether {@code e} is one of the four things a part may be. */
+        boolean letsThrough(Core e) {
+            if (!WhatABodyReads.anyOf(e, ofTheContainer)) {
+                return true;
+            }
+            Core bare = Core.withoutStanding(e);
+            if (bare instanceof Core.Read) {
+                return true;
+            }
+            if (bare == counted) {
+                return argumentsBesideTheStep(bare).stream().allMatch(this::letsThrough);
+            }
+            if (bare instanceof Core.Block) {
                 return false;
             }
+            for (Core each : Core.subexpressionsAt(bare)) {
+                if (!WhatARunMayEndFor.itself(each).endsNone()) {
+                    return false;
+                }
+            }
+            boolean[] every = {true};
+            Core.forEachChild(bare, child -> every[0] = every[0] && letsThrough(child));
+            return every[0];
         }
-        ClosureUses uses = step == null ? null : reads.usesOf(step);
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1
-                || WhatABodyReads.anyOf(step.body(), ofTheContainer)) {
-            return false;
+
+        /** Adds to {@code into} every walk of the container's elements worked out in
+         *  {@code e} ({@link #aWalkOfItsElements}), in the order they stand. */
+        void walksIn(Core e, List<Core> into) {
+            if (!WhatABodyReads.anyOf(e, ofTheContainer)) {
+                return;
+            }
+            Core bare = Core.withoutStanding(e);
+            for (Core each : Core.subexpressionsAt(bare)) {
+                if (aWalkOfItsElements(each)) {
+                    into.add(each);
+                }
+            }
+            Core.forEachChild(bare, child -> {
+                if (!(Core.withoutStanding(child) instanceof Core.Block)) {
+                    walksIn(child, into);
+                }
+            });
         }
-        ClosureUses.Application applied = uses.applications().getFirst();
-        return applied.applied() == HowAClosureIsApplied.TO_EVERY_ELEMENT
-                && applied.call() == call
-                && applied.madeByTheApplicationsBefore().isEmpty()
-                && offTheParameter(applied.container(), parameter);
+
+        /**
+         * Whether {@code e} is a call applying one closure, which it alone applies, to every
+         * element of the container as it is, handing it the element and nothing an application
+         * before it made, and reading nothing of the container inside it.
+         */
+        private boolean aWalkOfItsElements(Core e) {
+            Core.Block step = stepOf(e);
+            ClosureUses uses = step == null ? null : reads.usesOf(step);
+            if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1
+                    || WhatABodyReads.anyOf(step.body(), ofTheContainer)) {
+                return false;
+            }
+            ClosureUses.Application applied = uses.applications().getFirst();
+            return applied.applied() == HowAClosureIsApplied.TO_EVERY_ELEMENT
+                    && applied.call() == e
+                    && applied.madeByTheApplicationsBefore().isEmpty()
+                    && offTheParameter(applied.container(), parameter);
+        }
+
+        /** The one closure the call {@code e} is handed, or null where it is no call or is
+         *  handed none or several. */
+        private static Core.Block stepOf(Core e) {
+            Core.Block step = null;
+            for (Core arg : argumentsOf(e)) {
+                if (Core.withoutStanding(arg) instanceof Core.Block block) {
+                    if (step != null) {
+                        return null;
+                    }
+                    step = block;
+                }
+            }
+            return step;
+        }
+
+        /** What the call {@code e} is handed beside its closure. */
+        private static List<Core> argumentsBesideTheStep(Core e) {
+            return argumentsOf(e).stream()
+                    .filter(arg -> !(Core.withoutStanding(arg) instanceof Core.Block))
+                    .toList();
+        }
+
+        /** What the call {@code e} is handed, or nothing where it is no call. */
+        private static List<Core> argumentsOf(Core e) {
+            return switch (Core.withoutStanding(e)) {
+                case Core.Call applying -> applying.args();
+                case Core.PreservedCall applying -> applying.args();
+                default -> List.of();
+            };
+        }
     }
 
     /** Whether {@code e} is the parameter on {@code parameter}, or a field of it read down some
@@ -140,65 +235,69 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
-     * What a run works out before it gets to {@code comparison}, a node of {@code e}'s tree, in
-     * the order it does — or null where it is not in the tree, or stands in a closure.
+     * What a run works out up to {@code comparison}, a node of {@code root}'s tree, in the order
+     * it does, the comparison last — or null where it is not in the tree, or stands in a closure.
      *
      * <p>The value of every {@code let} whose body it is in, and every part of each node on the
      * way that runs before the part it is in: an operand before it, a condition deciding the
      * branch it is in. A part that runs only on some runs is counted as running, which asks more
      * of the way and never less.
      */
-    private static List<Before> before(Core e, Core comparison) {
-        if (e == comparison) {
-            return new ArrayList<>();
-        }
-        Core bare = Core.withoutStanding(e);
-        if (bare instanceof Core.Block) {
+    private static List<Core> workedOutUpTo(Core root, Core comparison) {
+        List<Core> way = wayDownTo(root, comparison);
+        if (way == null) {
             return null;
         }
-        if (bare instanceof Core.LetIn let) {
-            if (holds(let.value(), comparison)) {
-                return before(let.value(), comparison);
-            }
-            List<Before> inside = holds(let.body(), comparison)
-                    ? before(let.body(), comparison) : null;
-            if (inside == null) {
-                return null;
-            }
-            inside.addFirst(new Before(let.value(),
-                    let.binder() == null ? null : let.binder().binding()));
-            return inside;
-        }
-        List<Core> children = new ArrayList<>();
-        Core.forEachChild(e, children::add);
-        for (Core child : children) {
-            if (!holds(child, comparison)) {
-                continue;
-            }
-            List<Before> inside = before(child, comparison);
-            if (inside == null) {
-                return null;
-            }
-            List<Before> earlier = new ArrayList<>();
-            for (Evaluated.Step step : Evaluated.inOrder(e)) {
-                if (step.expression() == child) {
-                    break;
+        List<Core> out = new ArrayList<>();
+        for (int i = 0; i + 1 < way.size(); i++) {
+            Core child = way.get(i + 1);
+            switch (way.get(i)) {
+                case Core.Block _ -> {
+                    return null;
                 }
-                earlier.add(new Before(step.expression(), null));
+                // Standing as a wider type works nothing out of its own.
+                case Core.Widen _ -> { }
+                case Core.LetIn let -> {
+                    if (child == let.body()) {
+                        out.add(let.value());
+                    }
+                }
+                case Core node -> {
+                    for (Evaluated.Step step : Evaluated.inOrder(node)) {
+                        if (step.expression() == child) {
+                            break;
+                        }
+                        out.add(step.expression());
+                    }
+                }
             }
-            earlier.addAll(inside);
-            return earlier;
         }
-        return null;
+        out.add(comparison);
+        return out;
     }
 
-    /** Whether {@code node} is {@code e} or anywhere inside it. */
-    private static boolean holds(Core e, Core node) {
+    /** The nodes from {@code e} down to {@code node}, both included, by identity — or null where
+     *  {@code node} is not under {@code e}. */
+    private static List<Core> wayDownTo(Core e, Core node) {
         if (e == node) {
-            return true;
+            List<Core> out = new ArrayList<>();
+            out.add(e);
+            return out;
         }
-        boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] = found[0] || holds(child, node));
-        return found[0];
+        List<List<Core>> found = new ArrayList<>(1);
+        Core.forEachChild(e, child -> {
+            if (found.isEmpty()) {
+                List<Core> below = wayDownTo(child, node);
+                if (below != null) {
+                    found.add(below);
+                }
+            }
+        });
+        if (found.isEmpty()) {
+            return null;
+        }
+        List<Core> out = found.getFirst();
+        out.addFirst(e);
+        return out;
     }
 }

@@ -3,16 +3,32 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.RowObservation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
@@ -488,11 +504,137 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         return figures;
     }
 
-    /** {@code source} measured as a report that runs what it composes, which a witness of a count
-     *  is found by. */
+    /** A list of small numbers, how many of which are above some bound, and a row of one above
+     *  every bound below and one below, which the search takes the elements of. */
+    private static final String SMALL = """
+            module w1
+            data Small = Int invariant value >= 0 && value <= 5
+            behavior m : (xs: List<Small>) -> Bool
+            let m (xs) = %s
+
+            example m
+                | "one above and one below" : ([ Small(5), Small(0) ]) -> false
+            """;
+
+    /** The count bound to a name before the comparison, kept by {@code keep}. */
+    private static String countedAfterALet(String keep) {
+        return SMALL.formatted("{\n    let kept = List.filter(x -> " + keep + ", xs)\n"
+                + "    List.length(kept) == List.length(xs)\n}");
+    }
+
+    /** The same count written inside the comparison. */
+    private static String countedInline(String keep) {
+        return SMALL.formatted("List.length(List.filter(x -> " + keep + ", xs))"
+                + " == List.length(xs)");
+    }
+
+    /**
+     * A count is read alike however it is written. Of the numbers above two, bound to a name
+     * first or written inside the comparison, a row of five and of nought is a witness, and the
+     * length is parted at nought. Of the numbers above how many there are, the statement reads the
+     * container as well as the element: the rows made of the witness hold more elements than it
+     * does, and what the statement says of the same element changes with them, so nothing is
+     * shown, written either way.
+     */
+    @Test
+    void aCountIsReadOfAStatementAboutTheElementAloneHoweverItIsWritten() {
+        for (String model : List.of(countedAfterALet("x.value > 2"), countedInline("x.value > 2"))) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(List.of("List.length(xs)/0 <= x <= 0", "List.length(xs)/0 < x"),
+                    compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m").axes()
+                            .stream().filter(axis -> axis.path().equals("List.length(xs)"))
+                            .flatMap(axis -> axis.classes().stream()).toList(), model);
+        }
+        for (String model : List.of(countedAfterALet("x.value > List.length(xs)"),
+                countedInline("x.value > List.length(xs)"))) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
+                    .get("List.length(xs)"), model);
+        }
+    }
+
+    /**
+     * A witness found, the count of a statement about the element alone is read against the
+     * length, which it leaves either way wherever there is an element and settles at none; the
+     * count of one that also reads the container shows nothing of the length, witness or none. The
+     * rows made of the witness hold its elements over again, and a statement reading how many
+     * there are, or another of them, may say something else of the same element in each.
+     *
+     * <p>Asked of the relation itself, handed a witness for every count: a body whose statement
+     * reads the container reads it in the step that keeps the elements too, and what is worked out
+     * before the comparison would refuse that first.
+     */
+    @Test
+    void aCountOfAStatementReadingTheContainerIsReadOfNoRowsMadeOfAWitness() {
+        Compilation compilation = reported(FORECAST);
+        InputReading read = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("m")
+                .reading(RuleReadings.of(compilation, "w1"));
+        TermPath deals = TermPath.of("deals");
+        Type list = read.domain().typeAt(deals, read.rules());
+        NumericTerm.TakenOf length = NumericTerm.TakenOf.howManyHeldAt(
+                NumericMeasures.takenOf(list, read.rules().inners()), deals, list,
+                read.rules().inners(), read.rules().symbols());
+        CountWitnesses.Lookup everyCount = _ -> new CountWitnesses.Sought(Optional.of(
+                new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
+                        FixtureTemplate.integer(1))), Set.of());
+        DecisionSubject.AnInput currency =
+                new DecisionSubject.AnInput(deals.element().then("currency"));
+        Map<Proposition, Boolean> undividedBy = new LinkedHashMap<>();
+        undividedBy.put(new Proposition.SameValue(currency,
+                new DecisionSubject.AnInput(TermPath.of("rates").then("base")), true), true);
+        undividedBy.put(new Proposition.SameValue(currency,
+                new DecisionSubject.AnInput(deals), true), false);
+        undividedBy.forEach((statement, expected) -> {
+            Quantity.HowManyMeet count =
+                    new Quantity.HowManyMeet(new DecisionSubject.AnInput(deals), statement);
+            UndividedByARelation relation = UndividedByARelation.ofAForm(
+                    new LinearForm<>(ExactRatio.ZERO, Map.of(count, ExactRatio.ONE,
+                            new DecisionAtom.OfTheInput(length), ExactRatio.ONE.negated())),
+                    Rel.EQ);
+            UndividedByARelation.WhatItLeaves left = relation.left(read, everyCount);
+            assertEquals(expected, left.undivided().contains(FilingCoordinate.of(length))
+                    || left.settled().containsKey(length), statement.toString());
+        });
+    }
+
+    /**
+     * What a run works out inside the comparison is worked out as what it works out before it is.
+     * Sizes taken one more than the count and the length are worked out by an operator that may
+     * end a run on what nothing here bounds, on a container the witness never held; and a step
+     * written inline that walks the whole container beside reading its element — what it keeps
+     * turns on the element alone — is applied on containers the witness never held. Nothing is
+     * shown of either.
+     */
+    @Test
+    void whatTheComparisonWorksOutIsHeldToWhatIsWorkedOutBeforeIt() {
+        String oneMore = countedAfterALet("x.value > 2").replace(
+                "List.length(kept) == List.length(xs)",
+                "List.length(kept) + 1 == List.length(xs) + 1");
+        String stepWalksIt = countedInline("{\n        let n = walked(xs)\n        x.value > 2 }")
+                + """
+
+                partial let walked (ys: List<Small>): Int =
+                    match List.get(0, ys) with
+                        | None -> 0
+                        | Some first -> 1 + walked(List.drop(1, ys))
+                """;
+        for (String model : List.of(oneMore, stepWalksIt)) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
+                    .get("List.length(xs)"), model);
+        }
+    }
+
+    /** {@code source} measured as a report of what the rules say, with the rows it runs recording
+     *  where they went, which a witness of a count is found by. No value is composed at a point:
+     *  nothing here asks what a row at one would be. */
     private static Compilation reported(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.observe(RowObservation.RECORD_ARMS);
         compilation.answerEverything();
         return compilation;
     }

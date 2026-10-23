@@ -1154,9 +1154,12 @@ public final class Adequacy {
             RowTrials trials = trialling(db, name);
             // The places a run is recorded at, under the numbering the check issued.
             SiteNumbering numbering = numberingOf(db, name).orElse(null);
+            // What the behavior requires: nothing where the module did not build far enough to
+            // say, and a dependency stood in for is nothing this search has an answer for.
+            RequiredDependencies requires = RequiredDependencies.of(db, name, behavior);
             if (surface == null || sig == null || read == null || building == null
-                    || trials == null || numbering == null
-                    || !RequiredDependencies.of(db, name, behavior).none()) {
+                    || trials == null || numbering == null || requires == null
+                    || !requires.none()) {
                 return Answer.of(CountWitnesses.Sought.NOTHING);
             }
             // What the model writes at each parameter: a value it names at the parameter's type,

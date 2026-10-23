@@ -156,6 +156,9 @@ public final class CountWitnesses {
         // What each parameter may hold, as far as the boundary builds it: the container as what
         // stands for a list of its element, which the elements tried below take the place of.
         List<List<Built>> each = new ArrayList<>();
+        // And the elements the model writes in the container, each written back as a fixture of
+        // the element's type, tried before what stands for that type.
+        List<FixtureTemplate> written = new ArrayList<>();
         for (int i = 0; i < inputs.parameters().size(); i++) {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
             tried.addAll(Partitions.representativesOf(i == at ? Type.list(element)
@@ -167,6 +170,11 @@ public final class CountWitnesses {
             if (made.isEmpty()) {
                 return new Sought(Optional.empty(), stopped);
             }
+            if (i == at) {
+                for (Built list : made) {
+                    elementsOf(list.value(), element, reading, written);
+                }
+            }
             each.add(i == at ? made.subList(0, 1) : made);
         }
         // The rows of those, nearest first, as many as the search tries: one whose other values
@@ -174,12 +182,29 @@ public final class CountWitnesses {
         // none does, so the next is tried.
         for (List<Built> row : rowsOf(each, stopped)) {
             Optional<Witness> found = beside(row, at, element, container, count, inputs,
-                    statement, reading, building, running, stopped);
+                    statement, reading, building, running, written, stopped);
             if (found.isPresent()) {
                 return new Sought(found, Set.of());
             }
         }
         return new Sought(Optional.empty(), stopped);
+    }
+
+    /** Adds to {@code into} each element of {@code list}, a container the boundary built, written
+     *  back as a fixture of {@code element}, where it is one, and each once. */
+    private static void elementsOf(ObservedValue list, Type element, RuleReadingContext reading,
+                                   List<FixtureTemplate> into) {
+        if (!(list instanceof ObservedValue.Sequence(List<ObservedValue> held))) {
+            return;
+        }
+        for (ObservedValue each : held) {
+            if (ObservedFixtures.of(each, element, reading)
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate fixture)
+                    && !into.contains(fixture)) {
+                into.add(fixture);
+            }
+        }
     }
 
     /** As many of {@code values} as the search tries, first first, with the figure added to
@@ -230,13 +255,14 @@ public final class CountWitnesses {
                                             TermPath container, Quantity.HowManyMeet count,
                                             BehaviorInputs inputs, AStatementAtARow statement,
                                             RuleReadingContext reading, Building building,
-                                            Running running, Set<CompositionBudget> stopped) {
+                                            Running running, List<FixtureTemplate> written,
+                                            Set<CompositionBudget> stopped) {
         List<FixtureTemplate> row = beside.stream().map(Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(Built::value).toList();
         FixtureTemplate kept = null;
         FixtureTemplate dropped = null;
         for (FixtureTemplate each : elementsTried(element, container, at, count.ofTheElement(),
-                inputs, built, reading, building, stopped)) {
+                inputs, built, reading, building, written, stopped)) {
             Integer meet = metIn(List.of(each), at, built, inputs, statement, container,
                     building);
             if (meet == null) {
@@ -319,18 +345,20 @@ public final class CountWitnesses {
     }
 
     /**
-     * The elements tried: what stands for the element's type, and each of those made to hold, at
-     * a place the statement says is the same value as a place outside the container, every value
-     * the row holds there.
+     * The elements tried: those the model writes in the container ({@code inTheRows}), what stands
+     * for the element's type, and each of the latter made to hold, at a place the statement says
+     * is the same value as a place outside the container, every value the row holds there.
      */
     private static List<FixtureTemplate> elementsTried(Type element, TermPath container, int at,
                                                        Proposition stated, BehaviorInputs inputs,
                                                        List<ObservedValue> built,
                                                        RuleReadingContext reading,
                                                        Building building,
+                                                       List<FixtureTemplate> inTheRows,
                                                        Set<CompositionBudget> stopped) {
         List<FixtureTemplate> standing = Partitions.representativesOf(element, reading).values();
-        List<FixtureTemplate> out = new ArrayList<>(standing);
+        List<FixtureTemplate> out = new ArrayList<>(upTo(inTheRows, stopped));
+        out.addAll(standing);
         Map<List<String>, TermPath> alike = new LinkedHashMap<>();
         sameValuesIn(stated, container.element(), alike);
         if (alike.isEmpty()) {

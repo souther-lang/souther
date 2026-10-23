@@ -301,13 +301,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
                 "asks whether a value is a parameter or a run of fields read off one, which the"
                         + " base answers");
-        row(out, c + "partition/WhatARunWorksOutBeforeACount", "before",
+        row(out, c + "partition/WhatARunWorksOutBeforeACount", "wayDownTo",
                 "(" + core + core + ")Ljava/util/List;", Reading.STRUCTURE,
-                "finds the way down to one node by identity and what runs before each step of"
-                        + " it, which a projection's base is");
-        row(out, c + "partition/WhatARunWorksOutBeforeACount", "holds",
-                "(" + core + core + ")Z", Reading.STRUCTURE,
-                "asks whether one node stands anywhere under another, by identity");
+                "finds the way down to one node by identity, which a projection's base is on");
+        row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
+                "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "walksIn",
+                "(" + core + "Ljava/util/List;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "check/FieldDomains", "readOffAsItStands", "(" + core + ")Z",
                 Reading.STRUCTURE, "asks whether a value is a name or a run of fields read off"
                         + " one, which the base answers");

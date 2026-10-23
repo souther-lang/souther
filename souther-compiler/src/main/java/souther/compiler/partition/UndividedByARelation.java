@@ -471,7 +471,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     WhatItLeaves leftWhereRowsArrive(InputReading read, List<Reachability.Reaching> ways,
                                      CountWitnesses.Lookup witnesses) {
         WhatItLeaves nothingShown = new WhatItLeaves(new LinkedHashSet<>(amongThemselves),
-                Map.of());        // What the declarations leave each side, which no way changes: asked once for all of them.
+                Map.of());
+        // What the declarations leave each side, which no way changes: asked once for all of them.
         // A side a walk kept an end of is asked of the element's number, which is what the end
         // lies between.
         List<Source> sources = new ArrayList<>();
@@ -985,14 +986,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (read.isEmpty()) {
                 return null;
             }
+            // What the statement reads is the element's own, or a place under another parameter:
+            // the container itself — how many it holds, another of its elements, a value taken of
+            // all of them — differs between the rows made of the witness, and so may what the
+            // statement says of the same element.
             Set<TermPath> outside = new LinkedHashSet<>();
             for (TermPath place : read.get()) {
-                if (!place.isAtOrUnder(container)) {
-                    if (place.head().equals(container.head())) {
-                        return null;
-                    }
-                    outside.add(place);
+                if (place.isAtOrUnder(container.element()) || place.isAtOrUnder(container.key())) {
+                    continue;
                 }
+                if (place.head().equals(container.head())) {
+                    return null;
+                }
+                outside.add(place);
             }
             if (picksOut(conditions, container, outside)) {
                 return null;
