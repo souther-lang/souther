@@ -591,6 +591,13 @@ public final class NumericDomain<A> {
      * one composition further on.
      */
     private boolean everyRelatedPositionIsSpacedAlike() {
+        Map<A, A> reaches = related();
+        return spacedAlike(reaches, List.copyOf(reaches.keySet()));
+    }
+
+    /** The groups the rules relate the positions in, each position pointing along the chain to
+     *  its group ({@link #groupOf}). */
+    private Map<A, A> related() {
         Map<A, A> reaches = new LinkedHashMap<>();
         for (AffineConstraint<A> rule : rules()) {
             A first = null;
@@ -600,13 +607,19 @@ public final class NumericDomain<A> {
             for (A atom : rule.form().atomsIn(order)) {
                 if (first == null) {
                     first = atom;
+                    groupOf(reaches, atom);
                 } else {
                     relate(reaches, first, atom);
                 }
             }
         }
+        return reaches;
+    }
+
+    /** Whether each of {@code atoms} has its values spaced as every other of its group has. */
+    private boolean spacedAlike(Map<A, A> reaches, List<A> atoms) {
         Map<A, Granularity> ofGroup = new LinkedHashMap<>();
-        for (A atom : List.copyOf(reaches.keySet())) {
+        for (A atom : atoms) {
             Granularity how = kinds.get(atom);
             if (how == null) {
                 // Every atom of every rule is spaced, since a rule arrives through `assume` and that
@@ -1021,8 +1034,8 @@ public final class NumericDomain<A> {
      *
      * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider:
      * three things are shown of it together, and the run is answered with them rather than beside
-     * them so that a caller cannot take one answer for another. The rules are shown to leave each
-     * atom they relate the whole of its run ({@link #projectionCertification}). Its ends are the
+     * them so that a caller cannot take one answer for another. The rules are shown to leave the
+     * atom the whole of its run ({@link #leavesTheWholeOfItsRun}). Its ends are the
      * rules' own and not rounded past them: an end at a third is handed over as a decimal a hair
      * below, which no value of the atom is ({@link #endsAreWrittenExactly}). And each end is one
      * the atom takes: a whole number at or inside a strict end where the values step by one, and
@@ -1031,8 +1044,7 @@ public final class NumericDomain<A> {
      * not count, and no run of it is shown.
      */
     public Bounds wholeRunOf(A atom) {
-        if (!(projectionCertification() instanceof ProjectionCertification.Certified)
-                || !endsAreWrittenExactly(atom)
+        if (!leavesTheWholeOfItsRun(atom) || !endsAreWrittenExactly(atom)
                 || !(projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
                         Bounds run))) {
             return null;
@@ -1041,6 +1053,191 @@ public final class NumericDomain<A> {
             case null -> null;
             case DENSE -> run;
             case DISCRETE -> onWholeNumbers(run);
+        };
+    }
+
+    /**
+     * Whether the rules are shown to leave {@code atom} the whole of its run: what
+     * {@link #projectionCertification} asks of every rule, asked of the rules a chain of them
+     * relates to the atom, and of the rest only that they leave some value.
+     *
+     * <p>Positions no chain of rules relates to the atom are another system written beside its
+     * own, which bounds nothing of it but whether any value is left at all. So such a system is
+     * shown to hold a value, by the box and its differences where they prove each of its rules,
+     * and otherwise by a point of its box each of its rules holds at ({@link #aPointOfTheBoxHolds}).
+     * {@code 4h - 3s < 0} over two decimals running nought to 168 is no difference and is not
+     * proven, and leaves a whole number apart from both the whole of its run, since {@code h} at
+     * nought and {@code s} at 168 hold it.
+     */
+    private boolean leavesTheWholeOfItsRun(A atom) {
+        if (isBottom() || !closed().everyBoundWasComposed()) {
+            return false;
+        }
+        Map<A, A> reaches = related();
+        Map<A, List<AffineConstraint<A>>> systems = new LinkedHashMap<>();
+        for (AffineConstraint<A> rule : rules()) {
+            List<A> atoms = rule.form().atomsIn(order);
+            if (atoms.isEmpty()) {
+                if (!proven(rule, false)) {
+                    return false;
+                }
+                continue;
+            }
+            systems.computeIfAbsent(groupOf(reaches, atoms.getFirst()), _ -> new ArrayList<>())
+                    .add(rule);
+        }
+        A its = reaches.containsKey(atom) ? groupOf(reaches, atom) : null;
+        for (Map.Entry<A, List<AffineConstraint<A>>> system : systems.entrySet()) {
+            List<A> atoms = new ArrayList<>();
+            for (A each : List.copyOf(reaches.keySet())) {
+                if (groupOf(reaches, each).equals(system.getKey())) {
+                    atoms.add(each);
+                }
+            }
+            boolean proven = spacedAlike(reaches, atoms)
+                    && system.getValue().stream().allMatch(rule -> proven(rule, false));
+            if (!proven && (system.getKey().equals(its)
+                    || !aPointOfTheBoxHolds(atoms, system.getValue()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether some point of the box over {@code atoms} holds each of {@code rules}: for one of their
+     * half-spaces, each atom it weighs at the end of its run that takes the sum lowest, and each
+     * other at the value of its run nearest nought. An atom whose run has no end that way is moved
+     * instead, once the rest stand, to a whole number past where the half-space holds. Tried for
+     * each half-space in turn. Every value the point stands at is one its atom takes there: an end
+     * the run holds, a whole number where the values are whole.
+     */
+    private boolean aPointOfTheBoxHolds(List<A> atoms, List<AffineConstraint<A>> rules) {
+        for (AffineConstraint<A> rule : rules) {
+            for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
+                Map<A, ExactRatio> point = new LinkedHashMap<>();
+                A moved = null;
+                for (A atom : atoms) {
+                    ExactRatio weight = half.form().coefs().get(atom);
+                    boolean weighed = weight != null && !weight.isZero();
+                    ExactRatio at = weighed ? endTaken(atom, weight.signum() < 0) : null;
+                    if (at == null && weighed && moved == null
+                            && runsOnWithoutEnd(atom, weight.signum() < 0)) {
+                        moved = atom;
+                    }
+                    at = at == null ? nearestNoughtTaken(atom) : at;
+                    if (at == null) {
+                        break;
+                    }
+                    point.put(atom, at);
+                }
+                if (point.size() != atoms.size()) {
+                    continue;
+                }
+                if (moved != null && !holdsAt(half, point)) {
+                    ExactRatio to = pastWhereItHolds(half, point, moved);
+                    if (to == null) {
+                        continue;
+                    }
+                    point.put(moved, to);
+                }
+                if (rules.stream().allMatch(each -> holdsAt(each, point))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code atom}'s run has no end above, for {@code greatest}, or below. */
+    private boolean runsOnWithoutEnd(A atom, boolean greatest) {
+        Bounds run = projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
+                Bounds within) ? within : null;
+        return run != null && (greatest ? run.max() == null : run.min() == null);
+    }
+
+    /**
+     * The whole number one past where {@code half} holds with every atom but {@code atom} at its
+     * value in {@code point}: the rest's sum taken from the bound, over the atom's weight, and
+     * stepped one further — or null where that is no number.
+     */
+    private static <A> ExactRatio pastWhereItHolds(AffineConstraint.HalfSpace<A> half,
+                                                   Map<A, ExactRatio> point, A atom) {
+        ExactRatio rest = ExactRatio.ZERO;
+        for (Map.Entry<A, ExactRatio> each : half.form().coefs().entrySet()) {
+            if (!each.getKey().equals(atom)) {
+                ExactRatio weighed = point.get(each.getKey()).times(each.getValue()).orNull();
+                rest = weighed == null || rest == null ? null : rest.plus(weighed).orNull();
+            }
+        }
+        ExactRatio weight = half.form().coefs().get(atom);
+        ExactRatio at = rest == null ? null
+                : half.bound().at().minus(rest).flatMap(left -> left.dividedBy(weight)).orNull();
+        if (at == null) {
+            return null;
+        }
+        return weight.signum() > 0
+                ? at.floor().map(whole -> ExactRatio.of(whole.subtract(BigInteger.ONE))).orNull()
+                : at.ceiling().map(whole -> ExactRatio.of(whole.add(BigInteger.ONE))).orNull();
+    }
+
+    /** The value at the end of {@code atom}'s run, its greatest or its least, where the atom takes
+     *  one there — or null where the run has no such end or the atom takes no value at it. */
+    private ExactRatio endTaken(A atom, boolean greatest) {
+        Bounds run = projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
+                Bounds within) ? within : null;
+        Endpoint end = run == null ? null : greatest ? run.max() : run.min();
+        if (end == null || !(end.at() instanceof Count)) {
+            return null;
+        }
+        return switch (spacingOf(atom)) {
+            case null -> null;
+            case DENSE -> end.inclusive() ? ((Count) end.at()).exactly() : null;
+            case DISCRETE -> wholeAt(end, !greatest) instanceof Endpoint whole
+                    && whole.at() instanceof Count count ? count.exactly() : null;
+        };
+    }
+
+    /** The value of {@code atom}'s run nearest nought that the atom takes, or null where none is
+     *  shown. */
+    private ExactRatio nearestNoughtTaken(A atom) {
+        Bounds run = projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
+                Bounds within) ? within : null;
+        if (run == null || spacingOf(atom) == null) {
+            return null;
+        }
+        Endpoint least = run.min();
+        Endpoint greatest = run.max();
+        if (least != null && least.at() instanceof Count low && (low.exactly().signum() > 0
+                || (low.exactly().signum() == 0 && !least.inclusive()))) {
+            return endTaken(atom, false);
+        }
+        if (greatest != null && greatest.at() instanceof Count high && (high.exactly().signum() < 0
+                || (high.exactly().signum() == 0 && !greatest.inclusive()))) {
+            return endTaken(atom, true);
+        }
+        return (least == null || least.at() instanceof Count)
+                && (greatest == null || greatest.at() instanceof Count) ? ExactRatio.ZERO : null;
+    }
+
+    /** Whether {@code rule} holds with each of its atoms at its value in {@code point}. */
+    private static <A> boolean holdsAt(AffineConstraint<A> rule, Map<A, ExactRatio> point) {
+        ExactRatio sum = ExactRatio.ZERO;
+        for (Map.Entry<A, ExactRatio> each : rule.form().coefs().entrySet()) {
+            ExactRatio at = point.get(each.getKey());
+            ExactRatio weighed = at == null ? null : at.times(each.getValue()).orNull();
+            sum = weighed == null || sum == null ? null : sum.plus(weighed).orNull();
+        }
+        if (sum == null) {
+            return false;
+        }
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<A> half -> {
+                int order = sum.compareTo(half.bound().at());
+                yield order < 0 || (order == 0 && half.bound().inclusive());
+            }
+            case AffineConstraint.Equality<A> at -> sum.compareTo(at.at()) == 0;
+            case AffineConstraint.Disequality<A> hole -> sum.compareTo(hole.at()) != 0;
         };
     }
 
