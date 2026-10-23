@@ -7,13 +7,14 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,9 +75,10 @@ public final class CountWitnesses {
      * second and never in the first, and the figure is what says which a reader has.
      *
      * @param found     the witness, or empty
-     * @param stoppedAt the figures the search stopped at, none where one was found
+     * @param stoppedAt the figures the search stopped at, none where one was found: its own, and
+     *                  any a value it would have tried was cut short at before it got it
      */
-    public record Sought(Optional<Witness> found, Set<CompositionBudget> stoppedAt) {
+    public record Sought(Optional<Witness> found, Set<Figure> stoppedAt) {
 
         /** Nothing tried and nothing stopped at. */
         public static final Sought NOTHING = new Sought(Optional.empty(), Set.of());
@@ -156,7 +158,7 @@ public final class CountWitnesses {
                 read.domain().machines());
         AStatementAtARow statement = AStatementAtARow.of(count.ofTheElement(), behavior,
                 read.quantities());
-        Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+        Set<Figure> stopped = new LinkedHashSet<>();
         // What each parameter may hold, as far as the boundary builds it: the container as what
         // stands for a list of its element, which the elements tried below take the place of.
         List<List<Built>> each = new ArrayList<>();
@@ -166,7 +168,11 @@ public final class CountWitnesses {
         for (int i = 0; i < inputs.parameters().size(); i++) {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
             for (List<ObservedValue> row : taken) {
-                if (ObservedFixtures.of(row.get(i), inputs.types().get(i), reading)
+                // A value the run's observation was cut short at is one the search did not get
+                // to try, at that figure.
+                if (row.get(i) instanceof ObservedValue.Truncated(Figure cut)) {
+                    stopped.add(cut);
+                } else if (ObservedFixtures.of(row.get(i), inputs.types().get(i), reading)
                         instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                                 FixtureTemplate fixture)
                         && !tried.contains(fixture)) {
@@ -184,7 +190,7 @@ public final class CountWitnesses {
             }
             if (i == at) {
                 for (Built list : made) {
-                    elementsOf(list.value(), element, reading, written);
+                    elementsOf(list.value(), element, reading, written, stopped);
                 }
             }
             each.add(i == at ? made.subList(0, 1) : made);
@@ -203,9 +209,13 @@ public final class CountWitnesses {
     }
 
     /** Adds to {@code into} each element of {@code list}, a container the boundary built, written
-     *  back as a fixture of {@code element}, where it is one, and each once. */
+     *  back as a fixture of {@code element}, where it is one, and each once — and to
+     *  {@code stopped} the figure it was cut short at, where it was. */
     private static void elementsOf(ObservedValue list, Type element, RuleReadingContext reading,
-                                   List<FixtureTemplate> into) {
+                                   List<FixtureTemplate> into, Set<Figure> stopped) {
+        if (list instanceof ObservedValue.Truncated(Figure cut)) {
+            stopped.add(cut);
+        }
         if (!(list instanceof ObservedValue.Sequence(List<ObservedValue> held))) {
             return;
         }
@@ -221,11 +231,11 @@ public final class CountWitnesses {
 
     /** As many of {@code values} as the search tries, first first, with the figure added to
      *  {@code stopped} where some are left untried. */
-    private static <T> List<T> upTo(List<T> values, Set<CompositionBudget> stopped) {
+    private static <T> List<T> upTo(List<T> values, Set<Figure> stopped) {
         if (values.size() <= MOST_VALUES) {
             return values;
         }
-        stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
+        stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
         return values.subList(0, MOST_VALUES);
     }
 
@@ -235,13 +245,12 @@ public final class CountWitnesses {
     /** Rows taking one value of each parameter, nearest first — every parameter at its first
      *  before any at its second — and no more than the search tries, with the figure added to
      *  {@code stopped} where some are left untried. */
-    private static List<List<Built>> rowsOf(List<List<Built>> each,
-                                            Set<CompositionBudget> stopped) {
+    private static List<List<Built>> rowsOf(List<List<Built>> each, Set<Figure> stopped) {
         List<List<Built>> out = new ArrayList<>();
         int[] at = new int[each.size()];
         while (true) {
             if (out.size() == MOST_VALUES) {
-                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
+                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
                 break;
             }
             List<Built> row = new ArrayList<>();
@@ -268,7 +277,7 @@ public final class CountWitnesses {
                                             BehaviorInputs inputs, AStatementAtARow statement,
                                             RuleReadingContext reading, Building building,
                                             Running running, List<FixtureTemplate> written,
-                                            Set<CompositionBudget> stopped) {
+                                            Set<Figure> stopped) {
         List<FixtureTemplate> row = beside.stream().map(Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(Built::value).toList();
         FixtureTemplate kept = null;
@@ -367,18 +376,21 @@ public final class CountWitnesses {
                                                        RuleReadingContext reading,
                                                        Building building,
                                                        List<FixtureTemplate> inTheRows,
-                                                       Set<CompositionBudget> stopped) {
+                                                       Set<Figure> stopped) {
+        // In the order they are tried, and held to the figure once, over all of them: where they
+        // come from decides which are tried first and never whether the figure applies.
         List<FixtureTemplate> standing = Partitions.representativesOf(element, reading).values();
-        List<FixtureTemplate> out = new ArrayList<>(upTo(inTheRows, stopped));
+        List<FixtureTemplate> out = new ArrayList<>(inTheRows);
         out.addAll(standing);
         Map<List<String>, TermPath> alike = new LinkedHashMap<>();
         sameValuesIn(stated, container.element(), alike);
-        if (alike.isEmpty()) {
-            return out;
+        if (alike.isEmpty() || out.size() > MOST_VALUES) {
+            return upTo(out, stopped);
         }
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
                 new StandingAtAPoint.RowWalk(inputs, new ObservedInputs(built,
                         new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
+        making:
         for (FixtureTemplate base : standing) {
             ObservedValue each = builtAlone(base, at, building);
             if (each == null) {
@@ -389,17 +401,22 @@ public final class CountWitnesses {
                         instanceof WalkResult.Reached<List<ObservedValue>>(var there))) {
                     continue;
                 }
-                for (ObservedValue value : upTo(there, stopped)) {
+                for (ObservedValue value : there) {
                     ObservedValue moved = withAt(each, place.getKey(), value);
                     if (moved != null && ObservedFixtures.of(moved, element, reading)
                             instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                                     FixtureTemplate written)) {
                         out.add(written);
+                        // One past what is tried is enough to know the figure is reached, and
+                        // nothing past it is built.
+                        if (out.size() > MOST_VALUES) {
+                            break making;
+                        }
                     }
                 }
             }
         }
-        return out;
+        return upTo(out, stopped);
     }
 
     /**

@@ -485,16 +485,25 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 .replace("    List.length(kept) == List.length(deals)",
                         "    if a.value + b.value == 1000 then"
                                 + " List.length(kept) == List.length(deals) else false");
+        return figuresSaidOf(model, "deals");
+    }
+
+    /**
+     * The figures the report names beside what nothing is shown of at how many {@code container}
+     * holds, where the comparison of the count against it is written {@code == List.length(}.
+     */
+    private static List<String> figuresSaidOf(String model, String container) {
+        String length = "List.length(" + container + ")";
         Compilation compilation = reported(model);
         assertEquals(List.of(), compilation.errors(), model);
-        assertEquals(Map.of("List.length(deals)", NOT_SHOWN),
-                leftIn(compilation, whereWritten(model, "== List.length(deals")));
-        String at = "comparison@" + whereWritten(model, "== List.length(deals") + " ";
+        assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
+                .get(length), model);
+        String at = "comparison@" + whereWritten(model, "== List.length(") + " ";
         List<String> figures = new ArrayList<>();
         AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()))
                 .lines().map(String::strip)
                 .filter(line -> line.startsWith("· not read: " + at)
-                        && line.endsWith("about `List.length(deals)`"))
+                        && line.endsWith("about `" + length + "`"))
                 .forEach(line -> {
                     Matcher stopped = Pattern.compile("\\(([A-Z_]+), \\d+\\)").matcher(line);
                     while (stopped.find()) {
@@ -502,6 +511,46 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     }
                 });
         return figures;
+    }
+
+    /**
+     * Whatever cut short the values a witness is sought among is named, and the elements tried are
+     * held to the figure however each is come by. None of the numbers written is above a thousand,
+     * so the search finds no element the count holds of and tries all it has. A row of ten is
+     * all of it, and no figure is named. A row of sixty-five was kept only so far by the run that
+     * read it, and the figure it was cut at is named. Five rows of sixty, each kept whole, write
+     * more elements between them than the search tries, and its own figure is named.
+     */
+    @Test
+    void whatCutTheValuesAWitnessIsSoughtAmongShortIsNamed() {
+        assertEquals(List.of(), figuresSaidOf(numbersInRows(1, 10), "xs"));
+        assertEquals(List.of("OBSERVED_ELEMENTS"), figuresSaidOf(numbersInRows(1, 65), "xs"));
+        assertEquals(List.of("VALUES_AN_ELEMENT_IS_CHOSEN_AMONG"),
+                figuresSaidOf(numbersInRows(5, 60), "xs"));
+    }
+
+    /** How many of a list of numbers are above a thousand, against how many it holds, and
+     *  {@code rows} rows each writing the next {@code each} numbers from nought. */
+    private static String numbersInRows(int rows, int each) {
+        StringBuilder written = new StringBuilder();
+        for (int row = 0; row < rows; row++) {
+            StringBuilder numbers = new StringBuilder();
+            for (int i = 0; i < each; i++) {
+                numbers.append(i == 0 ? "" : ", ").append(row * each + i);
+            }
+            written.append("    | \"numbers ").append(row).append("\" : ([ ").append(numbers)
+                    .append(" ]) -> false\n");
+        }
+        return """
+                module w1
+                behavior m : (xs: List<Int>) -> Bool
+                let m (xs) = {
+                    let kept = List.filter(x -> x > 1000, xs)
+                    List.length(kept) == List.length(xs)
+                }
+
+                example m
+                %s""".formatted(written);
     }
 
     /** A list of small numbers, how many of which are above some bound, and a row of one above
@@ -626,6 +675,45 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
                     .get("List.length(xs)"), model);
         }
+    }
+
+    /**
+     * A count is let through for the call the reading says it was read off, and no other. The
+     * count of what a filter keeps, read off that filter, gets through. A count of the same list
+     * the reading names no call for gets through nowhere: nothing then says which walk the rows
+     * made of a witness are walked by.
+     *
+     * <p>Not the only thing that refuses it today: every operation of the language handed a
+     * function is one whose ending nothing here says ({@link
+     * souther.compiler.check.WhatARunMayEndFor}), so a walk the count is not named for is refused
+     * as well. What is held here is that the count is let through for the walk the reading names
+     * and not for whichever one is found.
+     */
+    @Test
+    void aCountIsLetThroughOnlyForTheCallTheReadingSaysItWasReadOff() {
+        CountWitnesses.Sought found = new CountWitnesses.Sought(Optional.of(
+                new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
+                        FixtureTemplate.integer(1))), Set.of());
+        CountWitnesses.AtComparisons always = _ -> _ -> found;
+        String filtered = countedInline("x.value > 2");
+        ReadComparisons read = ReadComparisons.ofTheAnalysis(filtered, "m", always);
+        List<Boolean> through = new ArrayList<>();
+        for (ComparisonReadings.Reading each : read.comparisons()) {
+            if (each.statement() instanceof ComparisonReadings.Stated.AComparison(var comparison)) {
+                Pullback.ofAComparisonOnTheInput(comparison, each.reads(),
+                        read.inputs().reading(read.rules())).readOff().keySet()
+                        .forEach(count -> through.add(
+                                each.witnesses().of(count).found().isPresent()));
+            }
+        }
+        assertEquals(List.of(true), through, filtered);
+        Quantity.HowManyMeet namedNowhere = new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(TermPath.of("xs")),
+                new Proposition.SameValue(new DecisionSubject.AnInput(TermPath.of("xs").element()),
+                        new DecisionSubject.AnInput(TermPath.of("limit")), true));
+        assertEquals(List.of(), read.comparisons().stream()
+                .filter(each -> each.witnesses().of(namedNowhere).found().isPresent())
+                .map(each -> each.at().toString()).toList(), filtered);
     }
 
     /** {@code source} measured as a report of what the rules say, with the rows it runs recording

@@ -37,6 +37,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.Figure;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -50,7 +51,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -224,7 +224,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
-                        boolean rowsArrive, Set<CompositionBudget> stoppedAt) {
+                        boolean rowsArrive, Set<Figure> stoppedAt) {
 
         WhatItLeaves {
             undivided = Set.copyOf(undivided);
@@ -262,7 +262,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alike.put(term, runs);
                 }
             });
-            Set<CompositionBudget> stopped = new LinkedHashSet<>(stoppedAt);
+            Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
             stopped.addAll(other.stoppedAt);
             return new WhatItLeaves(both, alike, true, stopped);
         }
@@ -834,7 +834,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
-        Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+        Set<Figure> stopped = new LinkedHashSet<>();
         Within lying = offItsLine || !heldWhole || remainder != null ? null
                 : Optional.ofNullable(positionWithinItsWalk(conditions))
                         .orElseGet(() -> countWithinItsContainer(conditions, witnesses, stopped));
@@ -969,7 +969,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private Within countWithinItsContainer(List<OnAWay> conditions,
                                            CountWitnesses.Lookup witnesses,
-                                           Set<CompositionBudget> stopped) {
+                                           Set<Figure> stopped) {
         if (sides.size() != 2) {
             return null;
         }

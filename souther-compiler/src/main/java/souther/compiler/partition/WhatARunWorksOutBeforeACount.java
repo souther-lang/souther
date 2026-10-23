@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Whether every row a count is read over gets through what a run works out up to the comparison
@@ -35,10 +36,9 @@ import java.util.Set;
  * to the next and nothing of the container read inside it: each application is of an element the
  * witness held, on what the witness held besides, and comes out as it did there, and what the walk
  * keeps is the count, never more than the container holds ({@link Quantity.HowManyMeet}). Which
- * walk that is, is not spelled out anywhere a reading of the count leaves it: it is a walk of the
- * container's elements the comparison reads, so it is among these parts, and where it is the only
- * one there it is that one — where there are several, nothing is shown. Anything else reading the
- * container is worked out on a container
+ * call that is, is the reading's to say, and it says so where it reads the count
+ * ({@link Pullback.OnTheInput#readOff}): a count it names no call for is read off nothing here,
+ * and nothing is shown of it. Anything else reading the container is worked out on a container
  * the witness never held, and is let through only where what it is ends no run on its own
  * ({@link WhatARunMayEndFor#itself}) and every part of it is one of the four in turn — a size taken
  * of the container, the comparison of two numbers. A fold, a lookup, a helper walking the
@@ -60,9 +60,12 @@ final class WhatARunWorksOutBeforeACount {
      * of a body is read with this beside it, and few of them read a count.
      *
      * @param reads      the names as they stand at the comparison
+     * @param readOff    the call each count the reading of the comparison made was read off
+     *                   ({@link Pullback.OnTheInput#readOff}), asked where a count first is
      * @param parameters the binding each parameter of the behavior is read on, by its name
      */
     static CountWitnesses.Lookup past(Core root, Core comparison, InputReads reads,
+                                      Supplier<Map<Quantity.HowManyMeet, Core>> readOff,
                                       Map<BindingId, String> parameters,
                                       CountWitnesses.Lookup witnesses) {
         if (root == null) {
@@ -76,33 +79,28 @@ final class WhatARunWorksOutBeforeACount {
             }
             boolean through = worked.getFirst().isPresent()
                     && getsThrough.computeIfAbsent(count, asked -> getsThrough(
-                            worked.getFirst().get(), asked, root, reads, parameters));
+                            worked.getFirst().get(), asked, readOff.get().get(asked), root,
+                            reads, parameters));
             return through ? witnesses.of(count) : CountWitnesses.Sought.NOTHING;
         };
     }
 
-    /** Whether every one of {@code parts} is let through for {@code count}. */
-    private static boolean getsThrough(List<Core> parts, Quantity.HowManyMeet count, Core root,
-                                       InputReads reads, Map<BindingId, String> parameters) {
-        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container))) {
+    /** Whether every one of {@code parts} is let through for {@code count}, read off
+     *  {@code counted} — never where the reading names no call it was read off. */
+    private static boolean getsThrough(List<Core> parts, Quantity.HowManyMeet count,
+                                       Core counted, Core root, InputReads reads,
+                                       Map<BindingId, String> parameters) {
+        if (counted == null
+                || !(count.container() instanceof DecisionSubject.AnInput(TermPath container))) {
             return false;
         }
         BindingId parameter = parameterOf(container, parameters);
         if (parameter == null) {
             return false;
         }
-        Set<BindingId> ofTheContainer = WhatABodyReads.namesMadeOf(root, Set.of(parameter));
-        // The count was read off a walk over the container that the comparison reads, which is
-        // worked out among these parts wherever it is written; where one such walk is, it is that
-        // one, and where several are, which of them it is is not known here.
-        List<Core> walks = new ArrayList<>();
-        Within finding = new Within(parameter, ofTheContainer, reads, null);
-        parts.forEach(each -> finding.walksIn(each, walks));
-        if (walks.size() > 1) {
-            return false;
-        }
-        Within asked = new Within(parameter, ofTheContainer, reads,
-                walks.isEmpty() ? null : walks.getFirst());
+        Within asked = new Within(parameter,
+                WhatABodyReads.namesMadeOf(root, Set.of(parameter)), reads,
+                Core.withoutStanding(counted));
         return parts.stream().allMatch(asked::letsThrough);
     }
 
@@ -123,7 +121,7 @@ final class WhatARunWorksOutBeforeACount {
      * @param parameter      the binding of the parameter the container is under
      * @param ofTheContainer that binding, and every name the body binds to a value reading it
      * @param reads          the names as they stand at the comparison
-     * @param counted        the walk the count was read off, or null where none is let through
+     * @param counted        the call the count was read off, as the reading names it
      */
     private record Within(BindingId parameter, Set<BindingId> ofTheContainer, InputReads reads,
                           Core counted) {
@@ -138,7 +136,8 @@ final class WhatARunWorksOutBeforeACount {
                 return true;
             }
             if (bare == counted) {
-                return argumentsBesideTheStep(bare).stream().allMatch(this::letsThrough);
+                return aWalkOfItsElements(bare)
+                        && argumentsBesideTheStep(bare).stream().allMatch(this::letsThrough);
             }
             if (bare instanceof Core.Block) {
                 return false;
@@ -151,25 +150,6 @@ final class WhatARunWorksOutBeforeACount {
             boolean[] every = {true};
             Core.forEachChild(bare, child -> every[0] = every[0] && letsThrough(child));
             return every[0];
-        }
-
-        /** Adds to {@code into} every walk of the container's elements worked out in
-         *  {@code e} ({@link #aWalkOfItsElements}), in the order they stand. */
-        void walksIn(Core e, List<Core> into) {
-            if (!WhatABodyReads.anyOf(e, ofTheContainer)) {
-                return;
-            }
-            Core bare = Core.withoutStanding(e);
-            for (Core each : Core.subexpressionsAt(bare)) {
-                if (aWalkOfItsElements(each)) {
-                    into.add(each);
-                }
-            }
-            Core.forEachChild(bare, child -> {
-                if (!(Core.withoutStanding(child) instanceof Core.Block)) {
-                    walksIn(child, into);
-                }
-            });
         }
 
         /**

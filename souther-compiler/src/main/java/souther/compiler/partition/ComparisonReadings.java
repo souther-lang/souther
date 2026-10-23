@@ -27,6 +27,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WrittenLines;
 import souther.compiler.types.ValueName;
@@ -547,10 +548,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             Citation where = Citation.of(e.pos());
             // A count is read over rows made of a witness only past what a run works out before
             // the comparison, which is asked of the behavior's own body: a helper's names are
-            // its own, and none of them is a parameter of the behavior.
+            // its own, and none of them is a parameter of the behavior. Which call each count
+            // was read off is the reading of the comparison's to say; an application states no
+            // comparison read here, and names none.
+            Supplier<Map<Quantity.HowManyMeet, Core>> readOff =
+                    stated.statement() instanceof Stated.AComparison(var comparison)
+                            ? () -> in.conditions().comparison(comparison, reads, in.read())
+                                    .readOff()
+                            : Map::of;
             CountWitnesses.Lookup witnesses = WhatARunWorksOutBeforeACount.past(
                     in.context().equals(CallContext.OF_THE_BODY) ? in.root() : null, e, reads,
-                    in.read().domain().parameterReads(), in.witnesses().at(stands));
+                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands));
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.

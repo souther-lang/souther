@@ -677,10 +677,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
                     "stops at the rows a witness is sought among, and adds the figure to what the"
                             + " search came to"),
-            Map.entry("souther.compiler.partition.ComparisonAssessment#relatingAt("
-                            + "Ljava/util/List;Ljava/util/Set;Ljava/util/Set;)Ljava/util/List;",
-                    "hands the figures a search for a witness stopped at to each place nothing is"
-                            + " shown of, as a relation not shown where the search stopped"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#partsOfARelation("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"

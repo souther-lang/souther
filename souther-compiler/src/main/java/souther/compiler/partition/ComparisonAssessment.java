@@ -291,7 +291,7 @@ sealed interface ComparisonAssessment {
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
                                Set<FilingCoordinate> undivided, List<AtAPosition> settling,
-                               Optional<DrawnBeside> beside, Set<CompositionBudget> stoppedAt)
+                               Optional<DrawnBeside> beside, Set<Figure> stoppedAt)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
@@ -341,7 +341,7 @@ sealed interface ComparisonAssessment {
             }
             List<AtAPosition> lines = beside.map(drawn -> settlingLines(drawn,
                     settledByEvery(about, leaves), reading, witnesses)).orElse(List.of());
-            Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+            Set<Figure> stopped = new LinkedHashSet<>();
             leaves.forEach(each -> stopped.addAll(each.stoppedAt()));
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped);
         }
@@ -1723,11 +1723,11 @@ sealed interface ComparisonAssessment {
      */
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided,
-                                   Set<CompositionBudget> stoppedAt) {
+                                   Set<Figure> stoppedAt) {
         BlockReason.RuleWithoutLineReason notShown = stoppedAt.isEmpty()
                 ? new BlockReason.RelationNotShownToReachEveryValue()
-                : new BlockReason.RelationNotShownWhereTheSearchStopped(Figure.inOrder(
-                        stoppedAt.stream().map(CompositionBudget::figure).toList()));
+                : new BlockReason.RelationNotShownWhereTheSearchStopped(
+                        Figure.inOrder(stoppedAt));
         return places.stream().distinct().map(at -> new LeftAt(at, undivided.contains(at)
                 ? new BlockReason.ComparisonRelatingTwoValues() : notShown)).toList();
     }
