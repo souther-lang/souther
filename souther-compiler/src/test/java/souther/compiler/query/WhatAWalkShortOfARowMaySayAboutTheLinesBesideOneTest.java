@@ -254,13 +254,12 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                         .anyMatch(each -> each instanceof Weakening.BorderValueUnreadable),
                 "a walk that went without a row says so in the words a reading answers in");
         assertTrue(assessed(border, new AnotherLineTheRowsAllow.CouldNotTell(
-                        new AnotherLineTheRowsAllow.Unsettled.NoStrategyForIt(
-                                AnotherLineTheRowsAllow.Strategy.A_RULE_THAT_NAMES_A_VALUE)))
+                        new AnotherLineTheRowsAllow.Unsettled.TheRowsAreAllOnOneSide()))
                         .besideWeakening().causes().stream()
                         .anyMatch(each -> each
                                 instanceof Weakening.ABorderNotHeldAgainstTheLinesBesideIt),
-                "and a strategy nobody wrote says so in words of its own, since a reader acts on"
-                        + " the two differently");
+                "and rows that pin no threshold say so in words of their own, since a reader acts"
+                        + " on the two differently");
     }
 
     /** The border with nothing established at any of its points, which is not what these are

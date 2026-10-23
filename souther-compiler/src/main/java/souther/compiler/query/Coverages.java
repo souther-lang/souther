@@ -1113,12 +1113,18 @@ final class Coverages {
                     ? atTheLine(border.border(), false) : refused;
             Criterion keptHere = kept == null && line.atOneValue()
                     ? atTheLine(border.border(), true) : kept;
+            //
+            // And each region a side names on its own: off a value is below it or above it, and a
+            // way that leaves rows on one of the two is looked along that one.
             if (refusedHere != null) {
-                out.add(search.tellingApart(refusedHere, label, line, line::onTheRefusedSide));
+                for (UnaryOperator<SearchRegion> region : line.onTheRefusedSide()) {
+                    out.add(search.tellingApart(refusedHere, label, line, region));
+                }
             }
-            Optional<UnaryOperator<SearchRegion>> keptSide = line.onTheKeptSide();
-            if (keptHere != null && keptSide.isPresent()) {
-                out.add(search.tellingApart(keptHere, label, line, keptSide.get()));
+            if (keptHere != null) {
+                for (UnaryOperator<SearchRegion> region : line.onTheKeptSide()) {
+                    out.add(search.tellingApart(keptHere, label, line, region));
+                }
             }
         }
         return new ARowTellingTheLinesApart(out);

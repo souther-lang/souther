@@ -62,10 +62,12 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * What one reading's search for a row ruling out one line of the family came to, on one side of
      * the model's line, and the input it composed its row at.
      *
-     * <p>One entry per side searched: a row the model refuses within reach of the rows it keeps, and
-     * a row it keeps at or past the rows it refuses ({@link AnotherLineTheRowsAllow.Stands}). Each is
-     * kept whatever the other came to, so a line nothing was composed for says what was tried on
-     * both sides, and a line with a candidate on each hands both to the offering.
+     * <p>One entry per region searched, each side of the model's line naming its own: a row the
+     * model refuses within reach of the rows it keeps, and a row it keeps at or past the rows it
+     * refuses ({@link AnotherLineTheRowsAllow.Stands}) — and beside a value singled out, off the
+     * place below it and above it apart. Each is kept whatever the others came to, so a line nothing
+     * was composed for says what was tried in each, and a line with a candidate in several hands
+     * them all to the offering.
      *
      * @param reading    the line as that reading met it, which is what says at which positions
      *                   {@code composedAt} is written and where a row is read back

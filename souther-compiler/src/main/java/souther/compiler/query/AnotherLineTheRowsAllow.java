@@ -316,15 +316,16 @@ public sealed interface AnotherLineTheRowsAllow {
             return left.with(drawn, values).map(after -> !after.apart());
         }
 
-        /** Where a row the model refuses has to stand to rule this line out, as a refinement of
-         *  {@code within} ({@link Fold#onTheRefusedSide}). */
-        public SearchRegion onTheRefusedSide(SearchRegion within) {
-            return left.onTheRefusedSide(within);
+        /** Where a row the model refuses can stand to rule this line out, each a refinement of a
+         *  region to look in on its own ({@link Fold#onTheRefusedSide}). */
+        public List<UnaryOperator<SearchRegion>> onTheRefusedSide() {
+            return left.onTheRefusedSide();
         }
 
-        /** Where a row the model keeps has to stand to rule this line out, as a refinement of a
-         *  region, or empty where nothing the rows hold says where ({@link Fold#onTheKeptSide}). */
-        public Optional<UnaryOperator<SearchRegion>> onTheKeptSide() {
+        /** Where a row the model keeps can stand to rule this line out, each a refinement of a
+         *  region to look in on its own, and none where nothing the rows hold says where
+         *  ({@link Fold#onTheKeptSide}). */
+        public List<UnaryOperator<SearchRegion>> onTheKeptSide() {
             return left.onTheKeptSide();
         }
 
@@ -387,13 +388,21 @@ public sealed interface AnotherLineTheRowsAllow {
              *  the line out, or null where nothing the rows hold says. */
             ExactRatio toward(boolean kept);
 
-            /** Where a row the model refuses has to stand to rule this line out, as a refinement
-             *  of {@code within}. */
-            SearchRegion onTheRefusedSide(SearchRegion within);
+            /**
+             * Where a row the model refuses can stand to rule this line out, each a refinement of a
+             * region a row is looked for in on its own.
+             *
+             * <p>A list and not one region, because where a row can stand need not be one region a
+             * search can be narrowed to: off a value is below it or above it, and a region holds
+             * either as an end and the two as no hole. Each is looked for apart, so a way to the
+             * border that leaves rows only on one side of it is not looked for on the other alone.
+             */
+            List<UnaryOperator<SearchRegion>> onTheRefusedSide();
 
-            /** Where a row the model keeps has to stand to rule this line out, as a refinement of
-             *  a region, or empty where nothing the rows hold says where. */
-            Optional<UnaryOperator<SearchRegion>> onTheKeptSide();
+            /** Where a row the model keeps can stand to rule this line out, each a refinement of a
+             *  region looked in on its own ({@link #onTheRefusedSide}), and none where nothing the
+             *  rows hold says where. */
+            List<UnaryOperator<SearchRegion>> onTheKeptSide();
 
             /**
              * The same, with a row whose positions read as {@code values} folded in, on the side
@@ -472,16 +481,18 @@ public sealed interface AnotherLineTheRowsAllow {
              * Within reach of the near end: a refused row there is one every threshold on this line
              * keeps, and none of them can keep it and the rows the model keeps apart. Which also
              * says why the rows already written are outside it: every row the model refuses is past
-             * {@code kept} by the arithmetic that put {@code kept} where it is.
+             * {@code kept} by the arithmetic that put {@code kept} where it is. One region, since
+             * one side of a threshold is.
              */
             @Override
-            public SearchRegion onTheRefusedSide(SearchRegion within) {
+            public List<UnaryOperator<SearchRegion>> onTheRefusedSide() {
                 // The region is asked to take the line in and carries it, which the direction's
                 // own type has already settled: a boundary of this kind exists only where every
                 // term of the quantity has a carrier that counts (OrderedAffineBoundary.weighable),
                 // and a region refuses a form only for a term with no carrier at all.
-                return within.assuming(new LinearForm<>(kept.negated(), direction.direction()),
-                        keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
+                LinearForm<NumericTerm> near = new LinearForm<>(kept.negated(), direction.direction());
+                Rel rel = keptOn == Towards.BELOW ? Rel.LE : Rel.GE;
+                return List.of(within -> within.assuming(near, rel).taken());
             }
 
             /**
@@ -492,14 +503,14 @@ public sealed interface AnotherLineTheRowsAllow {
              * model refuses for a kept one to be past.
              */
             @Override
-            public Optional<UnaryOperator<SearchRegion>> onTheKeptSide() {
+            public List<UnaryOperator<SearchRegion>> onTheKeptSide() {
                 if (refused == null) {
-                    return Optional.empty();
+                    return List.of();
                 }
                 LinearForm<NumericTerm> past =
                         new LinearForm<>(refused.negated(), direction.direction());
                 Rel rel = keptOn == Towards.BELOW ? Rel.GE : Rel.LE;
-                return Optional.of(within -> within.assuming(past, rel).taken());
+                return List.of(within -> within.assuming(past, rel).taken());
             }
 
             @Override
@@ -635,28 +646,34 @@ public sealed interface AnotherLineTheRowsAllow {
             /** At the place where the model's rule keeps the value, so the refused row is one the
              *  line keeps; off it where the rule refuses the value ({@link #off}). */
             @Override
-            public SearchRegion onTheRefusedSide(SearchRegion within) {
-                return within.assuming(atThePlace(), keepsTheValue ? Rel.EQ : off()).taken();
+            public List<UnaryOperator<SearchRegion>> onTheRefusedSide() {
+                return keepsTheValue ? atIt() : off();
             }
 
             /** Off the place where the model's rule keeps the value, so the kept row is one the
              *  line refuses ({@link #off}); at it where the rule refuses the value. */
             @Override
-            public Optional<UnaryOperator<SearchRegion>> onTheKeptSide() {
+            public List<UnaryOperator<SearchRegion>> onTheKeptSide() {
                 if (named == null) {
-                    return Optional.empty();
+                    return List.of();
                 }
-                Rel rel = keepsTheValue ? off() : Rel.EQ;
-                return Optional.of(within -> within.assuming(atThePlace(), rel).taken());
+                return keepsTheValue ? off() : atIt();
+            }
+
+            /** At the place, as one region. */
+            private List<UnaryOperator<SearchRegion>> atIt() {
+                return List.of(within -> within.assuming(atThePlace(), Rel.EQ).taken());
             }
 
             /**
-             * Off the place, asked as past it on one side. Either side rules the line out, and a
-             * region holds a side as an end where it may hold no hole at all, so asked as a hole
-             * the region could come back narrowed by nothing and a row be composed at the place.
+             * Off the place: below it, and above it, each a region of its own. Either side rules the
+             * line out, and the way to the border may leave rows on only one of them, so both are
+             * looked in. Asked as one hole, a region may hold no hole at all, and come back
+             * narrowed by nothing for a row to be composed at the place.
              */
-            private static Rel off() {
-                return Rel.GT;
+            private List<UnaryOperator<SearchRegion>> off() {
+                return List.of(within -> within.assuming(atThePlace(), Rel.LT).taken(),
+                        within -> within.assuming(atThePlace(), Rel.GT).taken());
             }
 
             private LinearForm<NumericTerm> atThePlace() {
@@ -789,21 +806,6 @@ public sealed interface AnotherLineTheRowsAllow {
         }
 
         /**
-         * There is a line beside this one and this compiler holds no border against it.
-         *
-         * <p>A limit of the strategy and not of the model. A rule that names a value divides the
-         * quantity at the value it names, and weighing one of its positions differently is as much
-         * a fault there as it is at a rule that orders the values — what is missing is a side to
-         * keep a row on, which is a thing to write rather than a thing that does not exist.
-         */
-        record NoStrategyForIt(Strategy which) implements Unsettled {
-
-            public NoStrategyForIt {
-                Objects.requireNonNull(which, "a strategy that is missing is named");
-            }
-        }
-
-        /**
          * A model's own decimals put a step of the fault family out of the exact arithmetic's reach,
          * so the family is not known whole.
          *
@@ -818,9 +820,8 @@ public sealed interface AnotherLineTheRowsAllow {
          * The values beside this line were not worked out, so there is no inequality to hold
          * against the lines beside it.
          *
-         * <p>Not {@link NoStrategyForIt}, which is a rule that names a value and orders nothing: this
-         * rule orders the values, and what stopped the reading is the exact arithmetic on the numbers
-         * beside its line. And not a row whose sum could not be held, on this line or on one beside
+         * <p>What stopped the reading is the exact arithmetic on the numbers beside the rule's line.
+         * Not a row whose sum could not be held, on this line or on one beside
          * it: that is a row read in part ({@link RowsIncomplete}), and is said in the words a
          * reading short of a number answers in.
          *
@@ -832,12 +833,6 @@ public sealed interface AnotherLineTheRowsAllow {
                 Objects.requireNonNull(why, "a line not worked out says why");
             }
         }
-    }
-
-    /** Which shape of border this compiler holds against no line beside it. */
-    enum Strategy {
-        /** A rule that names a value rather than ordering the values around it. */
-        A_RULE_THAT_NAMES_A_VALUE
     }
 
     /**
@@ -959,10 +954,6 @@ public sealed interface AnotherLineTheRowsAllow {
                                       List<OrderedAffineBoundary> elsewhere,
                                       WayToTheBorder way,
                                       Predicate<Map<NumericTerm, Place>> refused) {
-        // The two ways a border is not a line another line can be written beside, told apart. A
-        // rule that names a value orders nothing and has no side to keep a row on; a rule on an
-        // order with no numbers has no weights to write differently. Read off one answer, either
-        // would be published under the other's word.
         // What the line is, before what its rule states about it. Whether there is a line one step
         // from this one is the line's own answer and is the same whichever way the rule reads it —
         // so a bound on one position comes back as a question that does not arise, and never as one
@@ -1015,12 +1006,11 @@ public sealed interface AnotherLineTheRowsAllow {
         if (drawn instanceof ExactAnswer.Unheld<Optional<DrawnBoundary>> unheld) {
             return new CouldNotTell(new Unsettled.TheLineWasNotWorkedOut(unheld.why()));
         }
-        Optional<DrawnBoundary> held = ((ExactAnswer.Held<Optional<DrawnBoundary>>) drawn).value();
-        if (held.isEmpty()) {
-            return new CouldNotTell(
-                    new Unsettled.NoStrategyForIt(Strategy.A_RULE_THAT_NAMES_A_VALUE));
-        }
-        DrawnBoundary boundary = held.get();
+        // A line is drawn for either claim on a quantity that is a form and weighed by numbers, and
+        // the two questions above that answered otherwise have returned.
+        DrawnBoundary boundary = ((ExactAnswer.Held<Optional<DrawnBoundary>>) drawn).value()
+                .orElseThrow(() -> new IllegalStateException(
+                        "a weighable form draws a line whichever claim is on it: " + border));
         // The rows read here and not before. Reading them is a walk of its own over every row, and
         // every question above is about the line alone — so a border with no line beside it, which
         // is every bound on a position, pays nothing for being asked.

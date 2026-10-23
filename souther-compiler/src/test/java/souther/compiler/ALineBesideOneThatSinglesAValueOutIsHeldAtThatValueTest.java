@@ -93,6 +93,40 @@ class ALineBesideOneThatSinglesAValueOutIsHeldAtThatValueTest {
                 report);
     }
 
+    /**
+     * A row off the place a line is left at is looked for on both sides of it, each on its own:
+     * past a lookup, where only a row seen run to the rule names an input, and with the entry held
+     * at five or under, the line weighing the entry twice is ruled out only below its place — above
+     * it the entry would be past five — and the line weighing the threshold twice only above. Each
+     * is named; looked for on one side alone, one of them would be left where nothing showed an
+     * input arriving.
+     */
+    @Test
+    void aRowOffThePlaceIsLookedForOnEitherSideOfIt() {
+        String report = report("""
+                module p
+                behavior f : (m: Map<String, Int>, k: String, y: Int) -> Int
+                let f (m, k, y) =
+                    match Map.get(k, m) with
+                        | None -> 0
+                        | Some x -> if x <= 5 then (if x == y then 1 else 2) else 3
+                example f
+                    | "on" : ([("K", 5)], "K", 5) -> 1
+                    | "below" : ([("K", 4)], "K", 5) -> 2
+                    | "far below" : ([("K", 0)], "K", 5) -> 2
+                    | "above" : ([("K", 5)], "K", 4) -> 2
+                    | "far above" : ([("K", 5)], "K", 0) -> 2
+                    | "none" : ([], "K", 5) -> 0
+                    | "outside" : ([("K", 6)], "K", 5) -> 3
+                """);
+
+        assertTrue(besides(report).stream().anyMatch(line ->
+                line.contains("from `2 * m[*] - y = 5`") && line.contains("and a row at")), report);
+        assertTrue(besides(report).stream().anyMatch(line ->
+                line.contains("from `m[*] - 2 * y = -5`") && line.contains("and a row at")), report);
+        assertFalse(report.contains("not all of it was measured"), report);
+    }
+
     /** And rows on the model's line at places apart, which is how a model's own rows usually stand,
      *  rule every line of the family out at once. */
     @Test
