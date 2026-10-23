@@ -337,7 +337,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     private static ItemAssessment.Attempt built(String carrier) {
         return ItemAssessment.Attempt.Built.certified(new Generator.GeneratedRow(
-                new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null);
+                new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null,
+                InputsOfTheBody.aRowOfNoInputsReadBack());
     }
 
     /** The same row, with nothing having read it back where it was built for. */

@@ -14,24 +14,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Whether an offered row rules a line of a border's family out is asked of the row as it was read
- * back, by the account of offered rows, and nowhere else.
+ * Whether a row rules a line of a border's family out is asked of the row as it was read back, in
+ * one place, and nowhere else.
  *
- * <p>The measurement folds the rows in the file through the same range the question is made of
- * ({@code Stands.Ends}, private to the answer), which is what leaves a line standing. An offered row
- * is put to {@link AnotherLineTheRowsAllow.Stands#ruledOutBy} once it is read back, which is what
- * settles an obligation and what lets one row stand for several. Asked anywhere else — of the values
- * a search asked for, before the row they built was read — it is a second account of what a row
- * settles, made from something that is not the row: a search would be skipped on the strength of a
- * row nobody read, and the line it was for would go unlooked at.
+ * <p>The measurement folds the rows in the file through the same fold the question is made of
+ * ({@code Stands.Fold}), which is what leaves a line standing. A row is put to
+ * {@link AnotherLineTheRowsAllow.Stands#ruledOutBy} once it is read back ({@link WhatARowRulesOut}):
+ * an offered row, which is what settles an obligation and what lets one row stand for several, and a
+ * row a search composed and saw run to the rule, which is what shows an input arriving. Asked
+ * anywhere else — of the values a search asked for, before the row they built was read — it is a
+ * second account of what a row settles, made from something that is not the row: a search would be
+ * skipped on the strength of a row nobody read, and a line named at an input no row holds.
  */
 class WhatARowRulesOutIsAskedOfTheRowItIsTest {
 
     private static final Pattern RULES_OUT = Pattern.compile("\\.ruledOutBy\\(");
 
     @Test
-    void onlyTheAccountOfOfferedRowsAsksIt() throws IOException {
-        assertEquals(List.of("query/Settlements.java"), callersOf(RULES_OUT));
+    void onlyTheReadingOfARowReadBackAsksIt() throws IOException {
+        assertEquals(List.of("query/WhatARowRulesOut.java"), callersOf(RULES_OUT));
     }
 
     /** Every main source that calls it, by its path under the compiler's package. */

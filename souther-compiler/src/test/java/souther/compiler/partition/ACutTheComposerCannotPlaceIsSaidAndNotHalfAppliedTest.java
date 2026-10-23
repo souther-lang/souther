@@ -27,6 +27,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -253,7 +254,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                         domain().quantities(rules()).ordersOf(axis.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, TruthsAsked.NONE, List.of(taken),
-                        Reachability.Ways.ONE, List.of()),
+                        Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 

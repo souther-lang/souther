@@ -8,6 +8,7 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -535,11 +536,13 @@ public sealed interface ItemAssessment {
                 return account;
             }
 
-            /** A row composed where the whole way was stated and used, and seen run there. */
+            /** A row composed where the whole way was stated and used, and seen run there, read
+             *  back as {@code readBack}. */
             static Certified certified(Generator.GeneratedRow row,
-                                       souther.compiler.partition.WayToTheBorder way) {
+                                       souther.compiler.partition.WayToTheBorder way,
+                                       ObservedInputs readBack) {
                 return new Certified(row, way,
-                        souther.compiler.partition.CompositionAccount.NOTHING, true);
+                        souther.compiler.partition.CompositionAccount.NOTHING, true, readBack);
             }
         }
 
@@ -595,15 +598,19 @@ public sealed interface ItemAssessment {
          *                 ran it, or nothing watched where it went, the value stands at the point
          *                 and nothing shows a run gets there with it — which a point something on
          *                 the way may stop a run before is open on
+         * @param readBack the row as its run read it back, which is what a reader asking what the
+         *                 row does to anything else reads — and never the values it was composed
+         *                 for, which the row need not hold
          */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
                          souther.compiler.partition.CompositionAccount uncomposed,
-                         boolean ranThere)
+                         boolean ranThere, ObservedInputs readBack)
                 implements Attempt, Searched, Built {
 
             public Certified {
                 uncomposed = Built.withNoProofAmongThem(uncomposed);
+                Objects.requireNonNull(readBack, "a row read back standing somewhere was read back");
             }
         }
 

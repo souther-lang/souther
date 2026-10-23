@@ -251,7 +251,7 @@ public final class InputNumbersAnAnswerTurnsOn {
         cuts.addAll(held);
         return new InputNumbersAnAnswerTurnsOn(values, new Reachability.Reaching(region,
                 reaching.requirements(), reaching.truths(), cuts, reaching.ways(),
-                reaching.declined()));
+                reaching.declined(), Optional.empty()));
     }
 
     /**

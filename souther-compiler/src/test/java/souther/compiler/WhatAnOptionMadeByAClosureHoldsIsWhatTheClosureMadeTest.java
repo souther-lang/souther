@@ -206,7 +206,8 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
         }
     }
 
-    /** The rows offered, answered as the operations are defined, are all the model asks. */
+    /** The rows offered, answered as the operations are defined, are all the model asks: those
+     *  at the points, and in a second round those at the inputs named for the lines beside. */
     @Test
     void theRowsOfferedAreAnsweredByTheDefinitionAndSatisfyTheModel() {
         StringBuilder examples = new StringBuilder("\nexample f\n");
@@ -214,6 +215,13 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
             examples.append("    | \"").append(row.label()).append("\" : (")
                     .append(String.join(", ", row.inputTexts())).append(") -> ")
                     .append(oneMore(row.key(), row.entries(), row.q())).append('\n');
+        }
+        for (long[] at : AMapLookupIsReadAsTheEntryItSelectsTest.namedBeside(
+                report(measured(ONE_MORE + examples)))) {
+            examples.append("    | \"beside at ").append(at[0]).append(", ").append(at[1])
+                    .append("\" : (\"a\", [(\"a\", ").append(at[0]).append(")], ")
+                    .append(at[1]).append(") -> ")
+                    .append(oneMore("a", Map.of("a", at[0]), at[1])).append('\n');
         }
         Compilation answered = measured(ONE_MORE + examples);
 

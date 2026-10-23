@@ -448,7 +448,8 @@ class EverySchemaWordIsAccountedForTest {
             // the writer spelled its words as literals and nothing could be pointed at them.
             new Vocabulary("keptOpenBy[].kind",
                     List.of("$defs", "adequacyOpening", "properties", "kind"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated",
+                            "lines_beside_a_border_not_tried"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class,
                     souther.compiler.publish.AdequacyOpeningWord.class),
@@ -801,8 +802,11 @@ class EverySchemaWordIsAccountedForTest {
             // `row_did_not_finish` said in this vocabulary what `row_undecided` says in the
             // observation codes, and named the row without its source, so two rows of one behavior
             // were one word. Retired rather than gone, for the reason `probe_mapping_lost` is.
+            // `lines_beside_a_border_not_tried` said a rule naming a value was held against no line
+            // beside it; every rule that reads as a line now is, so nothing writes it.
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated",
+                            "lines_beside_a_border_not_tried"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",

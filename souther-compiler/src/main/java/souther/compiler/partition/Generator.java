@@ -5454,6 +5454,20 @@ public final class Generator {
         Map<RealizationTarget, Place> standing = where.at();
         Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(standing,
                 whatEachOfThemIsANumberOf(itemAsks, where.routed(), where.counted(), leaves));
+        // And what the way asks the elements of its containers to be, which the elements are
+        // written as. Where that is two things at one position inside an element, the elements are
+        // written alike and no row is — which is this composer's answer and not the model's.
+        ElementWrites elements = ElementWrites.of(reaching.boundedOnTheWay());
+        Requirements rowIs;
+        switch (elements.requiredBeside(reaching.requirements())) {
+            case Requirements.Merge.Merged(Requirements both) -> rowIs = both;
+            case Requirements.Merge.Conflict conflict -> {
+                return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        ElementWrites.writtenAlike(conflict.at())),
+                        where.unrepresented());
+            }
+        }
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
@@ -5485,7 +5499,16 @@ public final class Generator {
             // Anything but the first ask, and not only an ask that disagrees. That two edges offer
             // the same values is not the two being one ask here, for the reason above: what travels
             // beside the values is each edge's own, and the second would be recorded as the first's.
-            if (decided.write(at, edge.values()) != LocationWrites.Written.FIRST) {
+            //
+            // A container asked for how many it holds and nothing else, whose elements the way
+            // narrows to a case, is asked to hold that many and not to be one of the values standing
+            // for the number: written whole, it would be elements of whatever case the number's
+            // composer wrote, and the way's case would have nowhere to be written.
+            DeclaredBounds.CountRange holds =
+                    onlyHowManyItHolds(group.getValue().keySet(), at)
+                            && narrowedStrictlyUnder(rowIs, at) ? sizesOf(edge.values()) : null;
+            if ((holds != null ? decided.size(at, holds) : decided.write(at, edge.values()))
+                    != LocationWrites.Written.FIRST) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                         where.unrepresented());
@@ -5508,20 +5531,6 @@ public final class Generator {
                 return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         circularly(circular)), where.unrepresented());
-            }
-        }
-        // And what the way asks the elements of its containers to be, which the elements are
-        // written as. Where that is two things at one position inside an element, the elements are
-        // written alike and no row is — which is this composer's answer and not the model's.
-        ElementWrites elements = ElementWrites.of(reaching.boundedOnTheWay());
-        Requirements rowIs;
-        switch (elements.requiredBeside(reaching.requirements())) {
-            case Requirements.Merge.Merged(Requirements both) -> rowIs = both;
-            case Requirements.Merge.Conflict conflict -> {
-                return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        ElementWrites.writtenAlike(conflict.at())),
-                        where.unrepresented());
             }
         }
         Set<TermPath> truthsWritten = new LinkedHashSet<>(reaching.truths().at().keySet());
@@ -5581,7 +5590,7 @@ public final class Generator {
                     reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
                             var _, var from)
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of(), from)
-                            : Reachability.Ways.ONE, reaching.declined());
+                            : Reachability.Ways.ONE, reaching.declined(), reaching.narrowedBy());
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents(), taking)
                     .from(0, ValuesHandedOn.NONE);
@@ -11454,6 +11463,30 @@ public final class Generator {
             }
         }
         return false;
+    }
+
+    /** Whether {@code required} narrows a position inside {@code at}, and not {@code at}, to a
+     *  case. */
+    private static boolean narrowedStrictlyUnder(Requirements required, TermPath at) {
+        for (TermPath each : required.refinements().keySet()) {
+            if (isStrictlyUnder(each, at)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether every number of {@code group} is how many the container at {@code at} holds. */
+    private static boolean onlyHowManyItHolds(Collection<RealizationTarget> group, TermPath at) {
+        for (RealizationTarget each : group) {
+            if (!(each instanceof RealizationTarget.OfANumber number
+                    && number.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                    && taken.position().equals(at))) {
+                return false;
+            }
+        }
+        return !group.isEmpty();
     }
 
     /** Whether {@code required} narrows {@code at}, or a position under it, to a case. */

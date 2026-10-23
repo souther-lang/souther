@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -580,7 +581,8 @@ public final class AnAnswerComposed {
                     unaccounted);
         }
         return composed(subject, cuts, new Reachability.Reaching(region, required, truths,
-                cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE, List.of()));
+                cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE, List.of(),
+                Optional.empty()));
     }
 
     /**
