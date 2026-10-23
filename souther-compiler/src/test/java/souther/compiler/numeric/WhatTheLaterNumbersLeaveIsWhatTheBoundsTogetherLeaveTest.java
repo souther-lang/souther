@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -42,6 +43,12 @@ class WhatTheLaterNumbersLeaveIsWhatTheBoundsTogetherLeaveTest {
         return true;
     }
 
+    private static List<List<LaterNumbersEliminated.Bound<String>>> levels(
+            LaterNumbersEliminated<String> eliminated) {
+        assertInstanceOf(LaterNumbersEliminated.Eliminated.class, eliminated);
+        return ((LaterNumbersEliminated.Eliminated<String>) eliminated).levels();
+    }
+
     /** {@code z + w >= 2}, {@code z + w <= 2}, {@code z - w >= 0} and {@code z - w <= 0}. */
     private static final List<LaterNumbersEliminated.Bound<String>> AT_ONE_EACH = List.of(
             atMost(2, Map.of("z", -1L, "w", -1L), false),
@@ -51,17 +58,14 @@ class WhatTheLaterNumbersLeaveIsWhatTheBoundsTogetherLeaveTest {
 
     @Test
     void boundsOnSumsTheLaterNumberSharesLeaveTheEarlierWhereTheyTogetherDo() {
-        LaterNumbersEliminated<String> eliminated =
-                LaterNumbersEliminated.of(AT_ONE_EACH, List.of("w", "z"), 4);
-        assertFalse(eliminated.noneLeft());
-        assertFalse(eliminated.pastThePairs());
-        List<LaterNumbersEliminated.Bound<String>> ofW = eliminated.levels().getFirst();
+        List<List<LaterNumbersEliminated.Bound<String>>> levels =
+                levels(LaterNumbersEliminated.of(AT_ONE_EACH, List.of("w", "z"), 4));
         for (long w = -2; w <= 3; w++) {
-            assertEquals(w == 1, holdAt(ofW, Map.of("w", ExactRatio.of(w))), "w = " + w);
+            assertEquals(w == 1, holdAt(levels.getFirst(), Map.of("w", ExactRatio.of(w))),
+                    "w = " + w);
         }
-        assertEquals(4, eliminated.levels().getLast().size());
-        assertTrue(holdAt(eliminated.levels().getLast(),
-                Map.of("w", ExactRatio.ONE, "z", ExactRatio.ONE)));
+        assertEquals(4, levels.getLast().size());
+        assertTrue(holdAt(levels.getLast(), Map.of("w", ExactRatio.ONE, "z", ExactRatio.ONE)));
     }
 
     /** A bound weighing {@code z} below nought and one weighing it above, scaled apart, are
@@ -69,10 +73,9 @@ class WhatTheLaterNumbersLeaveIsWhatTheBoundsTogetherLeaveTest {
      *  {@code w} at two fifths or less. */
     @Test
     void weightsOfEitherSignAndAnyScaleCancel() {
-        LaterNumbersEliminated<String> eliminated = LaterNumbersEliminated.of(List.of(
+        List<LaterNumbersEliminated.Bound<String>> ofW = levels(LaterNumbersEliminated.of(List.of(
                 atMost(0, Map.of("z", -2L, "w", 3L), false),
-                atMost(-1, Map.of("z", 1L, "w", 1L), false)), List.of("w", "z"), 1);
-        List<LaterNumbersEliminated.Bound<String>> ofW = eliminated.levels().getFirst();
+                atMost(-1, Map.of("z", 1L, "w", 1L), false)), List.of("w", "z"), 1)).getFirst();
         assertTrue(holdAt(ofW, Map.of("w", new ExactRatio(BigInteger.TWO,
                 BigInteger.valueOf(5)))));
         assertFalse(holdAt(ofW, Map.of("w", new ExactRatio(BigInteger.valueOf(3),
@@ -83,28 +86,49 @@ class WhatTheLaterNumbersLeaveIsWhatTheBoundsTogetherLeaveTest {
      *  nought rather than below it would not say. */
     @Test
     void aBoundPutTogetherWithAStrictOneIsStrict() {
-        assertTrue(LaterNumbersEliminated.of(List.of(
+        assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, LaterNumbersEliminated.of(List.of(
                 atMost(0, Map.of("z", 1L, "w", -1L), true),
-                atMost(0, Map.of("z", -1L, "w", 1L), false)), List.of("w", "z"), 1).noneLeft());
-        assertFalse(LaterNumbersEliminated.of(List.of(
-                atMost(0, Map.of("z", 1L, "w", -1L), false),
-                atMost(0, Map.of("z", -1L, "w", 1L), false)), List.of("w", "z"), 1).noneLeft());
+                atMost(0, Map.of("z", -1L, "w", 1L), false)), List.of("w", "z"), 1));
+        assertInstanceOf(LaterNumbersEliminated.Eliminated.class, LaterNumbersEliminated.of(
+                List.of(atMost(0, Map.of("z", 1L, "w", -1L), false),
+                        atMost(0, Map.of("z", -1L, "w", 1L), false)), List.of("w", "z"), 1));
     }
 
-    /** Eliminating {@code z} takes four pairs. Allowed three, the elimination stops before it and
-     *  leaves {@code w} no bound, which says nothing of it. */
+    /** Eliminating {@code z} takes four pairs. Allowed three, the elimination stops before it,
+     *  says so, and says nothing of {@code w}. */
     @Test
     void anEliminationTakingMorePairsThanAllowedStopsBeforeIt() {
-        LaterNumbersEliminated<String> short3 =
-                LaterNumbersEliminated.of(AT_ONE_EACH, List.of("w", "z"), 3);
-        assertTrue(short3.pastThePairs());
-        assertEquals(0, short3.pairsCombined());
-        assertEquals(List.of(), short3.levels().getFirst());
-        assertEquals(4, short3.levels().getLast().size());
-        LaterNumbersEliminated<String> enough =
-                LaterNumbersEliminated.of(AT_ONE_EACH, List.of("w", "z"), 4);
-        assertFalse(enough.pastThePairs());
-        assertEquals(4, enough.pairsCombined());
+        LaterNumbersEliminated.StoppedShort<?> stopped = assertInstanceOf(
+                LaterNumbersEliminated.StoppedShort.class,
+                LaterNumbersEliminated.of(AT_ONE_EACH, List.of("w", "z"), 3));
+        assertEquals(LaterNumbersEliminated.Why.PAIRS, stopped.why());
+        assertEquals(1, stopped.place());
+        assertEquals(1, stopped.reached().size());
+        assertEquals(4, stopped.reached().getFirst().size());
+        assertEquals(0, stopped.pairsCombined());
+        assertEquals(4, LaterNumbersEliminated.of(AT_ONE_EACH, List.of("w", "z"), 4)
+                .pairsCombined());
+    }
+
+    /**
+     * A bound below a number and one above it that are both of it alone leave no bound of another,
+     * and take no pairs: numbers between ends of their own each are eliminated with none, and a
+     * number with ends of its own and one bound beside another takes only the pairs with that one.
+     */
+    @Test
+    void boundsOfTheNumberAloneAreNotPutTogether() {
+        List<LaterNumbersEliminated.Bound<String>> ends = List.of(
+                atMost(0, Map.of("z", -1L), false), atMost(-5, Map.of("z", 1L), false),
+                atMost(1, Map.of("w", -1L), false), atMost(-2, Map.of("w", 1L), false));
+        assertEquals(0, LaterNumbersEliminated.of(ends, List.of("w", "z"), 0).pairsCombined());
+        List<LaterNumbersEliminated.Bound<String>> beside = List.of(
+                atMost(0, Map.of("z", -1L), false), atMost(-5, Map.of("z", 1L), false),
+                atMost(-3, Map.of("z", 1L, "w", 1L), false));
+        LaterNumbersEliminated<String> eliminated =
+                LaterNumbersEliminated.of(beside, List.of("w", "z"), 1);
+        assertEquals(1, eliminated.pairsCombined());
+        assertTrue(holdAt(levels(eliminated).getFirst(), Map.of("w", ExactRatio.of(3))));
+        assertFalse(holdAt(levels(eliminated).getFirst(), Map.of("w", ExactRatio.of(4))));
     }
 
     @Test

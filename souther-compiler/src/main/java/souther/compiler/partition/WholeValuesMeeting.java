@@ -40,7 +40,9 @@ import java.util.function.Function;
  * {@code z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0} neither the region nor any one
  * statement puts {@code z} at one, and the four with {@code w} eliminated do. So a value given
  * leaves every later number some rational value, though not always a whole one, and where none is
- * left nothing is shown, never that no value is. Every statement is worked out at the values built,
+ * left nothing is shown, never that no value is. The value given is the one nearest nought
+ * ({@link WholeNumbersLeft#one}), so a bound the elimination adds moves it only where the bound
+ * leaves it out. Every statement is worked out at the values built,
  * and each value is held to the ends the declarations leave it, so what is built is a proof wherever
  * it comes back ({@link #holdsAt}) and the way it was built decides only whether one is found.
  */
@@ -67,8 +69,8 @@ final class WholeValuesMeeting {
         /**
          * None shown, which is not that none is.
          *
-         * @param pastThePairs whether the elimination stopped at the pairs it was allowed, which
-         *                     may be why
+         * @param pastThePairs whether the elimination stopped short at the pairs it was allowed
+         *                     ({@link LaterNumbersEliminated.Why#PAIRS}), which may be why
          */
         record NotShown(boolean pastThePairs, long pairsCombined) implements Witness {
         }
@@ -136,13 +138,26 @@ final class WholeValuesMeeting {
         }
         LaterNumbersEliminated<NumericTerm> eliminated =
                 LaterNumbersEliminated.of(bounds, terms, pairs);
-        Witness notShown = new Witness.NotShown(eliminated.pastThePairs(),
+        Witness notShown = new Witness.NotShown(
+                eliminated instanceof LaterNumbersEliminated.StoppedShort<NumericTerm> stopped
+                        && stopped.why() == LaterNumbersEliminated.Why.PAIRS,
                 eliminated.pairsCombined());
-        if (eliminated.noneLeft()) {
-            return notShown;
+        List<List<LaterNumbersEliminated.Bound<NumericTerm>>> levels = new ArrayList<>();
+        switch (eliminated) {
+            case LaterNumbersEliminated.Eliminated<NumericTerm> all -> levels.addAll(all.levels());
+            // The numbers before the one not eliminated are given values where their own
+            // statements and the region put them, which is all that is known of them.
+            case LaterNumbersEliminated.StoppedShort<NumericTerm> stopped -> {
+                for (int place = 0; place < stopped.place(); place++) {
+                    levels.add(List.of());
+                }
+                levels.addAll(stopped.reached());
+            }
+            case LaterNumbersEliminated.NoneLeft<NumericTerm> _ -> {
+                return notShown;
+            }
         }
-        Map<NumericTerm, ExactRatio> out = oneAtATime(terms, left, eliminated.levels(), region,
-                declared);
+        Map<NumericTerm, ExactRatio> out = oneAtATime(terms, left, levels, region, declared);
         if (out == null) {
             return notShown;
         }

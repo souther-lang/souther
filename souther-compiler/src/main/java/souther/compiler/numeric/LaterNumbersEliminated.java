@@ -24,26 +24,66 @@ import java.util.Set;
  * <p>Not some whole value. {@code a} between one and two with {@code 2b == a} leaves {@code a}
  * both, and only two leaves {@code b} a whole number.
  *
- * <p>Each pair of a bound below a number and a bound above it is a bound, so the bounds may
- * multiply with each number eliminated. The pairs are counted, and where the next number would take
- * more than are allowed the elimination stops before it: the levels reached are exact, and the ones
- * below hold nothing, which says nothing of those numbers. So it is where the exact arithmetic
- * cannot hold a pair put together.
+ * <p>A bound below a number and one above it that are both of that number alone put together no
+ * bound of another, so they are not put together: whether they leave the number a value is asked
+ * where it is given one, from its own level. Numbers no bound holds together are eliminated with
+ * no pairs at all.
  *
- * @param levels        for each number, at its place in the order, the bounds weighing it that
- *                      are of it and of the numbers before it
- * @param noneLeft      whether no rational values meet the bounds, shown by a bound of no number
- *                      that fails
- * @param pastThePairs  whether the elimination stopped because the next number would have taken
- *                      more pairs than were allowed
- * @param pairsCombined how many pairs were put together
- * @param <A>           what a number is called
+ * <p>Every other pair of a bound below a number and one above it is a bound, so the bounds may
+ * multiply with each number eliminated. The pairs are counted, and the elimination stops before a
+ * number that would take more than are allowed ({@link StoppedShort}).
+ *
+ * @param <A> what a number is called
  */
-public record LaterNumbersEliminated<A>(List<List<Bound<A>>> levels, boolean noneLeft,
-                                        boolean pastThePairs, long pairsCombined) {
+public sealed interface LaterNumbersEliminated<A> {
 
-    public LaterNumbersEliminated {
-        levels = List.copyOf(levels);
+    /** How many pairs of bounds were put together. */
+    long pairsCombined();
+
+    /**
+     * Every number eliminated after the first.
+     *
+     * @param levels for each number, at its place in the order, the bounds weighing it that are of
+     *               it and of the numbers before it
+     */
+    record Eliminated<A>(List<List<Bound<A>>> levels, long pairsCombined)
+            implements LaterNumbersEliminated<A> {
+
+        public Eliminated {
+            levels = List.copyOf(levels);
+        }
+    }
+
+    /** No rational values meet the bounds: two of them put together leave a bound of no number
+     *  that fails. */
+    record NoneLeft<A>(long pairsCombined) implements LaterNumbersEliminated<A> {
+    }
+
+    /**
+     * Stopped before eliminating the number at {@code place}, which says nothing of the numbers
+     * before it.
+     *
+     * @param place   the place of the number not eliminated
+     * @param reached for each number from {@code place} on, the bounds its level holds, exactly as
+     *                {@link Eliminated#levels} has them
+     * @param why     what stopped it
+     */
+    record StoppedShort<A>(int place, List<List<Bound<A>>> reached, Why why, long pairsCombined)
+            implements LaterNumbersEliminated<A> {
+
+        public StoppedShort {
+            reached = List.copyOf(reached);
+        }
+    }
+
+    /** What stopped an elimination short. */
+    enum Why {
+
+        /** The number would have taken more pairs than were allowed. */
+        PAIRS,
+
+        /** The exact arithmetic could not hold a bound put together. */
+        ARITHMETIC
     }
 
     /**
@@ -51,7 +91,7 @@ public record LaterNumbersEliminated<A>(List<List<Bound<A>>> levels, boolean non
      *
      * @param <A> what a number is called
      */
-    public record Bound<A>(LinearForm<A> form, boolean strict) {
+    record Bound<A>(LinearForm<A> form, boolean strict) {
     }
 
     /**
@@ -60,8 +100,7 @@ public record LaterNumbersEliminated<A>(List<List<Bound<A>>> levels, boolean non
      *
      * @throws IllegalArgumentException where a bound weighs a number not in {@code order}
      */
-    public static <A> LaterNumbersEliminated<A> of(List<Bound<A>> bounds, List<A> order,
-                                                   long pairs) {
+    static <A> LaterNumbersEliminated<A> of(List<Bound<A>> bounds, List<A> order, long pairs) {
         Map<A, Integer> placeOf = new HashMap<>();
         for (int each = 0; each < order.size(); each++) {
             placeOf.put(order.get(each), each);
@@ -75,7 +114,7 @@ public record LaterNumbersEliminated<A>(List<List<Bound<A>>> levels, boolean non
                         + each);
             }
             if (!taken(each, placeOf, left)) {
-                return new LaterNumbersEliminated<>(levels, true, false, 0);
+                return new NoneLeft<>(0);
             }
         }
         long combined = 0;
@@ -98,26 +137,33 @@ public record LaterNumbersEliminated<A>(List<List<Bound<A>>> levels, boolean non
             if (place == 0) {
                 break;
             }
-            long these = (long) below.size() * above.size();
+            long alone = below.stream().filter(each -> each.form().coefs().size() == 1).count()
+                    * above.stream().filter(each -> each.form().coefs().size() == 1).count();
+            long these = (long) below.size() * above.size() - alone;
             if (these > pairs - combined) {
-                return new LaterNumbersEliminated<>(levels, false, true, combined);
+                return new StoppedShort<>(place, levels.subList(place, levels.size()), Why.PAIRS,
+                        combined);
             }
             combined += these;
             for (Bound<A> up : above) {
                 for (Bound<A> down : below) {
+                    if (up.form().coefs().size() == 1 && down.form().coefs().size() == 1) {
+                        continue;
+                    }
                     LinearForm<A> between = between(up.form(), down.form(), number);
                     if (between == null) {
-                        return new LaterNumbersEliminated<>(levels, false, false, combined);
+                        return new StoppedShort<>(place, levels.subList(place, levels.size()),
+                                Why.ARITHMETIC, combined);
                     }
                     if (!taken(new Bound<>(between, up.strict() || down.strict()), placeOf,
                             rest)) {
-                        return new LaterNumbersEliminated<>(levels, true, false, combined);
+                        return new NoneLeft<>(combined);
                     }
                 }
             }
             left = rest;
         }
-        return new LaterNumbersEliminated<>(levels, false, false, combined);
+        return new Eliminated<>(levels, combined);
     }
 
     /**

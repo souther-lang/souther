@@ -54,6 +54,26 @@ class AWitnessApartIsGivenValuesWhereTheBoundsTogetherLeaveThemTest {
         assertEquals(new WholeValuesMeeting.Witness.NotShown(true, 0), sought(AT_ONE_EACH, 3));
     }
 
+    private static final NumericTerm A = new NumericTerm.ValueOf(TermPath.of("a"));
+
+    private static final NumericTerm B = new NumericTerm.ValueOf(TermPath.of("b"));
+
+    /**
+     * A bound the elimination finds that leaves the value taken where it was does not move it.
+     * {@code 2b >= a + 101} and {@code 2b <= 2a + 201} leave {@code a} at minus a hundred or more,
+     * which keeps nought, and nought leaves {@code b} fifty-one; minus a hundred would leave it
+     * only a half.
+     */
+    @Test
+    void aBoundThatKeepsTheValueTakenLeavesItTaken() {
+        assertEquals(new WholeValuesMeeting.Witness.Found(
+                Map.of(A, ExactRatio.ZERO, B, ExactRatio.of(51)), 1), sought(List.of(
+                new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(-101),
+                        Map.of(B, ExactRatio.of(2), A, ExactRatio.of(-1))), Rel.GE),
+                new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(-201),
+                        Map.of(B, ExactRatio.of(2), A, ExactRatio.of(-2))), Rel.LE)), 4));
+    }
+
     /** {@code z + w} above nought and below one leaves rational values and no whole ones, which
      *  is no figure's doing. */
     @Test
