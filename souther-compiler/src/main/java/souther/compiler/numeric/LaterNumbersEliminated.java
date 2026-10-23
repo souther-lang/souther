@@ -135,21 +135,32 @@ public sealed interface LaterNumbersEliminated<A> {
             List<Bound<A>> level = new ArrayList<>(below);
             level.addAll(above);
             levels.set(place, List.copyOf(level));
-            Bound<A> floor = null;
-            Bound<A> ceiling = null;
-            for (Bound<A> each : below) {
-                floor = each.form().coefs().size() == 1 ? tighter(floor, each) : floor;
+            // The bounds of the number alone are kept apart, so that no loop runs over a pair of
+            // them: they are asked of their tightest two, and every pair a loop runs over is one
+            // that is counted.
+            List<Bound<A>> aloneBelow = new ArrayList<>();
+            List<Bound<A>> otherBelow = new ArrayList<>();
+            List<Bound<A>> aloneAbove = new ArrayList<>();
+            List<Bound<A>> otherAbove = new ArrayList<>();
+            below.forEach(each -> (each.form().coefs().size() == 1 ? aloneBelow : otherBelow)
+                    .add(each));
+            above.forEach(each -> (each.form().coefs().size() == 1 ? aloneAbove : otherAbove)
+                    .add(each));
+            List<Bound<A>> floor = tightest(aloneBelow, number);
+            List<Bound<A>> ceiling = tightest(aloneAbove, number);
+            if (floor == null || ceiling == null) {
+                return new StoppedShort<>(place, levels.subList(place, levels.size()),
+                        Why.ARITHMETIC, combined);
             }
-            for (Bound<A> each : above) {
-                ceiling = each.form().coefs().size() == 1 ? tighter(ceiling, each) : ceiling;
-            }
-            if (floor != null && ceiling != null) {
-                LinearForm<A> between = between(ceiling.form(), floor.form(), number);
+            if (!floor.isEmpty() && !ceiling.isEmpty()) {
+                LinearForm<A> between = between(ceiling.getFirst().form(),
+                        floor.getFirst().form(), number);
                 if (between == null) {
                     return new StoppedShort<>(place, levels.subList(place, levels.size()),
                             Why.ARITHMETIC, combined);
                 }
-                if (!taken(new Bound<>(between, floor.strict() || ceiling.strict()), placeOf,
+                if (!taken(new Bound<>(between,
+                        floor.getFirst().strict() || ceiling.getFirst().strict()), placeOf,
                         rest)) {
                     return new NoneLeft<>(combined);
                 }
@@ -157,27 +168,29 @@ public sealed interface LaterNumbersEliminated<A> {
             if (place == 0) {
                 break;
             }
-            long alone = below.stream().filter(each -> each.form().coefs().size() == 1).count()
-                    * above.stream().filter(each -> each.form().coefs().size() == 1).count();
-            long these = (long) below.size() * above.size() - alone;
+            List<List<List<Bound<A>>>> groups = List.of(List.of(aloneAbove, otherBelow),
+                    List.of(otherAbove, aloneBelow), List.of(otherAbove, otherBelow));
+            long these = 0;
+            for (List<List<Bound<A>>> group : groups) {
+                these += (long) group.get(0).size() * group.get(1).size();
+            }
             if (these > pairs - combined) {
                 return new StoppedShort<>(place, levels.subList(place, levels.size()), Why.PAIRS,
                         combined);
             }
-            for (Bound<A> up : above) {
-                for (Bound<A> down : below) {
-                    if (up.form().coefs().size() == 1 && down.form().coefs().size() == 1) {
-                        continue;
-                    }
-                    combined++;
-                    LinearForm<A> between = between(up.form(), down.form(), number);
-                    if (between == null) {
-                        return new StoppedShort<>(place, levels.subList(place, levels.size()),
-                                Why.ARITHMETIC, combined);
-                    }
-                    if (!taken(new Bound<>(between, up.strict() || down.strict()), placeOf,
-                            rest)) {
-                        return new NoneLeft<>(combined);
+            for (List<List<Bound<A>>> group : groups) {
+                for (Bound<A> up : group.get(0)) {
+                    for (Bound<A> down : group.get(1)) {
+                        combined++;
+                        LinearForm<A> between = between(up.form(), down.form(), number);
+                        if (between == null) {
+                            return new StoppedShort<>(place, levels.subList(place, levels.size()),
+                                    Why.ARITHMETIC, combined);
+                        }
+                        if (!taken(new Bound<>(between, up.strict() || down.strict()), placeOf,
+                                rest)) {
+                            return new NoneLeft<>(combined);
+                        }
                     }
                 }
             }
@@ -187,16 +200,32 @@ public sealed interface LaterNumbersEliminated<A> {
     }
 
     /**
-     * The tighter of two bounds of one number alone, both normalised so the number weighs one
-     * either way round: the greater constant leaves the number less room, and of two at the same
-     * constant, the strict one does.
+     * Of bounds {@code c + k·n} of one number {@code n} alone, all weighing it below nought or all
+     * above, the one that leaves it the least room — in a list, empty where there are none — or
+     * null where the exact arithmetic cannot say which: {@code n} is at most or at least
+     * {@code -c/k} in turn, so it is the greater {@code c/|k|}, and of two at the same, the strict
+     * one. Two are set beside each other as they are written, {@code c·|k'|} against
+     * {@code c'·|k|}, and not as they would be divided through, so what the arithmetic cannot say
+     * is one answer and not a bound taken as it stands.
      */
-    private static <A> Bound<A> tighter(Bound<A> one, Bound<A> other) {
-        if (one == null) {
-            return other;
+    private static <A> List<Bound<A>> tightest(List<Bound<A>> alone, A number) {
+        Bound<A> tightest = null;
+        for (Bound<A> each : alone) {
+            if (tightest == null) {
+                tightest = each;
+                continue;
+            }
+            ExactRatio held = tightest.form().constant()
+                    .times(each.form().coefs().get(number).abs()).orNull();
+            ExactRatio other = each.form().constant()
+                    .times(tightest.form().coefs().get(number).abs()).orNull();
+            if (held == null || other == null) {
+                return null;
+            }
+            int by = held.compareTo(other);
+            tightest = by != 0 ? by > 0 ? tightest : each : each.strict() ? each : tightest;
         }
-        int by = one.form().constant().compareTo(other.form().constant());
-        return by != 0 ? by > 0 ? one : other : other.strict() ? other : one;
+        return tightest == null ? List.of() : List.of(tightest);
     }
 
     /**

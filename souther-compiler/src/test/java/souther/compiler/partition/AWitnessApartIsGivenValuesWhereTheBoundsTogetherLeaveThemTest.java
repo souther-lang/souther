@@ -9,6 +9,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -133,6 +134,18 @@ class AWitnessApartIsGivenValuesWhereTheBoundsTogetherLeaveThemTest {
         }
         assertTrue(metWithout > 0);
         assertTrue(metOnlyWith > 0);
+    }
+
+    /** An elimination the arithmetic stopped says nothing of the figure, and what is built from
+     *  the levels it reached is worked out as every other, so nothing false is shown. */
+    @Test
+    void anEliminationTheArithmeticStoppedShowsNothingFalseAndNamesNoFigure() {
+        ExactRatio far = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0);
+        ExactRatio near = new ExactRatio(BigInteger.ONE, BigInteger.ONE, -5, 0);
+        assertEquals(new WholeValuesMeeting.Witness.NotShown(false, 0), sought(List.of(
+                new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(2),
+                        Map.of(A, ExactRatio.ONE)), Rel.LE),
+                new TakenConstraint.Affine(new LinearForm<>(near, Map.of(A, far)), Rel.LE)), 4));
     }
 
     /** {@code z + w} above nought and below one leaves rational values and no whole ones, which

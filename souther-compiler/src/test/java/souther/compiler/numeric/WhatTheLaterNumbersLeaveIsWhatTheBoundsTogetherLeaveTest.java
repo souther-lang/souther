@@ -3,9 +3,11 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -170,6 +172,175 @@ class WhatTheLaterNumbersLeaveIsWhatTheBoundsTogetherLeaveTest {
                 atMost(-5, Map.of("z", 1L, "w", 1L), false)), List.of("w", "z"), 4);
         assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, none);
         assertEquals(1, none.pairsCombined());
+    }
+
+    /**
+     * What bounds on the numbers up to the first {@code keep} leave them once the others are
+     * eliminated, every bound below put with every bound above and nothing scaled, skipped or
+     * counted — or null where a bound of no number fails.
+     */
+    private static List<LaterNumbersEliminated.Bound<String>> projected(
+            List<LaterNumbersEliminated.Bound<String>> bounds, List<String> order, int keep) {
+        List<LaterNumbersEliminated.Bound<String>> now = bounds;
+        for (int place = order.size() - 1; place > keep; place--) {
+            String number = order.get(place);
+            List<LaterNumbersEliminated.Bound<String>> next = new ArrayList<>();
+            List<LaterNumbersEliminated.Bound<String>> ups = new ArrayList<>();
+            List<LaterNumbersEliminated.Bound<String>> downs = new ArrayList<>();
+            for (LaterNumbersEliminated.Bound<String> each : now) {
+                ExactRatio weight = each.form().coefs().get(number);
+                (weight == null ? next : weight.signum() > 0 ? ups : downs).add(each);
+            }
+            for (LaterNumbersEliminated.Bound<String> up : ups) {
+                for (LaterNumbersEliminated.Bound<String> down : downs) {
+                    LinearForm<String> scaledUp = up.form()
+                            .times(down.form().coefs().get(number).negated()).orNull();
+                    LinearForm<String> scaledDown = down.form()
+                            .times(up.form().coefs().get(number)).orNull();
+                    next.add(new LaterNumbersEliminated.Bound<>(
+                            scaledUp.plus(scaledDown).orNull(), up.strict() || down.strict()));
+                }
+            }
+            now = next;
+        }
+        for (LaterNumbersEliminated.Bound<String> each : now) {
+            if (each.form().coefs().isEmpty() && !holdAt(List.of(each), Map.of())) {
+                return null;
+            }
+        }
+        return now;
+    }
+
+    private static LaterNumbersEliminated.Bound<String> randomBound(Random random) {
+        Map<String, Long> weights = new HashMap<>();
+        for (String number : List.of("x", "y", "z")) {
+            long weight = random.nextInt(5) - 2L;
+            if (weight != 0) {
+                weights.put(number, weight);
+            }
+        }
+        return atMost(random.nextInt(7) - 3L, weights, random.nextBoolean());
+    }
+
+    /**
+     * The contract, against an elimination that does none of what this one saves work by: over
+     * small systems of a few bounds on three numbers, no values meet them exactly where the
+     * naive elimination finds a bound of no number failing, and the bounds at each level together
+     * hold at the values of the numbers up to it exactly where the naive elimination of the numbers
+     * after it leaves them. An elimination stopped short has reached the levels the whole one has,
+     * and no more pairs than it was allowed.
+     */
+    @Test
+    void anEliminationLeavesWhatTheNaiveEliminationLeavesAndStopsShortAtTheLevelsItReached() {
+        List<String> order = List.of("x", "y", "z");
+        Random random = new Random(2693);
+        int none = 0;
+        int stopped = 0;
+        for (int each = 0; each < 3000; each++) {
+            List<LaterNumbersEliminated.Bound<String>> bounds = new ArrayList<>();
+            for (int count = 1 + random.nextInt(6); count > 0; count--) {
+                bounds.add(randomBound(random));
+            }
+            LaterNumbersEliminated<String> whole = LaterNumbersEliminated.of(bounds, order, 1000);
+            String said = bounds.toString();
+            if (projected(bounds, order, -1) == null) {
+                assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, whole, said);
+                none++;
+                continue;
+            }
+            List<List<LaterNumbersEliminated.Bound<String>>> levels = levels(whole);
+            for (int place = 0; place < order.size(); place++) {
+                List<LaterNumbersEliminated.Bound<String>> naive = projected(bounds, order, place);
+                List<LaterNumbersEliminated.Bound<String>> together = new ArrayList<>();
+                levels.subList(0, place + 1).forEach(together::addAll);
+                for (int at = 0; at < Math.pow(5, place + 1); at++) {
+                    Map<String, ExactRatio> values = new HashMap<>();
+                    int rest = at;
+                    for (int number = 0; number <= place; number++) {
+                        values.put(order.get(number), ExactRatio.of(rest % 5 - 2L));
+                        rest /= 5;
+                    }
+                    assertEquals(holdAt(naive, values), holdAt(together, values),
+                            said + " at " + values);
+                }
+            }
+            for (long allowed = 0; allowed < whole.pairsCombined(); allowed++) {
+                LaterNumbersEliminated<String> cut =
+                        LaterNumbersEliminated.of(bounds, order, allowed);
+                assertTrue(cut.pairsCombined() <= allowed, said);
+                if (cut instanceof LaterNumbersEliminated.StoppedShort<String> reached) {
+                    assertEquals(LaterNumbersEliminated.Why.PAIRS, reached.why(), said);
+                    assertEquals(levels.subList(reached.place(), levels.size()), reached.reached(),
+                            said);
+                    stopped++;
+                }
+            }
+        }
+        assertTrue(none > 0);
+        assertTrue(stopped > 0);
+    }
+
+    /**
+     * Bounds of one number alone are compared as they are written, so that the tightest is the
+     * tightest however far the weights of the bounds are apart: {@code z <= -T²} (written
+     * {@code z/T + T <= 0}) and {@code z >= -T²/2} leave none for a {@code T} whose square no
+     * ratio holds.
+     */
+    @Test
+    void boundsOfTheNumberAloneAreComparedWithoutDividingThemThroughToWeighOne() {
+        ExactRatio t = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE / 2 + 1, 0);
+        ExactRatio over = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -(Long.MAX_VALUE / 2 + 1), 0);
+        ExactRatio twiceT = t.times(ExactRatio.of(2)).orNull();
+        ExactRatio fourOver = over.times(ExactRatio.of(4)).orNull();
+        LaterNumbersEliminated.Bound<String> first = new LaterNumbersEliminated.Bound<>(
+                new LinearForm<>(t, Map.of("z", over)), false);
+        LaterNumbersEliminated.Bound<String> second = new LaterNumbersEliminated.Bound<>(
+                new LinearForm<>(twiceT, Map.of("z", fourOver)), false);
+        LaterNumbersEliminated.Bound<String> third = new LaterNumbersEliminated.Bound<>(
+                new LinearForm<>(twiceT.negated(), Map.of("z", fourOver.negated())), false);
+        assertInstanceOf(LaterNumbersEliminated.NoneLeft.class, LaterNumbersEliminated.of(
+                List.of(first, second, third), List.of("w", "z"), 0));
+    }
+
+    /** Two bounds of one number alone whose weights and constants cannot be set beside each
+     *  other are an arithmetic that stopped it, not a bound taken as it stands. */
+    @Test
+    void boundsOfTheNumberAloneBeyondTheArithmeticStopItForThat() {
+        // The second cannot be divided through by its weight, and set beside the first as it is
+        // written, its weight times the first's constant has no ratio either.
+        ExactRatio far = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0);
+        ExactRatio near = new ExactRatio(BigInteger.ONE, BigInteger.ONE, -5, 0);
+        LaterNumbersEliminated.StoppedShort<?> stopped = assertInstanceOf(
+                LaterNumbersEliminated.StoppedShort.class, LaterNumbersEliminated.of(List.of(
+                        new LaterNumbersEliminated.Bound<>(
+                                new LinearForm<>(ExactRatio.of(2), Map.of("z", ExactRatio.ONE)),
+                                false),
+                        new LaterNumbersEliminated.Bound<>(
+                                new LinearForm<>(near, Map.of("z", far)), false)),
+                        List.of("w", "z"), 0));
+        assertEquals(LaterNumbersEliminated.Why.ARITHMETIC, stopped.why());
+        assertEquals(1, stopped.place());
+    }
+
+    /**
+     * The pairs put together are the pairs of which at least one is not of the number alone, and
+     * those are all that are counted: three of the number alone each way and two bounds of other
+     * numbers above it and one below take three, six and two.
+     */
+    @Test
+    void theOnlyPairsPutTogetherAreThoseNotBothOfTheNumberAlone() {
+        List<LaterNumbersEliminated.Bound<String>> bounds = List.of(
+                atMost(-10, Map.of("z", 1L), false), atMost(-11, Map.of("z", 1L), false),
+                atMost(-12, Map.of("z", 1L), false), atMost(-10, Map.of("z", -1L), false),
+                atMost(-11, Map.of("z", -1L), false), atMost(-12, Map.of("z", -1L), false),
+                atMost(-5, Map.of("z", 1L, "w", 1L), false),
+                atMost(-9, Map.of("z", 1L, "w", 2L), false),
+                atMost(-3, Map.of("z", -1L, "w", 1L), false));
+        assertEquals(11, LaterNumbersEliminated.of(bounds, List.of("w", "z"), 11).pairsCombined());
+        assertEquals(LaterNumbersEliminated.Why.PAIRS, assertInstanceOf(
+                LaterNumbersEliminated.StoppedShort.class,
+                LaterNumbersEliminated.of(bounds, List.of("w", "z"), 10)).why());
     }
 
     @Test
