@@ -4448,7 +4448,8 @@ final class TermRealizations {
      * <p>Where a year is asked for, the years the first such ask leaves are walked outward from
      * today's, and the dates whose moved date is in one of them are a run of days.
      *
-     * <p>Where none is, one cycle of the calendar is walked from the start of today's year. The Gregorian calendar repeats every
+     * <p>Where none is, one cycle of the calendar is walked outward from today's year. The
+     * Gregorian calendar repeats every
      * four hundred years, and those are a whole number of days, so a month or a day of a date moved
      * by a count of days is the same at every date a cycle away. Every combination the asks can
      * meet at is therefore met within one cycle of days they are all defined at, or within all of
@@ -4495,11 +4496,14 @@ final class TermRealizations {
      * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
      * there is none.
      *
-     * <p>The cycle is the one from the first day of today's year where every ask is defined there,
-     * and otherwise the nearest one that is. Any day starts a cycle, and this one puts the dates
-     * offered in the years a reader is in; a twenty-ninth of February is met in the first leap year
-     * walked. It is walked a year of the date at a time, so that a date found early is found
-     * without cutting the rest of the cycle.
+     * <p>Which days are walked and in what order they are walked are two answers. The days are a
+     * cycle with the first day of today's year at its middle where every ask is defined there, and
+     * otherwise the nearest cycle that is — any day starts a cycle, and every combination the asks
+     * can meet at is met within one. The order is today's year first and then the years either side of it,
+     * the one after before the one before, as every outward walk here takes them: so a date the
+     * asks meet in today's year is found there however near the end of the calendar today is, and
+     * a twenty-ninth of February in the leap year nearest it. Each year is walked a year of the
+     * date at a time, so that a date found early is found without cutting the rest of the cycle.
      */
     private static LocalDate dateInOneCycle(List<PutToTheDays> asks, Today today) {
         long first = asks.stream().mapToLong(each -> each.ask().moved().first()).max()
@@ -4509,17 +4513,26 @@ final class TermRealizations {
         if (first > last) {
             return null;
         }
-        long from = Math.max(first, Math.min(today.firstOfItsYear(),
+        // A cycle with today's year at its middle, so that the years either side of it are both
+        // in it; moved inside the days the asks are defined at where it reaches past them.
+        long from = Math.max(first, Math.min(today.firstOfItsYear() - DAYS_OF_A_CYCLE / 2,
                 last - DAYS_OF_A_CYCLE + 1));
         long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
-        for (long start = from; start <= to; ) {
-            long end = Math.min(to,
-                    LocalDate.of(LocalDate.ofEpochDay(start).getYear(), 12, 31).toEpochDay());
-            LocalDate found = firstAdmittedIn(start, end, asks);
-            if (found != null) {
-                return found;
+        int earliest = LocalDate.ofEpochDay(from).getYear();
+        int latest = LocalDate.ofEpochDay(to).getYear();
+        int centre = Math.max(earliest, Math.min(latest, today.year()));
+        for (int away = 0; centre + away <= latest || centre - away >= earliest; away++) {
+            for (int year : away == 0 ? List.of(centre) : List.of(centre + away, centre - away)) {
+                if (year < earliest || year > latest) {
+                    continue;
+                }
+                long start = Math.max(from, LocalDate.of(year, 1, 1).toEpochDay());
+                long end = Math.min(to, LocalDate.of(year, 12, 31).toEpochDay());
+                LocalDate found = firstAdmittedIn(start, end, asks);
+                if (found != null) {
+                    return found;
+                }
             }
-            start = end + 1;
         }
         return null;
     }

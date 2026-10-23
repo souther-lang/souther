@@ -2384,8 +2384,10 @@ final class CardinalityComposer {
      * Values of the element inside {@code run}: each place a relation turns at that is a value, and
      * up to {@code each} different values from every run between two of them and past the last.
      *
-     * <p>Nearest the place a run is bounded by, which is the value beside the line an author would
-     * write. A run bounded on neither side has one value taken, as a place with nothing to be near.
+     * <p>Where relations part the run, nearest the place each part is bounded by, which is the value
+     * beside the line an author would write ({@link #walked}). Where none does, the run is the
+     * values an element may hold and there is no line to be beside: the values standing for it are
+     * the ones near where the values are usually near ({@link #standingIn}).
      *
      * <p>Where a relation turns is a number and not always a value: {@code 3 * x > 1} turns at a
      * third, which no element is. The run is parted at the exact places it turns at inside it, and
@@ -2394,15 +2396,15 @@ final class CardinalityComposer {
      * dropped from a part and none from beside it is let in. A place a value can be is a value
      * besides.
      *
-     * @param usual where the values are usually near ({@link #walked}), which a part left open is
-     *              walked from
+     * @param usual where the values are usually near, which a run no relation parts stands near
+     *              and a part left open on the side it is entered from is walked from
      */
     static List<Place> valuesAlong(Carrier carrier, NumericDomain.Bounds run,
                                    List<ExactRatio> turns, int each, UsualPlace usual,
                                    Set<CompositionCapacity> unheld,
                                    Set<CompositionRepertoire> unnamed) {
         if (turns.isEmpty()) {
-            return walked(carrier, run.min(), run.max(), each, usual, unnamed);
+            return standingIn(carrier, run.min(), run.max(), each, usual, unnamed);
         }
         ExactEnd low = ExactEnd.of(run.min());
         ExactEnd high = ExactEnd.of(run.max());
@@ -2631,13 +2633,14 @@ final class CardinalityComposer {
     }
 
     /**
-     * Up to {@code each} different values between two ends, from the end there is.
+     * Up to {@code each} different values of a part of a run between two places a relation turns
+     * at, from the end there is: the value beside the line an author would write
+     * ({@link Carrier#somethingInside}).
      *
-     * <p>Or from where the value is usually near, where the side the run is entered from is one
-     * nobody drew ({@link Carrier#somethingInside}): the dates of a run open below are today's and
-     * those either side of it, above before below, as every outward walk here takes them. Walked
-     * one way only from there, a run whose far end is before today would give up today's nearest
-     * date and nothing else.
+     * <p>Or from where the value is usually near, where the side the part is entered from is one
+     * nobody drew: the dates of a part open below are today's and those either side of it, above
+     * before below, as every outward walk here takes them. Walked one way only from there, a part
+     * whose far end is before today would give up today's nearest date and nothing else.
      *
      * <p>A run that holds a value and of which the carrier named none is put in {@code unnamed}:
      * a string above every string a rule wrote is there and is not one this invents, and the run
@@ -2645,10 +2648,43 @@ final class CardinalityComposer {
      */
     private static List<Place> walked(Carrier carrier, Endpoint low, Endpoint high, int each,
                                       UsualPlace usual, Set<CompositionRepertoire> unnamed) {
-        List<Place> out = new ArrayList<>();
         Towards from = low == null && high != null ? Towards.BELOW : Towards.ABOVE;
         Place first = Endpoint.someValueLiesBetween(low, high)
                 ? carrier.somethingInside(low, high, from, usual) : null;
+        boolean outward = usual instanceof UsualPlace.Near near
+                && near.leftOpenAt(from == Towards.ABOVE ? low : high, from == Towards.ABOVE);
+        return steppedFrom(first, carrier, low, high, each, from, outward, unnamed);
+    }
+
+    /**
+     * Up to {@code each} different values standing for a run no relation parts, which no end of it
+     * is asked for ({@link Carrier#aPlaceInside}): where the value is usually near, where the run is
+     * left open on either side, and the values either side of it — and otherwise from the run's
+     * end, as {@link #walked} takes them.
+     *
+     * <p>The other question from the one a part beside a line asks. A run of the values an element
+     * may hold, bounded only by what its type admits, has no line to be beside: a set of dates from
+     * the year 2000 on is today and the days either side of it, as a single such date is today
+     * ({@link Partitions}), and not the first of January 2000 and the days after it.
+     */
+    private static List<Place> standingIn(Carrier carrier, Endpoint low, Endpoint high, int each,
+                                          UsualPlace usual, Set<CompositionRepertoire> unnamed) {
+        Towards from = low == null && high != null ? Towards.BELOW : Towards.ABOVE;
+        Place first = Endpoint.someValueLiesBetween(low, high)
+                ? carrier.aPlaceInside(low, high, usual) : null;
+        boolean outward = usual instanceof UsualPlace.Near near && near.leftOpenIn(low, high);
+        return steppedFrom(first, carrier, low, high, each, from, outward, unnamed);
+    }
+
+    /**
+     * {@code first} and the values after it, up to {@code each} of them: stepping away from the end
+     * {@code from} names, or outward from {@code first} on both sides, the one above before the one
+     * below, where {@code outward}.
+     */
+    private static List<Place> steppedFrom(Place first, Carrier carrier, Endpoint low,
+                                           Endpoint high, int each, Towards from, boolean outward,
+                                           Set<CompositionRepertoire> unnamed) {
+        List<Place> out = new ArrayList<>();
         if (first == null) {
             if (Endpoint.someValueLiesBetween(low, high)) {
                 unnamed.add(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
@@ -2656,8 +2692,6 @@ final class CardinalityComposer {
             return out;
         }
         out.add(first);
-        boolean outward = usual instanceof UsualPlace.Near near
-                && near.leftOpenAt(from == Towards.ABOVE ? low : high, from == Towards.ABOVE);
         // Each side carried from the last place it reached: above it entered from below, below it
         // from above, so each next value is the one beside the last on its side.
         Endpoint lo = Endpoint.exclusive(first);

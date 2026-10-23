@@ -331,6 +331,15 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 CardinalityComposer.valuesAlong(Carrier.DATE, NumericDomain.Bounds.OPEN,
                         List.of(), 3, usual, new LinkedHashSet<>(), new LinkedHashSet<>())
                         .stream().map(Dates::dateAt).toList());
+        // Closed below, long before the day and open above: still a range the day stands in, and
+        // not one entered at the bound it happens to draw.
+        NumericDomain.Bounds sinceTwoThousand = new NumericDomain.Bounds(
+                Endpoint.inclusive(Dates.dayOf(LocalDate.of(2000, 1, 1))),
+                Endpoint.inclusive(Dates.dayOf(LocalDate.MAX)));
+        assertEquals(List.of(TestDay.DATE, TestDay.DATE.plusDays(1), TestDay.DATE.minusDays(1)),
+                CardinalityComposer.valuesAlong(Carrier.DATE, sinceTwoThousand, List.of(), 3,
+                        usual, new LinkedHashSet<>(), new LinkedHashSet<>())
+                        .stream().map(Dates::dateAt).toList());
     }
 
     /**

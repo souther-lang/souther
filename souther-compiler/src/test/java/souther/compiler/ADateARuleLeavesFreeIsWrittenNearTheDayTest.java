@@ -124,21 +124,39 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         }
     }
 
-    /** A month and a day with no year are met in the first year from the day's that has them. */
+    /** A month and a day with no year are met in the year nearest the day's that has them, the
+     *  later where two are as near: 2028 on a day of 2026, 2040 on a day of 2041. */
     @Test
     void aMonthAndADayAreMetFromTheDaysYear() {
         String source = source("d: Date", "d", "Date.month(d) == 2 && Date.day(d) == 29");
         for (LocalDate day : DAYS) {
-            int leap = day.getYear();
-            while (!Year.isLeap(leap)) {
-                leap++;
-            }
-            LocalDate expected = LocalDate.of(leap, 2, 29);
+            LocalDate expected = LocalDate.of(nearestLeapYear(day.getYear()), 2, 29);
             List<List<LocalDate>> rows = rows(source, day);
             assertTrue(rows.contains(List.of(expected)), "on " + day + ": " + rows);
             for (List<LocalDate> row : rows) {
                 assertTrue(row.get(0).getYear() == day.getYear() || row.get(0).equals(expected),
                         "on " + day + ": " + row);
+            }
+        }
+    }
+
+    /** The nearest year is looked for from the day's own outward, so a day in the calendar's
+     *  last year meets the last day of a year in that year and not centuries before it. */
+    @Test
+    void aMonthAndADayAreMetInTheDaysYearAtTheEndOfTheCalendar() {
+        String source = source("d: Date", "d", "Date.month(d) == 12 && Date.day(d) == 31");
+        LocalDate day = LocalDate.MAX.minusMonths(6);
+        List<List<LocalDate>> rows = rows(source, day);
+        assertTrue(rows.contains(List.of(LocalDate.MAX)), "on " + day + ": " + rows);
+    }
+
+    private static int nearestLeapYear(int from) {
+        for (int away = 0; ; away++) {
+            if (Year.isLeap(from + away)) {
+                return from + away;
+            }
+            if (Year.isLeap(from - away)) {
+                return from - away;
             }
         }
     }
