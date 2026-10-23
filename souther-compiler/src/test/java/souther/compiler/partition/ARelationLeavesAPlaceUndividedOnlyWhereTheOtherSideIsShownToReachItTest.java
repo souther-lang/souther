@@ -1763,6 +1763,59 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftPast(fiveOfTheirOwn, UNUSED, each, "x == y", false));
     }
 
+    /**
+     * A way read again for a relation is read for it alone. Past the five, {@code (z >= 1 || w)}
+     * written twice comes to nothing for {@code x == y}, which leaves each where it does with no
+     * condition at all — and each writing is still a condition of its own, owed a row at each
+     * point of its line.
+     */
+    @Test
+    void aConditionWrittenTwiceOnAWayReadAgainIsOwedAtEachWriting() {
+        String inputs = "x: Int, y: Int, z: Int, w: Bool" + THE_FIVE;
+        String body = "if (z >= 1 || w) && " + FIVE_APART + " && (z >= 1 || w) then x == y"
+                + " else false";
+        int from = ("let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ").length() + 1;
+        Compilation compilation = measured(inputs, UNUSED, "Bool", body);
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
+                leftIn(compilation, "4:" + (from + body.indexOf("=="))));
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        for (int writing : List.of(body.indexOf(">="), body.lastIndexOf(">="))) {
+            String at = "point (comparison@4:" + (from + writing) + ")";
+            assertEquals(List.of("ON", "OFF", "IN", "OUT"), report.lines()
+                    .filter(line -> line.contains("whether a row is at the ") && line.contains(at))
+                    .map(line -> line.substring(line.indexOf("at the ") + 7,
+                            line.indexOf(" point")))
+                    .toList(), at);
+        }
+    }
+
+    /**
+     * Numbers a way apart fixes together are worked out from one another: {@code z + w == 2}
+     * puts {@code z} at {@code 2 - w}, so {@code z - w == 0} puts {@code w} at one. A choice with
+     * such a way apart comes to nothing for {@code x == y} past the five. Where no whole numbers
+     * are fixed so — {@code z} and {@code w} a half each, or {@code z} half an odd number once
+     * {@code w} and {@code v} are one value — it is kept as it is, and read as it is without the
+     * five.
+     */
+    @Test
+    void numbersAWayApartFixesTogetherAreWorkedOutFromOneAnother() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int, v: Int";
+        Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
+        for (String apart : List.of("z + w == 2 && z - w == 0",
+                "z + w == 2 && w + v == 2 && z + v == 2", "2 * z + 3 * w == 7 && z - w == 1")) {
+            assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
+                    true), apart);
+        }
+        for (String apart : List.of("z + w == 1 && z - w == 0",
+                "2 * z + w + v == 1 && w - v == 0")) {
+            String guard = "(" + apart + " || x >= 5)";
+            Map<String, String> alone = leftPast(inputs, UNUSED, guard, "x == y", false);
+            assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone, apart);
+            assertEquals(alone, leftPast(inputs, UNUSED, guard, "x == y", true), apart);
+        }
+    }
+
     /** Four choices of two ways each on numbers a way apart holds below {@code z}: sixteen ways
      *  together, which beside a choice of two that bear on {@code x} are more than a way is looked
      *  along each of. */

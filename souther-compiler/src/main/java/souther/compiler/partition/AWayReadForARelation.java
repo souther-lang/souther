@@ -5,16 +5,10 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
-import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -506,9 +500,9 @@ final class AWayReadForARelation {
      * the relation, beside the declarations: one way some row may take, open and nothing on it
      * declined.
      *
-     * <p>The numbers those positions are asked of are given values one at a time
-     * ({@link #oneValueEach}), and every statement of them is then worked out at those values.
-     * That is the proof: the values are a row's, whatever the region took in or rounded, where
+     * <p>The numbers those positions are asked of are given values, and every statement of them is
+     * then worked out at those values ({@link WholeValuesMeeting}). That is the proof: the values
+     * are a row's, whatever the region took in or rounded, where
      * the declarations leave each every value between its ends and no rule of a value around it
      * names it, which may hold it beside another. A truth asked of a {@code Bool} no rule around it
      * names is met by one of its values, and a case asked of a position no rule around it names by
@@ -560,95 +554,7 @@ final class AWayReadForARelation {
                 return false;
             }
         }
-        Map<NumericTerm, ExactRatio> values = oneValueEach(numbers, way.region());
-        return values != null && numbers.stream().allMatch(each -> holdsAt(each, values));
-    }
-
-    /**
-     * A whole number for each number {@code statements} are of — or null where one is not shown
-     * to be one the declarations leave every value between its ends, or none is left it.
-     *
-     * <p>Each is given its value where the ones before it stand at theirs. It is one of the whole
-     * numbers the region puts it at, between the ends the declarations leave it, that the
-     * statements of it and of the numbers already given leave it — those exactly, so a value held
-     * out by {@code z /= 0} is passed over and the next taken ({@link WholeNumbersLeft}). What a
-     * statement of numbers not yet given leaves it is read off the region, which may put it wider,
-     * so the statements are worked out at the values after.
-     */
-    private Map<NumericTerm, ExactRatio> oneValueEach(List<TakenConstraint.Affine> statements,
-                                                      SearchRegion region) {
-        Set<NumericTerm> terms = new LinkedHashSet<>();
-        statements.forEach(each -> terms.addAll(each.form().coefs().keySet()));
-        Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
-        SearchRegion given = region;
-        for (NumericTerm term : terms) {
-            NumericDomain.Bounds declared = declarations.leaveEveryValueBetween(term);
-            if (declared == null || !(given.projectionOf(term)
-                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds put))) {
-                return null;
-            }
-            WholeNumbersLeft left = WholeNumbersLeft.of(put.meet(declared));
-            for (TakenConstraint.Affine each : statements) {
-                if (left == null) {
-                    return null;
-                }
-                left = leftBy(each, term, out, left);
-            }
-            BigInteger whole = left == null ? null : left.one();
-            if (whole == null) {
-                return null;
-            }
-            out.put(term, ExactRatio.of(whole));
-            given = given.given(term, Count.of(new BigDecimal(whole)));
-        }
-        return out;
-    }
-
-    /**
-     * What {@code statement} leaves of {@code left}, the whole numbers {@code term} may be, where
-     * every other number it is of stands at {@code values}: {@code left} itself where it does not
-     * weigh {@code term} or weighs one not given yet, and null where the arithmetic cannot say.
-     */
-    private static WholeNumbersLeft leftBy(TakenConstraint.Affine statement, NumericTerm term,
-                                           Map<NumericTerm, ExactRatio> values,
-                                           WholeNumbersLeft left) {
-        ExactRatio weight = statement.form().coefs().get(term);
-        if (weight == null || weight.isZero()) {
-            return left;
-        }
-        ExactRatio constant = statement.form().constant();
-        for (Map.Entry<NumericTerm, ExactRatio> each : statement.form().coefs().entrySet()) {
-            if (each.getKey().equals(term)) {
-                continue;
-            }
-            ExactRatio value = values.get(each.getKey());
-            if (value == null) {
-                return left;
-            }
-            if (!(each.getValue().times(value) instanceof ExactAnswer.Held<ExactRatio>(
-                    ExactRatio weighed))
-                    || !(constant.plus(weighed) instanceof ExactAnswer.Held<ExactRatio>(
-                            ExactRatio sum))) {
-                return null;
-            }
-            constant = sum;
-        }
-        return left.meeting(weight, constant, statement.rel());
-    }
-
-    /** Whether {@code statement} holds with each number it is of at {@code values} — false where
-     *  one is not there, or the arithmetic cannot say. */
-    static boolean holdsAt(TakenConstraint.Affine statement, Map<NumericTerm, ExactRatio> values) {
-        ExactRatio at = statement.form().constant();
-        for (Map.Entry<NumericTerm, ExactRatio> term : statement.form().coefs().entrySet()) {
-            ExactRatio value = values.get(term.getKey());
-            if (value == null || !(term.getValue().times(value)
-                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weighed))
-                    || !(at.plus(weighed) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))) {
-                return false;
-            }
-            at = sum;
-        }
-        return statement.rel().holds(at.signum());
+        return WholeValuesMeeting.of(numbers, way.region(),
+                declarations::leaveEveryValueBetween) != null;
     }
 }
