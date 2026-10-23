@@ -263,8 +263,11 @@ sealed interface ClosureApplications {
      * answer, the elements no element before stopped it at — what the closure answers on one,
      * read in the names {@code entered} it with.
      *
-     * <p>Only over a container that is itself a position of the input, whose elements are the
-     * row's in the row's order. Anything made of one — a filter, a reversal, a map filed from a
+     * <p>Only over a container holding the elements of a position of the input in the row's order,
+     * which is the position itself or one chosen between it and a list written empty
+     * ({@link ElementsHeldFrom}): a run that applies the closure at all is one where the position's
+     * elements are what it holds, and that it applied it is what the run records. Anything made of
+     * one — a filter, a reversal, a map filed from a
      * list — is applied over in an order and over elements the row does not write, so which element
      * stopped the operation there is said not to be said. An operation applying its closure to
      * every element adds nothing. One applying it to an element it picks out, or to some, makes it
@@ -290,16 +293,17 @@ sealed interface ClosureApplications {
             case AT_MOST_ONE, TO_SOME -> notSaid(around.metOn(), containers, read,
                     new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.A_PART_NOT_READ));
             case UNTIL_ONE_HOLDS, UNTIL_ONE_FAILS -> {
-                if (containers.size() != 1 || !(containers.getFirst().at().pathOf(
-                        containers.getFirst().value(), read.newtypes())
-                        instanceof PathResolution.At(TermPath container))) {
+                Optional<ElementsHeldFrom> held = containers.size() == 1
+                        ? ElementsHeldFrom.of(containers.getFirst(), read) : Optional.empty();
+                if (held.isEmpty()) {
                     yield notSaid(around.metOn(), containers, read,
                             ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
                 }
                 WhatConditionsState conditions = WhatConditionsState.of(read);
                 Proposition answered = conditions.truth(block.body(), entered, read)
                         .proposition();
-                yield around.metOn().stoppingIn(container,
+                yield around.metOn().stoppingIn(
+                        held.get().position(),
                         how == HowAClosureIsApplied.UNTIL_ONE_HOLDS ? answered
                                 : conditions.denied(answered));
             }

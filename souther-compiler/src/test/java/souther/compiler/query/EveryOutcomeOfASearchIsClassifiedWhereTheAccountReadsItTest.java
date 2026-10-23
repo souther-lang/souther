@@ -250,7 +250,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static ItemAssessment.Attempt certified() {
         return ItemAssessment.Attempt.Built.certified(
                 new Generator.GeneratedRow(new Generator.Purpose.ForAPoint("p.x = 11"), List.of()),
-                WAY);
+                WAY, InputsOfTheBody.aRowOfNoInputsReadBack());
     }
 
     private static ItemAssessment.Attempt unverified() {
