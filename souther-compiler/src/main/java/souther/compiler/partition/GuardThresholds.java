@@ -182,7 +182,8 @@ public final class GuardThresholds {
                             InputReading read,
                             ElementBindings elements,
                             PathReachability.Arrivals arrives,
-                            RuleReachNumbering reaches) {
+                            RuleReachNumbering reaches,
+                            CountWitnesses.AtComparisons witnesses) {
         // A behavior with no representation for the analysis to read leaves nothing to read. This
         // reading is of that tree — where the language's operations stand — so where there is none
         // there are no rules to be had from it, and the answer is the same one a behavior with no
@@ -220,7 +221,7 @@ public final class GuardThresholds {
         // and the other one's answer would be about bindings this tree does not have.
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
-                        elements, inputs.dependencies()));
+                        elements, inputs.dependencies()), witnesses);
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =
@@ -278,7 +279,7 @@ public final class GuardThresholds {
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                             Reachability.of(new WayToTheBorder(each.assumed()),
                                                     read.quantities().region()),
-                                            wayToACase, arrivals, false, read);
+                                            wayToACase, arrivals, false, read, each.witnesses());
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.
                             // A comparison every run stops in is already said as that.

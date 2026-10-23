@@ -9,11 +9,9 @@ import souther.compiler.execute.RowTrials;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.Prepared;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
-import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
@@ -34,6 +32,7 @@ import souther.compiler.inputs.TermPath;
 
 
 import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ComparisonEmissionIndex;
@@ -138,6 +137,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.FixtureReferences;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
@@ -1114,17 +1114,25 @@ public final class Adequacy {
 
     /**
      * A row at which a statement {@code count} counts holds of one element and fails of another,
-     * beside one value of everything else, and at which {@code behavior} answers
-     * ({@link CountWitnesses}) — or nothing where none was found, which is no finding that none
-     * exists.
+     * beside one value of everything else, and at which {@code behavior} answers, a run of it
+     * going through one of {@code reaching} ({@link CountWitnesses}) — or nothing where none was
+     * found, which is no finding that none exists.
      *
      * <p>Asked below any division of the behavior: of what it takes, the values the model names,
      * the classes the compile produced and a run on them, and of nothing a division reads. A
      * behavior that depends on another is run only with the dependency stood in for, which this
      * has no answer for, so nothing is found for one.
+     *
+     * @param reaching the places a run going through the comparison the witness is of is recorded
+     *                 at: one of them a run of the witness has to be recorded at
      */
-    public record WitnessOfACount(String name, String behavior, Quantity.HowManyMeet count)
-            implements Key<Optional<CountWitnesses.Witness>> {
+    public record WitnessOfACount(String name, String behavior, Quantity.HowManyMeet count,
+                                  Set<ConditionOutcomeSite> reaching)
+            implements Key<CountWitnesses.Sought> {
+
+        public WitnessOfACount {
+            reaching = Set.copyOf(reaching);
+        }
 
         @Override
         public String module() {
@@ -1132,7 +1140,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Optional<CountWitnesses.Witness>> compute(Db db) {
+        public Answer<CountWitnesses.Sought> compute(Db db) {
             Prepared prepared = db.ask(new Shapes.Prepared(name)).value();
             CheckSurface surface = db.ask(new Shapes.CheckSurface(name)).value();
             Sig sig = db.ask(new Bodies.Signatures(name)).value() instanceof Map<String, Sig> all
@@ -1144,14 +1152,33 @@ public final class Adequacy {
             InputReading read = spec == null ? null : inputReadingOf(db, name, spec);
             FixturesAtTheBoundary building = constructing(db, name);
             RowTrials trials = trialling(db, name);
+            // The places a run is recorded at, under the numbering the check issued.
+            SiteNumbering numbering = numberingOf(db, name).orElse(null);
             if (surface == null || sig == null || read == null || building == null
-                    || trials == null || !RequiredDependencies.of(db, name, behavior).none()) {                return Answer.of(Optional.empty());
+                    || trials == null || numbering == null
+                    || !RequiredDependencies.of(db, name, behavior).none()) {
+                return Answer.of(CountWitnesses.Sought.NOTHING);
             }
+            // What the model writes at each parameter: a value it names at the parameter's type,
+            // and what each row written for the behavior holds there.
+            List<Hir.ExampleRow> written = prepared.examples().stream().map(Prepared.Example::read)
+                    .filter(block -> block.target().equals(behavior))
+                    .flatMap(block -> block.rows().stream()).toList();
+            // The search is one run of rows composed, so the references it names are numbered
+            // within it.
+            FixtureReferences references = new FixtureReferences(name, behavior);
             List<List<FixtureTemplate>> named = new ArrayList<>();
-            for (BoundaryInput in : sig.ins()) {
-                named.add(surface.typedFixtureValues().getOrDefault(in.type(), List.of()).stream()
-                        .map(one -> FixtureTemplate.named(one, new FixtureReferenceOrigin(0)))
-                        .toList());
+            for (int at = 0; at < sig.ins().size(); at++) {
+                List<FixtureTemplate> here = new ArrayList<>();
+                surface.typedFixtureValues().getOrDefault(sig.ins().get(at).type(), List.of())
+                        .forEach(one -> here.add(FixtureTemplate.named(one, references.next())));
+                for (Hir.ExampleRow row : written) {
+                    if (row.inputs().size() == sig.ins().size()) {
+                        here.add(new FixtureTemplate(row.identity().shown(),
+                                row.inputs().get(at)));
+                    }
+                }
+                named.add(here);
             }
             RowTrials.OfBehavior applying = trials.forBehavior(behavior, sig);
             return Answer.of(CountWitnesses.of(count, behavior, read, named,
@@ -1161,8 +1188,16 @@ public final class Adequacy {
                     inputs -> applying.prepare(inputs.stream().map(FixtureTemplate::value)
                                     .toList(), List.of())
                             .flatMap(RowTrials.Prepared::run)
-                            .map(RowTrials.Ran::answer)
-                            .orElse(new AnswerObservation.NotAnswered())));
+                            .filter(ran -> ran.answer() instanceof AnswerObservation.Answered)
+                            .map(ran -> ran.recorded() instanceof RunRecord.Recorded(var seen)
+                                    && wentThrough(numbering.align(seen)))
+                            .orElse(false)));
+        }
+
+        /** Whether the run {@code seen} is had some place of {@link #reaching} come out either
+         *  way. */
+        private boolean wentThrough(AlignedObservation seen) {
+            return reaching.stream().anyMatch(at -> seen.saw(at, true) || seen.saw(at, false));
         }
     }
 
@@ -2661,7 +2696,9 @@ public final class Adequacy {
                     // further in, a position would be allowed its machines once per caller and what
                     // the two came to would be bought by nobody.
                     db.ask(new Front.Adequacy()).value().measures()
-                            .allowanceForBehaviorDistinctions());
+                            .allowanceForBehaviorDistinctions(),
+                    (count, reaching) -> db.ask(new WitnessOfACount(name, behavior, count,
+                            reaching)).value());
             return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
                     read.rulesReachedAt()));
         }

@@ -7,6 +7,8 @@ import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Sig;
+import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
@@ -130,8 +132,20 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
     }
 
     private static Optional<CountWitnesses.Witness> witnessIn(Compilation compilation) {
-        return compilation.db().ask(new Adequacy.WitnessOfACount("demo", "forecast", COUNT))
-                .value();
+        return compilation.db().ask(askedIn(compilation, COUNT)).value().found();
+    }
+
+    /** {@code count}'s witness, at a run going through the comparison the body writes. */
+    private static Adequacy.WitnessOfACount askedIn(Compilation compilation,
+                                                    Quantity.HowManyMeet count) {
+        Set<ConditionOutcomeSite> reaching = new HashSet<>();
+        compilation.db().ask(new Bodies.Observable("demo")).value().plan().sites().forEach(site -> {
+            if (site instanceof CoverageSites.ComparisonSite compared
+                    && compared.body().equals("forecast")) {
+                reaching.add(compared.index());
+            }
+        });
+        return new Adequacy.WitnessOfACount("demo", "forecast", count, reaching);
     }
 
     /** The table the model names is the one tried, and an element is made to hold one of its
@@ -227,7 +241,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
                                 new DecisionSubject.AnInput(DEALS.element().then("currency")),
                                 true),
                         false));
-        Adequacy.WitnessOfACount asked = new Adequacy.WitnessOfACount("demo", "forecast", other);
+        Adequacy.WitnessOfACount asked = askedIn(compilation, other);
         compilation.db().ask(asked);
         assertTrue(compilation.db().isComputed(asked), "the other count is a question of its own");
     }
@@ -237,7 +251,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
     @Test
     void aWitnessIsFoundBelowAnyDivision() {
         Compilation compilation = compiled(forecast(DEAL, ""));
-        Adequacy.WitnessOfACount asked = new Adequacy.WitnessOfACount("demo", "forecast", COUNT);
+        Adequacy.WitnessOfACount asked = askedIn(compilation, COUNT);
         compilation.db().ask(asked);
         Set<Key<?>> reached = new HashSet<>();
         Set<String> read = new HashSet<>();

@@ -8,18 +8,21 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A row of a behavior's inputs at which a counted statement holds of one element of the container
  * and fails of another, beside one and the same value of everything else the behavior takes — and
- * at which the behavior answers.
+ * at which the behavior answers, the run going through the comparison it is asked for.
  *
  * <p>Found and then shown. Which values are tried is a search, and a search may miss: a named value
  * of a parameter's type the model writes ({@code TypedFixtureValues}), what stands for each type
@@ -28,10 +31,14 @@ import java.util.Optional;
  * that is a claim. What is a claim is what the boundary built of the row ({@link Building}), what
  * the statement says of each element of what it built ({@link AStatementAtARow#howManyMeetIn}) —
  * one element it holds of and one it fails of, and none it could not tell — and that the behavior
- * answered on it ({@link Running}). A row the search did not find is no row shown not to exist.
+ * answered on it, a run of it going through the comparison ({@link Running}). A row the search did
+ * not find is no row shown not to exist.
  *
- * <p>What the witness is not: a row reaching any comparison. Where a comparison stands, and what
- * the way to it asks of the rest of the row, is the reading of that comparison's to ask.
+ * <p>A witness is of one comparison as well as of one count: the way to a comparison may ask
+ * something of what the row holds beside the container, and a row that meets the statement both
+ * ways and answers somewhere else shows nothing of that comparison. What the reading of the
+ * comparison makes of the witness — every count of every size — is that reading's
+ * ({@code UndividedByARelation}).
  */
 public final class CountWitnesses {
 
@@ -42,19 +49,52 @@ public final class CountWitnesses {
     private CountWitnesses() {}
 
     /**
-     * Where a reading asks for a witness of a count ({@link #of}), by the behavior and the count.
+     * Where the reading of one comparison asks for a witness of a count it reads ({@link #of}):
+     * one whose row gets to that comparison.
      *
      * <p>Handed to a reading and not kept in what it reads: a witness is found by running what
      * the compile produced, which the reading of an input is not made of.
      */
     public interface Lookup {
 
-        /** A witness of {@code count}, read in {@code behavior}, or empty where none was
-         *  found. */
-        Optional<Witness> of(String behavior, Quantity.HowManyMeet count);
+        /** What the search for a witness of {@code count} whose row gets to the comparison being
+         *  read came to. */
+        Sought of(Quantity.HowManyMeet count);
 
         /** Nothing found for any count: nothing more is shown than the reading shows alone. */
-        Lookup NONE = (_, _) -> Optional.empty();
+        Lookup NONE = _ -> Sought.NOTHING;
+    }
+
+    /**
+     * What a search for a witness came to: the witness, where one was found, and where none was,
+     * the figures the search stopped at before it had tried everything it would have.
+     *
+     * <p>Two misses apart. A search that tried all it had and found nothing, and one that stopped
+     * at a figure, both leave the count not shown; a run allowed more may find a witness in the
+     * second and never in the first, and the figure is what says which a reader has.
+     *
+     * @param found     the witness, or empty
+     * @param stoppedAt the figures the search stopped at, none where one was found
+     */
+    public record Sought(Optional<Witness> found, Set<CompositionBudget> stoppedAt) {
+
+        /** Nothing tried and nothing stopped at. */
+        public static final Sought NOTHING = new Sought(Optional.empty(), Set.of());
+
+        public Sought {
+            stoppedAt = found.isPresent() ? Set.of() : Set.copyOf(stoppedAt);
+        }
+    }
+
+    /** Where the reading of a body asks for the witnesses of the comparison it reads, by which
+     *  comparison of the body it is. */
+    public interface AtComparisons {
+
+        /** Where the reading of {@code comparison} asks for a witness of a count it reads. */
+        Lookup at(ConstructOccurrence comparison);
+
+        /** Nothing found for any comparison. */
+        AtComparisons NONE = _ -> Lookup.NONE;
     }
 
     /** What the boundary builds of one input at a parameter, or empty where it refuses it. */
@@ -62,9 +102,10 @@ public final class CountWitnesses {
         Optional<ObservedValue> build(int parameter, FixtureTemplate fixture);
     }
 
-    /** Whether the behavior answers on a row of these inputs. */
+    /** Whether the behavior answers on a row of these inputs, a run of it going through the
+     *  comparison the witness is asked for. */
     public interface Running {
-        AnswerObservation run(List<FixtureTemplate> inputs);
+        boolean getsThere(List<FixtureTemplate> inputs);
     }
 
     /**
@@ -86,29 +127,32 @@ public final class CountWitnesses {
 
     /**
      * A row at which {@code count}'s statement holds of one element and fails of another, the
-     * behavior answering — or empty where none was found.
+     * behavior answering — or, where none was found, the figures the search stopped at first.
      *
      * <p>Only of a count of a parameter's own elements: the container is a list a parameter is.
      *
      * @param named the values the model names at each parameter's type, tried before anything
      *              else is
      */
-    public static Optional<Witness> of(Quantity.HowManyMeet count, String behavior,
-                                       InputReading read, List<List<FixtureTemplate>> named,
-                                       Building building, Running running) {
+    public static Sought of(Quantity.HowManyMeet count, String behavior, InputReading read,
+                            List<List<FixtureTemplate>> named, Building building,
+                            Running running) {
         if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container))
-                || !container.steps().isEmpty()) {
-            return Optional.empty();
+                || !container.steps().isEmpty()
+                || !read.domain().holdsItsElementsInTheOrderWritten(container, read.rules())) {
+            return Sought.NOTHING;
         }
         BehaviorInputs inputs = BehaviorInputs.of(read);
         int at = inputs.parameters().indexOf(container.head());
-        if (at < 0 || !(inputs.types().get(at) instanceof Type.ListOf(Type element))) {
-            return Optional.empty();
+        Type element = read.domain().typeAt(container.element(), read.rules());
+        if (at < 0 || element == null) {
+            return Sought.NOTHING;
         }
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
                 read.domain().machines());
         AStatementAtARow statement = AStatementAtARow.of(count.ofTheElement(), behavior,
                 read.quantities());
+        Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
         // What each parameter may hold, as far as the boundary builds it: the container as what
         // stands for a list of its element, which the elements tried below take the place of.
         List<List<Built>> each = new ArrayList<>();
@@ -117,35 +161,52 @@ public final class CountWitnesses {
             tried.addAll(Partitions.representativesOf(i == at ? Type.list(element)
                     : inputs.types().get(i), reading).values());
             List<Built> made = new ArrayList<>();
-            for (FixtureTemplate one : tried.subList(0, Math.min(tried.size(), MOST_VALUES))) {
+            for (FixtureTemplate one : upTo(tried, stopped)) {
                 building.build(i, one).ifPresent(value -> made.add(new Built(one, value)));
-            }            if (made.isEmpty()) {
-                return Optional.empty();
+            }
+            if (made.isEmpty()) {
+                return new Sought(Optional.empty(), stopped);
             }
             each.add(i == at ? made.subList(0, 1) : made);
         }
         // The rows of those, nearest first, as many as the search tries: one whose other values
         // leave no element to hold the statement of and another to fail it is no row shown that
         // none does, so the next is tried.
-        for (List<Built> row : rowsOf(each, MOST_VALUES)) {
+        for (List<Built> row : rowsOf(each, stopped)) {
             Optional<Witness> found = beside(row, at, element, container, count, inputs,
-                    statement, reading, building, running);
+                    statement, reading, building, running, stopped);
             if (found.isPresent()) {
-                return found;
+                return new Sought(found, Set.of());
             }
         }
-        return Optional.empty();
+        return new Sought(Optional.empty(), stopped);
+    }
+
+    /** As many of {@code values} as the search tries, first first, with the figure added to
+     *  {@code stopped} where some are left untried. */
+    private static <T> List<T> upTo(List<T> values, Set<CompositionBudget> stopped) {
+        if (values.size() <= MOST_VALUES) {
+            return values;
+        }
+        stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
+        return values.subList(0, MOST_VALUES);
     }
 
     /** One input the boundary built, and the fixture it was built of. */
     private record Built(FixtureTemplate fixture, ObservedValue value) {}
 
     /** Rows taking one value of each parameter, nearest first — every parameter at its first
-     *  before any at its second — and no more than {@code most} of them. */
-    private static List<List<Built>> rowsOf(List<List<Built>> each, int most) {
+     *  before any at its second — and no more than the search tries, with the figure added to
+     *  {@code stopped} where some are left untried. */
+    private static List<List<Built>> rowsOf(List<List<Built>> each,
+                                            Set<CompositionBudget> stopped) {
         List<List<Built>> out = new ArrayList<>();
         int[] at = new int[each.size()];
-        while (out.size() < most) {
+        while (true) {
+            if (out.size() == MOST_VALUES) {
+                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
+                break;
+            }
             List<Built> row = new ArrayList<>();
             for (int i = 0; i < each.size(); i++) {
                 row.add(each.get(i).get(at[i]));
@@ -169,15 +230,16 @@ public final class CountWitnesses {
                                             TermPath container, Quantity.HowManyMeet count,
                                             BehaviorInputs inputs, AStatementAtARow statement,
                                             RuleReadingContext reading, Building building,
-                                            Running running) {
+                                            Running running, Set<CompositionBudget> stopped) {
         List<FixtureTemplate> row = beside.stream().map(Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(Built::value).toList();
         FixtureTemplate kept = null;
         FixtureTemplate dropped = null;
         for (FixtureTemplate each : elementsTried(element, container, at, count.ofTheElement(),
-                inputs, built, reading, building)) {
+                inputs, built, reading, building, stopped)) {
             Integer meet = metIn(List.of(each), at, built, inputs, statement, container,
-                    building);            if (meet == null) {
+                    building);
+            if (meet == null) {
                 continue;
             }
             if (meet == 1 && kept == null) {
@@ -196,8 +258,7 @@ public final class CountWitnesses {
         Integer meet = metIn(both, at, built, inputs, statement, container, building);
         List<FixtureTemplate> shown = new ArrayList<>(row);
         shown.set(at, FixtureTemplate.collection(both));
-        if (meet == null || meet != 1
-                || !(running.run(shown) instanceof AnswerObservation.Answered)) {
+        if (meet == null || meet != 1 || !running.getsThere(shown)) {
             return Optional.empty();
         }
         return Optional.of(new Witness(shown, at, kept, dropped));
@@ -266,7 +327,8 @@ public final class CountWitnesses {
                                                        Proposition stated, BehaviorInputs inputs,
                                                        List<ObservedValue> built,
                                                        RuleReadingContext reading,
-                                                       Building building) {
+                                                       Building building,
+                                                       Set<CompositionBudget> stopped) {
         List<FixtureTemplate> standing = Partitions.representativesOf(element, reading).values();
         List<FixtureTemplate> out = new ArrayList<>(standing);
         Map<List<String>, TermPath> alike = new LinkedHashMap<>();
@@ -287,7 +349,7 @@ public final class CountWitnesses {
                         instanceof WalkResult.Reached<List<ObservedValue>>(var there))) {
                     continue;
                 }
-                for (ObservedValue value : there.subList(0, Math.min(there.size(), MOST_VALUES))) {
+                for (ObservedValue value : upTo(there, stopped)) {
                     ObservedValue moved = withAt(each, place.getKey(), value);
                     if (moved != null && ObservedFixtures.of(moved, element, reading)
                             instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(

@@ -41,7 +41,8 @@ final class ThresholdFixtures {
                 : GuardThresholds.of(behavior, states, emitted, plan, inputs.reading(source),
                         ElementBindings.of(states, source.newtypes()),
                         PathReachability.Arrivals.NONE,
-                        new RuleReachNumbering(source.symbols().module(), behavior));
+                        new RuleReachNumbering(source.symbols().module(), behavior),
+                        CountWitnesses.AtComparisons.NONE);
     }
 
     /** The lines one behavior's clauses draw, reading the input's rules here. */

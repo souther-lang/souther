@@ -13,6 +13,7 @@ import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 
 import java.util.ArrayList;
@@ -193,7 +194,10 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                 + gap.debt().point() + " carries " + found + " findings");
                     }
                 }
-                openIn.put(module.module() + "/declarations", declared.undecided().size());
+                openIn.put(module.module() + "/declarations", declared.undecided().stream()
+                        .mapToInt(open -> questionsOpen(wrong, reported.name(),
+                                open.debt().owed().disposition()))
+                        .sum());
                 refusedIn.put(module.module() + "/declarations", declared.refuted().size());
                 for (Adequacy.DeclaredDebt answered : declared.refuted()) {
                     carriesNoFinding(wrong, reported.name(), answered.debt(),
@@ -276,15 +280,16 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                         }
                     }
                     openIn.put(module.module() + "/" + behavior.name(),
-                            account.undecided().size() + openArms);
+                            account.undecided().stream().mapToInt(open -> questionsOpen(wrong,
+                                    reported.name(), open.owed().disposition())).sum()
+                                    + openArms);
                     refusedIn.put(module.module() + "/" + behavior.name(),
                             account.refuted().size());
                 }
             }
-            saidUnderEachBlock(wrong, reported.name(), page, openIn,
-                    "? undecided whether a row");
+            saidUnderEachBlock(wrong, reported.name(), page, openIn, OPEN);
             saidUnderEachBlock(wrong, reported.name(), page, refusedIn,
-                    "· no row can stand at");
+                    List.of("· no row can stand at"));
         }
 
         String reached = "met " + met + ", unmet " + unmet + ", refuted " + refuted
@@ -302,6 +307,30 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 "every state an arm reaches here is reached: " + reached);
     }
 
+    /**
+     * The openings of what a point nobody could decide is said to be open on, one line per
+     * question: whether a row that is written stands there, and whether a row can be written there
+     * at all — which an author acts on differently, so the two are worded apart and a point open
+     * on both is named by both. An arm nobody could decide opens as the first.
+     */
+    private static final List<String> OPEN = List.of(
+            "? undecided whether a row",
+            "? nothing could show a row can be written at the ",
+            "? nothing could show a row gets to the ",
+            "? no row can be written at the ");
+
+    /** How many questions {@code disposition} is open on, each of which is a line; a point open
+     *  on none is one nothing names. */
+    private static int questionsOpen(List<String> wrong, String source,
+                                     ObligationDisposition disposition) {
+        int open = disposition instanceof ObligationDisposition.Undecided it
+                ? it.because().written().size() : 0;
+        if (open == 0) {
+            wrong.add(source + ": an undecided point open on no question");
+        }
+        return open;
+    }
+
     /** A point nobody could decide carries no finding. */
     private static void carriesNoFinding(List<String> wrong, String source,
                                          BorderObligationPointAssessment open, long findings) {
@@ -312,8 +341,8 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
     }
 
     /**
-     * As many lines of one opening under each block as that block counted obligations of the state
-     * that opening is written for.
+     * As many lines of the openings under each block as that block counted of what those openings
+     * are written for.
      *
      * <p>Per block and counted, rather than looked for on the page. A block owing ten of them and
      * printing one says the sentence a reader searches for and answers for one of the ten; a page
@@ -326,7 +355,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
      */
     private static void saidUnderEachBlock(List<String> wrong, String source, String page,
                                            java.util.SequencedMap<String, Integer> owed,
-                                           String opening) {
+                                           List<String> openings) {
         java.util.Map<String, Integer> said = new java.util.LinkedHashMap<>();
         owed.keySet().forEach(block -> said.put(block, 0));
         String module = null;
@@ -338,15 +367,14 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
             } else if (line.startsWith("  ") && !line.startsWith("   ") && module != null) {
                 String named = module + "/" + line.strip().split("\\s+")[0];
                 block = owed.containsKey(named) ? named : block;
-            } else if (block != null && line.strip().startsWith(opening)) {
+            } else if (block != null && openings.stream().anyMatch(line.strip()::startsWith)) {
                 said.merge(block, 1, Integer::sum);
             }
         }
         owed.forEach((where, counted) -> {
             if (!counted.equals(said.get(where))) {
-                wrong.add(source + " " + where + ": " + counted + " obligations the count holds as"
-                        + " `" + opening + "` and " + said.get(where) + " lines saying so under"
-                        + " that block");
+                wrong.add(source + " " + where + ": " + counted + " counted as " + openings
+                        + " and " + said.get(where) + " lines saying so under that block");
             }
         });
     }

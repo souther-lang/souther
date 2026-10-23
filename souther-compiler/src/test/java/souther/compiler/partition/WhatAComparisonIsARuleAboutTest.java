@@ -61,7 +61,8 @@ class WhatAComparisonIsARuleAboutTest {
         return ComparisonAssessment.of("f", read.comparison().stated(),
                 Citation.of(read.binary().pos()), read.reading(), read.reads(),
                 ClosureApplications.OUTSIDE, read.rule(), Arrivals.inTheTree(read.binary()), false,
-                WhatConditionsState.of(read.reading()), Optional.empty());
+                WhatConditionsState.of(read.reading()), Optional.empty(),
+                CountWitnesses.Lookup.NONE);
     }
 
     /** The one comparison an {@code ensures} over {@code params} states, and what it is read in. */

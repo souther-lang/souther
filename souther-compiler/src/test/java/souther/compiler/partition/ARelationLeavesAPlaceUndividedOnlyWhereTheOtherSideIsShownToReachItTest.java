@@ -9,6 +9,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -309,6 +310,191 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
+    }
+
+    private static final String FORECAST = """
+            module w1
+
+            data CurrencyCode = String
+                invariant String.matches("[A-Z]{3}", value)
+
+            data ConversionRate = Decimal
+                invariant value > 0.0m
+
+            data RateTable =
+                { base: CurrencyCode
+                , rates: Map<CurrencyCode, ConversionRate>
+                }
+                invariant baseIsUnity = baseAtOne(base, rates)
+
+            let baseAtOne (base: CurrencyCode, rates: Map<CurrencyCode, ConversionRate>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> Decimal.compare(r.value, 1.0m) == 0)
+                    |> Option.withDefault(false)
+
+            let yenRates = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
+                [ (CurrencyCode("JPY"), ConversionRate(1.0m))
+                , (CurrencyCode("USD"), ConversionRate(150.0m)) ]) }
+
+            data Deal = { currency: CurrencyCode, amount: Decimal }
+
+            behavior m : (deals: List<Deal>, rates: RateTable) -> Bool
+
+            let m (deals, rates) = {
+                let kept = List.filterMap(d -> Map.get(d.currency, rates.rates), deals)
+                List.length(kept) == List.length(deals)
+            }
+            """;
+
+    /**
+     * How many deals a rate is kept for, against how many deals there are. A run on the rates the
+     * model names, of one deal in a currency they rate and one in a currency they do not, shows
+     * the kept count holding of one element and not of another, so every count from nought to the
+     * length is reached and the comparison leaves the length undivided wherever there is a deal.
+     * With no deal the count is nought as the length is, and that settles the comparison: the
+     * length is parted at nought and the values above it. A step weighing each deal by its rate
+     * may stop on a product nothing here bounds, and is applied to the witness's elements alone,
+     * on which it answered: the same is shown of it.
+     *
+     * <p>With no rates named, nothing the model writes is a rate table its rule admits, no run
+     * shows the count, and nothing is shown of the length.
+     */
+    @Test
+    void aCountAfterAFilterReachesEveryValueUpToTheLengthWhereARunShowsItHoldingAndFailing() {
+        String weighed = FORECAST.replace("d -> Map.get(d.currency, rates.rates)",
+                "d -> Option.map(r -> r.value * d.amount, Map.get(d.currency, rates.rates))");
+        for (String model : List.of(FORECAST, weighed)) {
+            Compilation named = reported(model);
+            assertEquals(Map.of(), leftIn(named, whereWritten(model, "== List")), model);
+            assertEquals(List.of("List.length(deals)/0 <= x <= 0", "List.length(deals)/0 < x"),
+                    named.db().ask(new Adequacy.Coverage("w1")).value().get("m").axes().stream()
+                            .filter(axis -> axis.path().equals("List.length(deals)"))
+                            .flatMap(axis -> axis.classes().stream()).toList(), model);
+        }
+        String unnamed = FORECAST.substring(0, FORECAST.indexOf("let yenRates"))
+                + FORECAST.substring(FORECAST.indexOf("data Deal"));
+        assertEquals(Map.of("List.length(deals)", NOT_SHOWN),
+                leftIn(reported(unnamed), whereWritten(unnamed, "== List")));
+    }
+
+    /**
+     * A witness is one run, and the rows the count is read over are its elements over again, so
+     * whatever stands between it and those rows leaves the length as nothing is shown of it. A
+     * helper calling itself on the deals before the comparison may stop a run on some list of them
+     * where nothing here says. A way that asks every deal for an amount above nought lets through
+     * some of the deals the witness's elements make, and one asking how many rates there are asks
+     * what the statement reads outside the element. A way through a value of a third parameter is
+     * met by a witness only where some run is found meeting it, which no value tried here does.
+     * And deals held in a record whose rule is that no two share a currency are not every list of
+     * the witness's elements over again: what a witness is found for is a list standing as a
+     * parameter on its own, which no rule of a value around it reads.
+     */
+    @Test
+    void aCountIsReadOverTheWitnessesElementsOverAgainOnlyWhereNothingStandsBetween() {
+        String stops = FORECAST.replace("behavior m :", """
+                partial let walked (ds: List<Deal>): Int =
+                    match List.get(0, ds) with
+                        | None -> 0
+                        | Some first -> 1 + walked(List.drop(1, ds))
+
+                behavior m :""").replace("    List.length(kept) == List.length(deals)",
+                "    let n = walked(deals)\n"
+                        + "    if List.length(kept) == List.length(deals) then n >= 0 else false");
+        String picked = FORECAST.replace("    List.length(kept) == List.length(deals)",
+                "    if List.all(d -> d.amount > 0.0m, deals) then"
+                        + " List.length(kept) == List.length(deals) else false");
+        String unique = FORECAST.replace("(deals: List<Deal>,", "(book: Book,")
+                .replace("let m (deals, rates)", "let m (book, rates)")
+                .replace("rates.rates), deals)", "rates.rates), book.deals)")
+                .replace("List.length(deals)", "List.length(book.deals)")
+                .replace("behavior m :", """
+                        data Book = { deals: List<Deal> }
+                            invariant List.length(List.distinct(List.map(d -> d.currency, deals)))
+                                == List.length(deals)
+
+                        behavior m :""")
+                + """
+
+                example m
+                    | "one deal a rate is kept for and one it is not" :
+                        (Book { deals = [ Deal { currency = CurrencyCode("USD"), amount = 1.0m }
+                                        , Deal { currency = CurrencyCode("AAA"), amount = 1.0m } ] },
+                         yenRates) -> false
+                """;
+        String third = FORECAST.replace("rates: RateTable) -> Bool", "rates: RateTable, flag: Int)"
+                        + " -> Bool")
+                .replace("let m (deals, rates)", "let m (deals, rates, flag)")
+                .replace("    List.length(kept) == List.length(deals)",
+                        "    if Int.floorMod(flag, 7919) == 5000 then"
+                                + " List.length(kept) == List.length(deals) else false");
+        String ratesAsked = FORECAST.replace("    List.length(kept) == List.length(deals)",
+                "    if Map.size(rates.rates) >= 2 then"
+                        + " List.length(kept) == List.length(deals) else false");
+        for (String model : List.of(stops, picked, third, ratesAsked)) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(Map.of("List.length(deals)", NOT_SHOWN),
+                    leftIn(compilation, whereWritten(model, "== List.length(deals")), model);
+        }
+        Compilation once = reported(unique);
+        assertEquals(List.of(), once.errors(), unique);
+        assertEquals(Map.of("List.length(book.deals)", NOT_SHOWN),
+                leftIn(once, whereWritten(unique, "== List.length(book")));
+    }
+
+    /**
+     * Two more parameters, each of a type the model names some values of, and a way through a sum
+     * of them no pair of those values meets. With one named of each, the search tries every row it
+     * has and finds none, and the length is not shown. With seventeen of each, the pairs are more
+     * rows than it tries, it stops short of the last of them, and the place says which figure it
+     * stopped at — a run allowed more may find what this one did not.
+     */
+    @Test
+    void aSearchForAWitnessThatStoppedShortSaysWhereItStopped() {
+        assertEquals(List.of(), figuresSaidOfTheLength(1));
+        assertEquals(List.of("VALUES_AN_ELEMENT_IS_CHOSEN_AMONG"), figuresSaidOfTheLength(17));
+    }
+
+    /** The figures the report names beside what nothing is shown of at the length, where the
+     *  model names {@code named} values of each of two more parameters. */
+    private static List<String> figuresSaidOfTheLength(int named) {
+        StringBuilder tags = new StringBuilder("data Tag = Int\n\n");
+        for (int i = 1; i <= named; i++) {
+            tags.append("let tag").append(i).append(" = Tag(").append(i).append(")\n");
+        }
+        String model = FORECAST.replace("rates: RateTable) -> Bool",
+                        "rates: RateTable, a: Tag, b: Tag) -> Bool")
+                .replace("behavior m :", tags + "\nbehavior m :")
+                .replace("let m (deals, rates)", "let m (deals, rates, a, b)")
+                .replace("    List.length(kept) == List.length(deals)",
+                        "    if a.value + b.value == 1000 then"
+                                + " List.length(kept) == List.length(deals) else false");
+        Compilation compilation = reported(model);
+        assertEquals(List.of(), compilation.errors(), model);
+        assertEquals(Map.of("List.length(deals)", NOT_SHOWN),
+                leftIn(compilation, whereWritten(model, "== List.length(deals")));
+        String at = "comparison@" + whereWritten(model, "== List.length(deals") + " ";
+        List<String> figures = new ArrayList<>();
+        AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()))
+                .lines().map(String::strip)
+                .filter(line -> line.startsWith("· not read: " + at)
+                        && line.endsWith("about `List.length(deals)`"))
+                .forEach(line -> {
+                    Matcher stopped = Pattern.compile("\\(([A-Z_]+), \\d+\\)").matcher(line);
+                    while (stopped.find()) {
+                        figures.add(stopped.group(1));
+                    }
+                });
+        return figures;
+    }
+
+    /** {@code source} measured as a report that runs what it composes, which a witness of a count
+     *  is found by. */
+    private static Compilation reported(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
     }
 
     /**
