@@ -2134,25 +2134,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * A run of how many {@code container} holds, every value of which some row in {@code region}
      * takes — or null where that is not shown.
      *
-     * <p>What the region answers is what the rules on the numbers leave the count, and a count of
-     * one or more is a row only where an element can be written: the rules of the element's own
-     * type may leave it no value, which no number says. So past nought the run is taken only where
-     * a value of the element is shown to exist ({@link #aValueIsShownToExist}).
+     * <p>What the region answers is what the rules on the numbers leave the count, and a count is
+     * a row only where that many elements can be written together. Two things no number says hold
+     * that back. A rule of a value around the container may read inside its elements — every
+     * element one, and no two alike, leave a list of one at most — so where one does, nothing is
+     * shown at all; a rule reading the container for how many it holds is a rule on the count,
+     * which the region holds. And the rules of the element's own type may leave it no value, so
+     * past nought the run is taken only where a value of the element is shown to exist
+     * ({@link #aValueIsShownToExist}). Then a list of so many copies of one such value is a row
+     * at every count the region leaves. A set, or the keys of a map, holds a value once, and how
+     * many different values the element has is not asked here, so past one nothing is shown of
+     * those.
      */
     private static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
                                                        SearchRegion region) {
+        if (namedDownTo(container.element(), container.steps().size(), read, null)
+                != Named.NOT) {
+            return null;
+        }
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
         NumericTerm.TakenOf count = type == null ? null
                 : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
                         container, type, rules.inners(), rules.symbols());
         NumericDomain.Bounds run = count == null ? null : region.wholeRunOf(count);
-        if (run == null || aValueIsShownToExist(read.domain().typeAt(container.element(), rules),
-                read)) {
+        if (run == null) {
+            return null;
+        }
+        int most;
+        if (!aValueIsShownToExist(read.domain().typeAt(container.element(), rules), read)) {
+            most = 0;
+        } else if (!read.domain().holdsAnElementOverAgain(container, rules)) {
+            most = 1;
+        } else {
             return run;
         }
-        return run.admits(Count.ZERO) ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO),
-                Endpoint.inclusive(Count.ZERO)) : null;
+        NumericDomain.Bounds upTo = run.meet(new NumericDomain.Bounds(null,
+                Endpoint.inclusive(Count.of(most))));
+        return upTo.holdsAValue() ? upTo : null;
     }
 
     /**

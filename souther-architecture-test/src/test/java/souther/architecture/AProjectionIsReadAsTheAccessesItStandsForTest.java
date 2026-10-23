@@ -435,6 +435,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/WhatABodyReads", "anyBinding", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "core/WhatABodyReads", "onlyAt",
+                "(" + core + "Lsouther/compiler/types/BindingId;L" + c + "core/Core$Read;)Z",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "count", "(" + core + "Ljava/util/function/Predicate;[I)V",

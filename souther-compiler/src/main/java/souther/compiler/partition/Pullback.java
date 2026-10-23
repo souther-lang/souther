@@ -6487,6 +6487,13 @@ final class Pullback {
      * in a branch, an arm or a right operand, it is read at the positions of the applications that
      * enter it — under {@code i > 0} at none of a list of one — which are some of the positions and
      * not every one.
+     *
+     * <p>And read there and nowhere else in the step ({@link WhatABodyReads#onlyAt}). Anything else
+     * the step works out of the position runs at every application, before the reading or after
+     * it, and may stop the walk there — {@code Int.max + i} at the second position, a division by
+     * one less than it — and every position past that one is then read by no row. What the
+     * reading's own arithmetic does to the walk is the relation's to work out, since it is the
+     * relation's form; anything else made of the position is not, so it is not read past.
      */
     private Optional<Quantity.HandedToTheStep> positionInTheWalk(Core.Read name,
                                                                  InputReads at) {
@@ -6498,6 +6505,7 @@ final class Pullback {
         if (!name.binding().equals(applied.position())
                 || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
                 || !Evaluated.runsWhenever(applied.step().body(), name)
+                || !WhatABodyReads.onlyAt(applied.step().body(), name.binding(), name)
                 || !(subjectOf(applied.container(), at) instanceof DecisionSubject.AnInput(
                         TermPath container))
                 || container.insideAContainer()

@@ -26,6 +26,17 @@ public final class WhatABodyReads {
         return found[0];
     }
 
+    /** Whether every read of {@code binding} inside {@code e} is {@code read}, the one node asked
+     *  about: there is no other place that binding's value goes. */
+    public static boolean onlyAt(Core e, BindingId binding, Core.Read read) {
+        if (e instanceof Core.Read here && here.binding().equals(binding)) {
+            return here == read;
+        }
+        boolean[] only = {true};
+        Core.forEachChild(e, child -> only[0] = only[0] && onlyAt(child, binding, read));
+        return only[0];
+    }
+
     /** Whether {@code e} reads any binding anywhere inside it: a value that reads none is made of
      *  what is written in it alone. */
     public static boolean anyBinding(Core e) {

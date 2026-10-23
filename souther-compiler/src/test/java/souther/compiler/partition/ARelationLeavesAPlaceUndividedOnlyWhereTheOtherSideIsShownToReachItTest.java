@@ -603,6 +603,49 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 body, atThe("==", NO_STRING, inputs, body)));
     }
 
+    /**
+     * A rule reading inside the elements says how many can stand together, which no number does:
+     * every element one, and no two alike, leave a box one element at most. So nothing is shown of
+     * the lengths past that, and no line is drawn on them.
+     */
+    @Test
+    void aRuleReadingInsideTheElementsLeavesHowManyTheyCanBeUnshown() {
+        String box = "data Box = { xs: List<Int> }\n"
+                + "    invariant List.all(x -> x == 1, xs) && List.allDistinctBy(x -> x, xs)";
+        String inputs = "box: Box";
+        String body = "List.mapIndexed((i, x) -> if i == List.length(box.xs) - 1 then 1 else 0,"
+                + " box.xs)";
+        assertEquals(Map.of("List.length(box.xs)", NOT_SHOWN), left(inputs, box, "List<Int>",
+                body, atThe("==", box, inputs, body)));
+    }
+
+    /**
+     * Where the step works something else out of the position, that may stop the walk at a
+     * position before the comparison is reached there: {@code Int.max + i} passes the type at the
+     * second. Nothing is shown.
+     */
+    @Test
+    void aPositionWorkedOutBeforeTheComparisonLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> { let total = 9223372036854775807 + i\n"
+                + "    if i == List.length(xs) - 1 then total else 0 }, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                body, "5:10"));
+    }
+
+    /**
+     * And after it: the second position compares and then stops the walk, so no position past it
+     * is compared.
+     */
+    @Test
+    void aPositionWorkedOutAfterTheComparisonLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + (9223372036854775807 + i), xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                body, atThe("==", UNUSED, inputs, body)));
+    }
+
     /** A list of one value over again, counted for how often it occurs, is no row either where the
      *  value is none: no bar is parted by it. */
     @Test
