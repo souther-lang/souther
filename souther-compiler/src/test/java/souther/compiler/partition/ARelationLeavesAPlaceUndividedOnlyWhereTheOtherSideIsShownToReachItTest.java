@@ -333,6 +333,52 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A number the run itself narrows is not free to meet a disequality: past
+     * {@code let unused = p + M}, {@code p} is nought, and {@code a != p} then takes the one
+     * value of {@code b} away that {@code a} could not meet: nought is no value of {@code b} the
+     * comparison holds at. Every {@code a} left meets some {@code b}, so {@code a} is not divided,
+     * and {@code b} is not shown to reach its true side at every value.
+     */
+    @Test
+    void aNumberTheRunNarrowsIsNotFreeToMeetADisequality() {
+        String body = "{\n    let unused = p.value + 9223372036854775807\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN), left("p: Yen, a: Yen, b: Yen",
+                "data Yen = Int invariant value >= 0", body, "8:18"));
+    }
+
+    /**
+     * Nor is one an operation the run works out reads where nothing says when it answers:
+     * {@code 1 / p} stops at nought, so past it {@code p} is one, and {@code a != p} takes
+     * {@code a} away from one. The same two places are not shown, where a free {@code p} would
+     * have left them related.
+     */
+    @Test
+    void aNumberAnUnsaidOperationReadsIsNotFreeToMeetADisequality() {
+        String body = "{\n    let unused = 1 / p.value\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN), left("p: Bit, a: Bit, b: Bit",
+                "data Bit = Int invariant value >= 0 && value <= 1", body, "8:18"));
+    }
+
+    /**
+     * Where what a run gets past leaves a place no value, no row arrives at the comparison, and
+     * it is read so: the reason says the rows that arrive hold no value at its line, and no class
+     * of either side is drawn. The region of the way is left as it was there, since the proof
+     * that nothing arrives is the walk's and is made from the same operators.
+     */
+    @Test
+    void aRunNoRowGetsPastLeavesTheComparisonNoRowAtIt() {
+        String body = "{\n    let unused = a.value + 9223372036854775807\n    a.value == b.value\n}";
+        String yen = "data Yen = Int invariant value >= 1";
+        Map<String, String> left = left("a: Yen, b: Yen", yen, body, "6:13");
+        assertEquals(Set.of("a", "b"), left.keySet());
+        left.values().forEach(each -> assertTrue(each.contains("no row that arrives at it"), each));
+        assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen, body, "a"));
+        assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen, body, "b"));
+    }
+
+    /**
      * What the comparison works out itself is worked out on a row at it: {@code a + M - M} is
      * {@code a} as a form and stops at every {@code a} above nought as written.
      */

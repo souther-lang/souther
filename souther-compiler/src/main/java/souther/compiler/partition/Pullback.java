@@ -128,6 +128,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -1001,19 +1002,29 @@ final class Pullback {
      * said of it, as is one under a part the arithmetic composes nothing out of — which says less
      * than what has to hold, and never more.
      */
-    static Proposition whereItsOperatorsAnswer(Core body, InputReads reads, InputReading read) {
+    static OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
+                                                   InputReading read) {
         return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
                 null);
     }
 
-    /** The same, leaving out the comparison {@code apart} is read in, where it is not null, and
-     *  the values of the names it reads: that arithmetic is the relation it states. */
-    private Proposition whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
-                                                        Core.Read apart) {
+    /**
+     * The same, leaving out the comparison {@code apart} is read in, where it is not null, and
+     * the values of the names it reads: that arithmetic is the relation it states.
+     *
+     * <p>And which operators it works out may stop a run where nothing here says it: a quotient,
+     * a join, a sum whose number has no representation here, or one over operands no form says.
+     * Left out of {@code answers}, they are told apart from an operator that never stops, since a
+     * reader that takes a run to get past them everywhere is wrong about the rows that arrive.
+     */
+    private OperatorsAnswer whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
+                                                            Core.Read apart) {
         Set<BindingId> ofTheRelation = apart == null ? Set.of()
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
+        Operators[] told = new Operators[1];
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
+            told[0] = operated;
             return whereEachOperatorAnswers(operated);
         });
         Derivation answered = null;
@@ -1021,7 +1032,9 @@ final class Pullback {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
-        return answered == null ? null : pulled(answered).proposition();
+        return new OperatorsAnswer(
+                answered == null ? Optional.empty() : Optional.of(pulled(answered).proposition()),
+                told[0].unsaidAt, told[0].unsaidElsewhere);
     }
 
     /** Every operator {@code e} works out on every run that works {@code e} out, told to
@@ -1034,8 +1047,23 @@ final class Pullback {
             case Core.Binary binary when apart != null && binary.op().compares()
                     && WhatABodyReads.holds(binary, apart) -> { }
             case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
-                    || binary.op() == BinOp.MUL -> AffineForms.outcome(e, reads, quantities());
-            case Core.Neg _ -> AffineForms.outcome(e, reads, quantities());
+                    || binary.op() == BinOp.MUL -> leaveUnsaidUnlessComposed(
+                            AffineForms.outcome(e, reads, quantities()));
+            case Core.Neg _ -> leaveUnsaidUnlessComposed(
+                    AffineForms.outcome(e, reads, quantities()));
+            case Core.Binary binary when !(WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()))
+                    instanceof WhereAnOperatorAnswers.Everywhere) -> {
+                // A quotient or a join is told of to nobody, and may stop a run on its operands.
+                for (Core operand : List.of(binary.left(), binary.right())) {
+                    leaveUnsaidOver(AffineForms.outcome(operand, reads, quantities()));
+                }
+                for (Evaluated.Step step : Evaluated.inOrder(e)) {
+                    if (step instanceof Evaluated.Step.Always(Core part)) {
+                        operatorsIn(part, reads, apart, ofTheRelation);
+                    }
+                }
+            }
             case Core.LetIn li -> {
                 if (li.binder() == null || !ofTheRelation.contains(li.binder().binding())) {
                     operatorsIn(li.value(), reads, apart, ofTheRelation);
@@ -1049,6 +1077,23 @@ final class Pullback {
                     }
                 }
             }
+        }
+    }
+
+    /** An operator whose form was not composed is told to nobody, and may stop a run on anything
+     *  it reads. */
+    private void leaveUnsaidUnlessComposed(AffineForms.Outcome<Quantity, InputReads> outcome) {
+        if (!(outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
+            operated.leaveUnsaidOverUnreadOperands();
+        }
+    }
+
+    /** An operator no region says where it answers stops a run on what its operand is made of. */
+    private void leaveUnsaidOver(AffineForms.Outcome<Quantity, InputReads> outcome) {
+        if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
+            operated.leaveUnsaid(form.coefs().keySet());
+        } else {
+            operated.leaveUnsaidOverUnreadOperands();
         }
     }
 
@@ -5251,11 +5296,48 @@ final class Pullback {
     private static final class Operators {
         private final List<Operated> told = new ArrayList<>();
         private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Set<TermPath> unsaidAt = new LinkedHashSet<>();
+        private boolean unsaidElsewhere;
 
         void tell(Core operation, LinearForm<Quantity> form) {
             if (nodes.add(operation)) {
                 told.add(new Operated(operation, form));
             }
+        }
+
+        /** An operator that may stop a run where nothing is said, over {@code reads}: the places
+         *  of the numbers among them are the ones it may stop on, and a quantity that is no
+         *  number of a place leaves it stopping on no place this can name. */
+        void leaveUnsaid(Collection<? extends Quantity> reads) {
+            for (Quantity each : reads) {
+                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                    unsaidAt.add(term.subjectPath());
+                } else {
+                    unsaidElsewhere = true;
+                }
+            }
+        }
+
+        /** An operator that may stop a run where nothing is said, over operands no form says. */
+        void leaveUnsaidOverUnreadOperands() {
+            unsaidElsewhere = true;
+        }
+    }
+
+    /**
+     * What the operators a run works out answer, and which of them answer nothing here.
+     *
+     * @param answers         where each of the operators said answers, or empty where none is
+     * @param unsaidAt        the places the numbers are of that the operators not said may stop a
+     *                        run on
+     * @param unsaidElsewhere whether an operator not said may stop a run on something that is no
+     *                        number of a place, or on operands no form says
+     */
+    record OperatorsAnswer(Optional<Proposition> answers, Set<TermPath> unsaidAt,
+                           boolean unsaidElsewhere) {
+
+        OperatorsAnswer {
+            unsaidAt = Set.copyOf(unsaidAt);
         }
     }
 
@@ -5286,11 +5368,15 @@ final class Pullback {
             };
             // A count is read with how it was read, which an operator's form does not carry, so a
             // form naming one says nothing of where the operator answers here.
-            if (form.coefs().isEmpty() || !(where instanceof
+            if (form.coefs().isEmpty() || where instanceof WhereAnOperatorAnswers.Everywhere) {
+                continue;
+            }
+            if (!(where instanceof
                     WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
                     || form.coefs().keySet().stream().anyMatch(quantity ->
                             quantity instanceof Quantity.HowManyMeet
                                     || quantity instanceof Quantity.HowManyDifferentMeet)) {
+                operated.leaveUnsaid(form.coefs().keySet());
                 continue;
             }
             if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
@@ -5302,6 +5388,8 @@ final class Pullback {
                                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
                         aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
                                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
+            } else {
+                operated.leaveUnsaid(form.coefs().keySet());
             }
         }
         return out;
@@ -6784,8 +6872,8 @@ final class Pullback {
         inside.askingWhereAStepAnswers = true;
         Core.Block step = at.usesOfTheClosureTaking(name.binding()).applications().getFirst()
                 .step();
-        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name) == null ? handed
-                : Optional.empty();
+        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name).answers().isEmpty()
+                ? handed : Optional.empty();
     }
 
     /**

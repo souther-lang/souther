@@ -538,7 +538,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<OnAWay> conditions = conditionsOf(each);
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
-            DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied());
+            DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
+                    each.unsaid());
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
                             heldWhole, declined, past), _ -> leftAlong(read, sources,
@@ -991,7 +992,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
         List<OnAWay> stated = offItsLine ? List.of()
-                : withoutWhatAFreeNumberMeets(written, declined, past.tied(), read);
+                : withoutWhatAFreeNumberMeets(written, declined, past, read);
         // Without a statement taken away, the region is the one its rows were found in; with one,
         // the one the rest of them leave, where the rest can be taken in again.
         SearchRegion rest = stated.size() == written.size() ? null : narrowedBy(stated, read);
@@ -1299,14 +1300,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private List<OnAWay> withoutWhatAFreeNumberMeets(List<OnAWay> conditions,
                                                      Optional<Set<String>> declined,
-                                                     List<Set<TermPath>> tied,
+                                                     DemandReading.Answered past,
                                                      InputReading read) {
         List<OnAWay> out = new ArrayList<>(conditions);
         for (OnAWay each : conditions) {
             TakenConstraint.Affine affine = each.affine();
             if (affine != null && affine.rel() == Rel.NE && affine.form().coefs().keySet()
                     .stream().anyMatch(term ->
-                            freeToMeet(term, each, out, declined, tied, read))) {
+                            freeToMeet(term, each, out, declined, past, read))) {
                 out.remove(each);
             }
         }
@@ -1318,16 +1319,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * name — no side of the relation reads it ({@link #placesRead}), no other statement of
      * {@code conditions} does, nothing the way declined may ({@code declined}), no operator the
      * source works out on the way ties it to another place ({@code tied}), and no rule of a value
-     * around it names it — and which is shown to take two values or more.
+     * around it names it — and which is shown to take two values or more among those the
+     * declarations leave and the run narrows it to ({@code past}).
      *
      * <p>What the source works out and not what its form comes to: {@code a + M - M != p} is
      * {@code a != p} as a form and stops at every {@code a} above nought as written, which the way
      * holds as a statement of {@code a} and not of {@code p}.
      */
     private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
-                               Optional<Set<String>> declined, List<Set<TermPath>> tied,
+                               Optional<Set<String>> declined, DemandReading.Answered past,
                                InputReading read) {
-        if (!(term instanceof NumericTerm.FromOnePosition number)) {
+        if (!(term instanceof NumericTerm.FromOnePosition number) || past.unsaid()) {
             return false;
         }
         for (Side side : sides) {
@@ -1342,7 +1344,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
         }
-        for (Set<TermPath> ties : tied) {
+        for (Set<TermPath> ties : past.tied()) {
             if (touches(number, ties)) {
                 return false;
             }
@@ -1352,8 +1354,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         Source source = sourceOf(number, read);
-        NumericDomain.Bounds takes = source == null || source.named() ? null
-                : realized(number, source, read.quantities().region(), Way.UNTOUCHED);
+        if (source == null || source.named()) {
+            return false;
+        }
+        // The values it takes are those the run leaves it: a number the run narrows is taken at
+        // the values the run lets a row hold, whatever the declarations leave it.
+        SearchRegion left =
+                TakenConstraint.narrowedBy(past.narrowing(), read.quantities().region());
+        if (left.emptiness().isPresent()) {
+            return false;
+        }
+        boolean narrowed = past.narrowing().stream()
+                .anyMatch(each -> each.terms().contains(number));
+        NumericDomain.Bounds takes = realized(number, source, left,
+                narrowed ? Way.NARROWED : Way.UNTOUCHED);
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
     }
 

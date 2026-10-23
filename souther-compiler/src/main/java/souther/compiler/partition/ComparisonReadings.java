@@ -542,11 +542,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
         DemandReading.Answered out = DemandReading.Answered.NOTHING;
         for (Core part : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison)) {
-            Optional<Proposition> answers =
+            Pullback.OperatorsAnswer operators =
                     in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
-            if (answers.isPresent()) {
-                out = out.and(DemandReading.regionAnswered(answers.get(), in.read()));
+            if (operators.answers().isPresent()) {
+                out = out.and(
+                        DemandReading.regionAnswered(operators.answers().get(), in.read()));
             }
+            out = out.and(DemandReading.Answered.leavingUnsaid(operators));
         }
         return out;
     }

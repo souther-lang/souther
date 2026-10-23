@@ -779,22 +779,32 @@ final class DemandReading {
                 tied.add(places);
             }
         }
-        return new Answered(narrowing, tied);
+        return new Answered(narrowing, tied, false);
     }
 
     /**
      * What a run's working out the operators of a part asks of a row.
      *
      * @param narrowing what one number of one place says, which a region carries
-     * @param tied      the places each of the rest names, which a region cannot say
+     * @param tied      the places each of the rest names, which a region cannot say, and the
+     *                  places of the numbers an operator not said may stop the run on
+     * @param unsaid    whether an operator not said may stop the run on something that is no
+     *                  number of a place: nothing is then known free of what the run works out
      */
-    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied) {
+    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
 
-        static final Answered NOTHING = new Answered(List.of(), List.of());
+        static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
         Answered {
             narrowing = List.copyOf(narrowing);
             tied = List.copyOf(tied);
+        }
+
+        /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */
+        static Answered leavingUnsaid(Pullback.OperatorsAnswer operators) {
+            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere() ? NOTHING
+                    : new Answered(List.of(), operators.unsaidAt().isEmpty() ? List.of()
+                            : List.of(operators.unsaidAt()), operators.unsaidElsewhere());
         }
 
         /** This and {@code other}, both. */
@@ -803,26 +813,33 @@ final class DemandReading {
             narrows.addAll(other.narrowing);
             List<Set<TermPath>> places = new ArrayList<>(tied);
             places.addAll(other.tied);
-            return new Answered(narrows, places);
+            return new Answered(narrows, places, unsaid || other.unsaid);
         }
     }
 
-    /** Whether {@code constraint} holds one number at or below a level at or above the greatest
-     *  {@code Int}, or at or above one at or below the least: what an operator over a number
-     *  answers where it cannot pass either end, which every {@code Int} meets and no row is
-     *  narrowed by. */
-    private static boolean endsOfTheInts(TakenConstraint constraint) {
+    /** Whether {@code constraint} is an ordering of one number that holds at the least
+     *  {@code Int} and at the greatest, so at every one between them: what an operator over a
+     *  number answers where it cannot pass either end, which every {@code Int} meets and no row is
+     *  narrowed by. A form is worked out at the two ends and the relation asked of each, so that
+     *  the side of the number it is on, whether it is strict and the sign of its weight are not
+     *  told apart by hand. */
+    static boolean endsOfTheInts(TakenConstraint constraint) {
         if (!(constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
-                || form.coefs().size() != 1) {
+                || form.coefs().size() != 1
+                || !(rel == Rel.LE || rel == Rel.LT || rel == Rel.GE || rel == Rel.GT)) {
             return false;
         }
         ExactRatio weight = form.coefs().values().iterator().next();
-        return form.constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
-                && (((rel == Rel.LE || rel == Rel.LT)
-                        && level.compareTo(ExactRatio.of(Long.MAX_VALUE)) >= 0)
-                        || ((rel == Rel.GE || rel == Rel.GT)
-                        && level.compareTo(ExactRatio.of(Long.MIN_VALUE)) <= 0));
+        return holdsAt(weight, form.constant(), rel, Long.MIN_VALUE)
+                && holdsAt(weight, form.constant(), rel, Long.MAX_VALUE);
+    }
+
+    /** Whether {@code weight * x + constant} stands to nought as {@code rel} says at
+     *  {@code x}. */
+    private static boolean holdsAt(ExactRatio weight, ExactRatio constant, Rel rel, long x) {
+        ExactRatio at = weight.times(ExactRatio.of(x)).orNull();
+        ExactRatio value = at == null ? null : at.plus(constant).orNull();
+        return value != null && rel.holds(value.signum());
     }
 
     private static List<Stated> both(List<Stated> left, List<Stated> right) {

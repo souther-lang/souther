@@ -285,12 +285,18 @@ public sealed interface Reachability {
      *                        region was made some other way. Two ways of one reading narrowed by
      *                        the same are over one region, which the region's own value does not
      *                        say
+     * @param gotPast         what the run to the border got past working out narrowed the region
+     *                        by, which no condition of the way states
+     * @param tied            the places that run ties together, or may stop on where nothing says
+     *                        when, which a region does not say
+     * @param unsaid          whether that run may stop on something no place names, so that no
+     *                        number is known free of what it works out
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
                     Optional<List<TakenConstraint>> narrowedBy,
-                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied)
+                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied, boolean unsaid)
             implements Reachability {
 
         public Reaching {
@@ -313,7 +319,7 @@ public sealed interface Reachability {
                         List<OnTheWay.Declined> declined,
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
-                    List.of(), List.of());
+                    List.of(), List.of(), false);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -345,7 +351,7 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy, gotPast, tied);
+                    narrowedBy, gotPast, tied, unsaid);
         }
 
         /** Whether taking {@code each} in moves where a number it names runs or what is held
@@ -365,7 +371,9 @@ public sealed interface Reachability {
         /**
          * This with {@code these}, what the run to the border got past working out, taken into the
          * region of it and of each way it is split into. A way they leave no input is kept as it
-         * is: that is a proof for the walk to make, not one made here.
+         * is, with what they tie and what they leave unsaid: the walk proves that no row arrives
+         * there, from the same operators, and says so; a region narrowed to nothing here would
+         * be one more reader's account of it.
          */
         Reaching gettingPast(DemandReading.Answered answered) {
             // Only what narrows: a bound the region already holds is nothing a reader of this
@@ -398,14 +406,15 @@ public sealed interface Reachability {
             };
             List<Set<TermPath>> ties = new ArrayList<>(tied);
             ties.addAll(answered.tied());
+            boolean unsaidNow = unsaid || answered.unsaid();
             if (narrowed.emptiness().isPresent()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
-                        declined, narrowedBy, gotPast, ties);
+                        declined, narrowedBy, gotPast, ties, unsaidNow);
             }
             List<TakenConstraint> past = new ArrayList<>(gotPast);
             past.addAll(narrowing);
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, past, ties);
+                    by, past, ties, unsaidNow);
         }
 
         /**
