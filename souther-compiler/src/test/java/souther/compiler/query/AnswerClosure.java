@@ -390,6 +390,7 @@ final class AnswerClosure {
 
     private static final Locus.Step ELEMENT = new Locus.Step.Element();
     private static final Locus.Step VALUE = new Locus.Step.MapValue();
+    private static final Locus.Step KEY = new Locus.Step.MapKey();
 
     /**
      * The end itself, on the way to what is holding it.
@@ -587,6 +588,19 @@ final class AnswerClosure {
                     m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
                     ELEMENT, m("souther.compiler.partition.PositionMeasurements", "position"),
                     m("souther.compiler.partition.PositionAccount", "admits")),
+            // And what a declaration's rule about the strings of a position comes to, filed under
+            // what each machine is a fact about: the set a plan realized, the set whose extent was
+            // taken, and the language a stretch was met with.
+            machineUnderALanguage(Q + "Machines$OfDeclaration", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m("souther.compiler.values.StringFacts", "realized"),
+                    VALUE),
+            machineUnderALanguage(Q + "Machines$OfDeclaration", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m("souther.compiler.values.StringFacts", "extents"), KEY),
+            new Known(at(Q + "Machines$OfDeclaration", "net.unit8.notation199x.pattern.Automaton",
+                    m(ANSWER, "value"), m("souther.compiler.values.StringFacts", "inside"), KEY,
+                    m("souther.compiler.values.StringFacts$Stretch", "language"),
+                    m("souther.compiler.regex.Language", "machine")),
+                    A_MACHINE_UNDER_A_LANGUAGE, Set.of(walked(Scenario.THE_CORPORA))),
             new Known(at(EVERY_ANSWER, "souther.compiler.diag.Diagnostic",
                     m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
                     A_REPORT, BOTH_EVERYWHERE));

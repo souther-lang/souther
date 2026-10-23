@@ -347,6 +347,12 @@ final class Pullback {
      */
     private Map<Quantity, Derivation.AComparisonRead.Counted> counting;
     /**
+     * The call each count of elements meeting a statement was read off, where a law of what the
+     * call answers counts them ({@link OnTheInput#readOff}). A count read any other way is not
+     * here: nothing here names the one expression it is the size of.
+     */
+    private final Map<Quantity.HowManyMeet, Core> readOff = new LinkedHashMap<>();
+    /**
      * Whether an element being added up over takes an arm, as the statement read of it, with the
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
      * elements taking it holds as how it was read.
@@ -611,19 +617,29 @@ final class Pullback {
      * @param arithmetic read where a rule asked for it and not again, so a reader that needs to know
      *                   where that arithmetic stopped asks this rather than reading the comparison a
      *                   second time
+     * @param readOff    the call each count of elements meeting a statement the reading made was
+     *                   read off, where a law of what the call answers counts them. A reader that
+     *                   has to know which expression a count is the size of asks this, and finds
+     *                   none for a count read any other way, rather than looking for one
      */
-    record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic) {}
+    record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic,
+                      Map<Quantity.HowManyMeet, Core> readOff) {
+
+        OnTheInput {
+            readOff = Map.copyOf(readOff);
+        }
+    }
 
     /** The same, with the arithmetic it was read through. */
     static OnTheInput ofAComparisonOnTheInput(StatedComparison comparison, InputReads reads,
                                               InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty());
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
-        return new OnTheInput(reading.pulled(reading.underTheEntriesLookedUp(
+        Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(
                 reading.firstThatReadsIt(
                         reading.rulesFor(comparison, null, false, reads, arithmetic)),
-                comparison, reads)),
-                arithmetic);
+                comparison, reads));
+        return new OnTheInput(stated, arithmetic, reading.readOff);
     }
 
     /**
@@ -4923,6 +4939,9 @@ final class Pullback {
                     new Quantity.HowManyMeet(heldAt, Proposition.whereItHolds(element));
             counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(heldAt, answered,
                     Optional.empty()));
+            // Read off this call, which is what its law counts of: told to whoever has to know
+            // which call a count of the reading is.
+            readOff.putIfAbsent(count, e);
             return new Sized.AsAForm(LinearForm.atom(count));
         }
 

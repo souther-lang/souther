@@ -1,0 +1,48 @@
+// How many elements of a list a lookup finds something for, against how many there are.
+//
+// Each deal is weighed by the rate of its currency, and a deal in a currency the table does not
+// rate is dropped by the walk that weighs them. The behavior answers whether none was dropped: the
+// count the walk kept against the length of the list. A run on one deal the table rates and one it
+// does not shows the count holding of one element and failing of another, so the count lies
+// anywhere from none to all of the deals and the comparison leaves the length either way wherever
+// there is a deal. With no deal the count is none as the length is, and that settles it.
+module conformance.counting exposing
+    ( CurrencyCode, ConversionRate, RateTable, Deal, yenRates, everyDealPriced )
+
+data CurrencyCode = String
+    invariant String.matches("[A-Z]{3}", value)
+
+data ConversionRate = Decimal
+    invariant value > 0.0m
+
+data RateTable =
+    { base: CurrencyCode
+    , rates: Map<CurrencyCode, ConversionRate>
+    }
+    invariant baseIsUnity = baseAtOne(base, rates)
+
+let baseAtOne (base: CurrencyCode, rates: Map<CurrencyCode, ConversionRate>): Bool =
+    Map.get(base, rates)
+        |> Option.map(r -> Decimal.compare(r.value, 1.0m) == 0)
+        |> Option.withDefault(false)
+
+let yenRates = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
+    [ (CurrencyCode("JPY"), ConversionRate(1.0m))
+    , (CurrencyCode("USD"), ConversionRate(150.0m)) ]) }
+
+data Deal = { currency: CurrencyCode, amount: Decimal }
+
+behavior everyDealPriced : (deals: List<Deal>, rates: RateTable) -> Bool
+
+let everyDealPriced (deals, rates) = {
+    let weighed = List.filterMap(
+        d -> Option.map(r -> r.value * d.amount, Map.get(d.currency, rates.rates)), deals)
+    List.length(weighed) == List.length(deals)
+}
+
+example everyDealPriced
+    | "a deal in a currency the table rates is priced" :
+        ([ Deal { currency = CurrencyCode("USD"), amount = 10.0m } ], yenRates) -> true
+    | "a deal in a currency the table does not rate is dropped" :
+        ([ Deal { currency = CurrencyCode("USD"), amount = 10.0m }
+         , Deal { currency = CurrencyCode("EUR"), amount = 10.0m } ], yenRates) -> false

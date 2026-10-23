@@ -1057,7 +1057,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * is the container's size or none, and a count of what nobody read is no number anything can be
      * said of.
      */
-    record HowManyMeet(DecisionSubject container, Proposition ofTheElement) implements Quantity {
+    record HowManyMeet(DecisionSubject container, Proposition ofTheElement)
+            implements Quantity, ReadAlongAContainer {
 
         public HowManyMeet {
             if (container == null || ofTheElement == null) {
@@ -1121,7 +1122,18 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>One type for every such thing, so a reader that carries one carries all of them, and one
      * that asks which it is answers each.
      */
-    public sealed interface HandedToTheStep permits KeptSoFar, PositionInTheWalk {}
+    public sealed interface HandedToTheStep extends ReadAlongAContainer
+            permits KeptSoFar, PositionInTheWalk {}
+
+    /**
+     * A number read off a container's elements one by one and at no one position of the input,
+     * where what it is says where it lies beside how many the container holds: what a walk hands
+     * its step, or how many of the elements meet a statement.
+     *
+     * <p>One type for every such thing, for the reason {@link HandedToTheStep} is one: a reader of
+     * a relation carrying one carries all of them.
+     */
+    public sealed interface ReadAlongAContainer permits HandedToTheStep, HowManyMeet {}
 
     /**
      * Where the element a walk over every element of {@code container} hands its step stands in
