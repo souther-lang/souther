@@ -7,12 +7,15 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What a path's rules leave the numbers in it, and what follows from them.
@@ -104,6 +107,7 @@ public final class NumericDomain<A> {
     private final RulesRead<A> readBefore;
     private RulesRead<A> read;
     private ClosedStates.Parted<A> closed;
+    private Systems<A> systems;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
                           boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
@@ -1068,40 +1072,113 @@ public final class NumericDomain<A> {
      * {@code 4h - 3s < 0} over two decimals running nought to 168 is no difference and is not
      * proven, and leaves a whole number apart from both the whole of its run, since {@code h} at
      * nought and {@code s} at 168 hold it.
+     *
+     * <p>What each system is shown to be is the domain's alone, worked out where an atom first
+     * asks it and kept for every other atom, and asked no further than the first system that
+     * keeps the run from being shown.
      */
     private boolean leavesTheWholeOfItsRun(A atom) {
-        if (isBottom() || !closed().everyBoundWasComposed()) {
+        Systems<A> had = systems;
+        if (had == null) {
+            had = systemsOf();
+            systems = had;
+        }
+        if (!had.anyShown()) {
             return false;
         }
-        Map<A, A> reaches = related();
-        Map<A, List<AffineConstraint<A>>> systems = new LinkedHashMap<>();
-        for (AffineConstraint<A> rule : rules()) {
-            List<A> atoms = rule.form().atomsIn(order);
-            if (atoms.isEmpty()) {
-                if (!proven(rule, false)) {
-                    return false;
-                }
-                continue;
-            }
-            systems.computeIfAbsent(groupOf(reaches, atoms.getFirst()), _ -> new ArrayList<>())
-                    .add(rule);
+        A its = had.groupOf().get(atom);
+        if (its != null && shownOf(had, its) != Shown.PROVEN) {
+            return false;
         }
-        A its = reaches.containsKey(atom) ? groupOf(reaches, atom) : null;
-        for (Map.Entry<A, List<AffineConstraint<A>>> system : systems.entrySet()) {
-            List<A> atoms = new ArrayList<>();
-            for (A each : List.copyOf(reaches.keySet())) {
-                if (groupOf(reaches, each).equals(system.getKey())) {
-                    atoms.add(each);
-                }
-            }
-            boolean proven = spacedAlike(reaches, atoms)
-                    && system.getValue().stream().allMatch(rule -> proven(rule, false));
-            if (!proven && (system.getKey().equals(its)
-                    || !aPointOfTheBoxHolds(atoms, system.getValue()))) {
+        for (A group : had.rulesOf().keySet()) {
+            if (!group.equals(its) && shownOf(had, group) == Shown.NOTHING) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** What one system of the rules is shown to leave: its runs whole, some point, or neither
+     *  shown. */
+    private enum Shown { PROVEN, A_POINT, NOTHING }
+
+    /** What the system of {@code group} is shown to leave, worked out once. */
+    private Shown shownOf(Systems<A> systems, A group) {
+        return systems.shown().computeIfAbsent(group, key -> {
+            List<A> atoms = systems.atomsOf().getOrDefault(key, List.of());
+            List<AffineConstraint<A>> rules = systems.rulesOf().get(key);
+            if (systems.spacedAlike().contains(key)
+                    && rules.stream().allMatch(rule -> proven(rule, false))) {
+                return Shown.PROVEN;
+            }
+            return aPointOfTheBoxHolds(atoms, rules) ? Shown.A_POINT : Shown.NOTHING;
+        });
+    }
+
+    /**
+     * The systems the rules are in, each by its group, and what each is shown to leave, as far as
+     * it has been asked.
+     *
+     * @param anyShown    whether a run is shown of any atom: not where nothing is left, the closure
+     *                    is incomplete or a rule over no atom is not proven
+     * @param groupOf     the group each atom a rule names is in
+     * @param atomsOf     the atoms of each group
+     * @param rulesOf     the rules of each group
+     * @param spacedAlike the groups whose atoms are spaced alike
+     * @param shown       what each system asked of is shown to leave
+     */
+    private record Systems<A>(boolean anyShown, Map<A, A> groupOf, Map<A, List<A>> atomsOf,
+                              Map<A, List<AffineConstraint<A>>> rulesOf, Set<A> spacedAlike,
+                              Map<A, Shown> shown) {
+
+        static <A> Systems<A> none() {
+            return new Systems<>(false, Map.of(), Map.of(), Map.of(), Set.of(),
+                    new ConcurrentHashMap<>());
+        }
+
+        Systems {
+            groupOf = Map.copyOf(groupOf);
+            atomsOf = Map.copyOf(atomsOf);
+            rulesOf = Collections.unmodifiableMap(new LinkedHashMap<>(rulesOf));
+            spacedAlike = Set.copyOf(spacedAlike);
+        }
+    }
+
+    private Systems<A> systemsOf() {
+        if (isBottom() || !closed().everyBoundWasComposed()) {
+            return Systems.none();
+        }
+        Map<A, A> reaches = related();
+        Map<A, List<AffineConstraint<A>>> byGroup = new LinkedHashMap<>();
+        for (AffineConstraint<A> rule : rules()) {
+            List<A> atoms = rule.form().atomsIn(order);
+            if (atoms.isEmpty()) {
+                if (!proven(rule, false)) {
+                    return Systems.none();
+                }
+                continue;
+            }
+            byGroup.computeIfAbsent(groupOf(reaches, atoms.getFirst()), _ -> new ArrayList<>())
+                    .add(rule);
+        }
+        Map<A, A> groups = new LinkedHashMap<>();
+        Map<A, List<A>> atomsOf = new LinkedHashMap<>();
+        for (A each : List.copyOf(reaches.keySet())) {
+            A group = groupOf(reaches, each);
+            groups.put(each, group);
+            atomsOf.computeIfAbsent(group, _ -> new ArrayList<>()).add(each);
+        }
+        Set<A> alike = new LinkedHashSet<>();
+        for (Map.Entry<A, List<A>> group : atomsOf.entrySet()) {
+            if (spacedAlike(reaches, group.getValue())) {
+                alike.add(group.getKey());
+            }
+        }
+        Map<A, List<A>> atoms = new LinkedHashMap<>();
+        atomsOf.forEach((group, each) -> atoms.put(group, List.copyOf(each)));
+        Map<A, List<AffineConstraint<A>>> rules = new LinkedHashMap<>();
+        byGroup.forEach((group, each) -> rules.put(group, List.copyOf(each)));
+        return new Systems<>(true, groups, atoms, rules, alike, new ConcurrentHashMap<>());
     }
 
     /**
