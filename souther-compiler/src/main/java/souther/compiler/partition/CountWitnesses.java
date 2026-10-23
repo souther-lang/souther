@@ -129,17 +129,21 @@ public final class CountWitnesses {
      * A row at which {@code count}'s statement holds of one element and fails of another, the
      * behavior answering — or, where none was found, the figures the search stopped at first.
      *
-     * <p>Only of a count of a parameter's own elements: the container is a list a parameter is.
+     * <p>Only of a count of a parameter's own elements, of a container that may hold an element
+     * over again: the rows a count is read over hold the witness's elements so many times each.
      *
      * @param named the values the model names at each parameter's type, tried before anything
      *              else is
+     * @param taken what each row written for the behavior took, one value per parameter, as its
+     *              run held it: tried next, each written back from what was built, and the
+     *              elements of the container among them tried before what stands for the element
      */
     public static Sought of(Quantity.HowManyMeet count, String behavior, InputReading read,
-                            List<List<FixtureTemplate>> named, Building building,
-                            Running running) {
+                            List<List<FixtureTemplate>> named, List<List<ObservedValue>> taken,
+                            Building building, Running running) {
         if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container))
                 || !container.steps().isEmpty()
-                || !read.domain().holdsItsElementsInTheOrderWritten(container, read.rules())) {
+                || !read.domain().holdsAnElementOverAgain(container, read.rules())) {
             return Sought.NOTHING;
         }
         BehaviorInputs inputs = BehaviorInputs.of(read);
@@ -161,6 +165,14 @@ public final class CountWitnesses {
         List<FixtureTemplate> written = new ArrayList<>();
         for (int i = 0; i < inputs.parameters().size(); i++) {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
+            for (List<ObservedValue> row : taken) {
+                if (ObservedFixtures.of(row.get(i), inputs.types().get(i), reading)
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate fixture)
+                        && !tried.contains(fixture)) {
+                    tried.add(fixture);
+                }
+            }
             tried.addAll(Partitions.representativesOf(i == at ? Type.list(element)
                     : inputs.types().get(i), reading).values());
             List<Built> made = new ArrayList<>();

@@ -1162,29 +1162,25 @@ public final class Adequacy {
                     || !requires.none()) {
                 return Answer.of(CountWitnesses.Sought.NOTHING);
             }
-            // What the model writes at each parameter: a value it names at the parameter's type,
-            // and what each row written for the behavior holds there.
-            List<Hir.ExampleRow> written = prepared.examples().stream().map(Prepared.Example::read)
-                    .filter(block -> block.target().equals(behavior))
-                    .flatMap(block -> block.rows().stream()).toList();
-            // The search is one run of rows composed, so the references it names are numbered
-            // within it.
+            // What the model names at each parameter's type. The search is one run of rows
+            // composed, so the references it names are numbered within it.
             FixtureReferences references = new FixtureReferences(name, behavior);
             List<List<FixtureTemplate>> named = new ArrayList<>();
             for (int at = 0; at < sig.ins().size(); at++) {
                 List<FixtureTemplate> here = new ArrayList<>();
                 surface.typedFixtureValues().getOrDefault(sig.ins().get(at).type(), List.of())
                         .forEach(one -> here.add(FixtureTemplate.named(one, references.next())));
-                for (Hir.ExampleRow row : written) {
-                    if (row.inputs().size() == sig.ins().size()) {
-                        here.add(new FixtureTemplate(row.identity().shown(),
-                                row.inputs().get(at)));
-                    }
-                }
                 named.add(here);
             }
+            // And what each row written for the behavior took, as its run held it: a value is
+            // written back from what was built, so what a row prints and what it builds are one.
+            Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
+            RowReading rows = byTarget == null ? null : byTarget.get(behavior);
+            List<List<ObservedValue>> taken = rows == null ? List.of()
+                    : rows.rowsSeen().stream().map(RowOutcome::inputs)
+                            .filter(inputs -> inputs.size() == sig.ins().size()).toList();
             RowTrials.OfBehavior applying = trials.forBehavior(behavior, sig);
-            return Answer.of(CountWitnesses.of(count, behavior, read, named,
+            return Answer.of(CountWitnesses.of(count, behavior, read, named, taken,
                     (at, fixture) -> building.build(sig.ins().get(at), fixture)
                             instanceof BoundaryValues.Built.Value(ObservedValue value)
                             ? Optional.of(value) : Optional.<ObservedValue>empty(),
