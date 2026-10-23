@@ -114,7 +114,7 @@ public sealed interface Reachability {
         return switch (way.truths()) {
             case TruthsAsked.Merge.Merged(var truths) -> new Reaching(
                     way.narrowing(declarations), required, truths, way.takenIn(), ways,
-                    way.declined());
+                    way.declined(), Optional.of(way.takenIntoTheRegion()));
             case TruthsAsked.Merge.Conflict(var at) -> new NothingReaches(new TwoAtOnce.Truths(at));
         };
     }
@@ -128,7 +128,7 @@ public sealed interface Reachability {
      */
     static Reaching untouched(SearchRegion declarations) {
         return new Reaching(declarations, Requirements.NONE, TruthsAsked.NONE, List.of(),
-                Ways.ONE, List.of());
+                Ways.ONE, List.of(), Optional.of(List.of()));
     }
 
     /**
@@ -237,20 +237,27 @@ public sealed interface Reachability {
      * @param declined        what the way states that none of the above holds: a row past it is
      *                        held to more than {@code region} says, and where the values of two
      *                        positions lie against one another is not all it says
+     * @param narrowedBy      what the declarations were narrowed by to make {@code region}, in
+     *                        order ({@link WayToTheBorder#takenIntoTheRegion}) — or empty where the
+     *                        region was made some other way. Two ways of one reading narrowed by
+     *                        the same are over one region, which the region's own value does not
+     *                        say
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
-                    List<OnTheWay.Declined> declined)
+                    List<OnTheWay.Declined> declined,
+                    Optional<List<TakenConstraint>> narrowedBy)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
-                    || declined == null) {
+                    || declined == null || narrowedBy == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
             declined = List.copyOf(declined);
+            narrowedBy = narrowedBy.map(List::copyOf);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -281,7 +288,8 @@ public sealed interface Reachability {
         /** The same way, split as {@code split} says. What the way asks of a row is the same
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
-            return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined);
+            return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
+                    narrowedBy);
         }
 
         /**

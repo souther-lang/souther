@@ -59,7 +59,7 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
 
         ElementsWrittenAlike.Choices choices = ElementsWrittenAlike.of(new Reachability.Reaching(
                 reading().quantities().region(), Requirements.NONE, TruthsAsked.NONE, asked,
-                Reachability.Ways.ONE, List.of()));
+                Reachability.Ways.ONE, List.of(), Optional.empty()));
 
         assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, choices.stoppedBy());
         assertFalse(choices.ways().isEmpty(), () -> "the open way found: " + choices);
