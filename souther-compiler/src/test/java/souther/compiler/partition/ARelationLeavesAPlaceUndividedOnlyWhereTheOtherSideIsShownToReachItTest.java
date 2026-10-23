@@ -379,6 +379,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A closure handed to an operation of the library is applied by it, so what its body may stop
+     * on is what the run may stop on: {@code Int.floorMod(x, p)} applied to each of two numbers
+     * stops at {@code p} nought, as it does written out.
+     */
+    @Test
+    void whatTheBodyOfAClosureAppliedByTheLibraryMayStopOnIsWhatTheRunMayStopOn() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        String body = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
+    }
+
+    /**
      * What may stop a run is asked of the one owner of it, at every node and not only those that
      * always run: a call of a kernel, a part worked out where a condition came out one way, and
      * an arm of a branch, each stop the run on the number they read, and past each of them

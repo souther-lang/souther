@@ -1002,14 +1002,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // And the run is what it got past working out as much without the statement: taking one
         // off the way takes no operator off the run.
         rest = rest == null ? null : TakenConstraint.narrowedBy(past.narrowing(), rest);
-        SearchRegion along = offItsLine ? read.quantities().region()
-                : rest != null ? rest : region;
+        SearchRegion declared = past.leaving(read.quantities().region());
+        SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
-                termsAlong(read, sources, carriers, along, conditions, stating, heldWhole,
-                        past.narrowing());
+                termsAlong(read, sources, carriers, along, declared, conditions, stating,
+                        heldWhole, past.narrowing());
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -1112,7 +1112,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // How far apart two sides are is asked of the relation as it stands, line and all.
         if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    read.quantities().region()));
+                    declared));
         }
         for (int at = 0; at < sides.size(); at++) {
             if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
@@ -1805,8 +1805,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> termsAlong(
             InputReading read, List<Source> sources, List<Carrier> carriers, SearchRegion region,
-            List<OnAWay> conditions, List<List<OnAWay>> stating, boolean heldWhole,
-            List<TakenConstraint> narrowedByTheRun) {
+            SearchRegion declared, List<OnAWay> conditions, List<List<OnAWay>> stating,
+            boolean heldWhole, List<TakenConstraint> narrowedByTheRun) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
@@ -1838,7 +1838,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // answer for that part: it is answered by what the declarations leave it.
             SearchRegion answering = way == Way.UNTOUCHED && conditions.stream()
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
-                    ? read.quantities().region() : region;
+                    ? declared : region;
             NumericDomain.Bounds realizes = source != null
                     ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
                             carriers.get(i))

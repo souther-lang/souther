@@ -800,6 +800,24 @@ final class DemandReading {
             tied = List.copyOf(tied);
         }
 
+        /**
+         * {@code declarations}, the rows the declarations leave, with what the run got past taken
+         * in: the one region of the rows the run lets on, for every reader that goes back to the
+         * declarations because the way's own region holds what it states and the reader asks
+         * without. A reader that picks a region of its own and does not ask this one answers for
+         * rows the run stopped on.
+         *
+         * <p>Where the run leaves no row the declarations are returned as they are: that nothing
+         * arrives is the walk's to prove.
+         */
+        SearchRegion leaving(SearchRegion declarations) {
+            if (narrowing.isEmpty()) {
+                return declarations;
+            }
+            SearchRegion left = TakenConstraint.narrowedBy(narrowing, declarations);
+            return left.emptiness().isPresent() ? declarations : left;
+        }
+
         /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators) {
             return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere() ? NOTHING
