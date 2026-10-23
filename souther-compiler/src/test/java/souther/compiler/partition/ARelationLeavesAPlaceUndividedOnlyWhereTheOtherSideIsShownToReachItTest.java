@@ -2631,6 +2631,39 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * The same of a declaration's rules over lengths, since a length is an {@code Int} and stops
+     * where one does: {@code List.length(ys) - List.length(zs) >= M} beside
+     * {@code List.length(zs) >= 1} is held by no two lists, so the amounts the rule beside it
+     * relates are not shown to reach each other. One less than {@code M} is held by a list of
+     * {@code M} beside a list of one.
+     */
+    @Test
+    void aRuleOnlyLengthsPastWhereAnIntStopsHoldLeavesNoRowToReachAnything() {
+        for (String apart : List.of("9223372036854775807", "9223372036854775806")) {
+            Compilation compilation = Compilation.ofSource("""
+                    module w1
+                    data Yen = Int invariant value >= 0
+                    data D = { g: Yen, d: Yen, ys: List<Int>, zs: List<Int> }
+                        invariant g.value >= d.value && List.length(zs) >= 1
+                            && List.length(ys) - List.length(zs) >= %s
+                    behavior m : (x: D) -> Bool
+                    let m (x) = true
+                    """.formatted(apart), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+            String said = apart.endsWith("7") ? "not shown to reach every value here"
+                    : "it relates the value here to another value rather than dividing";
+            for (String place : List.of("x.g", "x.d")) {
+                assertTrue(report.lines().anyMatch(line -> line.contains("invariant D #1")
+                        && line.contains(said) && line.endsWith("about `" + place + "`")),
+                        apart + "\n" + report);
+            }
+        }
+    }
+
+    /**
      * Over decimals from nought, {@code a >= s + 5}: every {@code s} has an {@code a} at five
      * above it and one below, the {@code a} needed running on without end on an order that has
      * none, and an {@code a} below five holds it for no {@code s}.

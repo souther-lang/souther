@@ -2504,9 +2504,15 @@ public final class FieldDomains {
     }
 
     /**
-     * Where the order the value at each place this reads is counted on stops, by the atom it is
-     * held as — the values a row of this declaration holds, which a run shown whole is shown inside
-     * ({@link NumericDomain#wholeRunOf}). A place whose type orders nothing has no entry.
+     * Where the order each number this reads is counted on stops, by the atom it is held as — the
+     * values a row of this declaration holds, which a run shown whole is shown inside
+     * ({@link NumericDomain#wholeRunOf}).
+     *
+     * <p>The value at each place and each count taken of one ({@link #atomAt}, {@link #countAt}):
+     * a system of rules over two lengths is as much a part of whether a row is left as one over
+     * two fields. A place's value is on its type's order, and a count on the order of the type its
+     * operation answers, so {@code List.length(xs)} stops where an {@code Int} does. A number whose
+     * type orders nothing has no entry.
      */
     private Map<FactSubject, NumericDomain.Bounds> whereTheOrdersStop() {
         Map<FactSubject, NumericDomain.Bounds> had = stops;
@@ -2514,16 +2520,27 @@ public final class FieldDomains {
             return had;
         }
         Map<FactSubject, NumericDomain.Bounds> out = new LinkedHashMap<>();
-        atomAt.forEach((path, atom) -> {
-            Type type = typeAt(path);
-            Carrier order = type == null ? null : Carrier.ofValue(type, source.declarations());
-            if (order != null) {
-                out.putIfAbsent(atom, order.whereItStops());
-            }
-        });
+        atomAt.forEach((path, atom) -> stopsOn(out, atom, typeAt(path)));
+        countAt.forEach((path, counted) ->
+                stopsOn(out, counted.atom(), answeredOf(counted.by(), path)));
         had = Map.copyOf(out);
         stops = had;
         return had;
+    }
+
+    /** Where the order of {@code type} stops, put down for {@code atom} where it orders anything
+     *  and nothing was put down for the atom before. */
+    private void stopsOn(Map<FactSubject, NumericDomain.Bounds> out, FactSubject atom, Type type) {
+        Carrier order = type == null ? null : Carrier.ofValue(type, source.declarations());
+        if (order != null) {
+            out.putIfAbsent(atom, order.whereItStops());
+        }
+    }
+
+    /** The type of the number {@code operation} answers of the value at {@code at}, or null where
+     *  it answers none this can name ({@link NumericAnswers#typeOf}). */
+    private Type answeredOf(ValueName operation, RuleKey at) {
+        return NumericAnswers.typeOf(operation, typeAt(at), source.inners(), source.symbols());
     }
 
     /** The type of the value at {@code at}, reached through fields from this declaration, or

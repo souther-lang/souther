@@ -1130,6 +1130,15 @@ public final class NumericDomain<A> {
      * Whether the rules, proven by the box and its differences, leave a value inside where the
      * orders of {@code atoms} stop: where every box lies inside its atom's order, the closure
      * holding something already says so; otherwise the ends are taken in and asked again.
+     *
+     * <p>Only of a system every rule of which the box and its differences prove, over atoms spaced
+     * alike ({@link #shownOf}). A state not shown empty is not a state with a value in it
+     * ({@link #isBottom}), and it is one here because of those two. Proven, the rules say no more
+     * than the closure does, so what the closure holds the rules hold; spaced alike, the
+     * differences close exactly over the atoms. An end taken in bounds one atom, which keeps the
+     * rules of that shape, so the closure with the ends in is still all they say. Asked of rules
+     * the box and its differences do not prove, a closure wider than they are would be read as a
+     * value of them.
      */
     private boolean leavesAValueInside(List<A> atoms, Map<A, Bounds> stops) {
         NumericDomain<A> inside = this;
