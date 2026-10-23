@@ -8,6 +8,12 @@ import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.Prepared;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.CountWitnesses;
+import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
@@ -1104,6 +1110,60 @@ public final class Adequacy {
             return null;
         }
         return readingOf(db, domain, reading.value());
+    }
+
+    /**
+     * A row at which a statement {@code count} counts holds of one element and fails of another,
+     * beside one value of everything else, and at which {@code behavior} answers
+     * ({@link CountWitnesses}) — or nothing where none was found, which is no finding that none
+     * exists.
+     *
+     * <p>Asked below any division of the behavior: of what it takes, the values the model names,
+     * the classes the compile produced and a run on them, and of nothing a division reads. A
+     * behavior that depends on another is run only with the dependency stood in for, which this
+     * has no answer for, so nothing is found for one.
+     */
+    public record WitnessOfACount(String name, String behavior, Quantity.HowManyMeet count)
+            implements Key<Optional<CountWitnesses.Witness>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Optional<CountWitnesses.Witness>> compute(Db db) {
+            Prepared prepared = db.ask(new Shapes.Prepared(name)).value();
+            CheckSurface surface = db.ask(new Shapes.CheckSurface(name)).value();
+            Sig sig = db.ask(new Bodies.Signatures(name)).value() instanceof Map<String, Sig> all
+                    ? all.get(behavior) : null;
+            Hir.SpecBehavior spec = prepared == null ? null : prepared.behaviors().stream()
+                    .filter(each -> each.name().equals(behavior))
+                    .filter(Hir.SpecBehavior.class::isInstance).map(Hir.SpecBehavior.class::cast)
+                    .findFirst().orElse(null);
+            InputReading read = spec == null ? null : inputReadingOf(db, name, spec);
+            FixturesAtTheBoundary building = constructing(db, name);
+            RowTrials trials = trialling(db, name);
+            if (surface == null || sig == null || read == null || building == null
+                    || trials == null || !RequiredDependencies.of(db, name, behavior).none()) {                return Answer.of(Optional.empty());
+            }
+            List<List<FixtureTemplate>> named = new ArrayList<>();
+            for (BoundaryInput in : sig.ins()) {
+                named.add(surface.typedFixtureValues().getOrDefault(in.type(), List.of()).stream()
+                        .map(one -> FixtureTemplate.named(one, new FixtureReferenceOrigin(0)))
+                        .toList());
+            }
+            RowTrials.OfBehavior applying = trials.forBehavior(behavior, sig);
+            return Answer.of(CountWitnesses.of(count, behavior, read, named,
+                    (at, fixture) -> building.build(sig.ins().get(at), fixture)
+                            instanceof BoundaryValues.Built.Value(ObservedValue value)
+                            ? Optional.of(value) : Optional.<ObservedValue>empty(),
+                    inputs -> applying.prepare(inputs.stream().map(FixtureTemplate::value)
+                                    .toList(), List.of())
+                            .flatMap(RowTrials.Prepared::run)
+                            .map(RowTrials.Ran::answer)
+                            .orElse(new AnswerObservation.NotAnswered())));
+        }
     }
 
     /**
