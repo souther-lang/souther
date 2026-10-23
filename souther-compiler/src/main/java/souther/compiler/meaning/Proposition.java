@@ -145,6 +145,9 @@ public sealed interface Proposition {
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
+            case Quantity.HowManyDifferentMeet(DecisionSubject counted, DecisionSubject _,
+                                               var meeting) -> isAnElementOf(counted, container)
+                    || meeting.statement().mayTurnOnAnElementOf(container);
             case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
             case Quantity.HowManyDifferentBelow below ->
@@ -1312,6 +1315,10 @@ public sealed interface Proposition {
             case Quantity.HowManyDifferent different ->
                     different.container() instanceof DecisionSubject.AnAnswer
                             || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+            case Quantity.HowManyDifferentMeet different ->
+                    different.container() instanceof DecisionSubject.AnAnswer
+                            || different.ofTheElement() instanceof DecisionSubject.AnAnswer
+                            || aboutAnAnswer(different.meeting().statement());
             case Quantity.HowManyDifferentAcross across ->
                     across.container() instanceof DecisionSubject.AnAnswer
                             || across.ofTheOccurrence() instanceof DecisionSubject.AnAnswer;

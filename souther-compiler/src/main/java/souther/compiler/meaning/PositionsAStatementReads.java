@@ -99,6 +99,9 @@ public final class PositionsAStatementReads {
                     .allMatch(this::reads);
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject each) ->
                     reads(counted) && reads(each);
+            case Quantity.HowManyDifferentMeet(DecisionSubject counted, DecisionSubject each,
+                                               var meeting) ->
+                    reads(counted) && reads(each) && reads(meeting.statement());
             case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject each) ->
                     reads(counted) && reads(each);
             case Quantity.HowManyDifferentBelow below -> {

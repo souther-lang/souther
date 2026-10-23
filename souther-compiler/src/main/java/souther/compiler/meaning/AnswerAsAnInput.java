@@ -608,6 +608,14 @@ public final class AnswerAsAnInput {
                         || !Quantity.HowManyDifferent.oneOfEach(container, each) ? null
                         : new Quantity.HowManyDifferent(container, each);
             }
+            case Quantity.HowManyDifferentMeet different -> {
+                DecisionSubject container = subject(different.container());
+                DecisionSubject each = subject(different.ofTheElement());
+                Proposition stated = proposition(different.meeting().statement());
+                yield container == null || each == null || stated == null
+                        ? null : Quantity.HowManyDifferentMeet.of(container, each,
+                                different.meeting().askedAgainOf(stated));
+            }
             case Quantity.HowManyDifferentAcross across -> {
                 DecisionSubject container = subject(across.container());
                 DecisionSubject each = subject(across.ofTheOccurrence());
