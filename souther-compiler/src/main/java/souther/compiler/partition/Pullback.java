@@ -6260,20 +6260,25 @@ final class Pullback {
      * <p>The statement is asked of each element, which a filter does: a value is counted where some
      * element holding it was kept. How it was read is held as the count of what was kept is, once
      * for each value instead of each element ({@link Derivation.AComparisonRead.Counted}). A count
-     * of the kept elements read only on the way here is no number of the comparison, and is taken
-     * back out of the table.
+     * of the kept elements read only on the way here is no number of the comparison, so it is read
+     * with a table of its own.
      */
     private Quantity differentAmongTheKept(TermPath container, DecisionSubject.AnInput at,
                                            List<Denotation> keptBy) {
         if (counting == null || keptBy.size() != 1) {
             return null;
         }
-        Set<Quantity> countedBefore = Set.copyOf(counting.keySet());
-        Quantity.HowManyMeet meeting = countKept(keptBy.getFirst().value(),
-                keptBy.getFirst().at());
-        Derivation.AComparisonRead.Counted kept = meeting == null ? null : counting.get(meeting);
-        if (meeting != null && !countedBefore.contains(meeting)) {
-            counting.remove(meeting);
+        // Read with a table of its own, so a count of the kept elements, which is no number of
+        // the comparison, is in none of the comparison's.
+        Map<Quantity, Derivation.AComparisonRead.Counted> outer = counting;
+        counting = new LinkedHashMap<>();
+        Quantity.HowManyMeet meeting;
+        Derivation.AComparisonRead.Counted kept;
+        try {
+            meeting = countKept(keptBy.getFirst().value(), keptBy.getFirst().at());
+            kept = meeting == null ? null : counting.get(meeting);
+        } finally {
+            counting = outer;
         }
         if (kept == null || !meeting.container().equals(new DecisionSubject.AnInput(container))) {
             return null;

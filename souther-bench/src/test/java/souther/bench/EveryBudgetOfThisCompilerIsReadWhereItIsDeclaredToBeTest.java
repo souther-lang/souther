@@ -163,11 +163,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
-            Map.entry("souther.compiler.partition.CardinalityComposer$HeldUnder#everyGroup("
-                            + "Ljava/util/List;Ljava/util/function/Function;"
+            Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
+                            + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
                             + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/inputs/TermPath;"
                             + "Ljava/util/List;ZZLjava/util/Set;)"
-                            + "Lsouther/compiler/partition/CardinalityComposer$Groups;",
+                            + "Lsouther/compiler/partition/CardinalityComposer$UnderEachValue;",
                     "stops listing the groups of elements under one value at the values an element"
                             + " is chosen among, and puts that figure in the set it is handed"),
             Map.entry("souther.compiler.partition.CardinalityComposer#alikeUnderOneValue("

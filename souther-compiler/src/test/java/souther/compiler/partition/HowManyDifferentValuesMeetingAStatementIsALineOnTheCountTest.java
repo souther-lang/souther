@@ -204,9 +204,10 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
 
     /**
      * A value counted by what the elements under it come to may take more than one of them: a
-     * currency held twice, or two amounts under one currency totalling nought where no amount is
-     * nought. The rows composed for such a line hold as many as it takes, and answer as their
-     * points say.
+     * currency held twice, two amounts under one currency totalling nought where no amount is
+     * nought, or a total of a hundred and fifty where no amount is above a hundred. The rows
+     * composed for such a line
+     * hold as many as it takes, and answer as their points say.
      */
     @Test
     void aValueIsComposedWithAsManyElementsUnderItAsWhatTheyComeToTakes() {
@@ -223,6 +224,15 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                     else 2
                 """, "f/#different fs [fs[*].currency] where"
                 + " [total(fs[*].amount by currency) == 0]");
+        // A total no one element reaches is reached by several, each a share of it.
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if List.all(f -> f.amount <= 100, fs) then
+                    if Map.size(Map.filterEntries((_, n) -> n == 150, totalsOf(fs))) == 1 then 1
+                    else 0
+                    else 2
+                """, "f/#different fs [fs[*].currency] where"
+                + " [total(fs[*].amount by currency) == 150]");
     }
 
     /**

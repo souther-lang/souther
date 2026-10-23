@@ -405,6 +405,33 @@ final class AStatementAtARow {
     }
 
     /**
+     * Whether what this answers may turn on which value stands at {@code at}, and not only on
+     * which elements hold one value there: some number it reads, or some position it asks of its
+     * own value, is that place, inside it or holds it. How often a value occurs there, and what the
+     * elements holding one value come to, read only which elements hold one value, and are no such
+     * number.
+     */
+    boolean readsTheValueAt(TermPath at) {
+        for (NumericTerm each : numbers()) {
+            boolean grouping = each instanceof NumericTerm.Multiplicity
+                    || each instanceof NumericTerm.OccurrencesOfItsValue
+                    || each instanceof NumericTerm.OccurrencesOfAKey
+                    || each instanceof NumericTerm.GatheredUnderItsKey;
+            if (!grouping && (each.subjectPath().isAtOrUnder(at)
+                    || at.isAtOrUnder(each.subjectPath()))) {
+                return true;
+            }
+        }
+        for (TermPath each : positions) {
+            if (each.isAtOrUnder(at) || at.isAtOrUnder(each)) {
+                return true;
+            }
+        }
+        return elements.values().stream()
+                .anyMatch(each -> each.ofTheElement().readsTheValueAt(at));
+    }
+
+    /**
      * Reads {@code row} the way {@link #at} does and asks nothing of what it read, for the walk
      * that finds which containers a row has to choose an element of.
      *
