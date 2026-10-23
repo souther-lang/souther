@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
+import souther.compiler.hash.ValueHash;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -220,26 +222,70 @@ public sealed interface DecisionCondition {
      * all read, which is what a measurement says of itself; left off, the rule would claim to state
      * every distinction on its path.
      *
-     * @param met which condition of the reading it is
-     * @param whys what stopped it, in the walk's own words, each once
+     * <p>Its number is worked out when it is made and kept. A rule is a map keyed by its conditions,
+     * and pairing two paths looks up each column of one in the other, so a condition is asked its
+     * number once for every pairing it takes part in — far more often than one is made.
      */
-    record AConditionNotRead(ConditionOccurrence met, List<WhyNotTaken> whys)
-            implements DecisionCondition {
+    final class AConditionNotRead implements DecisionCondition, KeepsTheNumberItIsAskedFor {
+
+        /**
+         * The whole of what this condition is: which condition of the reading it is, and what
+         * stopped it, in the walk's own words, each once.
+         */
+        record Parts(ConditionOccurrence met, List<WhyNotTaken> whys) {
+        }
+
+        private final Parts parts;
+
+        private final int hash;
 
         public AConditionNotRead(ConditionOccurrence met, WhyNotTaken why) {
             this(met, List.of(why));
         }
 
-        public AConditionNotRead {
+        public AConditionNotRead(ConditionOccurrence met, List<WhyNotTaken> whys) {
             if (met == null) {
                 throw new IllegalArgumentException(
                         "a condition nothing read is one some reading met, for a reason");
             }
-            whys = List.copyOf(new LinkedHashSet<>(whys));
-            if (whys.isEmpty()) {
+            List<WhyNotTaken> distinct = List.copyOf(new LinkedHashSet<>(whys));
+            if (distinct.isEmpty()) {
                 throw new IllegalArgumentException("a condition nothing read is unread for some"
                         + " reason");
             }
+            this.parts = new Parts(met, distinct);
+            this.hash = ValueHash.ofOnePart(AConditionNotRead.class, parts.hashCode());
+        }
+
+        /** Which condition of the reading it is. */
+        public ConditionOccurrence met() {
+            return parts.met();
+        }
+
+        /** What stopped it, in the walk's own words, each once. */
+        public List<WhyNotTaken> whys() {
+            return parts.whys();
+        }
+
+        @Override
+        public Parts standsFor() {
+            return parts;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof AConditionNotRead that && hash == that.hash
+                    && parts.equals(that.parts);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return "AConditionNotRead[met=" + parts.met() + ", whys=" + parts.whys() + "]";
         }
     }
 }
