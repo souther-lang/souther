@@ -152,7 +152,7 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
 
         assertNotNull(reading.of(itsOwnForm, ExactRatio.ZERO).least(),
                 "the rule bounds 10x - y below, so reading it plainly says so");
-        assertNull(reading.ofTheRestOf(rule, itsOwnForm, ExactRatio.ZERO).least(),
+        assertNull(reading.leastOfTheRestOf(rule, itsOwnForm, ExactRatio.ZERO),
                 "and reading it as that rule's own rest does not");
     }
 

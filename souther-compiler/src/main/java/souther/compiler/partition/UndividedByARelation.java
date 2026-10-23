@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -463,7 +464,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * what a term takes beside another along both is not what it takes along each: the runs of each
      * may join without a gap while a pair one way keeps out is one the other never reaches. Nothing
      * here shows what they come to together. A way split at a choice is each of its branches, so
-     * each is a way here, and a way some of whose branches were not split out shows nothing.
+     * each is a way here, and a way some of whose branches were not split out is read again with
+     * its choices as they come to for this, or shows nothing ({@link #branchesOf}).
      *
      * @param witnesses where a count of elements meeting a statement is shown to take every value
      *                  beside how many the container holds ({@link #countWithinItsContainer})
@@ -513,10 +515,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     true, witnesses);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
+        Set<CompositionBudget> stopped = new LinkedHashSet<>();
         for (Reachability.Reaching each : ways) {
-            if (!branchesOf(each, branches)) {
-                return nothingShown;
+            if (!branchesOf(each, branches, read, stopped)) {
+                return new WhatItLeaves(nothingShown.undivided(), Map.of(), true,
+                        stopped.stream().map(CompositionBudget::figure)
+                                .collect(Collectors.toCollection(LinkedHashSet::new)));
             }
+        }
+        if (branches.isEmpty()) {
+            return WhatItLeaves.ofAWayNoRowComesAlong(places());
         }
         // Ways read alike are read once: a choice the body works out after reading its input splits
         // the way into as many ways as it has arms, and each states the same. What a way is read by
@@ -632,24 +640,158 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A way split at a choice is the choices together, and what it states of the places is
      * stated by each branch and by none of them whole: under {@code x == 0 || x == 1}, a row
-     * holds {@code x} at nought or at one, which the way whole says nothing of. A way looked along
-     * whole past the figure is one whose branches past it were not split out, and nothing is shown
-     * of those.
+     * holds {@code x} at nought or at one, which the way whole says nothing of.
+     *
+     * <p>A way looked along whole past the figure is one whose branches past it were not split
+     * out. It is read again with each choice on it as it is shown to come to for this relation
+     * ({@link #readAgainForThis}), and its branches are those of what that comes to; where
+     * no choice is shown to come to less, nothing is shown of it. A way read again that no row
+     * takes adds nothing to {@code into}, since no row takes the way it was read from either.
+     *
+     * <p>Where nothing is shown of a way past the figure, the figure is why — a run allowed more
+     * ways would have split it — and so is each figure the reading again reached, past which a
+     * choice was kept as it stands. Those are added to {@code stopped}, which is what the relation
+     * says it stopped at.
      */
-    private static boolean branchesOf(Reachability.Reaching way,
-                                      List<Reachability.Reaching> into) {
+    private boolean branchesOf(Reachability.Reaching way, List<Reachability.Reaching> into,
+                               InputReading read, Set<CompositionBudget> stopped) {
         return switch (way.ways()) {
             case Reachability.Ways.One _ -> into.add(way);
             case Reachability.Ways.Each each -> {
                 for (Reachability.Reaching branch : each.along()) {
-                    if (!branchesOf(branch, into)) {
+                    if (!branchesOf(branch, into, read, stopped)) {
                         yield false;
                     }
                 }
                 yield true;
             }
-            case Reachability.Ways.Whole _ -> false;
+            case Reachability.Ways.Whole whole -> {
+                AWayReadForARelation.ReadAgain again = readAgainForThis(whole, read);
+                boolean shown = again.as().isPresent()
+                        && (!(again.as().get() instanceof Reachability.Reaching reaching)
+                                || branchesOf(reaching, into, read, stopped));
+                if (!shown) {
+                    stopped.add(whole.figure());
+                    stopped.addAll(again.stoppedAt());
+                }
+                yield shown;
+            }
         };
+    }
+
+    /**
+     * The way {@code whole} was read from, read again with each choice on it as it comes to for
+     * this relation ({@link AWayReadForARelation}) — or nothing where this relation reads places
+     * that cannot be named.
+     */
+    private AWayReadForARelation.ReadAgain readAgainForThis(Reachability.Ways.Whole whole,
+                                                            InputReading read) {
+        Set<TermPath> bearing = positionsRead();
+        return bearing == null ? new AWayReadForARelation.ReadAgain(Optional.empty(), Set.of())
+                : AWayReadForARelation.of(whole, bearing, declarationsOf(read));
+    }
+
+    /**
+     * What the declarations of {@code read} say of the positions a way is read again over.
+     *
+     * <p>Made for one reading again, which asks of every pair of positions whether they are tied:
+     * the classes each is in are worked out once a position, and let go with the reading.
+     */
+    private static AWayReadForARelation.Declarations declarationsOf(InputReading read) {
+        Map<TermPath, Set<Object>> tied = new HashMap<>();
+        return new AWayReadForARelation.Declarations() {
+            @Override
+            public boolean tie(TermPath one, TermPath other) {
+                // No declaration relates one parameter to another, so only places under one are
+                // tied by a rule.
+                return overlap(one, other) || (one.head().equals(other.head())
+                        && !Collections.disjoint(
+                                tied.computeIfAbsent(one, at -> tiedByTheDeclarations(at, read)),
+                                tied.computeIfAbsent(other,
+                                        at -> tiedByTheDeclarations(at, read))));
+            }
+
+            @Override
+            public boolean nameNothingAt(TermPath at) {
+                return namedByTheDeclarations(at, read) == Named.NOT;
+            }
+
+            @Override
+            public NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term) {
+                // A value at a place inside an element, or under a key, is one only where the
+                // row holds such an element, and a statement of it is of some of them.
+                if (!(term instanceof NumericTerm.ValueOf value) || !value.position().steps()
+                        .stream().allMatch(step -> step instanceof TermPath.Step.Field
+                                || step instanceof TermPath.Step.Refine)) {
+                    return null;
+                }
+                // A number is given a value only on an order that is a count or a decimal, whose
+                // every whole number between its ends is one of its values; a string's place on
+                // its order has no count under it to give.
+                TermOrders orders = read.quantities().ordersOf(value);
+                Carrier carrier = orders == null ? null : orders.answered();
+                Source source = sourceOf(value, read);
+                if (carrier == null || spacingOf(carrier) == null || source == null
+                        || source.named()) {
+                    return null;
+                }
+                NumericDomain.Bounds declared = switch (source.takes()) {
+                    case Takes.Every _ -> NumericDomain.Bounds.OPEN;
+                    case Takes.Some some -> !source.onlyItsEnds() ? null
+                            : some.ends() == null ? NumericDomain.Bounds.OPEN : some.ends();
+                };
+                // Every value the declarations leave it is one its type holds only up to where the
+                // type stops: an Int past the greatest is no Int, whatever the rules leave.
+                return declared == null ? null : declared.meet(carrier.whereItStops());
+            }
+
+            @Override
+            public boolean leaveAValueOf(TypeSymbol leaf) {
+                return aValueIsShownToExist(Type.ref(leaf), read);
+            }
+        };
+    }
+
+    /**
+     * The positions this relation reads: those of its places, and those a walk handing a side its
+     * value walks or starts from — or null where some side is read off places this cannot name,
+     * as what an operation answered of something unnamed is.
+     */
+    private Set<TermPath> positionsRead() {
+        Set<TermPath> out = new LinkedHashSet<>();
+        places().forEach(place -> out.add(place.path()));
+        for (Side each : sides) {
+            if (each.number() != null) {
+                out.addAll(each.number().placesReadOff());
+            }
+            switch (each.along()) {
+                case null -> {
+                    if (each.madeOf().isEmpty() && each.number() == null) {
+                        return null;
+                    }
+                }
+                case Quantity.KeptSoFar kept -> {
+                    out.add(kept.container());
+                    out.addAll(kept.ofEach().placesReadOff());
+                    if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
+                        out.addAll(from.placesReadOff());
+                    }
+                }
+                case Quantity.PositionInTheWalk position -> out.add(position.container());
+                case Quantity.HowManyMeet counted -> {
+                    Optional<List<TermPath>> reads =
+                            PositionsAStatementReads.of(counted.ofTheElement());
+                    if (reads.isEmpty()
+                            || !(counted.container() instanceof DecisionSubject.AnInput(
+                                    TermPath container))) {
+                        return null;
+                    }
+                    out.add(container);
+                    out.addAll(reads.get());
+                }
+            }
+        }
+        return out;
     }
 
     /**

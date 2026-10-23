@@ -270,7 +270,7 @@ public final class AffineReduction {
                                             FormReach<A> reading, AffineConstraint<A> itsOwnRule) {
         Map<A, ExactRatio> rest = new LinkedHashMap<>(half.form().coefs());
         rest.remove(atom);
-        ExactCut least = reading.ofTheRestOf(itsOwnRule, rest, ExactRatio.ZERO).least();
+        ExactCut least = reading.leastOfTheRestOf(itsOwnRule, rest, ExactRatio.ZERO);
         return least == null ? null : new Least(least.at(), least.inclusive());
     }
 

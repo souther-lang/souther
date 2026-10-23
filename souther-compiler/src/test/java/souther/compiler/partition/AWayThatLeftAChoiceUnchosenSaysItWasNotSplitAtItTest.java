@@ -54,9 +54,11 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
         assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, whole.figure());
         assertFalse(whole.along().isEmpty(), () -> "the open way found is looked along: " + whole);
         for (Reachability.Reaching along : whole.along()) {
-            assertEquals(new Reachability.Ways.Whole(List.of(onB),
-                            CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, List.of()),
+            Reachability.Ways.Whole left = assertInstanceOf(Reachability.Ways.Whole.class,
                     along.ways(), "the choice left is one the way was not split at");
+            assertEquals(List.of(onB), left.unsplit());
+            assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, left.figure());
+            assertEquals(List.of(), left.along());
         }
     }
 

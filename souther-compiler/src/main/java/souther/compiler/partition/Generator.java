@@ -813,6 +813,10 @@ public final class Generator {
                              // either way, and what was not looked along is carried with the row's
                              // account.
                              WAYS_A_WAY_IS_LOOKED_ALONG, CHOICES_ON_A_WAY_LOOKED_AT,
+                             // It stops a reading of a way for one relation, which composes
+                             // nothing, and what it stopped is carried as what the relation says
+                             // it stopped at.
+                             WALKS_A_WAY_IS_READ_AGAIN_WITH,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
@@ -5584,8 +5588,8 @@ public final class Generator {
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
                     way.taken(), truths, reaching.boundedOnTheWay(),
                     reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
-                            var _)
-                            ? new Reachability.Ways.Whole(unsplit, figure, List.of())
+                            var _, var from)
+                            ? new Reachability.Ways.Whole(unsplit, figure, List.of(), from)
                             : Reachability.Ways.ONE, reaching.declined(), reaching.narrowedBy());
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents(), taking)
@@ -6347,7 +6351,8 @@ public final class Generator {
         // taken first — and so composed for its counts, its elements meeting the statement each
         // their own way. Any other says so: along one of its ways the row would be composed
         // against more.
-        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _)) {
+        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _,
+                var _)) {
             for (OnTheWay each : unsplit) {
                 Optional<RealizationTarget.ElementsMeetingTogether> stated =
                         RealizationTarget.ElementsMeetingTogether.of(subject.behavior(), each);

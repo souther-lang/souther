@@ -198,6 +198,26 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Deque;Ljava/util/Map;Ljava/lang/Object;)Z",
                     "stops a group's walk at the choices looked at or at the ways handed on, and"
                             + " records which, which the walk says in what it comes back with"),
+            // A way past the figure read again for a relation: a choice whose alternatives, taken
+            // together where they ask of a value apart, are more ways than are looked along is
+            // kept as it stands, which reads it exactly, and so is every choice not yet shown to
+            // come to less once the walks are spent. Each figure reached is handed back with what
+            // the way was read again as, and where the relation is then shown nothing of the way
+            // it says it stopped at them.
+            Map.entry("souther.compiler.partition.AWayReadForARelation$Part#met("
+                            + "Ljava/util/List;)Z",
+                    "keeps a choice as it stands past the ways looked along, and hands the figure"
+                            + " to what the relation says it stopped at"),
+            Map.entry("souther.compiler.partition.AWayReadForARelation#walked("
+                            + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",
+                    "stops walking a way read again at the walks it is read again with, and hands"
+                            + " the figure to what the relation says it stopped at"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leftWhereRowsArrive("
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                            + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;",
+                    "says the figures a way it is shown nothing of was looked along whole past,"
+                            + " or read again up to, as what the relation stopped at"),
             Map.entry("souther.compiler.partition.WayToTheBorder#walked("
                             + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;)"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",

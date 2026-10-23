@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * What a row has to be for a search to reach one border, in the words a composer works in.
@@ -60,7 +61,8 @@ public sealed interface Reachability {
         return switch (way.along()) {
             case OneOfEach.Walked.Closed<OnTheWay, Reachability>(var _, var why) -> why;
             case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) ->
-                    whole.splitAs(new Ways.Whole(way.severalWays(), figure, List.of()));
+                    whole.splitAs(new Ways.Whole(way.severalWays(), figure, List.of(),
+                            new ReadFrom(way, declarations)));
             case OneOfEach.Walked.Open<OnTheWay, Reachability> _
                     when way.severalWays().isEmpty() -> whole;
             case OneOfEach.Walked.Open<OnTheWay, Reachability>(var ways, var stoppedBy) -> {
@@ -74,7 +76,10 @@ public sealed interface Reachability {
                         // it is not taken to have met it.
                         case OneOfEach.Way.LeftUnchosen<OnTheWay>(var chosen, var unchosen) ->
                                 reaching(new WayToTheBorder(chosen), declarations).splitAs(
-                                        new Ways.Whole(unchosen, stoppedBy, List.of()));
+                                        new Ways.Whole(unchosen, stoppedBy, List.of(),
+                                                new ReadFrom(new WayToTheBorder(Stream.concat(
+                                                        chosen.stream(), unchosen.stream())
+                                                        .toList()), declarations)));
                     });
                 }
                 // Every way a row takes is among them, so a search looking along each looks
@@ -84,7 +89,8 @@ public sealed interface Reachability {
                 // them being closed proves nothing — and the conditions it was not looked along
                 // each way of say so.
                 yield whole.splitAs(stoppedBy == null ? new Ways.Each(along)
-                        : new Ways.Whole(way.severalWays(), stoppedBy, along));
+                        : new Ways.Whole(way.severalWays(), stoppedBy, along,
+                                new ReadFrom(way, declarations)));
             }
         };
     }
@@ -190,17 +196,21 @@ public sealed interface Reachability {
          * @param unsplit the conditions of several ways on it, in the order the walk met them
          * @param along   the ways the figure let through that some row may take, looked along
          *                before the way whole; none where every one of them was closed
+         * @param from    what the way was read from, which a reader asking about some of its
+         *                places reads again with each choice as it shows it comes to for them
          */
-        record Whole(List<OnTheWay> unsplit, CompositionBudget figure, List<Reaching> along)
+        record Whole(List<OnTheWay> unsplit, CompositionBudget figure, List<Reaching> along,
+                     ReadFrom from)
                 implements Ways {
 
             public Whole {
                 unsplit = List.copyOf(unsplit);
                 along = List.copyOf(along);
-                if (unsplit.isEmpty() || figure == null
+                if (unsplit.isEmpty() || figure == null || from == null
                         || !unsplit.stream().allMatch(OnTheWay::splitsTheWay)) {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
-                            + " a condition of several ways on it, and a figure it met");
+                            + " a condition of several ways on it, a figure it met, and an account"
+                            + " it was read from");
                 }
             }
 
@@ -216,6 +226,30 @@ public sealed interface Reachability {
                 return unsplit.stream().anyMatch(each ->
                         RealizationTarget.ElementsMeetingTogether.of(behavior, each).isPresent());
             }
+        }
+    }
+
+    /**
+     * The account a way looked along whole was read from, and what the declarations left before
+     * it.
+     *
+     * <p>Kept so that a reader concluding something of some places only reads the way again with
+     * each choice as it shows it comes to for those places, and reads it the one way every way is
+     * read ({@link #of}) rather than working out the ways of what it put together itself.
+     */
+    record ReadFrom(WayToTheBorder way, SearchRegion declarations) {
+
+        public ReadFrom {
+            if (way == null || declarations == null) {
+                throw new IllegalArgumentException("a way is read from an account, over what the"
+                        + " declarations leave");
+            }
+        }
+
+        /** {@code onTheWay}, conditions some of which are this way's, read over the same
+         *  declarations. */
+        public Reachability readAs(List<OnTheWay> onTheWay) {
+            return Reachability.of(new WayToTheBorder(onTheWay), declarations);
         }
     }
 
