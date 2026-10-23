@@ -771,9 +771,10 @@ final class DemandReading {
         return List.copyOf(out);
     }
 
-    /** Whether {@code constraint} holds one number at or below the greatest {@code Int}, or at or
-     *  above the least: what an operator over a number read as it stands answers, which every
-     *  {@code Int} meets and no row is narrowed by. */
+    /** Whether {@code constraint} holds one number at or below a level at or above the greatest
+     *  {@code Int}, or at or above one at or below the least: what an operator over a number
+     *  answers where it cannot pass either end, which every {@code Int} meets and no row is
+     *  narrowed by. */
     private static boolean endsOfTheInts(TakenConstraint constraint) {
         if (!(constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
                 || form.coefs().size() != 1) {
@@ -782,8 +783,10 @@ final class DemandReading {
         ExactRatio weight = form.coefs().values().iterator().next();
         return form.constant().negated().dividedBy(weight)
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
-                && ((rel == Rel.LE && level.equals(ExactRatio.of(Long.MAX_VALUE)))
-                        || (rel == Rel.GE && level.equals(ExactRatio.of(Long.MIN_VALUE))));
+                && (((rel == Rel.LE || rel == Rel.LT)
+                        && level.compareTo(ExactRatio.of(Long.MAX_VALUE)) >= 0)
+                        || ((rel == Rel.GE || rel == Rel.GT)
+                        && level.compareTo(ExactRatio.of(Long.MIN_VALUE)) <= 0));
     }
 
     private static List<Stated> both(List<Stated> left, List<Stated> right) {

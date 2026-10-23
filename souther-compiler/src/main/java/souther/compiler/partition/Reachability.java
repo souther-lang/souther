@@ -374,8 +374,13 @@ public sealed interface Reachability {
                 case Ways.One one -> one;
                 case Ways.Each each -> new Ways.Each(each.along().stream()
                         .map(one -> one.gettingPast(these)).toList());
+                // Read again from the declarations narrowed by what the run got past, so that a
+                // reader reading the way again is as narrow as this one.
                 case Ways.Whole whole -> new Ways.Whole(whole.unsplit(), whole.figure(),
-                        whole.along().stream().map(one -> one.gettingPast(these)).toList());
+                        whole.along().stream().map(one -> one.gettingPast(these)).toList(),
+                        new ReadFrom(whole.from().way(),
+                                TakenConstraint.narrowedBy(narrowing,
+                                        whole.from().declarations())));
             };
             return narrowed.emptiness().isPresent() ? new Reaching(region, requirements, truths,
                     boundedOnTheWay, split, declined, narrowedBy)
