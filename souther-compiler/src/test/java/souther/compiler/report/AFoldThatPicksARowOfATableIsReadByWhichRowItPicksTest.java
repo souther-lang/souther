@@ -1,5 +1,8 @@
 package souther.compiler.report;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
@@ -35,7 +38,21 @@ class AFoldThatPicksARowOfATableIsReadByWhichRowItPicksTest {
             let row (g: Int, bound: Int): Row = Row { grade = g, lowerBound = bound }
             """;
 
-    private static String lookup(String step, String table) {
+    /** The rows of an ascending table: the grade rises with the value. */
+    private static final String AS_SORTED = """
+            | "small" : (Req { a = 0 })  -> Small
+            | "big" : (Req { a = 300 }) -> Big
+            """;
+
+    /** The rows of the table out of order below: whichever value, the last row reached has grade
+     *  one. */
+    private static final String ALWAYS_SMALL = """
+            | "below" : (Req { a = 0 })   -> Small
+            | "between" : (Req { a = 150 }) -> Small
+            | "above" : (Req { a = 300 }) -> Small
+            """;
+
+    private static String lookup(String step, String table, String examples) {
         return HEAD + """
 
                 let rowFor (monthly: Int): Row =
@@ -46,9 +63,7 @@ class AFoldThatPicksARowOfATableIsReadByWhichRowItPicksTest {
                 let judge (req) = if rowFor(req.a).grade >= 2 then Big else Small
 
                 example judge
-                    | "small" : (Req { a = 0 })  -> Small
-                    | "big" : (Req { a = 300 }) -> Big
-                """.formatted(step, table);
+                """.formatted(step, table) + examples.indent(4);
     }
 
     private static final String ASCENDING = "[row(1, 0), row(2, 100), row(3, 200)]";
@@ -66,7 +81,7 @@ class AFoldThatPicksARowOfATableIsReadByWhichRowItPicksTest {
     /** The lines the table's bounds draw are on the value, and nothing is left unread. */
     @Test
     void theTablesBoundsAreTheLinesOfTheValueItIsLookedUpBy() {
-        String report = reportOf(lookup(REACHED, ASCENDING));
+        String report = reportOf(lookup(REACHED, ASCENDING, AS_SORTED));
 
         assertTrue(report.contains("measurement: complete"), report);
         assertTrue(report.contains("= 99"), report);
@@ -77,9 +92,10 @@ class AFoldThatPicksARowOfATableIsReadByWhichRowItPicksTest {
     /** The step written the other way round, keeping the row where the condition does not hold. */
     @Test
     void aStepKeepingTheRowWhereTheConditionFailsIsTheSame() {
-        String reversed = reportOf(lookup("if r.lowerBound > monthly then acc else r", ASCENDING));
+        String reversed = reportOf(
+                lookup("if r.lowerBound > monthly then acc else r", ASCENDING, AS_SORTED));
 
-        assertEquals(lines(reportOf(lookup(REACHED, ASCENDING))), lines(reversed));
+        assertEquals(lines(reportOf(lookup(REACHED, ASCENDING, AS_SORTED))), lines(reversed));
     }
 
     /**
@@ -91,18 +107,23 @@ class AFoldThatPicksARowOfATableIsReadByWhichRowItPicksTest {
      */
     @Test
     void aTableOutOfOrderIsNotReadAsIfItWereSorted() {
-        String report = reportOf(lookup(REACHED, "[row(1, 0), row(3, 200), row(1, 100)]"));
+        String report = reportOf(
+                lookup(REACHED, "[row(1, 0), row(3, 200), row(1, 100)]", ALWAYS_SMALL));
 
         assertFalse(report.contains("written in a form this compiler does not read"), report);
-        assertFalse(lines(report).contains("· read as judge/req.a: = 200"), report);
-        assertFalse(lines(report).contains("· read as judge/req.a: = 199"), report);
+        // The comparison of the grade holds for no input, so the way that takes it is owed no row...
+        assertTrue(report.contains("no input takes 1 way through this body"), report);
+        assertTrue(report.contains("the comparison at null holds"), report);
+        // ...and it draws no line on the value, not at the bounds of the rows nor between them.
+        assertEquals(Set.of(), lines(report).stream().filter(each -> each.startsWith("· read as"))
+                .collect(Collectors.toSet()), report);
     }
 
     /** The lines of the report about the value looked up that the behavior's own comparison draws,
      *  and not the ones inside the lookup. */
-    private static java.util.Set<String> lines(String report) {
+    private static Set<String> lines(String report) {
         return report.lines().filter(each -> each.contains("req.a"))
                 .filter(each -> !each.contains("rowFor@null"))
-                .map(String::strip).collect(java.util.stream.Collectors.toSet());
+                .map(String::strip).collect(Collectors.toSet());
     }
 }

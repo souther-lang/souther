@@ -9325,26 +9325,30 @@ final class Pullback {
         }
         Rel states = stated.claim().statedRelation();
         Denotation other = new Denotation(onTheLeft ? stated.right() : stated.left(), reads);
-        Derivation reached = null;
-        for (int i = occurrences.size(); i >= 0; i--) {
-            Denotation value = i == occurrences.size()
-                    ? new Denotation(walk.seed(), call.at()) : occurrences.get(i).value();
-            Denotation field = new Denotation(chosen.fieldOf(value.value()), value.at());
-            Derivation compared = onTheLeft ? comparedCase(field, other, states, at)
-                    : comparedCase(other, field, states, at);
-            Derivation reaching = compared;
-            for (int later = occurrences.size() - 1; later > i; later--) {
-                reaching = joined(ConditionJoin.BOTH, passes.get(later), reaching);
-            }
-            if (i < occurrences.size()) {
-                reaching = joined(ConditionJoin.BOTH, picks.get(i), reaching);
-            }
-            reached = reached == null ? reaching : joined(ConditionJoin.EITHER, reaching, reached);
-            if (reached == null) {
-                return null;
-            }
+        // The walk after k elements ends with the k-th where its condition picks it and with what
+        // it ended with after k - 1 where it does not, so the comparison of the end after k is
+        // built of the one after k - 1: one case and one carrying on for each element.
+        Derivation reached = comparedField(walk.seed(), call.at(), chosen, other, onTheLeft,
+                states, at);
+        for (int i = 0; i < occurrences.size() && reached != null; i++) {
+            Denotation value = occurrences.get(i).value();
+            Derivation compared = comparedField(value.value(), value.at(), chosen, other,
+                    onTheLeft, states, at);
+            reached = joined(ConditionJoin.EITHER,
+                    joined(ConditionJoin.BOTH, picks.get(i), compared),
+                    joined(ConditionJoin.BOTH, passes.get(i), reached));
         }
-        return partOf(at, reached);
+        return reached == null ? null : partOf(at, reached);
+    }
+
+    /** The comparison of the field {@code chosen} takes of {@code row}, standing at {@code where},
+     *  with {@code other}. */
+    private Derivation comparedField(Core row, InputReads where, ChosenField chosen,
+                                     Denotation other, boolean onTheLeft, Rel states,
+                                     Denotation at) {
+        Denotation field = new Denotation(chosen.fieldOf(row), where);
+        return onTheLeft ? comparedCase(field, other, states, at)
+                : comparedCase(other, field, states, at);
     }
 
     /**
