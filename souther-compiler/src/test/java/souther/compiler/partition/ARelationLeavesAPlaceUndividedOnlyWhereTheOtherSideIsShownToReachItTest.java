@@ -628,6 +628,43 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * Where the step reads the position is asked of the one account of what runs when: in an arm
+     * of a match, or on the right of an operator that stops once its answer is settled, it is read
+     * at the applications that get there, and nothing is shown; in the body of a {@code let} it is
+     * read whenever the step runs, and the length is parted as with no {@code let} around it.
+     */
+    @Test
+    void aPositionReadInAnArmIsReadAtTheApplicationsThatEnterIt() {
+        String inputs = "xs: List<Int>";
+        String places = "data Later = { at: Int }\ndata First = { at: Int }\n"
+                + "data Place = Later | First";
+        String inAnArm = "List.mapIndexed((i, x) -> match (if i > 0 then Later { at = i } else"
+                + " First { at = i }) with | Later -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " | First -> 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, places, "List<Int>",
+                inAnArm, atThe("== List", places, inputs, inAnArm)));
+    }
+
+    /** The same on the right of an operator that stops once its answer is settled. */
+    @Test
+    void aPositionReadOnTheRightOfAStopEarlyOperatorIsReadWhereTheLeftLetsItRun() {
+        String inputs = "xs: List<Int>";
+        String onTheRight = "List.mapIndexed((i, x) -> x > 0 && i == List.length(xs) - 1, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Bool>",
+                onTheRight, atThe("== List", UNUSED, inputs, onTheRight)));
+    }
+
+    /** And in the body of a {@code let}, which runs whenever the step does. */
+    @Test
+    void aPositionReadInTheBodyOfALetIsReadWheneverTheStepRuns() {
+        String inputs = "xs: List<Int>";
+        String inALet = "List.mapIndexed((i, x) -> { let last = List.length(xs) - 1\n"
+                + "    if i == last then 1 else 0 }, xs)";
+        assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", inALet, "List.length(xs)"));
+    }
+
+    /**
      * Against another list's length, where an element of the walked list stands is no number
      * of it, and nothing is shown. Nor where the way picks out some of the elements: the walk is
      * handed every position, and the comparison is asked at those of the elements the way lets
