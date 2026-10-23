@@ -188,17 +188,12 @@ final class CardinalityComposer {
         boolean inside = standingAt.stream()
                 .anyMatch(each -> !each.term().subjectPath().equals(container.element()));
         // An element that is more than one number is chosen among the values it is read at
-        // whole, where the container is the parameter a row is read from; and so is every
-        // element whose different values are counted, since what is shared out then is the
-        // elements holding one value together, however many there are of each.
+        // whole; and so is every element whose different values are counted, since what is
+        // shared out then is the elements holding one value together, however many there are of
+        // each.
         if (element == null || inside || apartAt != null) {
-            if (container.steps().isEmpty()) {
-                return amongItsValues(asked, List.of(), standingAt, demands, container, size,
-                        sourceType, view, holding, keptApart, apartAt, measuring, within,
-                        reading);
-            }
-            return notChosen("an element of `" + container + "` is not one number the statements"
-                    + " read, or its different values are counted");
+            return amongItsValues(asked, List.of(), standingAt, demands, container, size,
+                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading);
         }
         for (RealizationTarget.OfANumber each : standingAt) {
             AskedAt at = demands.get(each);
@@ -455,7 +450,7 @@ final class CardinalityComposer {
      * @param together   statements the elements meet together, each about {@code container} alone
      * @param standingAt numbers inside an element, each asked to stand in a set: a value the row
      *                   places there, which some element of the container holds
-     * @param holding    what the container is, a list or a set written at a parameter
+     * @param holding    what the container is, a list or a set written where it stands
      */
     private static TermRealizations.Realization amongItsValues(List<Asked> counted,
                                                                List<AStatementAtARow> together,
