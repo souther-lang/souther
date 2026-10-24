@@ -102,7 +102,8 @@ public sealed interface ElementValue {
     /**
      * What this comes to for the element standing at {@code position}, as a form of its fields —
      * or null where it is no form there: where it turns on a flag of the element or the case of a
-     * value of it, which no form of the fields says, or where the exact arithmetic cannot hold it.
+     * value of it, which no form of the fields says, where it multiplies fields or rounds, which a
+     * fixed position leaves as it is, or where the exact arithmetic cannot hold it.
      *
      * <p>The position is fixed, so every choice made by it is made and every number made of it is
      * one number: {@code (if i mod 2 = 0 then 1 else 3)·c} is {@code c} at nought and {@code 3·c}
@@ -115,7 +116,7 @@ public sealed interface ElementValue {
                     .flatMap(moved -> moved.plus(form.base().form())).orNull();
             case ByPosition choice -> (choice.test().holdsOf(position) ? choice.whenHolds()
                     : choice.otherwise()).atPosition(position);
-            case Choose _, OfItsCase _ -> null;
+            case Choose _, OfItsCase _, Multilinear _ -> null;
             case SumOfChoices sum -> {
                 LinearForm<ElementProjection> total = sum.besides().atPosition(position);
                 for (Map.Entry<ElementValue, ExactRatio> each : sum.chosen().entrySet()) {
