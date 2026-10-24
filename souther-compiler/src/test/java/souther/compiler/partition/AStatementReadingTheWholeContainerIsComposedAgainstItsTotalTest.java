@@ -351,7 +351,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
         String source = source(PLAIN, K_AND_FS, "if k > 3 && " + listCount("k > 3 && " + HALF)
                 + " == 1 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source,
-                row -> row.k() > 3 && row.k() > 3 && elementsAboveHalf(row) == 1 ? 1 : 0,
+                row -> row.k() > 3 && elementsAboveHalf(row) == 1 ? 1 : 0,
                 row -> row.k() > 3 ? elementsAboveHalf(row) : 0);
         assertTrue(counts.contains(1L), counts::toString);
     }

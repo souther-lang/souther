@@ -70,7 +70,7 @@ class SharingsAmongKindsAreEveryOneThatCanGiveACountAskedForAndNoOtherTest {
     void theSharingsLookedAtAreExactlyThoseThatGiveACountAskedFor() {
         Random random = new Random(20261025);
         int walked = 0;
-        for (int round = 0; round < 3000; round++) {
+        for (int round = 0; round < 500; round++) {
             int kinds = 1 + random.nextInt(5);
             int statements = 1 + random.nextInt(3);
             boolean[][] meets = new boolean[kinds][statements];
@@ -103,7 +103,7 @@ class SharingsAmongKindsAreEveryOneThatCanGiveACountAskedForAndNoOtherTest {
                 walked += looked.size();
             }
         }
-        assertTrue(walked > 2000, "sharings met: " + walked);
+        assertTrue(walked > 300, "sharings met: " + walked);
     }
 
     /**

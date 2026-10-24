@@ -150,7 +150,6 @@ final class CoupledCardinalityComposer {
                 for (NumericTerm term : many.perElement().numbers()) {
                     if (term instanceof NumericTerm.ValueOf value
                             && value.position().isAtOrUnder(container.element())
-                            && !value.position().equals(container.element())
                             && (own == null || own.equals(value))) {
                         own = value;
                     } else if (term instanceof NumericTerm.TakenOver over

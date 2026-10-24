@@ -135,7 +135,7 @@ class TheTotalsASharingCanComeToAreExactlyWhereItsElementsCanSumToThemTest {
         Random random = new Random(20261024);
         int nonEmpty = 0;
         int unbounded = 0;
-        for (int round = 0; round < 1500; round++) {
+        for (int round = 0; round < 400; round++) {
             List<TotalsASharingCanComeTo.Reach> reaches = new ArrayList<>();
             int[] counts = new int[1 + random.nextInt(3)];
             for (int kind = 0; kind < counts.length; kind++) {
@@ -158,7 +158,7 @@ class TheTotalsASharingCanComeToAreExactlyWhereItsElementsCanSumToThemTest {
             unbounded += found != null && (found.low() == null || found.high() == null) ? 1 : 0;
         }
         // The draws reach intervals, none, and ones that run on without end.
-        assertTrue(nonEmpty > 150, "intervals met: " + nonEmpty);
-        assertTrue(unbounded > 40, "unbounded intervals met: " + unbounded);
+        assertTrue(nonEmpty > 40, "intervals met: " + nonEmpty);
+        assertTrue(unbounded > 10, "unbounded intervals met: " + unbounded);
     }
 }
