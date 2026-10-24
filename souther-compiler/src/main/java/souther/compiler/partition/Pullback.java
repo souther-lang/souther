@@ -26,7 +26,6 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
-import souther.compiler.check.ElementsApart;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.KeyedAccumulation;
@@ -3955,27 +3954,11 @@ final class Pullback {
                 return null;
             }
             ElementAt each = new ElementAt.AFiledElement(heldAt, indexed.key(),
-                    keysMayRepeat(walked.value(), indexed.key()));
+                    ElementsKeptApart.keysMayRepeat(walked.value(), indexed.key(),
+                            read.ruleReading()));
             settle(pending, each, null, located);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
-        }
-
-        /**
-         * Whether two elements of {@code list} may come to one key {@code key} makes: not where
-         * the rules of the value it is read off, or of the names it wears, keep its elements
-         * apart at the fields the key reads.
-         */
-        private boolean keysMayRepeat(Core list, Core.Block key) {
-            List<String> run = ElementsApart.runTaken(key, read.newtypes());
-            if (run == null) {
-                return true;
-            }
-            ElementsApart.ReadOff off = ElementsApart.readOff(list, read.newtypes());
-            List<List<String>> held = ElementsKeptApart.heldUnder(off.holder().type(),
-                    off.path(), read.ruleReading());
-            return !ElementsApart.covers(
-                    ElementsKeptApart.at(list.type(), held, read.ruleReading()), run);
         }
 
         /** What was kept at one level of a container, as the elements of that level are read. */

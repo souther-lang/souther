@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Core;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
 import souther.compiler.types.Type;
@@ -39,11 +40,25 @@ final class ElementsKeptApart {
         return at(view.wrappers(), view.shape(), held, reading);
     }
 
-    /** The same, of a value of {@code type} as the declarations read it. */
-    static List<List<String>> at(Type type, List<List<String>> held, RuleReadingContext reading) {
+    /**
+     * Whether two elements of {@code list} may come to one key {@code key} makes.
+     *
+     * <p>Not where the rules of the value the list is read off, or of the names it wears, keep its
+     * elements apart at the fields the key reads: the answer the builders of the list are told
+     * ({@link #at}), asked of the list as the key sees it. A key that does more than read fields off
+     * an element is one nothing here follows, and its keys may repeat.
+     */
+    static boolean keysMayRepeat(Core list, Core.Block key, RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
-        return at(TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
-                source.sums()), held, reading);
+        List<String> run = ElementsApart.runTaken(key, source.newtypes());
+        if (run == null) {
+            return true;
+        }
+        ElementsApart.ReadOff off = ElementsApart.readOff(list, source.newtypes());
+        List<List<String>> held = heldUnder(off.holder().type(), off.path(), reading);
+        TypeView view = TypeView.of(list.type(), source.inners(), source.symbols(),
+                source.kinds(), source.sums());
+        return !ElementsApart.covers(at(view, held, reading), run);
     }
 
     /** The same, of a position read as the names it wears and the shape under them. */
