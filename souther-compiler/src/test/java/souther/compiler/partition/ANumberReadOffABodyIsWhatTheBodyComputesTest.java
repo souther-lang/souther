@@ -269,7 +269,8 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
         Set<Object> different = new HashSet<>();
         switch (read) {
             case Quantity.HowManyDifferent each ->
-                    different.addAll(valuesAt(inputs, place(each.ofTheElement())));
+                    different.addAll(valuesAt(inputs, place(assertInstanceOf(
+                            Quantity.TheValue.AtAPlace.class, each.ofTheElement()).at())));
             case Quantity.HowManyDifferentAcross across ->
                     different.addAll(valuesAt(inputs, place(across.ofTheOccurrence())));
             case Quantity.HowManyDifferentBelow below -> {

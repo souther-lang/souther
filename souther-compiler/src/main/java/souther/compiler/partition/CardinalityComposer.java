@@ -5,13 +5,15 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
-import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -136,9 +138,9 @@ final class CardinalityComposer {
         // Where a count is of the different values the elements meeting a statement hold, every
         // element is chosen apart from the others at that place: then each counts once, and the
         // sharings, which count elements, count the values.
-        TermPath apartAt = null;
+        Quantity.TheValue apartAt = null;
         for (RealizationTarget.ACount each : counts) {
-            TermPath at = each.count().differentAt().orElse(null);
+            Quantity.TheValue at = each.count().differentAt().orElse(null);
             if (at != null && apartAt != null && !apartAt.equals(at)) {
                 return notChosen("the values the elements of `" + container + "` hold are counted"
                         + " at `" + apartAt + "` and at `" + at + "`, and no elements are chosen"
@@ -345,7 +347,7 @@ final class CardinalityComposer {
             List<Asked> asked, List<RealizationTarget.OfANumber> standingAt,
             SequencedMap<RealizationTarget, AskedAt> demands, TermPath container, TermPath across,
             NumericSet size, List<RealizationTarget.ElementsMeetingTogether> together,
-            Type sourceType, List<List<String>> keptApart, TermPath apartAt,
+            Type sourceType, List<List<String>> keptApart, Quantity.TheValue apartAt,
             Quantities measuring, SearchRegion within, RuleReadingContext reading) {
         if (size != null || !together.isEmpty()) {
             return notChosen("`" + container + "` is asked something of one of the containers,"
@@ -576,7 +578,7 @@ final class CardinalityComposer {
                                                                TypeView view,
                                                                Shape.Sequence holding,
                                                                List<List<String>> keptApart,
-                                                               TermPath apartAt,
+                                                               Quantity.TheValue apartAt,
                                                                Quantities measuring,
                                                                SearchRegion within,
                                                                RuleReadingContext reading,
@@ -758,7 +760,8 @@ final class CardinalityComposer {
      * ({@link AStatementAtARow.TurnsOn}). Elsewhere a container chosen that way is still read
      * whole before it is offered, so what is offered holds; what is not found is not shown absent.
      */
-    private static String chosenAlone(List<Asked> asked, TermPath container, TermPath under) {
+    private static String chosenAlone(List<Asked> asked, TermPath container,
+                                      Quantity.TheValue under) {
         AStatementAtARow.TurnsOn turns = AStatementAtARow.TurnsOn.THE_ELEMENT;
         for (Asked each : asked) {
             turns = turns.orMore(each.turnsOnAmong(container, under));
@@ -816,14 +819,37 @@ final class CardinalityComposer {
      *                 where an element's does
      * @param addedUp  a total of it gathered under that value, of every element: a group of so
      *                 many elements comes to a total at a place where its elements stand at about
-     *                 that place shared among them
+     *                 that place shared among them, through what each element adds of it
      */
-    private record TurningWith(List<NumericTerm> asItself, List<NumericTerm> addedUp) {}
+    private record TurningWith(List<NumericTerm> asItself, List<AddedOfIt> addedUp) {}
 
-    private static TurningWith turningWith(NumericTerm term, TermPath apartAt,
+    /**
+     * A total gathered under the value, and what an element adds to it of the number it turns
+     * with: {@code weight} times the number, and {@code beside} — the form of the element's case,
+     * where the case chooses the form.
+     */
+    private record AddedOfIt(NumericTerm total, ExactRatio weight, ExactRatio beside,
+                             boolean fromTheLast) {
+
+        /**
+         * Where the number stands for one of {@code shared} elements to add a share of
+         * {@code at}, or null where it stands nowhere. A total from the last element put is
+         * shared by no element before that one, so it is what one element adds alone.
+         */
+        ExactRatio standingFor(ExactRatio at, int shared) {
+            if (fromTheLast && shared != 1) {
+                return null;
+            }
+            return at.dividedBy(ExactRatio.of(shared)).orNull() instanceof ExactRatio share
+                    && share.minus(beside).orNull() instanceof ExactRatio left
+                    ? left.dividedBy(weight).orNull() : null;
+        }
+    }
+
+    private static TurningWith turningWith(NumericTerm term, Quantity.TheValue apartAt,
                                            List<Asked> asked) {
         List<NumericTerm> asItself = new ArrayList<>(List.of(term));
-        List<NumericTerm> addedUp = new ArrayList<>();
+        List<AddedOfIt> addedUp = new ArrayList<>();
         if (apartAt == null) {
             return new TurningWith(asItself, addedUp);
         }
@@ -834,23 +860,62 @@ final class CardinalityComposer {
             for (NumericTerm number : perElement.numbers()) {
                 // Of the elements a statement keeps as well: the shares are where a kept element
                 // is chosen, and whether it is kept is what reading the group says.
-                if (number instanceof NumericTerm.GatheredUnderItsKey gathered
-                        && gathered.key() instanceof ElementKey.At(ElementProjection way)
-                        && way.from(gathered.elements()).equals(apartAt)
-                        && gathered.value().asAPlace() instanceof ElementProjection place
-                        && place.from(gathered.elements()).equals(term.subjectPath())) {
-                    List<NumericTerm> into = switch (gathered.gathering()) {
-                        case NumericTerm.GatheredUnderItsKey.Gathering.End _ -> asItself;
-                        case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> addedUp;
-                        case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ -> null;
-                    };
-                    if (into != null && !into.contains(number)) {
-                        into.add(number);
+                if (!(number instanceof NumericTerm.GatheredUnderItsKey gathered)
+                        || !apartAt.isWhereFiled(gathered.key(), gathered.elements())) {
+                    continue;
+                }
+                ElementProjection place = ElementProjection.below(gathered.elements(),
+                        term.subjectPath());
+                ElementValue.Affine adds = place == null ? null
+                        : addedThrough(gathered.value(), place);
+                if (adds == null) {
+                    continue;
+                }
+                ExactRatio weight = adds.form().coefs().get(place);
+                switch (gathered.gathering()) {
+                    case NumericTerm.GatheredUnderItsKey.Gathering.End _ -> {
+                        if (ExactRatio.ONE.equals(weight) && adds.form().constant().isZero()
+                                && !asItself.contains(number)) {
+                            asItself.add(number);
+                        }
+                    }
+                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
+                         NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ -> {
+                        AddedOfIt added = new AddedOfIt(number, weight, adds.form().constant(),
+                                gathered.gathering()
+                                        instanceof NumericTerm.GatheredUnderItsKey.Gathering
+                                                .SinceAPut);
+                        if (!addedUp.contains(added)) {
+                            addedUp.add(added);
+                        }
                     }
                 }
             }
         }
         return new TurningWith(asItself, addedUp);
+    }
+
+    /**
+     * What an element adds to a number gathered of {@code value}, where that is {@code place}
+     * of it weighed and nothing else of it: the value itself, or the form of the case the place
+     * is under — or null where it is neither.
+     */
+    private static ElementValue.Affine addedThrough(ElementValue value, ElementProjection place) {
+        return switch (value) {
+            case ElementValue.Affine affine -> affine.form().coefs().size() == 1
+                    && affine.form().coefs().get(place) instanceof ExactRatio weight
+                    && weight.signum() != 0 ? affine : null;
+            case ElementValue.OfItsCase chosen -> {
+                for (ElementValue.OfItsCase.Arm arm : chosen.arms()) {
+                    ElementValue.Affine found = addedThrough(arm.value(), place);
+                    if (found != null) {
+                        yield found;
+                    }
+                }
+                yield null;
+            }
+            default -> null;
+        };
     }
 
     /**
@@ -865,7 +930,7 @@ final class CardinalityComposer {
      * ({@link #turningWith}): those shares are where an element is chosen too.
      */
     private static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
-                                                 TermPath apartAt, Quantities measuring,
+                                                 Quantity.TheValue apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
                                                  Set<CompositionRepertoire> unnamed, Today today) {
@@ -896,16 +961,16 @@ final class CardinalityComposer {
                     }
                     turns.addAll(where);
                 }
-                for (NumericTerm number : turning.addedUp()) {
-                    List<ExactRatio> where = one.turnsAt(number, beside);
+                for (AddedOfIt added : turning.addedUp()) {
+                    List<ExactRatio> where = one.turnsAt(added.total(), beside);
                     if (where == null) {
                         return null;
                     }
                     for (ExactRatio total : where) {
                         for (int shared = 1; shared <= MOST_ELEMENTS; shared++) {
-                            if (total.dividedBy(ExactRatio.of(shared))
-                                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio share)) {
-                                turns.add(share);
+                            ExactRatio standing = added.standingFor(total, shared);
+                            if (standing != null) {
+                                turns.add(standing);
                             }
                         }
                     }
@@ -1107,7 +1172,8 @@ final class CardinalityComposer {
         Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
         Map<NumericTerm, Place> beside = settledOutside(asked, measuring, within, written);
         List<List<String>> apart = ElementsKeptApart.at(view, keptApart, reading);
-        ListedByValue byValue = listedByValue(container, holding.element(), reading, place,
+        Quantity.TheValue value = new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(place));
+        ListedByValue byValue = listedByValue(container, holding.element(), reading, value,
                 (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, null, measuring,
                         within, beside, apart.isEmpty() ? 1 : MOST_ELEMENTS, unheld, unnamed,
                         reading.today()),
@@ -1129,8 +1195,8 @@ final class CardinalityComposer {
         }
         UnderEachValue under = UnderEachValue.of(byValue.values().size(), byValue.under(),
                 values -> withNumbersBeside(ofTheElement.holding(sourceType, values), written),
-                container, place, asked, !apart.isEmpty(),
-                UnderEachValue.oneEachUnder(container, place, apart), refused);
+                container, value, asked, !apart.isEmpty(),
+                UnderEachValue.oneEachUnder(container, value, apart), refused);
         Groups<HeldUnder> groups = under.groups();
         List<FixtureTemplate> built = new ArrayList<>();
         for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
@@ -1178,7 +1244,7 @@ final class CardinalityComposer {
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
-        String alone = chosenAlone(asked, container, place);
+        String alone = chosenAlone(asked, container, value);
         return alone != null ? notChosen(alone)
                 : none("no container of `" + container + "` this composed holds a value at `"
                         + place + "` as often as asked");
@@ -1725,11 +1791,11 @@ final class CardinalityComposer {
 
         /** Whether what an element of {@code container} answers of this may turn on which value
          *  stands at {@code at} inside it ({@link AStatementAtARow#readsTheValueAt}). */
-        boolean readsTheValueAt(TermPath container, TermPath at);
+        boolean readsTheValueAt(TermPath container, Quantity.TheValue at);
         /** What an element of {@code container} answers of this turns on, the elements held as
          *  groups under one value at {@code under}, or each on its own where it is null
          *  ({@link AStatementAtARow#turnsOnAmong}). */
-        AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under);
+        AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, Quantity.TheValue under);
 
         /**
          * How many elements meet {@code perElement}: one of the counts {@code wanted} holds.
@@ -1739,7 +1805,7 @@ final class CardinalityComposer {
          *               ({@link #composeAcross}): what an element turns on is asked of them all
          */
         record SoManyMeeting(AStatementAtARow perElement, LevelRegion wanted,
-                             Optional<TermPath> differentAt, Optional<TermPath> across)
+                             Optional<Quantity.TheValue> differentAt, Optional<TermPath> across)
                 implements Asked {
 
             @Override
@@ -1769,11 +1835,12 @@ final class CardinalityComposer {
             }
 
             @Override
-            public boolean readsTheValueAt(TermPath container, TermPath at) {
+            public boolean readsTheValueAt(TermPath container, Quantity.TheValue at) {
                 return perElement.readsTheValueAt(container, at, across);
             }
             @Override
-            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container,
+                                                         Quantity.TheValue under) {
                 return perElement.turnsOnAmong(container, under, across);
             }
 
@@ -1869,14 +1936,16 @@ final class CardinalityComposer {
                 return new AStatementAtARow.HowManyAtARow(meet, unread, why);
             }
 
-            /** Where the number this asks of is that place, inside it or holds it. */
+            /** Where the number this asks of is a place the value is held at, inside it or
+             *  holds it. */
             @Override
-            public boolean readsTheValueAt(TermPath container, TermPath place) {
-                return at.isAtOrUnder(place) || place.isAtOrUnder(at);
+            public boolean readsTheValueAt(TermPath container, Quantity.TheValue place) {
+                return place.overlaps(at);
             }
             /** A number at one place inside the element. */
             @Override
-            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container,
+                                                         Quantity.TheValue under) {
                 return AStatementAtARow.TurnsOn.THE_ELEMENT;
             }
 
@@ -1928,12 +1997,13 @@ final class CardinalityComposer {
 
             /** The element is the number this asks of, whatever place is asked about. */
             @Override
-            public boolean readsTheValueAt(TermPath container, TermPath at) {
+            public boolean readsTheValueAt(TermPath container, Quantity.TheValue at) {
                 return true;
             }
             /** The element itself. */
             @Override
-            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container,
+                                                         Quantity.TheValue under) {
                 return AStatementAtARow.TurnsOn.THE_ELEMENT;
             }
 
@@ -2061,22 +2131,29 @@ final class CardinalityComposer {
      *
      * <p>Each part is chosen at what {@code numbers} says, and {@code place} at what
      * {@code valuesThere} says, one value of it for each listing. The listings are alike but for
-     * that one value, so an element of one stands where the same element of another does.
+     * that one value, so an element of one stands where the same element of another does. Where
+     * the element's case chooses the place, the value is held at the place of each case, so an
+     * element of every case is listed holding it; the values are those the first such place is
+     * chosen at.
      */
     private static ListedByValue listedByValue(
-            TermPath container, Type element, RuleReadingContext reading, TermPath place,
+            TermPath container, Type element, RuleReadingContext reading, Quantity.TheValue place,
             BiFunction<TermPath, TypeView, List<ObservedValue>> numbers,
             BiFunction<TermPath, TypeView, List<ObservedValue>> valuesThere) {
+        List<TermPath> heldAt = place == null ? List.of() : place.heldAt();
         List<List<ObservedValue>> valuesAt = new ArrayList<>();
         ElementValues first = ElementValues.of(container, element, reading, (at, part) -> {
-            if (!at.equals(place)) {
+            if (!heldAt.contains(at)) {
                 return numbers.apply(at, part);
             }
-            List<ObservedValue> values = valuesThere.apply(at, part);
+            List<ObservedValue> values = valuesAt.isEmpty() ? valuesThere.apply(at, part)
+                    : valuesAt.getFirst();
             if (values == null || values.isEmpty()) {
                 return values;
             }
-            valuesAt.add(values);
+            if (valuesAt.isEmpty()) {
+                valuesAt.add(values);
+            }
             return List.of(values.getFirst());
         });
         if (first == null) {
@@ -2088,7 +2165,7 @@ final class CardinalityComposer {
                 return first.listed().values();
             }
             ElementValues holdingIt = ElementValues.of(container, element, reading,
-                    (at, part) -> at.equals(place) ? List.of(values.get(value))
+                    (at, part) -> heldAt.contains(at) ? List.of(values.get(value))
                             : numbers.apply(at, part));
             return holdingIt == null ? List.of() : holdingIt.listed().values();
         });
@@ -2157,8 +2234,8 @@ final class CardinalityComposer {
          */
         static UnderEachValue of(int values, IntFunction<List<ObservedValue>> listedUnder,
                                  Function<List<ObservedValue>, BorderQuantity.Observation> holding,
-                                 TermPath container, TermPath at, List<Asked> asked, boolean once,
-                                 boolean oneEach, Set<CompositionBudget> refused) {
+                                 TermPath container, Quantity.TheValue at, List<Asked> asked,
+                                 boolean once, boolean oneEach, Set<CompositionBudget> refused) {
             boolean alike = asked.stream().noneMatch(each -> each.readsTheValueAt(container, at));
             boolean byItsElements = readOffItsElements(asked, container, at);
             UnderEachValue out = new UnderEachValue(values, listedUnder, alike);
@@ -2260,13 +2337,13 @@ final class CardinalityComposer {
          * value for the whole group, held where some element of it meets the statement.
          */
         private static boolean readOffItsElements(List<Asked> asked, TermPath container,
-                                                  TermPath at) {
+                                                  Quantity.TheValue at) {
             for (Asked each : asked) {
                 if (each.turnsOnAmong(container, at) != AStatementAtARow.TurnsOn.THE_ELEMENT) {
                     return false;
                 }
                 if (each instanceof Asked.SoManyMeeting(var _, var _,
-                        Optional<TermPath> differentAt, var _)
+                        Optional<Quantity.TheValue> differentAt, var _)
                         && differentAt.isPresent() && !differentAt.get().equals(at)) {
                     return false;
                 }
@@ -2305,7 +2382,7 @@ final class CardinalityComposer {
             int[] counted = new int[asked.size()];
             for (int i = 0; i < asked.size(); i++) {
                 boolean ofTheValue = asked.get(i) instanceof Asked.SoManyMeeting(var _, var _,
-                        Optional<TermPath> differentAt, var _) && differentAt.isPresent();
+                        Optional<Quantity.TheValue> differentAt, var _) && differentAt.isPresent();
                 int meet = 0;
                 int unread = 0;
                 Set<ReadingGap> why = new LinkedHashSet<>();
@@ -2367,10 +2444,16 @@ final class CardinalityComposer {
 
         /**
          * Whether the rules of the container at {@code container} keep its elements apart at
-         * {@code at}, so that no value there is held by two of them: one of the places they are
-         * kept apart at, {@code apart}, is that place, as fields from the element.
+         * {@code value}, so that no value there is held by two of them: one of the places they are
+         * kept apart at, {@code apart}, is that place, as fields from the element. A value the
+         * element's case chooses the place of is kept apart by no such rule.
          */
-        static boolean oneEachUnder(TermPath container, TermPath at, List<List<String>> apart) {
+        static boolean oneEachUnder(TermPath container, Quantity.TheValue value,
+                                    List<List<String>> apart) {
+            if (!(value instanceof Quantity.TheValue.AtAPlace(
+                    DecisionSubject.AnInput(TermPath at)))) {
+                return false;
+            }
             ElementProjection below = ElementProjection.below(container.element(), at);
             if (below == null) {
                 return false;

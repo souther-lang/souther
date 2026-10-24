@@ -340,10 +340,11 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         Quantity.HowManyDifferentMeet.Selection last =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
                         new Proposition.LastToHold(fs, currency, true, "last"));
+        Quantity.TheValue value = new Quantity.TheValue.AtAPlace(currency);
         assertThrows(IllegalArgumentException.class,
-                () -> new Quantity.HowManyDifferentMeet(fs, currency, last));
-        assertNull(Quantity.HowManyDifferentMeet.of(fs, currency, last));
-        assertNotNull(Quantity.HowManyDifferentMeet.of(fs, currency,
+                () -> new Quantity.HowManyDifferentMeet(fs, value, last));
+        assertNull(Quantity.HowManyDifferentMeet.of(fs, value, last));
+        assertNotNull(Quantity.HowManyDifferentMeet.of(fs, value,
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
                         new Proposition.Present(currency, true, "present"))));
     }
@@ -363,13 +364,14 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         Proposition present = new Proposition.Present(currency, true, "present");
         Quantity.HowManyDifferentMeet.Selection.OfEachValue alone =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(present);
-        assertNotNull(Quantity.HowManyDifferentMeet.of(ds, currency, alone));
-        assertTrue(Quantity.HowManyDifferentMeet.of(ds, currency, alone).across());
+        Quantity.TheValue value = new Quantity.TheValue.AtAPlace(currency);
+        assertNotNull(Quantity.HowManyDifferentMeet.of(ds, value, alone));
+        assertTrue(Quantity.HowManyDifferentMeet.of(ds, value, alone).across());
         Quantity.HowManyDifferentMeet.Selection.OfEachValue withTheDesk =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(new Proposition.All(
                         List.of(present, new Proposition.Present(new DecisionSubject.AnInput(
                                 desk.then("floor")), true, "floor")), "both"));
-        assertNull(Quantity.HowManyDifferentMeet.of(ds, currency, withTheDesk));
+        assertNull(Quantity.HowManyDifferentMeet.of(ds, value, withTheDesk));
     }
 
     /**
@@ -670,6 +672,91 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 + " Ordered[term=ds[*].forecasts[*].region, at=EU, proposition=EQ] by currency)"
                 + " > 0 && ds[*].forecasts[*].region == EU]",
                 across.at("/lineId/target/quantity/counted").asString());
+    }
+
+    /** Movements filed under the field each case of them names its stock by. */
+    private static final String MOVEMENTS = """
+            data Receipt = { sku: String, quantity: Int }
+            data Issue = { sku: String, quantity: Int }
+            data Stocktake = { sku: String, counted: Int }
+            data Movement = Receipt | Issue | Stocktake
+
+            let summed (ms: List<Movement>): Map<String, Int> =
+                List.fold((acc, m) -> match m with
+                        | Receipt { sku, quantity } ->
+                            Map.updateOrInsert(sku, quantity, on -> on + quantity, acc)
+                        | Issue { sku, quantity } ->
+                            Map.updateOrInsert(sku, 0 - quantity, on -> on - quantity, acc)
+                        | Stocktake { sku, counted } ->
+                            Map.updateOrInsert(sku, counted, on -> on + counted, acc),
+                    Map.empty, ms)
+
+            let onHand (ms: List<Movement>): Map<String, Int> =
+                List.fold((acc, m) -> match m with
+                        | Receipt { sku, quantity } ->
+                            Map.updateOrInsert(sku, quantity, on -> on + quantity, acc)
+                        | Issue { sku, quantity } ->
+                            Map.updateOrInsert(sku, 0 - quantity, on -> on - quantity, acc)
+                        | Stocktake { sku, counted } -> Map.insert(sku, counted, acc),
+                    Map.empty, ms)
+
+            behavior f : (ms: List<Movement>) -> Int
+            """;
+
+    /** The value a movement is filed under, the field its case names. */
+    private static final String SKU = "when ms[*]@Receipt[sum-case] then"
+            + " ms[*]@Receipt[sum-case].sku when ms[*]@Issue[sum-case] then"
+            + " ms[*]@Issue[sum-case].sku when ms[*]@Stocktake[sum-case] then"
+            + " ms[*]@Stocktake[sum-case].sku";
+
+    /**
+     * A fold filing each element under the field its case names is a count of the different
+     * values those fields hold: a receipt and a stocktake of one sku are one entry. Its entries a
+     * statement keeps are the values whose total meets it — added up over every case, or from the
+     * last stocktake put — and a row at each point of the line answers as its point says.
+     */
+    @Test
+    void theEntriesOfAFoldFilingEachCaseUnderAFieldOfItsOwnAreCountedByTheValue() {
+        String summed = "module probe\n\n" + MOVEMENTS + """
+                let f (ms) = if Map.size(Map.filterEntries((_, on) -> on > 0, summed(ms))) == 1
+                    then 1 else 0
+                """;
+        JsonNode once = only(differentCounts(reportOf(summed + """
+                example f
+                    | "a receipt and a stocktake of one sku" : ([
+                        Receipt { sku = "A", quantity = 5 },
+                        Stocktake { sku = "A", counted = 3 }]) -> 1
+                    | "two skus" : ([Receipt { sku = "A", quantity = 5 },
+                        Stocktake { sku = "B", counted = 3 }]) -> 0
+                """)));
+        assertTrue(once.at("/lineId/target/quantity/counted").asString()
+                .startsWith("#different ms [" + SKU + "] where [total("), once::toString);
+        assertTrue(pointAt(once, "on").path("hit").asBoolean(), once::toString);
+        assertTrue(pointsAt(once, "off").stream().anyMatch(off -> off.path("hit").asBoolean()
+                && "2".equals(off.path("against").asString())), once::toString);
+        everyRowComposedAnswersAsItsPointSays(summed.substring("module probe\n\n".length()),
+                "f/" + once.at("/lineId/target/quantity/counted").asString());
+
+        String onHand = "module probe\n\n" + MOVEMENTS + """
+                let f (ms) = if Map.size(Map.filterEntries((_, on) -> on > 0, onHand(ms))) == 1
+                    then 1 else 0
+                """;
+        // A stocktake puts what it counted in place of what was on hand: counted last, nought is
+        // what the sku has.
+        JsonNode put = only(differentCounts(reportOf(onHand + """
+                example f
+                    | "a receipt, then nothing counted" : ([
+                        Receipt { sku = "A", quantity = 5 },
+                        Stocktake { sku = "A", counted = 0 }]) -> 0
+                    | "nothing counted, then a receipt" : ([
+                        Stocktake { sku = "A", counted = 0 },
+                        Receipt { sku = "A", quantity = 5 }]) -> 1
+                """)));
+        assertTrue(pointAt(put, "on").path("hit").asBoolean(), put::toString);
+        assertTrue(pointsAt(put, "off").stream().anyMatch(off -> off.path("hit").asBoolean()
+                && "0".equals(off.path("against").asString())), put::toString);
+        everyRowComposedAnswersAsItsPointSays(onHand.substring("module probe\n\n".length()),
+                "f/" + put.at("/lineId/target/quantity/counted").asString());
     }
 
     /**

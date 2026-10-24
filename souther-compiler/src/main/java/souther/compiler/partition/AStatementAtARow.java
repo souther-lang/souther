@@ -198,9 +198,9 @@ final class AStatementAtARow {
 
     /** Where the values {@code count}, one {@link #countIn} answers, counts once each stand, where
      *  it counts values rather than elements. */
-    static Optional<TermPath> differentAt(Quantity count) {
+    static Optional<Quantity.TheValue> differentAt(Quantity count) {
         return count instanceof Quantity.HowManyDifferentMeet different
-                ? Optional.of(different.ofTheElement().inputPosition()) : Optional.empty();
+                ? Optional.of(different.ofTheElement()) : Optional.empty();
     }
 
     /**
@@ -487,7 +487,7 @@ final class AStatementAtARow {
      * @param across the container whose elements each hold one at {@code container}, where the
      *               elements grouped are every element of all of those ({@link #elementsIn})
      */
-    TurnsOn turnsOnAmong(TermPath container, TermPath under, Optional<TermPath> across) {
+    TurnsOn turnsOnAmong(TermPath container, Quantity.TheValue under, Optional<TermPath> across) {
         TurnsOn out = TurnsOn.THE_ELEMENT;
         for (NumericTerm each : numbers()) {
             out = out.orMore(readOf(each, container, under, across).turnsOn());
@@ -513,7 +513,8 @@ final class AStatementAtARow {
      *
      * @param across as {@link #turnsOnAmong} has it
      */
-    boolean readsTheValueAt(TermPath container, TermPath at, Optional<TermPath> across) {
+    boolean readsTheValueAt(TermPath container, Quantity.TheValue at,
+                            Optional<TermPath> across) {
         for (NumericTerm each : numbers()) {
             WhatItReads read = readOf(each, container, at, across);
             if (read.turnsOn() == TurnsOn.OTHER_ELEMENTS || read.theValue()) {
@@ -521,7 +522,7 @@ final class AStatementAtARow {
             }
         }
         for (TermPath each : positions) {
-            if (each.isAtOrUnder(at) || at.isAtOrUnder(each)) {
+            if (at.overlaps(each)) {
                 return true;
             }
         }
@@ -563,7 +564,7 @@ final class AStatementAtARow {
      * read among them as one gathered over one container is among its elements; and a number
      * read among the elements of one of them turns on which one it is.
      */
-    static WhatItReads readOf(NumericTerm term, TermPath container, TermPath under,
+    static WhatItReads readOf(NumericTerm term, TermPath container, Quantity.TheValue under,
                               Optional<TermPath> across) {
         return switch (term) {
             case NumericTerm.FromOnePosition one ->
@@ -571,16 +572,16 @@ final class AStatementAtARow {
             case NumericTerm.TakenOver taken ->
                     new WhatItReads(overTheRun(taken.source(), container), false);
             case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(
-                    List.of(often.container()), container, across, often.place().equals(under),
+                    List.of(often.container()), container, across, isAt(under, often.place()),
                     TurnsOn.THOSE_UNDER_ITS_VALUE), false);
             case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(
-                    List.of(end.container()), container, across, end.key().equals(under),
+                    List.of(end.container()), container, across, isAt(under, end.key()),
                     TurnsOn.THOSE_UNDER_ITS_VALUE), overlaps(end.value(), under));
             case NumericTerm.OccurrencesOfItsValue often -> {
                 List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
                 yield new WhatItReads(ranged.size() == 1 || ranged.equals(over(container, across))
                         ? underItsValue(ranged, container, across,
-                                often.subjectPath().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE)
+                                isAt(under, often.subjectPath()), TurnsOn.THOSE_UNDER_ITS_VALUE)
                         : overTheRun(often.run(), container), false)
                         .and(keeping(often.selection(), container, under, across));
             }
@@ -595,8 +596,8 @@ final class AStatementAtARow {
                             : TurnsOn.THE_ELEMENT, readsIt)
                             .and(keeping(gathered.selection(), container, under, across));
                 }
-                boolean underIt = gathered.key() instanceof ElementKey.At(ElementProjection way)
-                        && way.from(gathered.elements()).equals(under);
+                boolean underIt = under != null
+                        && under.isWhereFiled(gathered.key(), gathered.elements());
                 yield new WhatItReads(underItsValue(ranged, container, across, underIt,
                         switch (gathered.gathering()) {
                             case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
@@ -614,17 +615,23 @@ final class AStatementAtARow {
 
     /** What the statement keeping some elements, asked of each, reads among the elements of
      *  {@code container} grouped at {@code under} — nothing where every element is kept. */
-    private static WhatItReads keeping(KeptOccurrences kept, TermPath container, TermPath under,
-                                       Optional<TermPath> across) {
+    private static WhatItReads keeping(KeptOccurrences kept, TermPath container,
+                                       Quantity.TheValue under, Optional<TermPath> across) {
         return kept == null ? new WhatItReads(TurnsOn.THE_ELEMENT, false)
                 : new WhatItReads(kept.perElement().turnsOnAmong(container, under, across),
                         under != null
                                 && kept.perElement().readsTheValueAt(container, under, across));
     }
 
-    /** Whether {@code path} is the place at {@code under}, inside it or holds it. */
-    private static boolean overlaps(TermPath path, TermPath under) {
-        return under != null && (path.isAtOrUnder(under) || under.isAtOrUnder(path));
+    /** Whether {@code path} is where the value the elements are grouped under is held, inside it
+     *  or holds it; never where they stand alone. */
+    private static boolean overlaps(TermPath path, Quantity.TheValue under) {
+        return under != null && under.overlaps(path);
+    }
+
+    /** Whether the elements are grouped under the value at {@code place} of every element. */
+    private static boolean isAt(Quantity.TheValue under, TermPath place) {
+        return under != null && under.isAt(place);
     }
 
     /** The containers the elements grouped stand inside, outermost first, as a number read over
@@ -791,7 +798,7 @@ final class AStatementAtARow {
      *
      * @return null where the walk could not reach the container
      */
-    HowManyAtARow howManyIn(TermPath container, Optional<TermPath> differentAt,
+    HowManyAtARow howManyIn(TermPath container, Optional<Quantity.TheValue> differentAt,
                             Optional<TermPath> across, BorderQuantity.Observation row) {
         if (across.isPresent() && differentAt.isEmpty()) {
             throw new IllegalArgumentException("every element of the containers at " + container
@@ -802,11 +809,33 @@ final class AStatementAtARow {
                 : howManyMeetIn(container, row);
     }
 
+    /**
+     * The value {@code element}, a reading of the row with one element chosen, holds at
+     * {@code at}: at the one place, or at the place the case it holds chooses — or null where it
+     * could not be read, or no case of the key's takes it.
+     */
+    static ObservedValue valueAt(BorderQuantity.Observation element, Quantity.TheValue at) {
+        TermPath place = switch (at) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject.AnInput(TermPath path)) -> path;
+            case Quantity.TheValue.AtAPlace _ -> null;
+            case Quantity.TheValue.ChosenByCase(TermPath of, ElementKey.ByCase key) -> {
+                if (!(element.at(key.subject().from(of)) instanceof WalkResult.Reached<
+                        ObservationAtPoint>(ObservationAtPoint.Value(ObservedValue subject)))) {
+                    yield null;
+                }
+                ElementProjection way = key.readAlong(cases -> cases.leaves(subject));
+                yield way == null ? null : way.from(of);
+            }
+        };
+        return place != null && element.at(place) instanceof WalkResult.Reached<
+                ObservationAtPoint>(ObservationAtPoint.Value(ObservedValue value)) ? value : null;
+    }
+
     /** How many different values the elements of a container meeting one statement hold, by the
      *  statement, the container, where the value stands and the container holding the
      *  containers, where every one of them is counted. */
-    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container, TermPath at,
-                                      Optional<TermPath> across)
+    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container,
+                                      Quantity.TheValue at, Optional<TermPath> across)
             implements BorderQuantity.ReadAlike<HowManyAtARow> {
 
         @Override
@@ -827,8 +856,8 @@ final class AStatementAtARow {
                 if (answer instanceof Answer.CouldNotTell(var stopped)) {
                     why.addAll(stopped);
                 }
-                if (!(element.at(at) instanceof WalkResult.Reached<ObservationAtPoint>(
-                        ObservationAtPoint.Value(ObservedValue value)))) {
+                ObservedValue value = valueAt(element, at);
+                if (value == null) {
                     why.add(ReadingGap.COULD_NOT_WALK);
                     unreadValues++;
                     continue;
@@ -1019,9 +1048,7 @@ final class AStatementAtARow {
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count -> {
-                if (differentAt(count).isPresent()) {
-                    read.add(differentAt(count).get());
-                }
+                differentAt(count).ifPresent(value -> read.addAll(value.places()));
                 yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
                         && readsOf(meetingOf(count), about, read);
             }
@@ -1667,7 +1694,8 @@ final class AStatementAtARow {
      * stand — and the container whose elements hold one each, where every one of them is counted.
      */
     private record OverTheElements(TermPath container, AStatementAtARow ofTheElement,
-                                   Optional<TermPath> differentAt, Optional<TermPath> across) {
+                                   Optional<Quantity.TheValue> differentAt,
+                                   Optional<TermPath> across) {
 
         /** How many elements meet what each is asked at {@code row}, or how many different values
          *  they hold; null where the walk could not reach the container. */

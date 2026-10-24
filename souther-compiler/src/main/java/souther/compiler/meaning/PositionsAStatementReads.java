@@ -97,9 +97,9 @@ public final class PositionsAStatementReads {
                     reads(counted) && reads(each);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .allMatch(this::reads);
-            case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject each) ->
+            case Quantity.HowManyDifferent(DecisionSubject counted, Quantity.TheValue each) ->
                     reads(counted) && reads(each);
-            case Quantity.HowManyDifferentMeet(DecisionSubject counted, DecisionSubject each,
+            case Quantity.HowManyDifferentMeet(DecisionSubject counted, Quantity.TheValue each,
                                                var meeting) ->
                     reads(counted) && reads(each) && reads(meeting.statement());
             case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject each) ->
@@ -134,6 +134,18 @@ public final class PositionsAStatementReads {
                 yield true;
             }
             case DecisionSubject.AnAnswer _ -> answersNameNothing;
+        };
+    }
+
+    /** Where a value counted once each stands: the place, or every place its case is told and
+     *  read at. */
+    private boolean reads(Quantity.TheValue value) {
+        return switch (value) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject at) -> reads(at);
+            case Quantity.TheValue.ChosenByCase chosen -> {
+                out.addAll(chosen.places());
+                yield true;
+            }
         };
     }
 }

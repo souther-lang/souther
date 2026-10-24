@@ -1219,7 +1219,9 @@ public sealed interface Derivation {
                                 || (Quantity.HowManyDifferent.oneOfEach(over,
                                         new DecisionSubject.AnInput(element))
                                 && new Quantity.HowManyDifferent(over,
-                                        new DecisionSubject.AnInput(element)).equals(atom));
+                                        new Quantity.TheValue.AtAPlace(
+                                                new DecisionSubject.AnInput(element)))
+                                        .equals(atom));
                     }
                     // A sum is held spread over the numbers of each element and how many elements
                     // there are ({@link Quantity.SumOver#over}), so what each element adds is
@@ -3060,7 +3062,7 @@ public sealed interface Derivation {
              * Where the values counted once each stand, and whether what {@code ofTheElement} was
              * read as is asked of each value rather than of each element.
              */
-            public record Different(DecisionSubject at, boolean ofEachValue) {
+            public record Different(Quantity.TheValue at, boolean ofEachValue) {
 
                 public Different {
                     Objects.requireNonNull(at, "the values counted stand somewhere");

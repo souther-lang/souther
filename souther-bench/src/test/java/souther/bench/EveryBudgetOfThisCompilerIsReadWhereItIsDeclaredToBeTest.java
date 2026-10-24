@@ -155,7 +155,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/Shape$Sequence;Ljava/util/List;"
-                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/meaning/Quantity$TheValue;"
                             + "Lsouther/compiler/inputs/Quantities;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;"
@@ -166,7 +166,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
-                            + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/meaning/Quantity$TheValue;"
                             + "Ljava/util/List;ZZLjava/util/Set;)"
                             + "Lsouther/compiler/partition/CardinalityComposer$UnderEachValue;",
                     "stops listing the groups of elements under one value at the values an element"

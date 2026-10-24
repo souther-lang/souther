@@ -155,8 +155,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "CardinalityComposer", "composeAcross",
                     "(Ljava/util/List;Ljava/util/List;Ljava/util/SequencedMap;L" + INPUTS
                             + "TermPath;L" + INPUTS + "TermPath;L" + PARTITION + "NumericSet;"
-                            + "Ljava/util/List;" + TYPE + "Ljava/util/List;L" + INPUTS
-                            + "TermPath;L" + INPUTS + "Quantities;L" + INPUTS + "SearchRegion;"
+                            + "Ljava/util/List;" + TYPE
+                            + "Ljava/util/List;Lsouther/compiler/meaning/Quantity$TheValue;L"
+                            + INPUTS + "Quantities;L" + INPUTS + "SearchRegion;"
                             + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "composeAlike",

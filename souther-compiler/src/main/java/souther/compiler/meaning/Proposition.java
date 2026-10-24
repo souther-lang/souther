@@ -144,9 +144,9 @@ public sealed interface Proposition {
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
-            case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
+            case Quantity.HowManyDifferent(DecisionSubject counted, Quantity.TheValue _) ->
                     isAnElementOf(counted, container);
-            case Quantity.HowManyDifferentMeet(DecisionSubject counted, DecisionSubject _,
+            case Quantity.HowManyDifferentMeet(DecisionSubject counted, Quantity.TheValue _,
                                                var meeting) -> isAnElementOf(counted, container)
                     || meeting.statement().mayTurnOnAnElementOf(container);
             case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject _) ->
@@ -1399,10 +1399,11 @@ public sealed interface Proposition {
                     .anyMatch(Proposition::aboutAnAnswer);
             case Quantity.HowManyDifferent different ->
                     different.container() instanceof DecisionSubject.AnAnswer
-                            || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+                            || different.ofTheElement().where() instanceof DecisionSubject.AnAnswer;
             case Quantity.HowManyDifferentMeet different ->
                     different.container() instanceof DecisionSubject.AnAnswer
-                            || different.ofTheElement() instanceof DecisionSubject.AnAnswer
+                            || different.ofTheElement().where()
+                                    instanceof DecisionSubject.AnAnswer
                             || aboutAnAnswer(different.meeting().statement());
             case Quantity.HowManyDifferentAcross across ->
                     across.container() instanceof DecisionSubject.AnAnswer
