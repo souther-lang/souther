@@ -3453,10 +3453,11 @@ public final class Adequacy {
         public Answer<Map<CaseOfAStatement, RowToRun>> compute(Db db) {
             Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
             DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
-            if (evidence == null || evidence.took().made().isEmpty()) {
+            RowWork work = db.ask(new RowsOwed(name, behavior)).value();
+            if (evidence == null || work == null) {
                 return Answer.absent();
             }
-            List<CaseOfAStatement> unseen = evidence.took().made().orElseThrow().unseenCases();
+            List<CaseOfAStatement> unseen = work.cases();
             if (unseen.isEmpty()) {
                 return Answer.of(Map.of());
             }
@@ -5506,7 +5507,31 @@ public final class Adequacy {
             return Answer.of(new RowWork(
                     classesOwed(measured, db.ask(new Unanswered(name, behavior)).value()), armsOwed,
                     pairs, meetings, List.copyOf(rules), pointsOwed(db, name, behavior),
-                    List.copyOf(replacements)));
+                    List.copyOf(replacements), unseenCasesOf(db, name, behavior)));
+        }
+
+        /**
+         * The cases a statement of this behavior's decision draws inside itself that no row was
+         * seen in.
+         *
+         * <p>The one derivation, asked of the measure of the decision and not of a finding: the
+         * offer in front of a behavior and the search that composes the rows are handed this list
+         * and read nothing of the decision again. Nothing where the rows were not all read — a
+         * case unseen may be one a row sitting in a source that could not be evaluated is in, and
+         * offering a row for it is telling a person to write what is there. And only the cases a
+         * row can be looked for: the measure still reports the rest, and an offer for work nothing
+         * can compose is a lightbulb that writes nothing.
+         */
+        private static List<CaseOfAStatement> unseenCasesOf(Db db, String name, String behavior) {
+            Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
+            DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
+            Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
+            if (evidence == null || byTarget == null || evidence.took().made().isEmpty()
+                    || RowReadings.readingFor(byTarget, behavior).someRowsUnseen()) {
+                return List.of();
+            }
+            return evidence.took().made().orElseThrow().unseenCases().stream()
+                    .filter(CaseOfAStatement::canBeLookedFor).toList();
         }
 
         /**
@@ -5674,9 +5699,7 @@ public final class Adequacy {
             // And the rows for the cases a statement of the decision draws inside itself that the
             // rows leave unseen. Beside the rules and not among them: every rule may be taken and
             // a case inside one still be short.
-            Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
-            RowsForCases cases = rowsForCases(db, name, behavior,
-                    decisions == null ? null : decisions.get(behavior), here.observed());
+            RowsForCases cases = rowsForCases(db, name, behavior, work.cases());
             return Answer.of(new Filling(composed,
                     offeredHere(behavior, here.edges(),
                             RowsOwed.restingOnAPremise(db, name, behavior)),
@@ -6150,13 +6173,12 @@ public final class Adequacy {
          * for it is telling them to write what is there.
          */
         private static RowsForCases rowsForCases(Db db, String name, String behavior,
-                                                 DecisionEvidence evidence, RowReading observed) {
-            if (evidence == null || evidence.took().made().isEmpty() || observed.someRowsUnseen()) {
+                                                 List<CaseOfAStatement> unseen) {
+            if (unseen.isEmpty()) {
                 return RowsForCases.NOTHING;
             }
-            List<CaseOfAStatement> unseen = evidence.took().made().orElseThrow().unseenCases();
             Map<CaseOfAStatement, RowToRun> found = db.ask(new CaseSearch(name, behavior)).value();
-            if (unseen.isEmpty() || found == null) {
+            if (found == null) {
                 return RowsForCases.NOTHING;
             }
             Map<CaseOfAStatement, Generator.GeneratedRow> out = new LinkedHashMap<>();

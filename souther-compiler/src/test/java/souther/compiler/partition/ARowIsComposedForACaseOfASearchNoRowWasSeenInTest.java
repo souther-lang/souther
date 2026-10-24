@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.RowWork;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
@@ -116,6 +117,65 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
                 () -> "the leaf is already written: " + block);
         assertTrue(block.contains("a search that finds nothing through the nodes below its start"),
                 () -> "the children are not: " + block);
+    }
+
+    /**
+     * A case no row was seen in is work the offer in front of the behavior knows of.
+     *
+     * <p>Where nothing else is owed, the cases are all there is: the classes are covered, both
+     * rules are taken, and the editor decides whether to offer the rows by what is owed. Left out
+     * of it, the command printed a row the editor never offered.
+     */
+    @Test
+    void aCaseIsTheOnlyWorkOwedAndTheOfferKnowsOfIt() {
+        Compilation compilation = Compilation.ofSource(SOME + ROWS_THAT_FIND + """
+                    | "a child that fails" :
+                        (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        RowWork owed = compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value();
+
+        assertEquals(List.of(), owed.rules(), "both rules are taken");
+        assertEquals(List.of(), owed.classes(), "and no class is owed");
+        assertEquals(List.of(), owed.arms(), "and no arm");
+        assertEquals(Set.of(CaseOfAStatement.Step.NOWHERE_AT_A_LEAF),
+                owed.cases().stream().map(each -> ((CaseOfAStatement.Search) each).step())
+                        .collect(Collectors.toSet()),
+                "the leaf is the one step no row was seen in");
+        assertTrue(!owed.isEmpty(), "so there is work the offer stands for");
+    }
+
+    /**
+     * A step no search can look a row for is no work, and is still reported as unmeasured.
+     *
+     * <p>Finding a node below the start says nothing of the start node, so no row is composed
+     * toward it. An offer for it would be a lightbulb that writes nothing; the measure goes on
+     * saying the decision is short of it.
+     */
+    @Test
+    void aStepNoRowCanBeLookedForIsNoWorkAndIsStillUnmeasured() {
+        Compilation compilation = Compilation.ofSource(SOME + """
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> Yes
+                    | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
+                    | "a child that fails" :
+                        (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
+                .get("f");
+
+        assertEquals(Set.of(CaseOfAStatement.Step.BELOW_IT),
+                evidence.took().made().orElseThrow().unseenCases().stream()
+                        .map(each -> ((CaseOfAStatement.Search) each).step())
+                        .collect(Collectors.toSet()),
+                "the step below the start is the one no row was seen in");
+        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().isEmpty(),
+                "and there is no row to offer for it");
     }
 
     private static String blockOf(String model) {
