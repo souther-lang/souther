@@ -403,7 +403,7 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    new HashMap<>(), bindings, reads).walk(read);
+                    new HashMap<>(), new ArrayList<>(), bindings, reads).readsOf(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
                 String name = declared.get(each);
@@ -439,22 +439,44 @@ final class Clauses {
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
                                   DeclarationNewtypes newtypes, Map<BindingId, Location> aliases,
+                                  List<Lookup> lookups,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
 
-        private static final ValueName.Stdlib.Operation MAP_GET =
-                ValueName.Stdlib.operation("Map", "get");
-        private static final ValueName.Stdlib.Operation MAP_CONTAINS_KEY =
-                ValueName.Stdlib.operation("Map", "containsKey");
+        /** The operations that take what to look for and the container to look in, in that order,
+         *  and read the member that is looked for. */
+        private static final Set<ValueName> LOOKUPS = Set.of(
+                ValueName.Stdlib.operation("Map", "get"),
+                ValueName.Stdlib.operation("Map", "containsKey"),
+                ValueName.Stdlib.operation("Set", "contains"),
+                ValueName.Stdlib.operation("List", "contains"));
 
         ReadsOfAClause {
             Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
             Objects.requireNonNull(aliases, "a walk of a clause knows what a name was given");
+            Objects.requireNonNull(lookups, "a walk of a clause gathers its lookups somewhere");
             Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
             Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
         }
 
-        void walk(Core e) {
+        /** A lookup in a container that is a place of the value: the lookup, and the container. */
+        private record Lookup(Core lookup, Location map) {}
+
+        /**
+         * Every place of {@code clause} it reads. The containers it looks members up in are read
+         * once the whole clause has been walked, because whether a lookup is one the clause
+         * cannot be true without is a question about the clause around it.
+         */
+        void readsOf(Core clause) {
+            walk(clause);
+            for (Lookup each : lookups) {
+                read(each.map(), LookupsAClauseNeeds.needs(clause, each.lookup())
+                        ? ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS
+                        : ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+            }
+        }
+
+        private void walk(Core e) {
             if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null) {
                 Location given = locationOf(let.value());
                 if (given != null) {
@@ -484,22 +506,22 @@ final class Clauses {
                 if (child == counted) {
                     read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
                 } else if (child == looked) {
-                    read(locationOf(child), ClauseRead.Kind.AN_ENTRY_AT_A_KEY, RuleKey.THE_VALUE);
+                    lookups.add(new Lookup(e, locationOf(child)));
                 } else {
                     walk(child);
                 }
             });
         }
 
-        /** The map {@code e} looks an entry up in or asks a key of, where that is a place of the
-         *  value; null otherwise. */
+        /** The container {@code e} looks a member up in or asks the membership of, where that is a
+         *  place of the value; null otherwise. */
         private Core entryLookedUp(Core e) {
             if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(var operation, var args))
-                    || !(operation.equals(MAP_GET) || operation.equals(MAP_CONTAINS_KEY))) {
+                    || !LOOKUPS.contains(operation)) {
                 return null;
             }
-            Core map = args.get(1);
-            return locationOf(map) != null ? map : null;
+            Core container = args.get(1);
+            return locationOf(container) != null ? container : null;
         }
 
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {

@@ -3051,11 +3051,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             let m (codes, t) = List.any(c -> Map.containsKey(c, t.rates), codes)
             """;
 
+    private static final String KEYED_BY_TEXT = """
+            module w1
+            data Table = { base: String, rates: Map<String, Int> }
+                invariant %s
+            behavior m : (ks: List<String>, t: Table) -> Bool
+            let m (ks, t) = List.any(k -> Map.containsKey(k, t.rates), ks)
+            """;
+
     /**
-     * A rule that looks up the entry under one key reads that entry and no other. The keys of the
-     * map beside it are every code, as a second entry takes any code that is not the one the rule
-     * names, so a code asked for and the keys the map holds reach each other. Written out in the
-     * rule, or in a helper it hands the map to, it is the same lookup.
+     * A rule that looks up the entry under one key and cannot be true without it reads that entry
+     * and no other. The keys of the map beside it are every code, as a second entry takes any
+     * code that is not the one the rule names, so a code asked for and the keys the map holds
+     * reach each other. Written out in the rule, or in a helper it hands the map to, it is the
+     * same lookup, and a key written as a constant is needed the same.
      */
     @Test
     void aRuleLookingUpOneKeyLeavesTheOtherKeysOfTheMapEveryValue() {
@@ -3063,6 +3072,60 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             String model = KEYED.formatted(rule);
             assertEquals(Map.of("t.rates[key]", RELATES, "codes[*]", RELATES),
                     leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+        }
+    }
+
+    @Test
+    void aKeyWrittenAsAConstantIsNeededTheSame() {
+        for (String rule : List.of("Map.containsKey(\"a\", rates)",
+                "Map.containsKey(base, rates) && Map.containsKey(\"a\", rates)")) {
+            String model = KEYED_BY_TEXT.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "ks[*]", RELATES),
+                    leftIn(model, whereWritten(model, "Map.containsKey(k")), rule);
+        }
+    }
+
+    /**
+     * A rule that reads the entry under a key is not one that has the key there. Where it wants
+     * the key missing, or is true without the lookup, some keys are the ones it keeps out, and
+     * the map accepts none with them: a map with room for more is not a map every key is in.
+     */
+    @Test
+    void aRuleNotNeedingTheEntryLeavesTheKeysNoRunToReach() {
+        for (String rule : List.of("Map.containsKey(\"a\", rates) == false",
+                "Bool.not(Map.containsKey(base, rates))",
+                "base == \"a\" && Bool.not(Map.containsKey(base, rates))",
+                "Map.containsKey(base, rates) || Map.size(rates) == 0")) {
+            String model = KEYED_BY_TEXT.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "ks[*]", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "Map.containsKey(k")), rule);
+        }
+    }
+
+    private static final String MEMBERED = """
+            module w1
+            data Table = { main: String, members: %s<String> }
+                invariant %s
+            behavior m : (ks: List<String>, t: Table) -> Bool
+            let m (ks, t) = List.any(k -> %s.contains(k, t.members), ks)
+            """;
+
+    /**
+     * A set or a list is read the way a map is: a rule that cannot be true without a member there
+     * leaves the other members every value, and one that merely reads it, or wants it missing,
+     * leaves them none.
+     */
+    @Test
+    void theMembersOfASetOrAListAreReadTheWayTheKeysOfAMapAre() {
+        for (String container : List.of("Set", "List")) {
+            String needed = MEMBERED.formatted(container,
+                    container + ".contains(main, members)", container);
+            assertEquals(Map.of("t.members[*]", RELATES, "ks[*]", RELATES),
+                    leftIn(needed, whereWritten(needed, container + ".contains(k")), container);
+            String missing = MEMBERED.formatted(container,
+                    container + ".contains(main, members) == false", container);
+            assertEquals(Map.of("t.members[*]", RELATES, "ks[*]", NOT_SHOWN),
+                    leftIn(missing, whereWritten(missing, container + ".contains(k")), container);
         }
     }
 
