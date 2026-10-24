@@ -1133,7 +1133,9 @@ public final class NumericDomain<A> {
      * box inside those ends each of its rules holds at ({@link #aPointOfTheBoxHolds}). The atom's
      * own system is proven so too. {@code 4h - 3s < 0} over two decimals running nought to 168 is
      * no difference and is not proven, and leaves a whole number apart from both the whole of its
-     * run, since {@code h} at nought and {@code s} at 168 hold it.
+     * run, since {@code h} at nought and {@code s} at 168 hold it. A system of boxes and limits on
+     * sums ({@code a + b <= M}) leaves each atom the whole of its run too, with the others at the
+     * low corner of their boxes ({@link #limitsOnSumsHoldAtTheLowCorner}).
      *
      * <p>What each system is shown to be is the domain's alone, worked out where an atom first
      * asks it and kept for every other atom, and asked no further than the first system that
@@ -1149,7 +1151,8 @@ public final class NumericDomain<A> {
             return false;
         }
         A its = had.groupOf().get(atom);
-        if (its != null && shownOf(had, its) != Shown.PROVEN) {
+        if (its != null && shownOf(had, its) != Shown.PROVEN
+                && shownOf(had, its) != Shown.AT_THE_LOW_CORNER) {
             return false;
         }
         for (A group : had.rulesOf().keySet()) {
@@ -1161,8 +1164,9 @@ public final class NumericDomain<A> {
     }
 
     /** What one system of the rules is shown to leave inside where its atoms' orders stop: its
-     *  runs whole, some point, or neither shown. */
-    private enum Shown { PROVEN, A_POINT, NOTHING }
+     *  runs whole, its runs whole as limits on sums hold at the low corner of the box
+     *  ({@link #limitsOnSumsHoldAtTheLowCorner}), some point, or neither shown. */
+    private enum Shown { PROVEN, AT_THE_LOW_CORNER, A_POINT, NOTHING }
 
     /** What the system of {@code group} is shown to leave, worked out once. */
     private Shown shownOf(Systems<A> systems, A group) {
@@ -1176,8 +1180,48 @@ public final class NumericDomain<A> {
                     && rules.stream().allMatch(rule -> proven(rule, false))) {
                 return leavesAValueInside(atoms) ? Shown.PROVEN : Shown.NOTHING;
             }
+            if (limitsOnSumsHoldAtTheLowCorner(atoms, rules)) {
+                return Shown.AT_THE_LOW_CORNER;
+            }
             return aPointOfTheBoxHolds(atoms, rules) ? Shown.A_POINT : Shown.NOTHING;
         });
+    }
+
+    /**
+     * Whether the rules over {@code atoms} are boxes and limits on sums, and the point of the box
+     * with each atom at the value of its run nearest its least end, inside where its order stops,
+     * holds them.
+     *
+     * <p>A limit on a sum is a half-space every weight of which is positive: lowering an atom
+     * keeps it held. With each atom but one at its least, the one is held at every value up to
+     * the greatest the limits leave it, and that greatest is the end the closure answers for it.
+     */
+    private boolean limitsOnSumsHoldAtTheLowCorner(List<A> atoms,
+                                                   List<AffineConstraint<A>> rules) {
+        Map<A, ExactRatio> corner = new LinkedHashMap<>();
+        for (A atom : atoms) {
+            Bounds box = boxOf(atom);
+            Bounds run = box == null ? null : box.meet(orders.get(atom));
+            ExactRatio least = run == null || !run.holdsAValue() ? null
+                    : run.aValueNearestItsEnd(false, spacingOf(atom));
+            if (least == null) {
+                return false;
+            }
+            corner.put(atom, least);
+        }
+        for (AffineConstraint<A> rule : rules) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)
+                    || (weighedAtoms(half) > 1 && half.form().coefs().values().stream()
+                            .anyMatch(weight -> weight.signum() < 0))
+                    || !holdsAt(half, corner)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static <A> long weighedAtoms(AffineConstraint.HalfSpace<A> half) {
+        return half.form().coefs().values().stream().filter(weight -> !weight.isZero()).count();
     }
 
     /**

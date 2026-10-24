@@ -714,6 +714,7 @@ public final class WhatARelationLeavesUndivided {
         if (held == null || rest == null) {
             return null;
         }
+        WholeRun order = it.runsTo() == null ? null : WholeRun.ofTheValues(it.runsTo());
         List<SettledRun> runs = new ArrayList<>();
         List<WholeRun> settledTrue = new ArrayList<>();
         WholeRun between = held;
@@ -721,7 +722,10 @@ public final class WhatARelationLeavesUndivided {
             Rel asked = holds ? asking.holding() : asking.failing();
             for (OnTheDifference statement : settledBy(it.weight(), rest, asked)) {
                 WholeRun settling = WholeRun.where(statement);
-                if (settling == null || !settling.holdsAWholeNumber()) {
+                // Values past where the term's order stops are none it takes, so a run wholly
+                // past that is no run of its values.
+                if (settling == null || !settling.holdsAWholeNumber()
+                        || (order != null && !settling.meet(order).holdsAWholeNumber())) {
                     continue;
                 }
                 between = between == null ? null : between.without(settling);

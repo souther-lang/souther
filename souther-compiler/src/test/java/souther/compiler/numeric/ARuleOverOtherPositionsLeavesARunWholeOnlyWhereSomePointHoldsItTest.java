@@ -110,6 +110,121 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 .over(each -> each + "'", CanonicalOrder.asTheyAreSpelled()).wholeRunOf("c'"));
     }
 
+    /**
+     * A limit on a sum, {@code a + b <= 5} over two whole numbers from nought to seven, leaves each
+     * of its atoms the run it leaves with the other at its least: any value of one up to five has
+     * the other at nought. A rule that is no box and no limit on a sum beside it — {@code 2a < 3c}
+     * — leaves its atoms no run, as it does alone.
+     */
+    @Test
+    void aLimitOnASumLeavesEachOfItsAtomsTheRunItLeavesWithTheOthersAtTheirLeast() {
+        Map<String, Long> limit = new LinkedHashMap<>();
+        limit.put("a", 1L);
+        limit.put("b", 1L);
+        NumericDomain<String> alone = domainOf(List.of(new Written(limit, -5, Rel.LE)))
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertEquals(run(LOW, 5), alone.wholeRunOf("a"));
+        assertEquals(run(LOW, 5), alone.wholeRunOf("b"));
+        assertEquals(run(LOW, HIGH), alone.wholeRunOf("c"));
+
+        Map<String, Long> mixed = new LinkedHashMap<>();
+        mixed.put("a", 2L);
+        mixed.put("c", -3L);
+        NumericDomain<String> beside = domainOf(
+                List.of(new Written(limit, -5, Rel.LE), new Written(mixed, 0, Rel.LT)))
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertNull(beside.wholeRunOf("a"));
+        assertNull(beside.wholeRunOf("b"));
+    }
+
+    /**
+     * A limit on a sum is held at the low corner of the orders the atoms are counted on and not
+     * of their boxes: {@code a + b <= 5} beside orders that start at three has its box's corner at
+     * nought, which holds it, and no row, since the rows start at three each.
+     */
+    @Test
+    void aLimitOnASumTheLowCornerOfTheOrdersBreaksLeavesNoRun() {
+        Map<String, Long> limit = new LinkedHashMap<>();
+        limit.put("a", 1L);
+        limit.put("b", 1L);
+        Map<String, NumericDomain.Bounds> orders = endless("a", "b", "c");
+        NumericDomain.Bounds fromThree = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(3)), null);
+        orders.put("a", fromThree);
+        orders.put("b", fromThree);
+        NumericDomain<String> domain = domainOf(List.of(new Written(limit, -5, Rel.LE)))
+                .heldInsideTheirOrders(orders);
+        assertNull(domain.wholeRunOf("a"));
+        assertNull(domain.wholeRunOf("b"));
+        assertNull(domain.wholeRunOf("c"));
+    }
+
+    /**
+     * Limits on sums over three whole numbers from nought to seven, the lower ends raised at
+     * random: every value of a run shown of an atom is one some point of the rules carries. And
+     * a run is shown of some atom in most of the states, so the limits are being read.
+     */
+    @Test
+    void aRunShownOfAnAtomUnderLimitsOnSumsIsCarriedByPointsOfTheRules() {
+        Random random = new Random(2678);
+        int shown = 0;
+        for (int s = 0; s < STATES; s++) {
+            List<Written> rules = new ArrayList<>();
+            for (int r = 1 + random.nextInt(2); r > 0; r--) {
+                Map<String, Long> limit = new LinkedHashMap<>();
+                for (String atom : List.of("a", "b", "c")) {
+                    long weight = random.nextInt(3);
+                    if (weight > 0) {
+                        limit.put(atom, weight);
+                    }
+                }
+                if (limit.size() > 1) {
+                    rules.add(new Written(limit, -(2L + random.nextInt(2 * HIGH)), Rel.LE));
+                }
+            }
+            for (String atom : List.of("a", "b", "c")) {
+                int least = random.nextInt(3);
+                if (least > 0) {
+                    rules.add(new Written(Map.of(atom, 1L), -least, Rel.GE));
+                }
+            }
+            NumericDomain<String> domain = domainOf(rules)
+                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            for (String atom : List.of("a", "b", "c")) {
+                NumericDomain.Bounds run = domain.wholeRunOf(atom);
+                if (run == null) {
+                    continue;
+                }
+                shown++;
+                for (int v = LOW; v <= HIGH; v++) {
+                    if (run.admits(ExactRatio.of(v))) {
+                        assertTrue(somePointHolds(rules, atom, v),
+                                () -> atom + " was shown " + run + " beside " + rules);
+                    }
+                }
+            }
+        }
+        assertTrue(shown > STATES / 4, "a run was shown in " + shown + " reads, so none of the"
+                + " limits on sums were being read");
+    }
+
+    /** Whether some whole point of the box with {@code atom} at {@code v} holds every one of
+     *  {@code rules}. */
+    private static boolean somePointHolds(List<Written> rules, String atom, int v) {
+        for (int a = LOW; a <= HIGH; a++) {
+            for (int b = LOW; b <= HIGH; b++) {
+                for (int c = LOW; c <= HIGH; c++) {
+                    Map<String, Integer> point = Map.of("a", a, "b", b, "c", c);
+                    if (point.get(atom) == v
+                            && rules.stream().allMatch(each -> holdsAt(each, point))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     /** Each of {@code atoms} on an order with no end either way. */
     private static Map<String, NumericDomain.Bounds> endless(String... atoms) {
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
