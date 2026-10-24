@@ -293,11 +293,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Ljava/util/List;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;I)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "has no room for a grouping of the elements past as many elements as a row"
-                            + " carries, and hands the figure over in the shortfall it comes"
-                            + " back with"),
+                            + " carries, nor for more rows than it is given room for, and hands"
+                            + " the figures over in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"

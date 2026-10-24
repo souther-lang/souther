@@ -353,6 +353,21 @@ final class CardinalityComposer {
             return notChosen("`" + container + "` is asked something of one of the containers,"
                     + " and its elements are chosen across all of them");
         }
+        for (Asked each : asked) {
+            if (each instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)
+                    && !perElement.answersHoweverTheElementsAreSharedOut(container, across)) {
+                return notChosen("what an element of `" + container + "` answers reads a container"
+                        + " holding it, and the elements are chosen across all of them, whichever"
+                        + " they are shared out over");
+            }
+        }
+        for (RealizationTarget.OfANumber each : standingAt) {
+            if (AStatementAtARow.readsAroundTheElement(each.term(), container, across)) {
+                return notChosen("`" + each.term() + "` is read off a container holding an element"
+                        + " of `" + container + "`, and the elements are chosen across all of"
+                        + " them, whichever they are shared out over");
+            }
+        }
         RuleReadingSource ruleSource = reading.source();
         NestedContainersAddingUp.Inside inner =
                 NestedContainersAddingUp.ofTheContainerAt(sourceType, container, reading);
@@ -380,9 +395,9 @@ final class CardinalityComposer {
         /** {@code holding}, a row holding a container of the elements chosen, as it is read. */
         BorderQuantity.Observation read(BorderQuantity.Observation holding);
 
-        /** The rows holding {@code values}, with what writing them met — or null where they are
-         *  written as nothing. */
-        TermRealizations.Realization written(List<ObservedValue> values);
+        /** At most {@code room} rows holding {@code values}, with what writing them met — or null
+         *  where they are written as nothing. */
+        TermRealizations.Realization written(List<ObservedValue> values, int room);
 
         /** The container where it stands, of {@code type}. */
         record WhereItIsWritten(Type type, RuleReadingContext reading) implements Standing {
@@ -393,7 +408,7 @@ final class CardinalityComposer {
             }
 
             @Override
-            public TermRealizations.Realization written(List<ObservedValue> values) {
+            public TermRealizations.Realization written(List<ObservedValue> values, int room) {
                 return ObservedFixtures.of(new ObservedValue.Sequence(values), type, reading)
                         instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                                 FixtureTemplate one)
@@ -418,9 +433,9 @@ final class CardinalityComposer {
             }
 
             @Override
-            public TermRealizations.Realization written(List<ObservedValue> values) {
+            public TermRealizations.Realization written(List<ObservedValue> values, int room) {
                 return new NestedContainersAddingUp(container.element()).holdingThe(type,
-                        keptApart, values, within, reading);
+                        keptApart, values, within, reading, room);
             }
         }
     }
@@ -714,7 +729,8 @@ final class CardinalityComposer {
                 if (!sharing.holdsTogether() && !heldTogether(together, container, whole)) {
                     return true;
                 }
-                TermRealizations.Realization rows = standing.written(values);
+                TermRealizations.Realization rows =
+                        standing.written(values, MOST_OFFERED - built.size());
                 if (rows == null) {
                     return true;
                 }
@@ -866,27 +882,27 @@ final class CardinalityComposer {
                 }
                 ElementProjection place = ElementProjection.below(gathered.elements(),
                         term.subjectPath());
-                ElementValue.Affine adds = place == null ? null
-                        : addedThrough(gathered.value(), place);
-                if (adds == null) {
-                    continue;
-                }
-                ExactRatio weight = adds.form().coefs().get(place);
-                switch (gathered.gathering()) {
-                    case NumericTerm.GatheredUnderItsKey.Gathering.End _ -> {
-                        if (ExactRatio.ONE.equals(weight) && adds.form().constant().isZero()
-                                && !asItself.contains(number)) {
-                            asItself.add(number);
+                // Each form an element's case may add through the place is a way the total comes
+                // to a figure, so each is a place to stand at.
+                for (ElementValue.Affine adds : place == null ? List.<ElementValue.Affine>of()
+                        : addedThrough(gathered.value(), place)) {
+                    ExactRatio weight = adds.form().coefs().get(place);
+                    switch (gathered.gathering()) {
+                        case NumericTerm.GatheredUnderItsKey.Gathering.End _ -> {
+                            if (ExactRatio.ONE.equals(weight) && adds.form().constant().isZero()
+                                    && !asItself.contains(number)) {
+                                asItself.add(number);
+                            }
                         }
-                    }
-                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
-                         NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ -> {
-                        AddedOfIt added = new AddedOfIt(number, weight, adds.form().constant(),
-                                gathered.gathering()
-                                        instanceof NumericTerm.GatheredUnderItsKey.Gathering
-                                                .SinceAPut);
-                        if (!addedUp.contains(added)) {
-                            addedUp.add(added);
+                        case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
+                             NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ -> {
+                            AddedOfIt added = new AddedOfIt(number, weight,
+                                    adds.form().constant(), gathered.gathering()
+                                            instanceof NumericTerm.GatheredUnderItsKey.Gathering
+                                                    .SinceAPut);
+                            if (!addedUp.contains(added)) {
+                                addedUp.add(added);
+                            }
                         }
                     }
                 }
@@ -897,24 +913,31 @@ final class CardinalityComposer {
 
     /**
      * What an element adds to a number gathered of {@code value}, where that is {@code place}
-     * of it weighed and nothing else of it: the value itself, or the form of the case the place
-     * is under — or null where it is neither.
+     * of it weighed and nothing else of it: the value itself, or the form of each case the place
+     * is under, and of what no arm takes, each once — none where it is neither.
      */
-    private static ElementValue.Affine addedThrough(ElementValue value, ElementProjection place) {
+    static List<ElementValue.Affine> addedThrough(ElementValue value, ElementProjection place) {
         return switch (value) {
             case ElementValue.Affine affine -> affine.form().coefs().size() == 1
                     && affine.form().coefs().get(place) instanceof ExactRatio weight
-                    && weight.signum() != 0 ? affine : null;
+                    && weight.signum() != 0 ? List.of(affine) : List.of();
             case ElementValue.OfItsCase chosen -> {
-                for (ElementValue.OfItsCase.Arm arm : chosen.arms()) {
-                    ElementValue.Affine found = addedThrough(arm.value(), place);
-                    if (found != null) {
-                        yield found;
+                List<ElementValue> each = new ArrayList<>();
+                chosen.arms().forEach(arm -> each.add(arm.value()));
+                if (chosen.rest() != null) {
+                    each.add(chosen.rest());
+                }
+                List<ElementValue.Affine> found = new ArrayList<>();
+                for (ElementValue one : each) {
+                    for (ElementValue.Affine form : addedThrough(one, place)) {
+                        if (!found.contains(form)) {
+                            found.add(form);
+                        }
                     }
                 }
-                yield null;
+                yield found;
             }
-            default -> null;
+            default -> List.of();
         };
     }
 

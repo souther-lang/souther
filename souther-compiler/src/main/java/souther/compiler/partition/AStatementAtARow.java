@@ -505,6 +505,51 @@ final class AStatementAtARow {
     }
 
     /**
+     * Whether what an element of {@code container} answers of this is the same however the
+     * elements of all the containers at {@code container}, inside the elements of {@code across},
+     * are shared out over those containers: nothing it reads is a place of a container that holds
+     * the element, or of the elements of {@code across} outside the container's own.
+     *
+     * <p>The elements of every one of the containers put end to end are chosen as one, and what
+     * each answers is read of them there. It is the same answer wherever they are written only
+     * for a statement that reads the element itself, what is read of every element of all the
+     * containers, and what stands outside {@code across}.
+     */
+    boolean answersHoweverTheElementsAreSharedOut(TermPath container, TermPath across) {
+        for (NumericTerm each : numbers()) {
+            if (readsAroundTheElement(each, container, across)) {
+                return false;
+            }
+        }
+        for (TermPath each : positions) {
+            if (aroundTheElement(each, container, across)) {
+                return false;
+            }
+        }
+        for (OverTheElements each : elements.values()) {
+            if (aroundTheElement(each.container(), container, across)
+                    || !each.ofTheElement().answersHoweverTheElementsAreSharedOut(container,
+                            across)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code term} is read off a place around an element of {@code container}, inside
+     *  {@code across} ({@link #answersHoweverTheElementsAreSharedOut}). */
+    static boolean readsAroundTheElement(NumericTerm term, TermPath container, TermPath across) {
+        return term.placesReadOff().stream()
+                .anyMatch(place -> aroundTheElement(place, container, across));
+    }
+
+    /** Whether {@code place} is in {@code across} and not in an element of {@code container}:
+     *  the outer container, one of its elements, or the container inside one. */
+    private static boolean aroundTheElement(TermPath place, TermPath container, TermPath across) {
+        return place.isAtOrUnder(across) && !place.isAtOrUnder(container.element());
+    }
+
+    /**
      * Whether what an element of {@code container} answers of this may turn on which value stands
      * at {@code at}, and not only on which elements hold one value there: some number it reads
      * reads that place ({@link WhatItReads#theValue}), or some position it asks of its own value

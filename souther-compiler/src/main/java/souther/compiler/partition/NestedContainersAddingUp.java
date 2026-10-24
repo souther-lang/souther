@@ -212,10 +212,13 @@ final class NestedContainersAddingUp {
      * caller's; here only which container each falls in. Widest, so that elements next to one
      * another in the listing — the ones holding one value, say — fall in different containers,
      * and a number across the containers is told apart from a number inside one.
+     *
+     * @param room how many rows may be offered at most: a row past it is not built, and the figure
+     *             that turned it away is said in the shortfall
      */
     TermRealizations.Realization holdingThe(Type container, List<List<String>> keptApart,
                                             List<ObservedValue> elements, SearchRegion within,
-                                            RuleReadingContext reading) {
+                                            RuleReadingContext reading, int room) {
         ContainersAddingUp.WhatWasLeft left = new ContainersAddingUp.WhatWasLeft();
         Levels made = levelsOf(container, keptApart, within, reading, null, DemandsInside.NOTHING,
                 left);
@@ -237,6 +240,7 @@ final class NestedContainersAddingUp {
         groupings.made().stream().filter(each -> !layouts.contains(each)).forEach(layouts::add);
         int ways = levels.stream().mapToInt(each -> each.ways().filled().size()).max().orElse(0);
         List<FixtureTemplate> rows = new ArrayList<>();
+        offering:
         for (Layout layout : layouts) {
             for (int way = 0; way < ways; way++) {
                 Deque<ObservedValue> next = new ArrayDeque<>(elements);
@@ -252,7 +256,15 @@ final class NestedContainersAddingUp {
                             ? Proposals.ofNullable(written) : Proposals.NONE;
                 }, way, reading);
                 left.met(one.met());
-                one.values().forEach(rows::add);
+                for (FixtureTemplate each : one.values()) {
+                    // One more to offer than the room leaves: it is not kept, and what stopped it
+                    // is said.
+                    if (rows.size() >= room) {
+                        left.refused(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
+                        break offering;
+                    }
+                    rows.add(each);
+                }
             }
         }
         left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
