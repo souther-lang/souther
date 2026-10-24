@@ -279,6 +279,50 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         assertEquals(List.of(), errors(compilation), () -> report(compilation));
     }
 
+    /** Weakening words of a model measured with {@code rows} written for it. */
+    private static List<String> weakeningWith(String rows) throws Exception {
+        Compilation compilation = measured(MODEL + "\nexample f\n" + rows);
+        assertEquals(List.of(), errors(compilation), () -> report(compilation));
+        List<String> words = new ArrayList<>();
+        collectWeakening(JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()))), words);
+        return words;
+    }
+
+    /**
+     * Rows where the order of a key held twice decided the guard both ways round — the last row
+     * short where the first was enough, and the last enough where the first was short — leave
+     * nothing of the order unmeasured.
+     */
+    @Test
+    void rowsWhereTheOrderDecidedBothWaysMeasureIt() throws Exception {
+        List<String> words = weakeningWith("""
+                    | "last row short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                    | "last row enough" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }]) -> 1
+                """);
+
+        assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+    }
+
+    /**
+     * The control: rows of one way round only, and rows holding a key twice where the order
+     * decides nothing, leave the other way unmeasured.
+     */
+    @Test
+    void rowsWhereTheOrderDecidedOneWayLeaveTheOtherUnmeasured() throws Exception {
+        List<String> oneWay = weakeningWith("""
+                    | "last row short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                """);
+        List<String> decidingNothing = weakeningWith("""
+                    | "both short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 1 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                    | "both enough" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 20 }]) -> 1
+                """);
+
+        assertTrue(oneWay.contains("keyed_overwrite_cases_unmeasured"), oneWay::toString);
+        assertTrue(decidingNothing.contains("keyed_overwrite_cases_unmeasured"),
+                decidingNothing::toString);
+    }
+
     /** The control: a wrong answer for the repeated key is refused. */
     @Test
     void anAnswerTheLookupDoesNotGiveIsRefused() {

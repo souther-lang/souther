@@ -3,7 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
@@ -207,6 +209,34 @@ public final class StandingAtAPoint {
                           List<ObservedInputs> observed, Criterion criterion,
                           List<ConditionOutcomeSite> watched) {
         return putToRows(line, watched).met(observed, criterion);
+    }
+
+    /** What a statement comes to at one row, read over the whole row. */
+    public enum AtTheRow { HOLDS, FAILS, COULD_NOT_TELL }
+
+    /**
+     * What {@code stated} comes to at the row {@code observed} wrote, read over the whole row with
+     * no element of any container chosen — a statement about elements asks them itself.
+     *
+     * @param firstOfAKeyIsTheEntry whether the entry of a key is read as the first element of it
+     *                              rather than the last: what the statement would come to were
+     *                              the elements of each repeated key the other way round
+     */
+    public static AtTheRow atTheRow(Proposition stated, String behavior, Quantities quantities,
+                                    BehaviorInputs where, ObservedInputs observed,
+                                    boolean firstOfAKeyIsTheEntry) {
+        if (!AStatementAtARow.askable(stated)) {
+            return AtTheRow.COULD_NOT_TELL;
+        }
+        AStatementAtARow asked = AStatementAtARow.of(stated, behavior, quantities);
+        DiscoveringRow row = new DiscoveringRow(
+                new RowWalk(where, observed, firstOfAKeyIsTheEntry));
+        asked.lookAt(row);
+        return switch (asked.at(row)) {
+            case AStatementAtARow.Answer.Holds _ -> AtTheRow.HOLDS;
+            case AStatementAtARow.Answer.Fails _ -> AtTheRow.FAILS;
+            case AStatementAtARow.Answer.CouldNotTell _ -> AtTheRow.COULD_NOT_TELL;
+        };
     }
 
     /**
@@ -682,7 +712,8 @@ public final class StandingAtAPoint {
          * that holds nothing there, or for every element where the walk could not be made.
          *
          * <p>From the last element to the first, carrying what the elements after each hold: the
-         * values read whole, and the first in order that was not.
+         * values read whole, and the first in order that was not. Where the walk reads the first
+         * of a key as its entry, from the first to the last, so "after" is "before".
          */
         private Map<Integer, Lastness> lastnessOfEach(TermPath container, TermPath position) {
             Written written = walk.at(position);
@@ -700,7 +731,8 @@ public final class StandingAtAPoint {
             Set<ObservedValue> readAfter = new HashSet<>();
             ReadingGap firstNotReadAfter = null;
             for (Map.Entry<Integer, List<ObservedValue>> element
-                    : byElement.descendingMap().entrySet()) {
+                    : (walk.firstOfAKeyIsTheEntry() ? byElement : byElement.descendingMap())
+                            .entrySet()) {
                 ObservedValue held = element.getValue().getLast();
                 ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
                 // One after it that was read and is equal settles it, whatever else was not.
@@ -966,9 +998,25 @@ public final class StandingAtAPoint {
         /** How many answers were read rather than taken from those kept. */
         private long read;
 
+        /**
+         * Whether the entry of a key is read as the first element of it rather than the last: the
+         * row as a map filed the other way round would hold it.
+         */
+        private final boolean firstOfAKeyIsTheEntry;
+
         RowWalk(BehaviorInputs where, ObservedInputs observed) {
+            this(where, observed, false);
+        }
+
+        RowWalk(BehaviorInputs where, ObservedInputs observed, boolean firstOfAKeyIsTheEntry) {
             this.where = where;
             this.observed = observed;
+            this.firstOfAKeyIsTheEntry = firstOfAKeyIsTheEntry;
+        }
+
+        /** {@link #firstOfAKeyIsTheEntry}. */
+        boolean firstOfAKeyIsTheEntry() {
+            return firstOfAKeyIsTheEntry;
         }
 
         /** What the row wrote at {@code path}. */

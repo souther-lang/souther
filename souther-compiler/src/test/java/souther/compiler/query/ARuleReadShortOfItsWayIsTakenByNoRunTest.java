@@ -155,7 +155,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     private static DecisionEvidence evidenceWithNoRows(DecisionReading read) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         return new DecisionEvidence(read, DecisionEvidence.of("decides",
-                rulesOf(compilation, read), List.of(), WeakeningSet.none()), Map.of());
+                rulesOf(compilation, read), List.of(), WeakeningSet.none()), Map.of(), WeakeningSet.none());
     }
 
     private static RunPlacement rulesOf(Compilation compilation, DecisionReading read) {

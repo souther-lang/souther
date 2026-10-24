@@ -25,10 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What a decision rule is, is the search as a whole: whether some node at any depth meets the
  * statement. Which rule a row takes is what the row comes to when it is run, so a row that only a
- * grandchild settles takes the rule a row settled at the top does. And what the measures over the
- * input's positions read is as deep as a row is written and no deeper: no row is written toward the
- * nodes under the top, said as a weakening of the decision's measure and not as a position nobody
- * read, so a search read whole is never what makes a behavior's measurement complete.
+ * grandchild settles takes the rule a row settled at the top does. Inside the rule the search has
+ * cases of its own — the top meeting the statement, a node below doing so where the top does not,
+ * and none doing so — and until rows have been seen in each case the decision can come out in, the
+ * measure says so as a weakening of the decision and not as a position nobody read.
  */
 class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
 
@@ -128,6 +128,46 @@ class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
                 """)) {
             assertWentWithoutWhatIsBelow(behavior(source), "t.below[*]");
         }
+    }
+
+    /**
+     * Rows in every case of the search — found at the top, found only below it, found nowhere
+     * though there was something below — leave none of its cases unmeasured. The same for a
+     * search stated the other way round, every node meeting the denial.
+     */
+    @Test
+    void rowsInEveryCaseOfTheSearchMeasureIt() {
+        String rows = """
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> %s
+                    | "a grandchild" :
+                        (Node { v = 0, below = [ Node { v = 0, below = [ Node { v = 9, below = [] } ] } ] })
+                        -> %s
+                    | "nowhere below" : (Node { v = 0, below = [ Node { v = 1, below = [] } ] }) -> %s
+                """;
+        JsonNode some = behavior(SOME + rows.formatted("Yes", "Yes", "No"));
+        JsonNode every = behavior(EVERY + rows.formatted("No", "No", "Yes"));
+
+        assertFalse(weakening(some).contains("reachable_node_cases_unmeasured"),
+                () -> "weakened by " + weakening(some));
+        assertFalse(weakening(every).contains("reachable_node_cases_unmeasured"),
+                () -> "weakened by " + weakening(every));
+    }
+
+    /**
+     * The control: the same rows with the one found only below left out take every rule and leave
+     * that case unmeasured.
+     */
+    @Test
+    void rowsTakingEveryRuleWithNoneFoundBelowLeaveThatCaseUnmeasured() {
+        JsonNode f = behavior(SOME + """
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> Yes
+                    | "nowhere below" : (Node { v = 0, below = [ Node { v = 1, below = [] } ] }) -> No
+                """);
+
+        assertEquals(Map.of("held", true, "denied", true), takenByOutcome(f));
+        assertWentWithoutWhatIsBelow(f, "t.below[*]");
     }
 
     /**

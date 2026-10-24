@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
@@ -44,13 +45,18 @@ import java.util.Set;
  *                   the body such a row may reach; a rule a row can take as far as anything here
  *                   says is not here. Read off the same body as the rules, and beside what the rows
  *                   took: it is about the rule and not about the reading of the rows
+ * @param unmeasured what the cases a statement of the decision draws inside itself leave
+ *                   unmeasured, where no row was seen in one of them ({@link #unmeasuredOf});
+ *                   nothing where no row was read
  */
 public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
-                               Map<DecisionRule, List<WhereNothingIsAnswered.Premise>> unanswered) {
+                               Map<DecisionRule, List<WhereNothingIsAnswered.Premise>> unanswered,
+                               WeakeningSet unmeasured) {
 
     public DecisionEvidence {
         Objects.requireNonNull(read, "a decision is some body's");
         Objects.requireNonNull(took, "there is always an answer to what the rows took");
+        Objects.requireNonNull(unmeasured, "what the cases leave unmeasured may be nothing");
         unanswered = Map.copyOf(unanswered);
         // A reading that would not hold the body's ways apart comes back with none of them, so a
         // run placed against those rules was placed against nothing. Folded in here and not left
@@ -64,7 +70,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         // And every rule read short, because the measure is of all the rules: a count of the rules
         // the rows took is short of whatever rule a run could not be placed at. Which rule that
         // was is each rule's own answer (readShortOf), and not this list's.
-        WeakeningSet unread = derivationOf(read).union(unmeasuredOf(read));
+        WeakeningSet unread = derivationOf(read).union(unmeasured);
         for (DecisionReading.Ruled ruled : read.found()) {
             unread = unread.union(readShortOf(read, ruled));
         }
@@ -252,23 +258,20 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
     }
 
     /**
-     * What the rules of the decision, read in full, leave unmeasured of the rows.
+     * What the rules of the decision, read in full, leave unmeasured of the rows: the kinds of case
+     * a statement draws inside itself that no row was seen in.
      *
-     * <p>A decision resting on which of several elements of one key a map holds is read as it is,
-     * and none of the rows written holds a key twice. The same holds of a search from a node: its
-     * statement is read, and no row is written toward a node further down settling it. Not part of
-     * {@link #derivation}: every rule is in hand, and what is short is the rows that would tell
-     * them apart.
+     * <p>Not part of {@link #derivation}: every rule is in hand, and what is short is the rows that
+     * would tell the cases apart.
      */
-    private static WeakeningSet unmeasuredOf(DecisionReading read) {
+    public static WeakeningSet unmeasuredOf(String behavior, Set<CasesTheRowsTook.Kind> unseen) {
         WeakeningSet out = WeakeningSet.none();
-        if (read.consultsWhichElementOfAKeyIsLast()) {
-            out = out.union(WeakeningSet.of(
-                    new Weakening.KeyedOverwriteCasesUnmeasured(read.behavior())));
-        }
-        if (read.consultsASearchBelowTheNodesARowWrites()) {
-            out = out.union(WeakeningSet.of(
-                    new Weakening.ReachableNodeCasesUnmeasured(read.behavior())));
+        for (CasesTheRowsTook.Kind each : unseen) {
+            out = out.union(WeakeningSet.of(switch (each) {
+                case THE_ORDER_OF_A_REPEATED_KEY ->
+                        new Weakening.KeyedOverwriteCasesUnmeasured(behavior);
+                case A_NODE_A_SEARCH_REACHES -> new Weakening.ReachableNodeCasesUnmeasured(behavior);
+            }));
         }
         return out;
     }

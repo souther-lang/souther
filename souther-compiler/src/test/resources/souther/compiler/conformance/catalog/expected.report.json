@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "question_unanswered", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
+  "weakening" : [ "rule_unread", "question_unanswered", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -8818,7 +8818,7 @@
   }, {
     "module" : "conformance.searching",
     "status" : "partial",
-    "weakening" : [ "reachable_node_cases_unmeasured", "rewrite_undecided" ],
+    "weakening" : [ "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -10177,8 +10177,7 @@
         "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "reachable_node_cases_unmeasured" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10280,8 +10279,7 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "partial",
-          "weakening" : [ "reachable_node_cases_unmeasured" ]
+          "status" : "complete"
         },
         "obligations" : [ {
           "obligationId" : {
@@ -10394,8 +10392,7 @@
         "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "reachable_node_cases_unmeasured" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10497,8 +10494,7 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "partial",
-          "weakening" : [ "reachable_node_cases_unmeasured" ]
+          "status" : "complete"
         },
         "obligations" : [ {
           "obligationId" : {

@@ -4,6 +4,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
@@ -751,12 +752,11 @@ public sealed interface Weakening {
      * holds — the last — and what that decides was not measured.
      *
      * <p>The last value for a key is read as it is: what a statement says of an entry is said of
-     * the last element of its key. What is not established is which distinctions the body draws
-     * are told apart by that order — a row where an earlier element of a key meets a condition and
-     * the last does not, and the other way round. The rows this compiler writes hold one element
-     * of each key, so a distinction that only a repeated key makes is one nothing here has a row
-     * for, and a measurement that said it was whole would be saying the rows it has are every row
-     * the model distinguishes.
+     * the last element of its key. What is not established is that the rows tell apart what that
+     * order decides — a row the statement holds of with the last element of a key the entry and
+     * fails of with the first, and a row the other way round. Said where no row was seen in one of
+     * the two ({@link CasesTheRowsTook}), and never where the rules of
+     * the list keep its keys apart, since then no key is held twice.
      *
      * <p>About the behavior and not about a rule: the order is a property of the map the body
      * looks values up in, and each decision downstream of the lookup rests on it.
@@ -767,10 +767,7 @@ public sealed interface Weakening {
             Objects.requireNonNull(behavior, "an overwrite order is that of some body's map");
         }
 
-        /**
-         * What is missing is a capacity: this compiler writes no row holding a key twice, and a
-         * run allowed more of everything writes none either.
-         */
+        /** What is missing is a row of the model's own, which a run allowed more of does not add. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
@@ -782,10 +779,11 @@ public sealed interface Weakening {
      * decides was not measured.
      *
      * <p>The search is read as it is: what it asks of the node it starts at, and of that node having
-     * nothing below. What is not established is what a node further down meeting what it asks does
-     * to the answer, because a value holding values of its own kind is written so deep and no
-     * deeper, so no row is written toward such a node. About the behavior and not about a rule:
-     * every decision downstream of the search rests on it.
+     * nothing below. Its cases are the node it starts at meeting what it asks, that node not
+     * meeting it and one below doing so, and no node doing so; this says some case the decision
+     * can come out in was not seen in any row ({@link CasesTheRowsTook}).
+     * About the behavior and not about a rule: every decision downstream of the search rests on
+     * it.
      */
     record ReachableNodeCasesUnmeasured(String behavior) implements Weakening {
 
@@ -793,7 +791,7 @@ public sealed interface Weakening {
             Objects.requireNonNull(behavior, "a search is that of some body");
         }
 
-        /** What is missing is a capacity to write rows, which a run allowed more of does not add. */
+        /** What is missing is a row of the model's own, which a run allowed more of does not add. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;

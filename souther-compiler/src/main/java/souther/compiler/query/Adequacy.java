@@ -24,6 +24,7 @@ import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.ShownBy;
@@ -1756,13 +1757,40 @@ public final class Adequacy {
                 WhereNothingIsAnswered unanswered = db.ask(new Unanswered(name, behavior)).value();
                 souther.compiler.partition.MeasuredInput subject =
                         unanswered.regions().isEmpty() ? null : subjectOf(db, name, behavior);
+                RunPlacement against = placementOf(db, readInputs, source, placed, behavior);
+                RowReading observed = RowReadings.readingFor(byTarget, behavior);
                 out.put(behavior, new DecisionEvidence(rules,
-                        whatTheRowsTook(behavior, rules, placementOf(db, readInputs, source, placed, behavior),
-                                RowReadings.readingFor(byTarget, behavior), numbering),
+                        whatTheRowsTook(behavior, rules, against, observed, numbering),
                         subject == null ? Map.of()
-                                : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes())));
+                                : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes()),
+                        DecisionEvidence.unmeasuredOf(behavior, casesUnseen(db, rules, against,
+                                observed, numbering, readInputs.get(behavior), source))));
             });
             return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * The kinds of case a statement of the decision draws inside itself that none of the rows
+         * was seen in. Nothing where the decision draws none, or where the rows could not be put
+         * against its rules: then nothing was measured for this to weaken.
+         */
+        private static Set<CasesTheRowsTook.Kind> casesUnseen(Db db,
+                souther.compiler.partition.DecisionReading rules, RunPlacement against,
+                RowReading observed, Optional<SiteNumbering> numbering, InputDomain domain,
+                RuleReadingSource source) {
+            if (!rules.consultsWhichElementOfAKeyIsLast()
+                    && !rules.consultsASearchBelowTheNodesARowWrites()) {
+                return Set.of();
+            }
+            if (against == null || domain == null || !observed.recordedArms()) {
+                return Set.of();
+            }
+            List<ObservedInputs> rows = new ArrayList<>();
+            for (RowOutcome row : observed.rowsSeen()) {
+                rows.add(WitnessedRow.of(row, numbering).observed());
+            }
+            return CasesTheRowsTook.unseen(rules, against,
+                    readingOf(db, domain, source).quantities(), rows);
         }
 
         /**
