@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongBinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,8 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code List.sum(List.map(a -> a.q, xs))} did not: the closure answered no place of its element,
  * and a place was the only thing a run could be made of. What is held here is that the number is
  * named by the computation and not by how it was written, that the line it draws owes its points,
- * that rows are written for it and come to what they were written for, and that what is not a form
- * of the element's fields is still reported as unread.
+ * that rows are written for it and come to what they were written for, and that what is no form of
+ * the element's fields or of their products — a field times itself — is still reported as unread.
  */
 class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
 
@@ -408,10 +409,27 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(totals.stream().anyMatch(each -> each < 3), () -> "one outside: " + totals);
     }
 
-    /** A product of two fields is no form of them, and stays a rule nothing read. */
+    /**
+     * A product of two fields is read as the product it is, and rows are written for it with one
+     * field held still: each row's elements multiplied and added up come to the point it fills.
+     */
     @Test
-    void aProductOfTwoFieldsStaysUnread() {
-        String report = report(model("a.q * a.p", 3));
+    void aProductOfTwoFieldsIsSolvedForWithTheOtherHeldStill() {
+        String model = model("a.q * a.p", 3);
+        String report = report(model);
+        assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]})"), report);
+        assertFalse(report.contains("not read"), report);
+        List<Long> totals = totalsOf(rowsOf(model), (q, p) -> q * p);
+        assertTrue(totals.contains(3L), () -> "the point on the line: " + totals);
+        assertTrue(totals.contains(2L), () -> "the point just off it: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each > 3), () -> "one inside: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each < 2), () -> "one outside: " + totals);
+    }
+
+    /** A field times itself is a square, which holding no other field still makes a form of. */
+    @Test
+    void aSquareOfAFieldStaysUnread() {
+        String report = report(model("a.q * a.q", 3));
         assertTrue(report.contains("not read"), report);
         assertFalse(report.contains("List.sum({"), report);
     }
@@ -474,15 +492,19 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                 () -> "the other three points have rows: " + rows);
     }
 
-    /** What chooses more than one field of an element is a way this compiler writes none of. */
+    /**
+     * A form of several fields is solved for one of them with the other held still, and each row's
+     * elements come to the point it fills.
+     */
     @Test
-    void aFormOfSeveralFieldsIsReadAndNoRowIsWrittenForIt() {
+    void aFormOfSeveralFieldsIsSolvedForWithTheOthersHeldStill() {
         String model = model("a.q + a.p", 3);
-        String report = report(model);
-        assertTrue(report.contains("made of several fields, chosen by a flag, chosen by their"
-                + " case or chosen by where they stand"), report);
-        String rows = rowsOf(model);
-        assertTrue(rows.contains("no row for"), rows);
+        assertFalse(report(model).contains("not read"), model);
+        List<Long> totals = totalsOf(rowsOf(model), Long::sum);
+        assertTrue(totals.contains(3L), () -> "the point on the line: " + totals);
+        assertTrue(totals.contains(2L), () -> "the point just off it: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each > 3), () -> "one inside: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each < 2), () -> "one outside: " + totals);
     }
 
     /** What each row's elements come to, each weighing its {@code q} and adding the constant. */
@@ -496,6 +518,27 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
             boolean any = false;
             while (found.find()) {
                 total += weight * Long.parseLong(found.group(1)) + constant;
+                any = true;
+            }
+            if (any) {
+                totals.add(total);
+            }
+        }
+        return totals;
+    }
+
+    /** What each row's elements come to, each the number {@code ofAnElement} makes of its
+     *  {@code q} and {@code p}. */
+    private static List<Long> totalsOf(String rows, LongBinaryOperator ofAnElement) {
+        List<Long> totals = new ArrayList<>();
+        Pattern element = Pattern.compile("A \\{ q = (-?\\d+), p = (-?\\d+)");
+        for (String row : rows.split("\n    \\| ")) {
+            Matcher found = element.matcher(row);
+            long total = 0;
+            boolean any = false;
+            while (found.find()) {
+                total += ofAnElement.applyAsLong(Long.parseLong(found.group(1)),
+                        Long.parseLong(found.group(2)));
                 any = true;
             }
             if (any) {

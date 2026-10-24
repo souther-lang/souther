@@ -1934,7 +1934,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (over != null) {
             return realized(behavior, AffineReading.stating(over,
                     holds ? affine.proposition() : affine.proposition().denied(),
-                    written, reads, read.rules()), read.quantities());
+                    written, reads, read), read.quantities());
         }
         return onANumberNoPositionHolds(behavior, affine, holds, read);
     }

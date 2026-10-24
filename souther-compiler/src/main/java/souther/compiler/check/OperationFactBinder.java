@@ -349,7 +349,7 @@ final class OperationFactBinder {
             case OperationFact.ShiftsBy shifts -> holdShift(stdlib, declaration, shifts);
             case OperationFact.CountsWholeUnitsBetween counts ->
                     holdCountOfWholeUnits(declaration, counts);
-            case OperationFact.RoundsToAWholeNumber rounds ->
+            case OperationFact.RoundsToAStep rounds ->
                     holdRounding(stdlib, declaration, rounds);
             case OperationFact.BoundsItsResult bounded ->
                     new BoundOperationFact.BoundsItsResult(operation,
@@ -772,24 +772,31 @@ final class OperationFactBinder {
     }
 
     /**
-     * As {@link #holdToTheDeclaration}, for a rounding to a whole number: the answer is an
-     * {@code Int}, what is rounded is a number, and the policy is the one the library declares —
-     * each of whose cases is one way of rounding the compiler knows, and each way of rounding one of
-     * its cases.
+     * As {@link #holdToTheDeclaration}, for a rounding to a step: what is rounded is a number; the
+     * answer is an {@code Int} where the rounding is to a whole number, and a {@code Decimal}
+     * where it is at a scale, which is an {@code Int}; and the policy is the one the library
+     * declares — each of whose cases is one way of rounding the compiler knows, and each way of
+     * rounding one of its cases.
      *
      * <p>The cases are matched to the ways by name here and nowhere else, and both ways round: a
      * case the library adds is one whose lines nothing here knows, and a way no case is called is
      * one the library no longer has.
      */
-    static BoundOperationFact.RoundsToAWholeNumber holdRounding(
-            Stdlib stdlib, CompleteSignature declaration, OperationFact.RoundsToAWholeNumber rounds) {
-        if (declaration.result() != Type.Prim.INT) {
-            throw new IllegalStateException("what " + declaration.declaring().operation()
-                    + " rounds to is " + Type.show(declaration.result())
-                    + ", and a rounding to a whole number answers an Int");
-        }
+    static BoundOperationFact.RoundsToAStep holdRounding(
+            Stdlib stdlib, CompleteSignature declaration, OperationFact.RoundsToAStep rounds) {
         DeclaredArgument value = holdToTheDeclaration(declaration, rounds.value(), null,
                 TypeRequirement.EXACT, "the number that is rounded");
+        DeclaredArgument scale = rounds.scale() == null ? null
+                : holdToTheDeclaration(declaration, rounds.scale(), null, TypeRequirement.EXACT,
+                        "the scale it is rounded at");
+        Type answers = scale == null ? Type.Prim.INT : Type.Prim.DECIMAL;
+        if (!declaration.result().equals(answers)
+                || (scale != null && scale.stands() != Type.Prim.INT)) {
+            throw new IllegalStateException("what " + declaration.declaring().operation()
+                    + " rounds to is " + Type.show(declaration.result())
+                    + ", and a rounding to a whole number answers an Int, and one at an Int scale"
+                    + " a Decimal");
+        }
         DeclaredArgument mode = holdToTheDeclaration(declaration, rounds.mode(), null,
                 TypeRequirement.ANY, "the policy it is rounded by");
         Type policy = mode.stands();
@@ -817,7 +824,7 @@ final class OperationFactBinder {
             throw new IllegalStateException("the rounding policy has the cases " + ways.keySet()
                     + ", and the compiler knows the ways " + List.of(WholeRounding.values()));
         }
-        return new BoundOperationFact.RoundsToAWholeNumber(declaration.declaring(), mode, value,
+        return new BoundOperationFact.RoundsToAStep(declaration.declaring(), scale, mode, value,
                 ways);
     }
 
