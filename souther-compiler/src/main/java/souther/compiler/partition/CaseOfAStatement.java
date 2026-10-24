@@ -85,6 +85,9 @@ public sealed interface CaseOfAStatement {
                 case BELOW_IT -> Optional.empty();
                 case NOWHERE_AT_A_LEAF -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, none));
+                // What every node below comes to is no statement about the start node: a row is in
+                // the case where its run says so, and the walk that composes it goes on to its next
+                // assignment while it does not.
                 case NOWHERE_BELOW -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, denying.apply(none)));
             };

@@ -5286,6 +5286,26 @@ public final class Generator {
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
                                               StandInAttempt stood, Trial trial) {
+        return probeFixing(subject, label, fixing, asking, reaching, check, stood, trial,
+                Optional.empty());
+    }
+
+    /**
+     * The same, holding each row composed to {@code judge} as well, where there is one.
+     *
+     * <p>For what the way cannot say. A way states what a row has to be at the places it names, and
+     * a case a search draws inside itself turns on what every node below the start comes to, which
+     * no way states: whether a row is in it is for its run to say. Held to that inside the walk, a
+     * row whose run was not in the case is passed over and the walk goes on to the next
+     * assignment, within the figure the walk hands rows the choice at. Asked of the rows once the
+     * walk had taken one, there was no next assignment to go on to.
+     */
+    public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
+                                              Map<RealizationTarget, Place> fixing,
+                                              NumbersAskedFor asking,
+                                              Reachability.Reaching reaching, CandidateCheck check,
+                                              StandInAttempt stood, Trial trial,
+                                              Optional<RowJudge> judge) {
         // Where an element may meet something several ways, a row writing its elements alike is
         // composed along each way of choosing one for every element first. A row along one is a
         // row of the way; one of them coming to nothing says nothing of the rest, or of elements
@@ -5307,7 +5327,7 @@ public final class Generator {
         List<BoundaryAttempt> builtShort = new ArrayList<>();
         if (apartFirst) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, trial, true, null);
+                    check, stood, trial, true, null, judge);
             if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
@@ -5315,13 +5335,13 @@ public final class Generator {
         ElementsWrittenAlike.Choices alike = ElementsWrittenAlike.of(reaching);
         for (ElementsWrittenAlike.Alike one : alike.ways()) {
             BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
-                    one.reaching(), check, stood, trial, false, one.leftBy());
+                    one.reaching(), check, stood, trial, false, one.leftBy(), judge);
             if (builtLeavingNothingOut(along, builtShort)) {
                 return along;
             }
         }
         BoundaryAttempt whole = probeFixingAlong(subject, label, fixing, asking, reaching, check,
-                stood, trial, false, alike.stoppedBy());
+                stood, trial, false, alike.stoppedBy(), judge);
         if (builtLeavingNothingOut(whole, builtShort)) {
             return whole;
         }
@@ -5330,7 +5350,7 @@ public final class Generator {
         // nothing as well.
         if (!apartFirst && counts) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, trial, true, null);
+                    check, stood, trial, true, null, judge);
             if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
@@ -5428,6 +5448,7 @@ public final class Generator {
      *                       with ({@link ElementsWrittenAlike.Alike}), or the one the ways of
      *                       writing the elements alike were looked along to
      *                       ({@link ElementsWrittenAlike.Choices})
+     * @param judge what each row composed is held to besides the way, where something is
      */
     private static BoundaryAttempt probeFixingAlong(MeasuredInput subject, String label,
                                                     Map<RealizationTarget, Place> fixing,
@@ -5435,7 +5456,8 @@ public final class Generator {
                                                     Reachability.Reaching reaching,
                                                     CandidateCheck check, StandInAttempt stood,
                                                     Trial trial, boolean byCounts,
-                                                    CompositionBudget alikeStoppedBy) {
+                                                    CompositionBudget alikeStoppedBy,
+                                                    Optional<RowJudge> judge) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -5569,9 +5591,11 @@ public final class Generator {
         // Every row composed here stands at the point, so each one meets what it is composed for.
         // Only where a row can be run: one nothing stands the dependencies in for is no row
         // anything applies.
-        TellingArmsApart preferring =
+        RowPreference preferring =
                 stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
-                        ? new TellingArmsApart(trial, answers) : null;
+                        ? judge.<RowPreference>map(each -> new ReachingWhatIsJudged(each, answers))
+                                .orElseGet(() -> new TellingArmsApart(trial, answers))
+                : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
         boolean[] noRowAnswered = {false};
@@ -9481,7 +9505,7 @@ public final class Generator {
      * <p>A run that comes back with nothing to read, or a rewrite whose run cannot be told from the
      * body's, tells nothing apart.
      */
-    static final class TellingArmsApart {
+    static final class TellingArmsApart implements RowPreference {
 
         /** What bounds the rows a walk hands the choice, whatever they come to. */
         private static final CompositionBudget HANDED_THE_CHOICE =
@@ -9525,7 +9549,8 @@ public final class Generator {
          * assignment of every parameter multiplies, and the rows it hands on that are no
          * candidates cost composing each time even though they cost no run.
          */
-        RowTaking over(RowTaking meets) {
+        @Override
+        public RowTaking over(RowTaking meets) {
             return inputs -> {
                 if (++handed > MOST_ROWS_HANDED) {
                     stoppedAtItsFigure = true;
@@ -9542,12 +9567,14 @@ public final class Generator {
         }
 
         /** The row taken, or null where nothing offered met the requirement. */
-        List<FixtureTemplate> taken() {
+        @Override
+        public List<FixtureTemplate> taken() {
             return best;
         }
 
         /** Whether a run of a row that met the requirement went past what a run may spend. */
-        boolean aRunRanOut() {
+        @Override
+        public boolean aRunRanOut() {
             return aRunRanOut;
         }
 
@@ -9560,7 +9587,8 @@ public final class Generator {
         }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
-        SearchShortfall untried() {
+        @Override
+        public SearchShortfall untried() {
             return stoppedAtItsFigure
                     ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
                     : SearchShortfall.NONE;
@@ -9624,6 +9652,110 @@ public final class Generator {
         private Acceptance onward() {
             return answering < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
                     : Acceptance.STOPPED;
+        }
+    }
+
+    /**
+     * What a row is held to besides the way it was composed for, decided by running it.
+     *
+     * <p>A function of the row alone, so the walk that composes can ask it of every row it hands
+     * on. What the answer rests on — which rule the run was placed at, which case it was evidence
+     * of — is the caller's: the way states what a row has to be at the places it names, and this
+     * is for what only a run says.
+     */
+    @FunctionalInterface
+    public interface RowJudge {
+
+        /** Whether the run of {@code row} is what was looked for. */
+        boolean accepts(RowToRun row);
+    }
+
+    /**
+     * Which of the rows a walk composes for one way is taken, kept across the rows the walk hands
+     * on, and what it left untried.
+     */
+    interface RowPreference {
+
+        /** What the walk makes of each whole row, {@code meets} being what a row has to meet at
+         *  all. */
+        RowTaking over(RowTaking meets);
+
+        /** The row taken, or null where nothing offered was. */
+        List<FixtureTemplate> taken();
+
+        /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
+        SearchShortfall untried();
+
+        /** Whether a run of a row went past what a run may spend. */
+        boolean aRunRanOut();
+    }
+
+    /**
+     * The first row a walk composes that {@link RowJudge} accepts.
+     *
+     * <p>Each row once, and a row passed over sends the walk on to its next assignment, so the
+     * rows tried are the rows the walk reaches, nearest first, within the figure it may hand rows
+     * the choice at ({@link CompositionBudget#ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW}). A row the
+     * walk is stopped before is untried and is said so ({@link #untried}): not finding one within
+     * that is this compiler having looked, and says nothing of whether a row can be.
+     */
+    static final class ReachingWhatIsJudged implements RowPreference {
+
+        private static final CompositionBudget HANDED_THE_CHOICE =
+                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
+
+        private final RowJudge judge;
+        private final List<StoodInAnswer> answers;
+        /** Every row judged so far, as it is written, so a row composed again is not run again. */
+        private final Set<List<String>> judged = new HashSet<>();
+        private List<FixtureTemplate> taken;
+        private boolean stoppedAtItsFigure;
+        /** How many rows the walk has handed here, judged or not. */
+        private int handed;
+
+        ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers) {
+            this.judge = judge;
+            this.answers = List.copyOf(answers);
+        }
+
+        @Override
+        public RowTaking over(RowTaking meets) {
+            return inputs -> {
+                if (++handed > HANDED_THE_CHOICE.maximum()) {
+                    stoppedAtItsFigure = true;
+                    return Acceptance.STOPPED;
+                }
+                RowToRun row = new RowToRun(inputs, answers);
+                if (!judged.add(RunOnce.writtenAs(row))) {
+                    return Acceptance.PASSED;
+                }
+                Acceptance met = meets.take(inputs);
+                if (met != Acceptance.TAKEN) {
+                    return met;
+                }
+                if (judge.accepts(row)) {
+                    taken = List.copyOf(inputs);
+                    return Acceptance.TAKEN;
+                }
+                return Acceptance.PASSED;
+            };
+        }
+
+        @Override
+        public List<FixtureTemplate> taken() {
+            return taken;
+        }
+
+        @Override
+        public SearchShortfall untried() {
+            return stoppedAtItsFigure
+                    ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
+                    : SearchShortfall.NONE;
+        }
+
+        @Override
+        public boolean aRunRanOut() {
+            return false;
         }
     }
 

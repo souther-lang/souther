@@ -63,6 +63,32 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
         });
     }
 
+    /**
+     * What the way writes of the start node does not decide the children, so a candidate whose
+     * children meet the search is composed for the case all the same. Its run says it is not in
+     * the case, and no row outside it is offered: not finding one is what this compiler composed,
+     * and a row for the wrong case is a row the author is told to write.
+     */
+    @Test
+    void aCandidateWhoseChildrenMeetTheSearchIsNeverOfferedForTheCaseTheyAreNotIn() {
+        Map<CaseOfAStatement, RowToRun> found = search("""
+                module m
+                data Node = { v: Int, below: List<Node> }
+                data Yes
+                data No
+                let anyLow (n: Node): Bool = n.v < 3 || List.any(c -> anyLow(c), n.below)
+                behavior f : (t: Node) -> Yes | No
+                let f (t) = if anyLow(t) then Yes else No
+                example f
+                    | "the top" : (Node { v = 1, below = [] }) -> Yes
+                    | "below" : (Node { v = 5, below = [ Node { v = 1, below = [] } ] }) -> Yes
+                """);
+        assertTrue(!stepsOf(found).contains(CaseOfAStatement.Step.NOWHERE_BELOW),
+                () -> "no row of this is in the case: " + found.keySet());
+        assertTrue(stepsOf(found).contains(CaseOfAStatement.Step.NOWHERE_AT_A_LEAF),
+                () -> "and the step a candidate is in is still found: " + found.keySet());
+    }
+
     @Test
     void aCaseARowWasSeenInIsNotSearchedFor() {
         Map<CaseOfAStatement, RowToRun> found = search(SOME + ROWS_THAT_FIND + """

@@ -3498,23 +3498,27 @@ public final class Adequacy {
                     instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
                 return null;
             }
+            // Held to the run inside the walk that composes the rows. The way says what the row is
+            // at the start node; whether every node below comes out as the case needs is for the
+            // run, and a row it refuses is passed over so that the walk goes on to the next
+            // assignment of the values below.
+            Generator.RowJudge inTheCase = row -> {
+                RowAsRead read = setting.probe().read(row);
+                return read.watched() instanceof Generator.Watched.Ran
+                        && setting.taken().takenBy(read.asRun())
+                                instanceof RulesTaken.WhichRule.TookThis took
+                        && took.rule().equals(ruled.rule())
+                        && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
+            };
             for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
-                List<Generator.BoundaryAttempt> ways = setting.probe().attempt(
+                for (Generator.BoundaryAttempt made : setting.probe().attempt(
                         "a case of a statement of the decision", Map.of(),
-                        NumbersAskedFor.ANYTHING, along, ruled.demands());
-                for (Generator.BoundaryAttempt made : ways) {
-                    if (!(made instanceof Generator.BoundaryAttempt.Built built)) {
-                        continue;
-                    }
-                    RowToRun row = built.row().toRun();
-                    RowAsRead read = setting.probe().read(row);
-                    if (read.watched() instanceof Generator.Watched.Ran
-                            && setting.taken().takenBy(read.asRun())
-                                    instanceof RulesTaken.WhichRule.TookThis took
-                            && took.rule().equals(ruled.rule())
-                            && cases.casesSeenBy(read.asRun(), ruled.rule())
-                                    .contains(way.which())) {
-                        return row;
+                        NumbersAskedFor.ANYTHING, along, ruled.demands(),
+                        Optional.of(inTheCase))) {
+                    // Every row built was accepted by the judge, which is the only way the walk
+                    // takes one.
+                    if (made instanceof Generator.BoundaryAttempt.Built built) {
+                        return built.row().toRun();
                     }
                 }
             }
@@ -3667,7 +3671,8 @@ public final class Adequacy {
                         souther.compiler.numeric.Place> fixing,
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
-                souther.compiler.partition.AnswersDemanded demands) {
+                souther.compiler.partition.AnswersDemanded demands,
+                Optional<Generator.RowJudge> judge) {
             Generator.CandidateCheck check = checkAgainst(building, sig);
             try {
                 // One per way of standing the dependencies in. Which of them answers what was asked
@@ -3690,7 +3695,7 @@ public final class Adequacy {
                     for (souther.compiler.partition.StandInAttempt stood
                             : answers.of(demands, pinned.values())) {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
-                                pinned.reaching(), check, stood, trial));
+                                pinned.reaching(), check, stood, trial, judge));
                     }
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
@@ -5326,6 +5331,12 @@ public final class Adequacy {
          * line as a whole, and it is composed under a condition no point states.
          */
         public List<Generator.GeneratedRow> tellingLinesApart() {
+            return tellingLinesApart(generation);
+        }
+
+        /** The same, of dispositions not yet held by a filling. */
+        static List<Generator.GeneratedRow> tellingLinesApart(
+                List<GenerationDisposition> generation) {
             List<Generator.GeneratedRow> out = new ArrayList<>();
             for (GenerationDisposition each : generation) {
                 if (each.finding().about() instanceof About.ALineTheRowsDoNotTellFromAnother
@@ -5637,8 +5648,21 @@ public final class Adequacy {
             // a rule comes from. Not a second search: settling whether a rule is owed a row is
             // composing a value, running it and asking what rule the run took, and a value that
             // came back certified is a row an author can be handed.
+            // This behavior's readings and no others. What a finding of this behavior is about is
+            // a line its own rules drew, and such a line is read only in the body that wrote it —
+            // so a wider account walks readings this has no finding at, and a request about one
+            // behavior pays for the searches of the rest.
+            BorderAccount account =
+                    accountFor(db, name, new GenerationScope.Behavior(behavior));
+            // What the block holds already when the searches that follow the fill are asked for
+            // rows: counted once for each row the block will hold, by the function that joins them.
+            List<Generator.GeneratedRow> lines = Composition.atTheLines(
+                    account == null ? null : account.rowsByCarrier().get(behavior));
             RowsForRules rules = rowsForRules(db, name, behavior, work.rules(), here.observed(),
-                    db.ask(new Front.Adequacy()).value().generation(), composed.rows().size());
+                    db.ask(new Front.Adequacy()).value().generation(),
+                    Composition.rowsBetween(behavior, composed.offers(), List.of(lines)));
+            List<GenerationDisposition> generation =
+                    dispositions(owed, rules, here.edges(), account, composed);
             // And the rows for the cases a statement of the decision draws inside itself that the
             // rows leave unseen. Beside the rules and not among them: every rule may be taken and
             // a case inside one still be short.
@@ -5646,20 +5670,13 @@ public final class Adequacy {
             RowsForCases cases = rowsForCases(db, name, behavior,
                     decisions == null ? null : decisions.get(behavior), here.observed(),
                     db.ask(new Front.Adequacy()).value().generation(),
-                    composed.rows().size() + rules.byRule().size());
+                    Composition.rowsBetween(behavior, composed.offers(),
+                            List.of(lines, Filling.tellingLinesApart(generation),
+                                    rules.byRule().values())));
             return Answer.of(new Filling(composed,
                     offeredHere(behavior, here.edges(),
                             RowsOwed.restingOnAPremise(db, name, behavior)),
-                    rules,
-                    cases,
-                    dispositions(owed, rules, here.edges(),
-                            // This behavior's readings and no others. What a finding of this
-                            // behavior is about is a line its own rules drew, and such a line is
-                            // read only in the body that wrote it — so a wider account walks
-                            // readings this has no finding at, and a request about one behavior
-                            // pays for the searches of the rest.
-                            accountFor(db, name, new GenerationScope.Behavior(behavior)),
-                            composed)));
+                    rules, cases, generation));
         }
 
         /**

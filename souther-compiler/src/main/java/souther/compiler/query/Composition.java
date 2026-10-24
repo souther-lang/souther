@@ -6,6 +6,7 @@ import souther.compiler.partition.ObligationIdentity;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +103,33 @@ public record Composition(OfferingRequest request,
             }
         });
         return new Composition(request, out, new LinkedHashMap<>(generated), account);
+    }
+
+    /**
+     * How many rows these sources put in one behavior's block between them, which is what
+     * the generation's {@code rowLimit} is held against.
+     *
+     * <p>A row once, however many of the sources composed it: {@link #take} joins them on the
+     * stimulus, so a count of the rows each composed would count a row two searches arrived at
+     * twice, and the block would stop short of rows it has room for. And the sources in the order
+     * {@link #take} joins them, so a search that follows others is told how much room they took
+     * by the one function that says what the block holds.
+     *
+     * @param cells   the fill's rows
+     * @param sources the rows of the lines, and whatever else is joined by the stimulus
+     */
+    static int rowsBetween(String behavior, List<FillResult.Offer> cells,
+                           List<? extends Collection<Generator.GeneratedRow>> sources) {
+        Set<RowKey> keys = new HashSet<>();
+        for (FillResult.Offer offer : cells) {
+            keys.add(RowKey.of(behavior, offer.row()));
+        }
+        for (Collection<Generator.GeneratedRow> rows : sources) {
+            for (Generator.GeneratedRow row : rows) {
+                keys.add(RowKey.of(behavior, row));
+            }
+        }
+        return keys.size();
     }
 
     /** One behavior's rows, joined onto whatever it already offers. */
