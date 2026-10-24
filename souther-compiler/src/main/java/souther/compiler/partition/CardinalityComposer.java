@@ -131,7 +131,7 @@ final class CardinalityComposer {
                         + each + "`");
             }
             asked.add(new Asked.SoManyMeeting(each.count().perElement(), at.about().values(),
-                    each.count().differentAt()));
+                    each.count().differentAt(), each.count().across()));
         }
         // Where a count is of the different values the elements meeting a statement hold, every
         // element is chosen apart from the others at that place: then each counts once, and the
@@ -602,7 +602,8 @@ final class CardinalityComposer {
                 Integer index = saidOfAnElement.get(key);
                 if (index == null) {
                     index = asked.size();
-                    asked.add(new Asked.SoManyMeeting(perElement, ANY_COUNT, Optional.empty()));
+                    asked.add(new Asked.SoManyMeeting(perElement, ANY_COUNT, Optional.empty(),
+                            Optional.empty()));
                     saidOfAnElement.put(key, index);
                 }
                 at.put(key, index);
@@ -827,7 +828,7 @@ final class CardinalityComposer {
             return new TurningWith(asItself, addedUp);
         }
         for (Asked one : asked) {
-            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _))) {
+            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _))) {
                 continue;
             }
             for (NumericTerm number : perElement.numbers()) {
@@ -1098,7 +1099,8 @@ final class CardinalityComposer {
             List<List<String>> keptApart, Quantities measuring, SearchRegion within,
             RuleReadingContext reading) {
         List<Asked> asked = kept == null ? List.of()
-                : List.of(new Asked.SoManyMeeting(kept.perElement(), ANY_COUNT, Optional.empty()));
+                : List.of(new Asked.SoManyMeeting(kept.perElement(), ANY_COUNT, Optional.empty(),
+                        Optional.empty()));
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
@@ -1728,9 +1730,16 @@ final class CardinalityComposer {
          *  ({@link AStatementAtARow#turnsOnAmong}). */
         AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under);
 
-        /** How many elements meet {@code perElement}: one of the counts {@code wanted} holds. */
+        /**
+         * How many elements meet {@code perElement}: one of the counts {@code wanted} holds.
+         *
+         * @param across the container whose elements each hold one of the containers whose
+         *               elements are counted, where those are every element of all of them
+         *               ({@link #composeAcross}): what an element turns on is asked of them all
+         */
         record SoManyMeeting(AStatementAtARow perElement, LevelRegion wanted,
-                             Optional<TermPath> differentAt) implements Asked {
+                             Optional<TermPath> differentAt, Optional<TermPath> across)
+                implements Asked {
 
             @Override
             public AStatementAtARow.Answer at(Place value, BorderQuantity.Observation row) {
@@ -1760,11 +1769,11 @@ final class CardinalityComposer {
 
             @Override
             public boolean readsTheValueAt(TermPath container, TermPath at) {
-                return perElement.readsTheValueAt(container, at);
+                return perElement.readsTheValueAt(container, at, across);
             }
             @Override
             public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
-                return perElement.turnsOnAmong(container, under);
+                return perElement.turnsOnAmong(container, under, across);
             }
 
             @Override
@@ -2020,7 +2029,7 @@ final class CardinalityComposer {
                                                           Map<TermPath, ObservedValue> written) {
         Map<NumericTerm, Place> out = new LinkedHashMap<>();
         for (Asked one : asked) {
-            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _))) {
+            if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _))) {
                 continue;
             }
             for (NumericTerm term : perElement.numbers()) {
@@ -2256,7 +2265,7 @@ final class CardinalityComposer {
                     return false;
                 }
                 if (each instanceof Asked.SoManyMeeting(var _, var _,
-                        Optional<TermPath> differentAt)
+                        Optional<TermPath> differentAt, var _)
                         && differentAt.isPresent() && !differentAt.get().equals(at)) {
                     return false;
                 }
@@ -2295,7 +2304,7 @@ final class CardinalityComposer {
             int[] counted = new int[asked.size()];
             for (int i = 0; i < asked.size(); i++) {
                 boolean ofTheValue = asked.get(i) instanceof Asked.SoManyMeeting(var _, var _,
-                        Optional<TermPath> differentAt) && differentAt.isPresent();
+                        Optional<TermPath> differentAt, var _) && differentAt.isPresent();
                 int meet = 0;
                 int unread = 0;
                 Set<ReadingGap> why = new LinkedHashSet<>();

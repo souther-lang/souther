@@ -524,7 +524,8 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
     /**
      * The rows composed for a line on the values across the lists share the elements out over
      * them, and answer as their points say: two forecasts of one currency meeting the statement
-     * two ways, on either side of five, and the forecasts under one currency totalling a number.
+     * two ways, on either side of five, the forecasts under one currency totalling a number, and
+     * a total of a hundred and fifty where no forecast in any desk is above a hundred.
      */
     @Test
     void everyRowComposedAcrossTheListsAnswersAsItsPointSays() {
@@ -545,6 +546,14 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                     + " [total(ds[*].forecasts[*].amount by currency) "
                     + total.substring("n ".length()) + "]");
         }
+        everyRowComposedAnswersAsItsPointSays(desk + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if List.all(d -> List.all(f -> f.amount <= 100, d.forecasts), ds)
+                    then if Map.size(Map.filterEntries((_, n) -> n == 150,
+                        totalsOf(List.flatMap(d -> d.forecasts, ds)))) == 1 then 1 else 0
+                    else 2
+                """, "f/#different ds [ds[*].forecasts[*].currency] where"
+                + " [total(ds[*].forecasts[*].amount by currency) == 150]");
     }
 
     /**

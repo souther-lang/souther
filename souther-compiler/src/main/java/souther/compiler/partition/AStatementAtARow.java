@@ -483,11 +483,14 @@ final class AStatementAtARow {
      * any number it reads turns on ({@link #readOf}), and other
      * elements where it asks a position holding the container, or says something of the
      * container's elements itself.
+     *
+     * @param across the container whose elements each hold one at {@code container}, where the
+     *               elements grouped are every element of all of those ({@link #elementsIn})
      */
-    TurnsOn turnsOnAmong(TermPath container, TermPath under) {
+    TurnsOn turnsOnAmong(TermPath container, TermPath under, Optional<TermPath> across) {
         TurnsOn out = TurnsOn.THE_ELEMENT;
         for (NumericTerm each : numbers()) {
-            out = out.orMore(readOf(each, container, under).turnsOn());
+            out = out.orMore(readOf(each, container, under, across).turnsOn());
         }
         for (TermPath each : positions) {
             if (container.isAtOrUnder(each)) {
@@ -496,7 +499,7 @@ final class AStatementAtARow {
         }
         for (OverTheElements each : elements.values()) {
             out = out.orMore(among(List.of(each.container()), container) ? TurnsOn.OTHER_ELEMENTS
-                    : each.ofTheElement().turnsOnAmong(container, under));
+                    : each.ofTheElement().turnsOnAmong(container, under, across));
         }
         return out;
     }
@@ -507,10 +510,12 @@ final class AStatementAtARow {
      * reads that place ({@link WhatItReads#theValue}), or some position it asks of its own value
      * is that place, inside it or holds it — or it reads other elements, of which nothing is
      * shown.
+     *
+     * @param across as {@link #turnsOnAmong} has it
      */
-    boolean readsTheValueAt(TermPath container, TermPath at) {
+    boolean readsTheValueAt(TermPath container, TermPath at, Optional<TermPath> across) {
         for (NumericTerm each : numbers()) {
-            WhatItReads read = readOf(each, container, at);
+            WhatItReads read = readOf(each, container, at, across);
             if (read.turnsOn() == TurnsOn.OTHER_ELEMENTS || read.theValue()) {
                 return true;
             }
@@ -521,7 +526,7 @@ final class AStatementAtARow {
             }
         }
         return elements.values().stream()
-                .anyMatch(each -> each.ofTheElement().readsTheValueAt(container, at));
+                .anyMatch(each -> each.ofTheElement().readsTheValueAt(container, at, across));
     }
 
     /**
@@ -552,24 +557,32 @@ final class AStatementAtARow {
      * the value at {@code under} occurs and what is gathered under it, which turn on those holding
      * that value, and read the value where what they gather stands at it. What keeps the elements
      * such a number is of is asked of each of them, and the number reads what that reads.
+     *
+     * <p>Where the elements grouped are every element of the containers at {@code container}
+     * inside the elements of the one at {@code across}, a number gathered over all of those is
+     * read among them as one gathered over one container is among its elements; and a number
+     * read among the elements of one of them turns on which one it is.
      */
-    static WhatItReads readOf(NumericTerm term, TermPath container, TermPath under) {
+    static WhatItReads readOf(NumericTerm term, TermPath container, TermPath under,
+                              Optional<TermPath> across) {
         return switch (term) {
             case NumericTerm.FromOnePosition one ->
                     new WhatItReads(TurnsOn.THE_ELEMENT, overlaps(one.subjectPath(), under));
             case NumericTerm.TakenOver taken ->
                     new WhatItReads(overTheRun(taken.source(), container), false);
-            case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(often.container(),
-                    container, often.place().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE), false);
-            case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(end.container(),
-                    container, end.key().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE),
-                    overlaps(end.value(), under));
+            case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(
+                    List.of(often.container()), container, across, often.place().equals(under),
+                    TurnsOn.THOSE_UNDER_ITS_VALUE), false);
+            case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(
+                    List.of(end.container()), container, across, end.key().equals(under),
+                    TurnsOn.THOSE_UNDER_ITS_VALUE), overlaps(end.value(), under));
             case NumericTerm.OccurrencesOfItsValue often -> {
                 List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
-                yield new WhatItReads(ranged.size() == 1 ? underItsValue(ranged.getFirst(),
-                        container, often.subjectPath().equals(under),
-                        TurnsOn.THOSE_UNDER_ITS_VALUE) : overTheRun(often.run(), container), false)
-                        .and(keeping(often.selection(), container, under));
+                yield new WhatItReads(ranged.size() == 1 || ranged.equals(over(container, across))
+                        ? underItsValue(ranged, container, across,
+                                often.subjectPath().equals(under), TurnsOn.THOSE_UNDER_ITS_VALUE)
+                        : overTheRun(often.run(), container), false)
+                        .and(keeping(often.selection(), container, under, across));
             }
             case NumericTerm.OccurrencesOfAKey often ->
                     new WhatItReads(overTheRun(often.run(), container), false);
@@ -577,21 +590,21 @@ final class AStatementAtARow {
                 List<TermPath> ranged = gathered.elements().containersHoldingIt();
                 boolean readsIt = gathered.value().reads().stream()
                         .anyMatch(each -> overlaps(each.from(gathered.elements()), under));
-                if (ranged.size() != 1) {
+                if (ranged.size() != 1 && !ranged.equals(over(container, across))) {
                     yield new WhatItReads(among(ranged, container) ? TurnsOn.OTHER_ELEMENTS
                             : TurnsOn.THE_ELEMENT, readsIt)
-                            .and(keeping(gathered.selection(), container, under));
+                            .and(keeping(gathered.selection(), container, under, across));
                 }
                 boolean underIt = gathered.key() instanceof ElementKey.At(ElementProjection way)
                         && way.from(gathered.elements()).equals(under);
-                yield new WhatItReads(underItsValue(ranged.getFirst(), container, underIt,
+                yield new WhatItReads(underItsValue(ranged, container, across, underIt,
                         switch (gathered.gathering()) {
                             case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
                                  NumericTerm.GatheredUnderItsKey.Gathering.End _ ->
                                     TurnsOn.THOSE_UNDER_ITS_VALUE;
                             case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
                                     TurnsOn.THE_ORDER_OF_THOSE_UNDER_ITS_VALUE;
-                        }), readsIt).and(keeping(gathered.selection(), container, under));
+                        }), readsIt).and(keeping(gathered.selection(), container, under, across));
             }
             case NumericTerm.GatheredUnderAKey gathered -> new WhatItReads(among(
                     gathered.gathered().elements().containersHoldingIt(), container)
@@ -601,10 +614,12 @@ final class AStatementAtARow {
 
     /** What the statement keeping some elements, asked of each, reads among the elements of
      *  {@code container} grouped at {@code under} — nothing where every element is kept. */
-    private static WhatItReads keeping(KeptOccurrences kept, TermPath container, TermPath under) {
+    private static WhatItReads keeping(KeptOccurrences kept, TermPath container, TermPath under,
+                                       Optional<TermPath> across) {
         return kept == null ? new WhatItReads(TurnsOn.THE_ELEMENT, false)
-                : new WhatItReads(kept.perElement().turnsOnAmong(container, under),
-                        under != null && kept.perElement().readsTheValueAt(container, under));
+                : new WhatItReads(kept.perElement().turnsOnAmong(container, under, across),
+                        under != null
+                                && kept.perElement().readsTheValueAt(container, under, across));
     }
 
     /** Whether {@code path} is the place at {@code under}, inside it or holds it. */
@@ -612,14 +627,24 @@ final class AStatementAtARow {
         return under != null && (path.isAtOrUnder(under) || under.isAtOrUnder(path));
     }
 
-    /** What a number read among the elements of {@code counted} turns on: {@code grouped} where
-     *  that is {@code container} and the number is of the value the elements are grouped under. */
-    private static TurnsOn underItsValue(TermPath counted, TermPath container,
-                                         boolean ofTheValue, TurnsOn grouped) {
-        if (counted.equals(container)) {
+    /** The containers the elements grouped stand inside, outermost first, as a number read over
+     *  all of them names them: {@code container} and, where it is one of them, {@code across}. */
+    private static List<TermPath> over(TermPath container, Optional<TermPath> across) {
+        return across.map(outer -> List.of(outer, container)).orElse(List.of(container));
+    }
+
+    /**
+     * What a number read among the elements of {@code counted}, the containers it is read over
+     * outermost first, turns on: {@code grouped} where those are the containers the elements are
+     * grouped over and the number is of the value they are grouped under.
+     */
+    private static TurnsOn underItsValue(List<TermPath> counted, TermPath container,
+                                         Optional<TermPath> across, boolean ofTheValue,
+                                         TurnsOn grouped) {
+        if (counted.equals(over(container, across))) {
             return ofTheValue ? grouped : TurnsOn.OTHER_ELEMENTS;
         }
-        return among(List.of(counted), container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+        return among(counted, container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
     }
 
     /** What a number taken over every value of {@code run} turns on: other elements where the run
