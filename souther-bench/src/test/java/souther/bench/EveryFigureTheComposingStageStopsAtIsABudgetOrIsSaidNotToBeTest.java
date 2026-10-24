@@ -103,12 +103,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer.MOST_RELATIONS",
                     "how many relations of those counts have their ways of standing taken"
                             + " together; past it the counts are composed as elsewhere"),
-            // The names of the two numbers the forms solved are over, which are no count of
-            // anything.
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer.TOTAL",
-                    "the name of the total in the forms solved, which counts nothing"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer.ELEMENT",
-                    "the name of an element's number in the forms solved, which counts nothing"),
 
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.

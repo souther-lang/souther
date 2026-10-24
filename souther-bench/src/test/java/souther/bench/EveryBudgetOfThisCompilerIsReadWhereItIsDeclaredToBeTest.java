@@ -176,8 +176,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "says the sizes walked to the end and the values an element is listed at in"
                             + " what it comes back with"),
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#totalsIn(Lsouther/compiler/partition/CoupledCardinalityComposer$Span;)"
-                            + "Ljava/util/List;",
+                            + "#totalsIn(Lsouther/compiler/partition/TotalsASharingCanComeTo"
+                            + "$Interval;)Ljava/util/List;",
                     "stops at the totals tried for a sharing, and puts that figure in what it"
                             + " comes back with"),
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
