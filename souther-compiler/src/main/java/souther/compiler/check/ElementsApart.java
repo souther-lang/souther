@@ -246,7 +246,8 @@ public final class ElementsApart {
      *  {@code newtypes} is given. */
     private static List<String> readOffABinding(Core e, DeclarationNewtypes newtypes) {
         ReadOff off = readOff(e, newtypes);
-        return off.holder() instanceof Core.Read ? off.path().steps() : null;
+        return Core.withoutStanding(off.holder()) instanceof Core.Read
+                ? off.path().steps() : null;
     }
 
     /**

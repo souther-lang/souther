@@ -181,6 +181,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ContainersAddingUp$HowManyIsAskedFor;Ljava/util/List;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "ElementsKeptApart", "at",
+                    "(" + TYPE + "Ljava/util/List;" + CONTEXT + ")Ljava/util/List;",
+                    THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "levelsOf",
                     "(" + TYPE + "Ljava/util/List;L" + INPUTS + "SearchRegion;" + CONTEXT + "L"
                             + PARTITION + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION

@@ -40,14 +40,12 @@ import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RecursionOverATree;
 import souther.compiler.check.RemainderOfAShiftedValue;
 import souther.compiler.check.RoundedToAWholeNumber;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.TypeView;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
@@ -3944,11 +3942,8 @@ final class Pullback {
             ElementsApart.ReadOff off = ElementsApart.readOff(list, read.newtypes());
             List<List<String>> held = ElementsKeptApart.heldUnder(off.holder().type(),
                     off.path(), read.ruleReading());
-            RuleReadingSource rules = read.rules();
-            TypeView view = TypeView.of(list.type(), rules.inners(), rules.symbols(),
-                    rules.kinds(), rules.sums());
-            return !ElementsApart.covers(ElementsKeptApart.at(view, held, read.ruleReading()),
-                    run);
+            return !ElementsApart.covers(
+                    ElementsKeptApart.at(list.type(), held, read.ruleReading()), run);
         }
 
         /** What was kept at one level of a container, as the elements of that level are read. */

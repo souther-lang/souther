@@ -39,6 +39,13 @@ final class ElementsKeptApart {
         return at(view.wrappers(), view.shape(), held, reading);
     }
 
+    /** The same, of a value of {@code type} as the declarations read it. */
+    static List<List<String>> at(Type type, List<List<String>> held, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        return at(TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums()), held, reading);
+    }
+
     /** The same, of a position read as the names it wears and the shape under them. */
     static List<List<String>> at(List<TypeSymbol> worn, Shape shape, List<List<String>> held,
                                  RuleReadingContext reading) {
