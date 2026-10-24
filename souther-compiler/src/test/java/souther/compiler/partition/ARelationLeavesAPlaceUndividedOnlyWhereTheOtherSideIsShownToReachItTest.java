@@ -3037,6 +3037,142 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 
+    private static final String KEYED = """
+            module w1
+            data Code = String invariant String.length(value) >= 1 && String.length(value) <= 3
+            data Rate = Int invariant value > 0
+            data Table = { base: Code, rates: Map<Code, Rate> }
+                invariant %s
+            let baseIsOne (base: Code, rates: Map<Code, Rate>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> r.value == 1)
+                    |> Option.withDefault(false)
+            behavior m : (codes: List<Code>, t: Table) -> Bool
+            let m (codes, t) = List.any(c -> Map.containsKey(c, t.rates), codes)
+            """;
+
+    private static final String KEYED_BY_TEXT = """
+            module w1
+            data Table = { base: String, rates: Map<String, Int> }
+                invariant %s
+            behavior m : (ks: List<String>, t: Table) -> Bool
+            let m (ks, t) = List.any(k -> Map.containsKey(k, t.rates), ks)
+            """;
+
+    /**
+     * A rule that looks up the entry under one key and cannot be true without it reads that entry
+     * and no other. The keys of the map beside it are every code, as a second entry takes any
+     * code that is not the one the rule names, so a code asked for and the keys the map holds
+     * reach each other. Written out in the rule, or in a helper it hands the map to, it is the
+     * same lookup, and a key written as a constant is needed the same.
+     */
+    @Test
+    void aRuleLookingUpOneKeyLeavesTheOtherKeysOfTheMapEveryValue() {
+        for (String rule : List.of("Map.containsKey(base, rates)", "baseIsOne(base, rates)")) {
+            String model = KEYED.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "codes[*]", RELATES),
+                    leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+        }
+    }
+
+    @Test
+    void aKeyWrittenAsAConstantIsNeededTheSame() {
+        for (String rule : List.of("Map.containsKey(\"a\", rates)",
+                "Map.containsKey(base, rates) && Map.containsKey(\"a\", rates)")) {
+            String model = KEYED_BY_TEXT.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "ks[*]", RELATES),
+                    leftIn(model, whereWritten(model, "Map.containsKey(k")), rule);
+        }
+    }
+
+    /**
+     * A rule that reads the entry under a key is not one that has the key there. Where it wants
+     * the key missing, or is true without the lookup, some keys are the ones it keeps out, and
+     * the map accepts none with them: a map with room for more is not a map every key is in.
+     */
+    @Test
+    void aRuleNotNeedingTheEntryLeavesTheKeysNoRunToReach() {
+        for (String rule : List.of("Map.containsKey(\"a\", rates) == false",
+                "Bool.not(Map.containsKey(base, rates))",
+                "base == \"a\" && Bool.not(Map.containsKey(base, rates))",
+                "Map.containsKey(base, rates) || Map.size(rates) == 0")) {
+            String model = KEYED_BY_TEXT.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "ks[*]", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "Map.containsKey(k")), rule);
+        }
+    }
+
+    private static final String MEMBERED = """
+            module w1
+            data Table = { main: String, members: %s<String> }
+                invariant %s
+            behavior m : (ks: List<String>, t: Table) -> Bool
+            let m (ks, t) = List.any(k -> %s.contains(k, t.members), ks)
+            """;
+
+    /**
+     * A set or a list is read the way a map is: a rule that cannot be true without a member there
+     * leaves the other members every value, and one that merely reads it, or wants it missing,
+     * leaves them none.
+     */
+    @Test
+    void theMembersOfASetOrAListAreReadTheWayTheKeysOfAMapAre() {
+        for (String container : List.of("Set", "List")) {
+            String needed = MEMBERED.formatted(container,
+                    container + ".contains(main, members)", container);
+            assertEquals(Map.of("t.members[*]", RELATES, "ks[*]", RELATES),
+                    leftIn(needed, whereWritten(needed, container + ".contains(k")), container);
+            String missing = MEMBERED.formatted(container,
+                    container + ".contains(main, members) == false", container);
+            assertEquals(Map.of("t.members[*]", RELATES, "ks[*]", NOT_SHOWN),
+                    leftIn(missing, whereWritten(missing, container + ".contains(k")), container);
+        }
+    }
+
+    /**
+     * What a rule leaves the keys is the entry it reads only while the map may hold a second one.
+     * With room for one entry the only key is the one the rule names, and a rule reading every
+     * key holds each to what it says. Neither leaves a key every code.
+     */
+    @Test
+    void aRuleThatPinsTheKeysLeavesThemNoRunToReach() {
+        for (String rule : List.of("Map.containsKey(base, rates) && Map.size(rates) <= 1",
+                "Map.containsKey(base, rates) && List.all(k -> k == base, Map.keys(rates))")) {
+            String model = KEYED.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", NOT_SHOWN, "codes[*]", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+        }
+    }
+
+    /**
+     * What a rule leaves the keys it leaves nothing of the values: the entry under the key the
+     * rule names is held to what it says, and an entry under another key takes a value only if
+     * the type has a second key. With one code the only entry is the one held to one, so no number
+     * but one reaches the values of the map, while those values do reach each number; with many,
+     * the values are still not read as every value.
+     */
+    @Test
+    void aRuleLookingUpOneKeyLeavesTheValuesOfTheMapNoRunToReach() {
+        for (String code : List.of("String.matches(\"JPY\", value)",
+                "String.length(value) >= 1 && String.length(value) <= 3")) {
+            String model = """
+                    module w1
+                    data Code = String invariant %s
+                    data Rate = Int invariant value > 0
+                    data Table = { base: Code, rates: Map<Code, Rate> }
+                        invariant baseIsOne(base, rates)
+                    let baseIsOne (base: Code, rates: Map<Code, Rate>): Bool =
+                        Map.get(base, rates)
+                            |> Option.map(r -> r.value == 1)
+                            |> Option.withDefault(false)
+                    behavior m : (n: Int, t: Table) -> Bool
+                    let m (n, t) = List.any(r -> r.value == n, Map.values(t.rates))
+                    """.formatted(code);
+            assertEquals(Map.of("t.rates[*]", RELATES, "n", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "== n")), code);
+        }
+    }
+
     /** The places some comparison at {@code at} of a model written out whole is not read about. */
     private static Set<String> notReadIn(String source, String at) {
         Compilation compilation = measured(source);

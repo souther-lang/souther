@@ -138,8 +138,41 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         Set.of(values("inner", "low"), values("inner", "high")),
                         Set.of(howMany("tags")),
                         Set.of(values("name")),
-                        Set.of(howMany("tags"), values("tags")),
+                        Set.of(howMany("tags"), neededMember("tags")),
                         Set.of(howMany("items"), howMany("inner", "members"))),
+                clausesSay(c, ClauseMeaning.Stated::reads));
+    }
+
+    /**
+     * A lookup reads the member it looks for and no other, whether the helper holding it is
+     * written out or handed the container. Where the clause is false without the member it is the
+     * member the clause needs; where it is also true without it, or wants it missing, it is a
+     * member looked up and nothing more.
+     */
+    @Test
+    void aLookupReadsTheMemberItLooksForAndSaysWhetherTheClauseNeedsIt() {
+        Compilation c = started("""
+                module shop.prices exposing ( Range )
+
+                data Range = { key: String, table: Map<String, Int>, other: Map<String, Int>,
+                               tags: Set<String> }
+                    invariant Map.containsKey(key, table)
+                    invariant isOne(key, table)
+                    invariant Map.containsKey(key, other) == false
+                    invariant Set.contains(key, tags) || Set.size(tags) == 0
+                    invariant Map.containsKey(key, table) && Set.contains("a", tags)
+
+                let isOne (key: String, table: Map<String, Int>): Bool =
+                    Map.get(key, table)
+                        |> Option.map(n -> n == 1)
+                        |> Option.withDefault(false)
+                """);
+        assertEquals(List.of(
+                        Set.of(values("key"), neededMember("table")),
+                        Set.of(values("key"), neededMember("table")),
+                        Set.of(values("key"), lookedUpMember("other")),
+                        Set.of(values("key"), lookedUpMember("tags"), howMany("tags")),
+                        Set.of(values("key"), neededMember("table"), neededMember("tags"))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
     }
 
@@ -179,6 +212,16 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
 
     private static ClauseRead values(String... steps) {
         return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES,
+                RuleKey.THE_VALUE);
+    }
+
+    private static ClauseRead neededMember(String... steps) {
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS,
+                RuleKey.THE_VALUE);
+    }
+
+    private static ClauseRead lookedUpMember(String... steps) {
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.A_LOOKED_UP_MEMBER,
                 RuleKey.THE_VALUE);
     }
 
