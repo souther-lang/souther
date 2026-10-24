@@ -832,8 +832,9 @@ final class CardinalityComposer {
                 continue;
             }
             for (NumericTerm number : perElement.numbers()) {
+                // Of the elements a statement keeps as well: the shares are where a kept element
+                // is chosen, and whether it is kept is what reading the group says.
                 if (number instanceof NumericTerm.GatheredUnderItsKey gathered
-                        && gathered.selection() == null
                         && gathered.key() instanceof ElementKey.At(ElementProjection way)
                         && way.from(gathered.elements()).equals(apartAt)
                         && gathered.value().asAPlace() instanceof ElementProjection place

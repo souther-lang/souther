@@ -71,12 +71,16 @@ public sealed interface BorderQuantity
      * <p>The only quantity whose levels a carrier can write, because they are the carrier's own
      * values. A line here divides the position into classes, which is why this one has an axis and
      * the others do not.
+     *
+     * <p>The behavior may be no name, as it may for every other quantity: what keeps the elements
+     * a number of the input is of is put to rows under none ({@link KeptOccurrences}), since the
+     * number is one whichever behavior reads it, and a row read at a position turns on no name.
      */
     record OfACoordinate(String behavior, NumericTerm.FromOnePosition term, TermOrders of)
             implements LinearQuantity {
 
         public OfACoordinate {
-            if (behavior == null || behavior.isEmpty() || term == null || of == null) {
+            if (behavior == null || term == null || of == null) {
                 throw new IllegalArgumentException("a coordinate quantity is a behavior's number "
                         + "on an order: " + behavior + " " + term + " " + of);
             }

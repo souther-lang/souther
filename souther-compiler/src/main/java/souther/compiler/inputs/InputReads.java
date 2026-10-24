@@ -2977,11 +2977,16 @@ public final class InputReads {
      * The container inside the elements of an outer one whose lists {@code list} puts end to end
      * with nothing made of an element — its elements are those of the lists — or null where the
      * list is no such flattening.
+     *
+     * <p>A list the closure answers some of the elements of is crossed where {@code keeping} says
+     * so, and each call crossed is added to {@code keptBy}: the elements put end to end are those
+     * it kept ({@link #flattenedKeysAt}).
      */
-    public TermPath containerFlattenedInto(Core list, Symbols symbols,
+    public TermPath containerFlattenedInto(Core list, Function<Core, Core> keeping,
+                                           List<Denotation> keptBy, Symbols symbols,
                                            DeclarationNewtypes newtypes) {
         Flattened elements = flattenedKeysAt(standing(list, symbols, newtypes),
-                List.of(ReadOff.ITSELF), true, null, new ArrayList<>(), symbols, newtypes);
+                List.of(ReadOff.ITSELF), true, keeping, keptBy, symbols, newtypes);
         if (elements == null || !(elements.reads().getFirst() instanceof Occurrences.Read.At(
                 TermPath keys, var _))) {
             return null;

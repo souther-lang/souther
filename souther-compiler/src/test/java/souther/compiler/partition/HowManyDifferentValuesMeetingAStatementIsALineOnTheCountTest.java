@@ -556,6 +556,122 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 + " [total(ds[*].forecasts[*].amount by currency) == 150]");
     }
 
+    /** Forecasts with a region, kept by it on the way to the count. */
+    private static final String REGIONED = """
+            module probe
+
+            data Forecast = { currency: String, amount: Int, region: String }
+            data Desk = { forecasts: List<Forecast> }
+
+            let totalsOf (fs: List<Forecast>): Map<String, Int> =
+                List.fold((acc, f) -> Map.updateOrInsert(f.currency, f.amount,
+                    n -> n + f.amount, acc), Map.empty, fs)
+
+            """;
+
+    /**
+     * Two filters on the way are one statement, both of them: one above the other, over one list
+     * or over the lists a flattening puts end to end, or one above the flattening and one inside
+     * its closure — and a fold gathering the values reads them as the law does.
+     */
+    @Test
+    void twoFiltersOnTheWayAreOneStatementOfBoth() {
+        String direct = REGIONED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if %s == 1 then 1 else 0
+                """;
+        String across = REGIONED + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if %s == 1 then 1 else 0
+                """;
+        for (String count : List.of(
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.filter(f -> f.region == \"EU\", fs)))))",
+                "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
+                        + " List.filter(f -> f.amount > 0, List.filter(f -> f.region == \"EU\","
+                        + " fs))))")) {
+            JsonNode line = only(differentCounts(reportOf(direct.formatted(count))));
+            assertEquals("#different fs [fs[*].currency] where [fs[*].amount > 0"
+                    + " && fs[*].region == EU]",
+                    line.at("/lineId/target/quantity/counted").asString(), count);
+        }
+        for (String count : List.of(
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.filter(f -> f.region == \"EU\","
+                        + " List.flatMap(d -> d.forecasts, ds))))))",
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.flatMap(d -> List.filter(f -> f.region == \"EU\", d.forecasts),"
+                        + " ds)))))")) {
+            JsonNode line = only(differentCounts(reportOf(across.formatted(count))));
+            assertEquals("#different ds [ds[*].forecasts[*].currency] where"
+                    + " [ds[*].forecasts[*].amount > 0 && ds[*].forecasts[*].region == EU]",
+                    line.at("/lineId/target/quantity/counted").asString(), count);
+        }
+    }
+
+    /**
+     * An element the closure of a flattening kept is an element of the list inside the outer
+     * element, and a statement about it reads that element's places — not the outer element's,
+     * which holds no such field.
+     */
+    @Test
+    void aStatementAboutAnElementAFlatteningsClosureKeptReadsThatElement() {
+        JsonNode behavior = behaviorOf(reportOf(REGIONED + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if List.any(f -> f.amount > 0, List.flatMap(d ->
+                    List.filter(g -> g.region == "EU", d.forecasts), ds)) then 1 else 0
+                """));
+        List<String> axes = new ArrayList<>();
+        behavior.at("/partition/boundaries").forEach(each -> axes.add(each.path("axis")
+                .asString()));
+        assertTrue(axes.contains("f/ds[*].forecasts[*].amount"), axes::toString);
+        List<String> read = new ArrayList<>();
+        behavior.at("/partition/notRead").forEach(each -> read.add(each.path("position")
+                .asString()));
+        assertFalse(read.contains("ds[*].amount"), read::toString);
+    }
+
+    /**
+     * Where a filter kept some elements before a fold filed them under their keys, a key is
+     * counted where some kept element holds it and what the kept ones under it total meets the
+     * statement: the elements of other regions add nothing to the total, and a currency only they
+     * hold is no entry. Over one list and over the lists a flattening puts end to end.
+     */
+    @Test
+    void theEntriesOfWhatAFilterKeptAreTheValuesItKeptWhoseTotalMeetsTheStatement() {
+        String direct = REGIONED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.region == "EU", fs)))) == 1 then 1 else 0
+                """;
+        String kept = "#different fs [fs[*].currency] where [total(fs[*].amount kept by fs"
+                + " meeting Ordered[term=fs[*].region, at=EU, proposition=EQ] by currency) > 0"
+                + " && fs[*].region == EU]";
+        JsonNode line = only(differentCounts(reportOf(direct + """
+                example f
+                    | "one EU currency above nought" : ([
+                        Forecast { currency = "USD", amount = 10, region = "EU" },
+                        Forecast { currency = "USD", amount = -20, region = "US" },
+                        Forecast { currency = "JPY", amount = 5, region = "US" }]) -> 1
+                """)));
+        assertEquals(kept, line.at("/lineId/target/quantity/counted").asString());
+        assertTrue(pointAt(line, "on").path("hit").asBoolean(), line::toString);
+        everyRowComposedAnswersAsItsPointSays(direct.substring("module probe\n\n".length()),
+                "f/" + kept);
+
+        JsonNode across = only(differentCounts(reportOf(REGIONED + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.region == "EU",
+                        List.flatMap(d -> d.forecasts, ds))))) == 1 then 1 else 0
+                """)));
+        assertEquals("#different ds [ds[*].forecasts[*].currency] where"
+                + " [total(ds[*].forecasts[*].amount kept by ds[*].forecasts meeting"
+                + " Ordered[term=ds[*].forecasts[*].region, at=EU, proposition=EQ] by currency)"
+                + " > 0 && ds[*].forecasts[*].region == EU]",
+                across.at("/lineId/target/quantity/counted").asString());
+    }
+
     /**
      * What keeps an element may read the element of the outer list holding its list, and then it
      * turns on which list each element is put in: no row is composed by choosing the elements as
