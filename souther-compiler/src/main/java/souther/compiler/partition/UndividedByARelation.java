@@ -1062,10 +1062,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : metByARowAtTheLine(unfree, past.narrowing());
         List<OnAWay> stated = unfree.stream().filter(each -> each.affine() == null
                 || !met.contains(each.affine())).toList();
-        DemandReading.Answered answered = met.isEmpty() ? past : new DemandReading.Answered(
-                past.narrowing().stream().filter(each ->
-                        !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
-                        .toList(), past.tied(), past.unsaid());
+        DemandReading.Answered answered = met.isEmpty() ? past : past.without(met);
         // Without a statement taken away, the region is the one its rows were found in; with one,
         // the one the rest of them leave, where the rest can be taken in again.
         boolean tookAway = stated.size() != written.size()
@@ -1648,9 +1645,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return List.of();
         }
         List<TakenConstraint.Affine> stated = new ArrayList<>();
-        conditions.forEach(each -> stated.add(each.affine()));
-        narrowing.forEach(each -> stated.add(
-                each instanceof TakenConstraint.Affine affine ? affine : null));
+        for (OnAWay each : conditions) {
+            if (each.affine() != null) {
+                stated.add(each.affine());
+            }
+        }
+        for (TakenConstraint each : narrowing) {
+            if (each instanceof TakenConstraint.Affine affine) {
+                stated.add(affine);
+            }
+        }
         return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(stated, asked);
     }
 

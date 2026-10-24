@@ -103,7 +103,7 @@ final class WhatStatementsOfOneFormDecide {
         }
         List<Bound> bounds = new ArrayList<>();
         for (TakenConstraint.Affine each : stated) {
-            if (each == null || each.form().coefs().isEmpty() || !outsideEveryContainer(each)) {
+            if (each.form().coefs().isEmpty() || !outsideEveryContainer(each)) {
                 continue;
             }
             ExactRatio factor = factorBetween(asked.form().coefs(), each.form().coefs());
