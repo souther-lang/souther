@@ -310,6 +310,10 @@ public final class ReportedReason {
             case BlockReason.RelationNotShownToReachEveryValue _,
                  BlockReason.RelationNotShownWhereTheSearchStopped _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
+            // Its own word and not the one above: what falls short is the values here getting to
+            // the rule, and a reader looks at what the run works out before it.
+            case BlockReason.RelationNotShownReachedAtEveryValue _ ->
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two

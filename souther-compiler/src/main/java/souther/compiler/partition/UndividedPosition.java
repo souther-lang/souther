@@ -267,6 +267,18 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
         /**
+         * What the rule states was read, and it relates the value here to another value, but a run
+         * may stop on the way to the rule on what this compiler does not say, so not every value
+         * here is shown to get to it.
+         *
+         * <p>Its own word and not the one above. There every value here gets to the rule and the
+         * other side is what falls short, and a reader looks at the other side; here the values
+         * here may not get to the rule at all, and a reader looks at what the run works out before
+         * it. Told the rule relates two values, a reader would take every value here as one the
+         * rule leaves open.
+         */
+        RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+        /**
          * The rule says how the elements of the container here stand to each other, and which
          * containers it leaves is not worked out.
          *

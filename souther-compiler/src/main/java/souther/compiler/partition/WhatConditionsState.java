@@ -71,6 +71,8 @@ final class WhatConditionsState {
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
     private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
     private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
+    private final Map<ANodeLeavingOut, Pullback.OperatorsAnswer> operatorsAnswerLeavingOut =
+            new HashMap<>();
     private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
 
     private WhatConditionsState(InputReading read) {
@@ -133,6 +135,32 @@ final class WhatConditionsState {
         heldTo(read);
         return kept(operatorsAnswer, new ANode(body, reads),
                 () -> Pullback.whereItsOperatorsAnswer(body, reads, read));
+    }
+
+    /** The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}
+     *  ({@link Pullback#whereItsOperatorsAnswerLeavingOut}). */
+    Pullback.OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                               InputReads reads,
+                                                               InputReading read) {
+        heldTo(read);
+        return kept(operatorsAnswerLeavingOut, new ANodeLeavingOut(body, leftOut, reads),
+                () -> Pullback.whereItsOperatorsAnswerLeavingOut(body, leftOut, reads, read));
+    }
+
+    /** A node read leaving out one of its nodes, by the nodes they are, under names. */
+    record ANodeLeavingOut(Core value, Core leftOut, InputReads reads) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ANodeLeavingOut that && value == that.value
+                    && leftOut == that.leftOut && reads.equals(that.reads);
+        }
+
+        @Override
+        public int hashCode() {
+            return (System.identityHashCode(value) * 31 + System.identityHashCode(leftOut)) * 31
+                    + reads.hashCode();
+        }
     }
 
     /** What {@code truth} holding states with its names as {@code reads} has them, under

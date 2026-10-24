@@ -4,6 +4,7 @@ import souther.compiler.check.ARecursion;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
@@ -16,8 +17,10 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
@@ -32,10 +35,15 @@ import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WrittenLines;
 import souther.compiler.types.ValueName;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.OperationLaw;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -538,22 +546,174 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * What a region can carry of every operator a run works out up to {@code comparison}
      * answering ({@link Reading#getsPast}), read of each part the run always works out, with the
      * names as they stand at the comparison.
+     *
+     * <p>Of a comparison in a closure, what the run works out up to the application it is reached
+     * in, and apart from that what the applications before work out
+     * ({@link DemandReading.PriorApplications}) — the call applying the closure read whole, the
+     * comparison apart, which is the relation's own working out wherever it is applied. A region
+     * carries only what the run up to the application narrows: what only the applications before
+     * narrow holds of a run that makes them and of no other, so it is owed with them as a stop on
+     * the places it names.
      */
     private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
+        Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
+        List<Core> whole = WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison);
+        WhatARunWorksOutBeforeACount.FirstApplication first =
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(), comparison);
+        if (first == null || first.entered().isEmpty()) {
+            return workedOut(whole, comparison, ofTheRelation, in, reads);
+        }
+        DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads);
+        DemandReading.Answered upTo = workedOut(first.parts(), comparison, ofTheRelation, in,
+                reads);
+        List<Set<TermPath>> ties = new ArrayList<>(before.tied());
+        for (TakenConstraint each : before.narrowing()) {
+            if (!upTo.narrowing().contains(each)) {
+                Set<TermPath> places = new LinkedHashSet<>();
+                each.terms().forEach(term -> places.add(term.subjectPath()));
+                ties.add(places);
+            }
+        }
+        return upTo.after(new DemandReading.PriorApplications(
+                walkedOneAfterAnother(first.entered(), reads),
+                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed())));
+    }
+
+    /**
+     * What each call of {@code entered} walks, where each applies its closure to the elements of
+     * what it walks one after another from the first, as far as every one of them or until one
+     * answers some way — or empty where one is not shown to.
+     */
+    private static Optional<List<DemandReading.PriorApplications.WalkedOver>> walkedOneAfterAnother(
+            List<WhatARunWorksOutBeforeACount.Applying> entered, InputReads reads) {
+        List<DemandReading.PriorApplications.WalkedOver> out = new ArrayList<>();
+        for (WhatARunWorksOutBeforeACount.Applying each : entered) {
+            ClosureUses uses = reads.usesOf(each.closure());
+            ClosureUses.Application applied = uses == null || uses.usedElsewhere() ? null
+                    : uses.applications().stream()
+                            .filter(one -> Core.withoutStanding(one.call())
+                                    == Core.withoutStanding(each.call()))
+                            .findFirst().orElse(null);
+            if (applied == null || !EACH_IN_TURN.contains(applied.applied())) {
+                return Optional.empty();
+            }
+            out.add(new DemandReading.PriorApplications.WalkedOver(applied.container(), reads));
+        }
+        return Optional.of(out);
+    }
+
+    /** The ways of applying a closure that apply it to the first element, and to the others one
+     *  after another. */
+    private static final Set<HowAClosureIsApplied> EACH_IN_TURN = Set.of(
+            HowAClosureIsApplied.TO_EVERY_ELEMENT, HowAClosureIsApplied.UNTIL_ONE_HOLDS,
+            HowAClosureIsApplied.UNTIL_ONE_FAILS);
+
+    /** What a region can carry of every operator of {@code parts} answering
+     *  ({@link #gotPast}). */
+    private static DemandReading.Answered workedOut(List<Core> parts, Core comparison,
+                                                    Set<Core> ofTheRelation, Body in,
+                                                    InputReads reads) {
         DemandReading.Answered out = DemandReading.Answered.NOTHING;
-        for (Core part : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison)) {
-            Pullback.OperatorsAnswer operators =
-                    in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
+        for (Core part : parts) {
+            Pullback.OperatorsAnswer operators = part != comparison && standsIn(comparison, part)
+                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, reads,
+                            in.read())
+                    : in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
             DemandReading.Answered ofIt = operators.answers().isPresent()
                     ? DemandReading.regionAnswered(operators.answers().get(), in.read())
                     : DemandReading.Answered.NOTHING;
-            if (part == comparison) {
+            if (part == comparison || ofTheRelation.contains(part)) {
                 out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
             } else {
-                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators)));
+                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators,
+                        in.root())));
             }
         }
         return out;
+    }
+
+    /**
+     * The values {@code root} binds to the names {@code comparison} reads, by way of others or
+     * not: the terms of what it relates, so the arithmetic in them is its relation's as the
+     * arithmetic written in it is — the same relation, whether a term is written there or under a
+     * name.
+     *
+     * <p>By way of a name an arm binds to part of what it matches, and of one a closure binds to
+     * what the call applying it walks, as much as of one a {@code let} binds: each holds a value
+     * made of those, which the comparison then reads.
+     */
+    private static Set<Core> valuesTheComparisonReads(Core root, Core comparison) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (root == null) {
+            return out;
+        }
+        Map<BindingId, List<Core>> madeOf = new HashMap<>();
+        bindingsIn(root, madeOf);
+        Set<BindingId> read = new HashSet<>(WhatABodyReads.namesReadBy(root, comparison));
+        Deque<BindingId> left = new ArrayDeque<>(read);
+        while (!left.isEmpty()) {
+            for (Core source : madeOf.getOrDefault(left.pop(), List.of())) {
+                for (BindingId more : WhatABodyReads.namesReadBy(root, source)) {
+                    if (read.add(more)) {
+                        left.push(more);
+                    }
+                }
+            }
+        }
+        boundTo(root, read, out);
+        return out;
+    }
+
+    /** Whether {@code node} is {@code e} or under it, by the node it is. */
+    private static boolean standsIn(Core node, Core e) {
+        if (e == node) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || standsIn(node, child));
+        return found[0];
+    }
+
+    /**
+     * What each name {@code e} binds is made of: an arm's binding, of what the arm matches; a
+     * closure's parameter, of what else the call applying the closure is handed.
+     */
+    private static void bindingsIn(Core e, Map<BindingId, List<Core>> madeOf) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.Match match) {
+            for (Core.Case arm : match.cases()) {
+                if (arm.binding().binder() != null) {
+                    madeOf.computeIfAbsent(arm.binding().binder().binding(),
+                            _ -> new ArrayList<>()).add(match.scrutinee());
+                }
+            }
+        }
+        AnOperationApplied applied = AnOperationApplied.of(node);
+        if (applied != null) {
+            for (Core arg : applied.args()) {
+                if (Core.withoutStanding(arg) instanceof Core.Block closure) {
+                    for (Core.Binder param : closure.params()) {
+                        for (Core other : applied.args()) {
+                            if (other != arg) {
+                                madeOf.computeIfAbsent(param.binding(), _ -> new ArrayList<>())
+                                        .add(other);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Core.forEachChild(node, child -> bindingsIn(child, madeOf));
+    }
+
+    private static void boundTo(Core e, Set<BindingId> names, Set<Core> out) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.LetIn li && li.binder() != null
+                && names.contains(li.binder().binding())) {
+            out.add(li.value());
+            out.add(Core.withoutStanding(li.value()));
+        }
+        Core.forEachChild(node, child -> boundTo(child, names, out));
     }
 
     /**
