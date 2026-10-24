@@ -232,11 +232,23 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
      *  {@code rules}. */
     private static boolean aGridPointHolds(List<Written> rules) {
         int steps = 24;
+        int n = rules.size();
+        long[] onA = new long[n];
+        long[] onB = new long[n];
+        long[] constant = new long[n];
+        for (int r = 0; r < n; r++) {
+            onA[r] = rules.get(r).coefs().getOrDefault("a", 0L);
+            onB[r] = rules.get(r).coefs().getOrDefault("b", 0L);
+            constant[r] = rules.get(r).constant() * steps;
+        }
         for (int a = 0; a <= HIGH * steps; a++) {
             for (int b = 0; b <= HIGH * steps; b++) {
-                long sa = a;
-                long sb = b;
-                if (rules.stream().allMatch(each -> holdsAtScaled(each, sa, sb, steps))) {
+                int r = 0;
+                while (r < n && holdsScaled(rules.get(r).rel(),
+                        constant[r] + onA[r] * a + onB[r] * b)) {
+                    r++;
+                }
+                if (r == n) {
                     return true;
                 }
             }
@@ -244,12 +256,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         return false;
     }
 
-    private static boolean holdsAtScaled(Written rule, long a, long b, int steps) {
-        long sum = rule.constant() * steps;
-        for (Map.Entry<String, Long> each : rule.coefs().entrySet()) {
-            sum += each.getValue() * (each.getKey().equals("a") ? a : b);
-        }
-        return switch (rule.rel()) {
+    private static boolean holdsScaled(Rel rel, long sum) {
+        return switch (rel) {
             case LT -> sum < 0;
             case LE -> sum <= 0;
             case GT -> sum > 0;
@@ -328,6 +336,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             }
             NumericDomain<String> domain = domainOf(rules)
                     .heldInsideTheirOrders(endless("a", "b", "c"));
+            boolean[][] carried = valuesCarried(rules);
             for (String atom : List.of("a", "b", "c")) {
                 NumericDomain.Bounds run = domain.wholeRunOf(atom);
                 if (run == null) {
@@ -336,7 +345,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 shown++;
                 for (int v = LOW; v <= HIGH; v++) {
                     if (run.admits(ExactRatio.of(v))) {
-                        assertTrue(somePointHolds(rules, atom, v),
+                        assertTrue(carried[List.of("a", "b", "c").indexOf(atom)][v],
                                 () -> atom + " was shown " + run + " beside " + rules);
                     }
                 }
@@ -346,21 +355,26 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 + " sums were not being read");
     }
 
-    /** Whether some whole point of the box with {@code atom} at {@code v} holds every one of
-     *  {@code rules}. */
-    private static boolean somePointHolds(List<Written> rules, String atom, int v) {
+    /** For each of {@code a}, {@code b} and {@code c}, in that order, the values of the box some
+     *  whole point holding every one of {@code rules} stands it at. */
+    private static boolean[][] valuesCarried(List<Written> rules) {
+        boolean[][] carried = new boolean[3][HIGH + 1];
+        Map<String, Integer> point = new LinkedHashMap<>();
         for (int a = LOW; a <= HIGH; a++) {
             for (int b = LOW; b <= HIGH; b++) {
                 for (int c = LOW; c <= HIGH; c++) {
-                    Map<String, Integer> point = Map.of("a", a, "b", b, "c", c);
-                    if (point.get(atom) == v
-                            && rules.stream().allMatch(each -> holdsAt(each, point))) {
-                        return true;
+                    point.put("a", a);
+                    point.put("b", b);
+                    point.put("c", c);
+                    if (rules.stream().allMatch(each -> holdsAt(each, point))) {
+                        carried[0][a] = true;
+                        carried[1][b] = true;
+                        carried[2][c] = true;
                     }
                 }
             }
         }
-        return false;
+        return carried;
     }
 
     /** Each of {@code atoms} on an order with no end either way. */

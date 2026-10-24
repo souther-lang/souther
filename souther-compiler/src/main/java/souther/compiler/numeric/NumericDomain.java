@@ -1180,15 +1180,33 @@ public final class NumericDomain<A> {
                     && rules.stream().allMatch(rule -> proven(rule, false))) {
                 return leavesAValueInside(atoms) ? Shown.PROVEN : Shown.NOTHING;
             }
-            if (limitsOnSumsHoldAtTheLowCorner(atoms, rules)) {
+            Map<A, Bounds> runs = runsInsideTheirOrders(atoms);
+            if (runs != null && limitsOnSumsHoldAtTheLowCorner(atoms, runs, rules)) {
                 return Shown.AT_THE_LOW_CORNER;
             }
-            if (anOpenSetOfDecimalsIsLeft(atoms, rules)
-                    || aPointOfTheBoxHolds(atoms, rules)) {
+            if ((runs != null && aPointOfTheBoxHolds(atoms, runs, rules))
+                    || anOpenSetOfDecimalsIsLeft(atoms, rules)) {
                 return Shown.A_POINT;
             }
             return Shown.NOTHING;
         });
+    }
+
+    /**
+     * What each of {@code atoms} runs over inside where its order stops, or null where one has no
+     * run that holds a value or no spacing recorded.
+     */
+    private Map<A, Bounds> runsInsideTheirOrders(List<A> atoms) {
+        Map<A, Bounds> runs = new LinkedHashMap<>();
+        for (A atom : atoms) {
+            Bounds box = boxOf(atom);
+            Bounds run = box == null ? null : box.meet(orders.get(atom));
+            if (run == null || !run.holdsAValue() || spacingOf(atom) == null) {
+                return null;
+            }
+            runs.put(atom, run);
+        }
+        return runs;
     }
 
     /** The pairs of bounds put together in asking whether a system of decimals leaves a point. */
@@ -1259,17 +1277,13 @@ public final class NumericDomain<A> {
      * its least end, and one they pass is held by values as near the ends as asked. No value is
      * picked inside a run left open.
      */
-    private boolean limitsOnSumsHoldAtTheLowCorner(List<A> atoms,
+    private boolean limitsOnSumsHoldAtTheLowCorner(List<A> atoms, Map<A, Bounds> runs,
                                                    List<AffineConstraint<A>> rules) {
         Map<A, ExactRatio> least = new LinkedHashMap<>();
         Set<A> taken = new LinkedHashSet<>();
         for (A atom : atoms) {
-            Bounds box = boxOf(atom);
-            Bounds run = box == null ? null : box.meet(orders.get(atom));
+            Bounds run = runs.get(atom);
             Granularity spacing = spacingOf(atom);
-            if (run == null || !run.holdsAValue() || spacing == null) {
-                return false;
-            }
             ExactRatio end = spacing == Granularity.DISCRETE
                     ? run.aValueNearestItsEnd(false, spacing)
                     : run.min() != null && run.min().at() instanceof Count count ? count.exactly()
@@ -1471,16 +1485,8 @@ public final class NumericDomain<A> {
      * past where the half-space holds. Tried for each half-space in turn. Every value the point
      * stands at is one its atom takes inside its run.
      */
-    private boolean aPointOfTheBoxHolds(List<A> atoms, List<AffineConstraint<A>> rules) {
-        Map<A, Bounds> runs = new LinkedHashMap<>();
-        for (A atom : atoms) {
-            Bounds box = boxOf(atom);
-            Bounds run = box == null ? null : box.meet(orders.get(atom));
-            if (run == null || !run.holdsAValue() || spacingOf(atom) == null) {
-                return false;
-            }
-            runs.put(atom, run);
-        }
+    private boolean aPointOfTheBoxHolds(List<A> atoms, Map<A, Bounds> runs,
+                                        List<AffineConstraint<A>> rules) {
         for (AffineConstraint<A> rule : rules) {
             for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
                 Map<A, ExactRatio> point = new LinkedHashMap<>();
