@@ -855,4 +855,56 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 data Y = { a: A }
                 """));
     }
+
+    private static String heldWith(String rule) {
+        return """
+                module demo
+
+                data Held = Int invariant %s
+                data Rec = { h: Held }
+                """.formatted(rule);
+    }
+
+    /**
+     * A rule whose arithmetic every value stops in leaves no value, though the form it comes to
+     * has one. Every `Held` above nought stops at the sum.
+     */
+    @Test
+    void aRuleEveryValueStopsInLeavesNoValue() {
+        assertEquals(List.of("E1013"),
+                codesFor(heldWith("value >= 1 && value + 9223372036854775807 > 0")));
+    }
+
+    /** The sum is worked out before the difference takes it away, so cancelling it saves nothing. */
+    @Test
+    void aSumCancelledAwayIsStillWorkedOut() {
+        assertEquals(List.of("E1013"), codesFor(heldWith(
+                "value >= 1 && value + 9223372036854775807 - 9223372036854775807 >= 1")));
+    }
+
+    /** A divisor no value leaves non-nought is one no run gets past. */
+    @Test
+    void aQuotientByNoughtLeavesNoValue() {
+        assertEquals(List.of("E1013"),
+                codesFor(heldWith("value == 0 && 1 / value > 0")));
+    }
+
+    /** Where the left of an `||` holds, the right is not worked out. */
+    @Test
+    void aSumTheRunSkipsIsNotAskedToFit() {
+        admits(heldWith("value == 1 || value + 9223372036854775807 > 0"));
+    }
+
+    /** The left of an `||` is worked out first, and a run that stops there reaches nothing. */
+    @Test
+    void aSumLeftOfAnOrIsAskedToFit() {
+        assertEquals(List.of("E1013"),
+                codesFor(heldWith("value >= 1 && (value +9223372036854775807 > 0 || value == 1)")));
+    }
+
+    /** A value that gets through the sum is a value. */
+    @Test
+    void aSumSomeValueGetsThroughLeavesAValue() {
+        admits(heldWith("value == 0 && value + 9223372036854775807 > 0"));
+    }
 }

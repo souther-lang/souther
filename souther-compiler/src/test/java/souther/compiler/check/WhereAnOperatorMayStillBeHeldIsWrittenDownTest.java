@@ -152,6 +152,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.PathCompletion.operationAt",
                     "whether the operator is one a recipe is recorded against, which a product and"
                             + " a quotient are and a sum and a difference are not"),
+            new Held("souther.compiler.check.PathCompletion.askedThrough",
+                    "which operators of a rule a run is sure to work out: the left of a connective,"
+                            + " and the right of a conjunction the rule is held to be true of"),
             new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
                     "hands each operator a closure's body was worked out through to"
                             + " WhereAnOperatorAnswers, for where an application of it answers"),

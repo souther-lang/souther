@@ -285,32 +285,97 @@ final class PathCompletion {
      * gets past and never under-reads it.
      */
     private Known answering(Operated operated, Known k) {
+        Known out = k;
+        for (NumericConstraint asked : asked(operated, k)) {
+            out = out.taking(asked.form(), asked.rel(), Known.Held.ON_THE_PATH,
+                    terms.kindsOf(asked.form()));
+        }
+        return out;
+    }
+
+    /**
+     * What {@link #answering} takes in, as relations: the operands where the operator answers, less
+     * what {@code k} already holds. Each is checked against {@code k} and not against the ones
+     * before it, which are the same operator's other end.
+     */
+    private List<NumericConstraint> asked(Operated operated, Known k) {
         LinearForm<FactSubject> form = operated.form();
         if (form == null) {
-            return k;
+            return List.of();
         }
         // What holds already is not taken again, so a run past an operator that answers wherever
         // it is reached holds what it held — and the same state.
         if (operated.where() instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought) {
-            return k.numbers().entails(form, Rel.NE) ? k
-                    : k.taking(form, Rel.NE, Known.Held.ON_THE_PATH, terms.kindsOf(form));
+            return k.numbers().entails(form, Rel.NE) ? List.of()
+                    : List.of(new NumericConstraint(form, Rel.NE));
         }
         if (!(operated.where() instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
                 BigInteger least, BigInteger greatest))) {
-            return k;
+            return List.of();
         }
-        Known out = k;
+        List<NumericConstraint> out = new ArrayList<>();
         if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
                 instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)
                 && !k.numbers().entails(above, Rel.LE)) {
-            out = out.taking(above, Rel.LE, Known.Held.ON_THE_PATH, terms.kindsOf(above));
+            out.add(new NumericConstraint(above, Rel.LE));
         }
         if (form.minus(LinearForm.constant(ExactRatio.of(least)))
                 instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)
                 && !k.numbers().entails(below, Rel.GE)) {
-            out = out.taking(below, Rel.GE, Known.Held.ON_THE_PATH, terms.kindsOf(below));
+            out.add(new NumericConstraint(below, Rel.GE));
         }
         return out;
+    }
+
+    /**
+     * What every operator of {@code part} that a run is sure to work out asks of the operands
+     * ({@link #asked}), where {@code part} is a rule a value is held to, less what {@code k}
+     * already holds.
+     *
+     * <p>A value is one the rule is worked out of and comes to true, so a value the rule stops a
+     * run in is none, whatever the form the rule comes to leaves it. Under
+     * {@code value >= 1 && value + M > 0} the sum answers where {@code value} is not above nought,
+     * and the form {@code value > -M} is the sum worked out over the whole numbers. The sum is read
+     * where it is written and not where it is composed into: {@code value + M - M >= 1} comes to
+     * {@code value >= 1}, and the run stops at the sum all the same.
+     *
+     * <p>Only the operators that are worked out whenever the rule is. The right of an {@code &&}
+     * is worked out where the rule is required to be true, because the left then was; the right of
+     * an {@code ||} is not, and is left out, as is anything below a node that is no operator.
+     * Leaving one out takes in less, which is the weaker of the two answers.
+     *
+     * @param required whether {@code part} is held to come to true, which is what makes the right
+     *                 of an {@code &&} worked out
+     */
+    List<NumericConstraint> askedThrough(Core part, boolean required, Known k, Denotations at) {
+        List<NumericConstraint> out = new ArrayList<>();
+        askedThrough(part, required, k, at, out);
+        return List.copyOf(out);
+    }
+
+    /** The same, with what is asked added to {@code out} and taken in as holding for what follows. */
+    private Known askedThrough(Core part, boolean required, Known k, Denotations at,
+                               List<NumericConstraint> out) {
+        Core e = Core.withoutStanding(part);
+        Known past = k;
+        switch (e) {
+            case Core.Binary binary -> {
+                past = askedThrough(binary.left(), required && binary.op() == BinOp.AND, past, at,
+                        out);
+                if (binary.op() == BinOp.AND && required) {
+                    past = askedThrough(binary.right(), true, past, at, out);
+                } else if (binary.op() != BinOp.AND && binary.op() != BinOp.OR) {
+                    past = askedThrough(binary.right(), false, past, at, out);
+                }
+            }
+            case Core.Neg neg -> past = askedThrough(neg.operand(), false, past, at, out);
+            default -> {
+                return past;
+            }
+        }
+        Operated operated = operated(part, at);
+        out.addAll(asked(operated, past));
+        return answering(operated, past);
     }
 
     /**

@@ -845,6 +845,7 @@ public final class InvariantChecker {
         // answer is not in this reading at all.
         Set<RuleKey> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
+        List<WorkedClause> worked = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
         // Per part, because a rule is represented where every part of it is: a conjunct the bounds
@@ -951,6 +952,7 @@ public final class InvariantChecker {
             Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
+            worked.add(new WorkedClause(view, constrained));
         }
         if (skipped) {
             // A rule of this value that no reading here took in, said once however many were
@@ -969,6 +971,49 @@ public final class InvariantChecker {
                 k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                         atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
                         k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
+            }
+        }
+        // A value is one the clauses are worked out of and come to true, which the forms they came
+        // to do not say: they are the clauses over the whole numbers. What an operator asks of its
+        // operands is a limit on the values only where no value is left, so it is taken in then
+        // and not otherwise: a sum that fits wherever the clause holds draws no line of its own.
+        // Asked once the fields' own types are in, so that what a type already holds is not asked
+        // of a clause again.
+        Map<PartId<RuleRef.Invariant>, List<NumericConstraint>> askedOf = new LinkedHashMap<>();
+        Known past = k;
+        for (WorkedClause each : worked) {
+            for (Clauses.StatedPart part : each.view().present()) {
+                List<NumericConstraint> asked = c.completion.askedThrough(part.of().written(),
+                        part.of().positive(), past, at);
+                for (NumericConstraint one : asked) {
+                    past = past.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
+                            c.terms.kindsOf(one.form()));
+                }
+                if (!asked.isEmpty()) {
+                    askedOf.put(part.id(), asked);
+                }
+            }
+        }
+        if (past.reachesNothing() && !k.reachesNothing()) {
+            k = past;
+            for (WorkedClause each : worked) {
+                for (Clauses.StatedPart part : each.view().present()) {
+                    List<NumericConstraint> asked = askedOf.get(part.id());
+                    if (asked == null) {
+                        continue;
+                    }
+                    Set<FactSubject> atomsAsked = new LinkedHashSet<>();
+                    asked.forEach(one -> atomsAsked.addAll(one.atoms()));
+                    atomsAsked.forEach(spoken -> took.record(part.id().rule(), spoken));
+                    Map<ClauseOccurrence, PartAsRead> occurrences = each.constrained()
+                            .computeIfAbsent(part.id(), _ -> new LinkedHashMap<>());
+                    PartAsRead before = occurrences.get(part.of().at());
+                    PartRead said = before == null
+                            ? new PartRead(atomsAsked, atomsAsked, asked)
+                            : before.said().alsoStating(atomsAsked, asked);
+                    occurrences.put(part.of().at(),
+                            new PartAsRead(before == null ? part.of() : before.of(), said));
+                }
             }
         }
         Map<RuleKey, FactSubject> atoms = new LinkedHashMap<>();
@@ -2041,8 +2086,26 @@ public final class InvariantChecker {
             narrowable = Set.copyOf(narrowable);
             stated = List.copyOf(stated);
         }
+
+        /** This, also stating {@code more} over {@code atoms}. */
+        PartRead alsoStating(Set<FactSubject> atoms, List<NumericConstraint> more) {
+            Set<FactSubject> spoken = new LinkedHashSet<>(constrained);
+            spoken.addAll(atoms);
+            Set<FactSubject> narrowed = new LinkedHashSet<>(narrowable);
+            narrowed.addAll(atoms);
+            List<NumericConstraint> both = new ArrayList<>(stated);
+            both.addAll(more);
+            return new PartRead(spoken, narrowed, both);
+        }
     }
 
+    /**
+     * One clause of a declaration as it was read, kept until the fields' types are in and what the
+     * clause asks of the operations it works out can be told from what those already hold.
+     */
+    private record WorkedClause(ClauseView view,
+                                Map<PartId<RuleRef.Invariant>,
+                                        Map<ClauseOccurrence, PartAsRead>> constrained) {}
     /**
      * One occurrence of a part as that reading read it: the shape it is, and what the reading made
      * of it.
