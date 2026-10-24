@@ -16,12 +16,15 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ComposedRows;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -38,8 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The model is a blended discount cap: what each line comes to after its discount, rounded to
  * cents, is at least six tenths of what the lines come to before it. Held by working each row out
  * here with {@link BigDecimal}, rounding half up at two places as {@code Decimal.round} does: a row
- * at a point of the line comes to the number its label names, and a row composed for a rule is put
- * back as an example answered with what the cap works out to, which the compiler runs.
+ * at a point of the line comes to the number its label names, and a row composed for a rule is run
+ * through the module and answers what the cap works out to.
  */
 class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
 
@@ -214,27 +217,24 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
     }
 
     /**
-     * A row composed for each way the cap comes out is put back as an example, answered with what
-     * the cap works out to over its lines here, and the compiler runs it without a word.
+     * A row composed for each way the cap comes out is run through the module, and answers what
+     * the cap works out to over its lines here.
      */
     @Test
     void everyRuleIsComposedARowThatTakesIt() {
-        List<String> examples = new ArrayList<>();
+        Compilation compilation = measured(AS_WRITTEN);
+        List<String> texts = new ArrayList<>();
         Set<Integer> answers = new TreeSet<>();
-        for (List<FixtureTemplate> row : composedForTheRules(measured(AS_WRITTEN))) {
+        for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
             String text = row.getFirst().text();
             int answer = capOf(text, new BigDecimal("0.6")).signum() >= 0 ? 1 : 0;
+            texts.add(text);
             answers.add(answer);
-            examples.add("    | \"composed " + examples.size() + "\" : (" + text + ") -> "
-                    + answer);
+            assertEquals(new AnswerObservation.Answered(new ObservedValue.Integer(answer)),
+                    ComposedRows.answer(compilation, "capped", row),
+                    () -> text + " is answered as its lines say");
         }
-        assertEquals(Set.of(0, 1), answers, () -> "a row on each side, and not " + examples);
-        Compilation answeredBy = Compilation.ofSource(AS_WRITTEN + "\nexample capped\n"
-                + String.join("\n", examples) + "\n", "Main");
-        answeredBy.answerEverything();
-        assertEquals(List.of(), answeredBy.errors().stream()
-                .map(error -> error.diagnostic().code() + " " + error.diagnostic().said())
-                .toList(), () -> "each row is answered as its lines say: " + examples);
+        assertEquals(Set.of(0, 1), answers, () -> "a row on each side, and not " + texts);
     }
 
     /**
