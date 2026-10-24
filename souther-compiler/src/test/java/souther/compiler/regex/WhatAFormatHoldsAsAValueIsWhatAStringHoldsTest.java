@@ -77,7 +77,7 @@ class WhatAFormatHoldsAsAValueIsWhatAStringHoldsTest {
     @Test
     void aSequenceNormalizationChangesIsNoValueOfTheFormat() {
         Language format = language("a\\x{301}|bb");
-        Language held = format.heldAsWritten(METER);
+        StringsHeldAsWritten held = format.heldAsWritten();
         assertTrue(format.codePointsAt(2, 0).has('a'), "the format places a letter first");
         assertEquals(CodePoints.of('b'), held.codePointsAt(2, 0));
         assertFalse(held.has("á"));
@@ -92,7 +92,7 @@ class WhatAFormatHoldsAsAValueIsWhatAStringHoldsTest {
     void whatTheStringsHeldAsWrittenShowIsShownByValues() {
         for (String regex : FORMATS) {
             Language format = language(regex);
-            Language held = format.heldAsWritten(METER);
+            StringsHeldAsWritten held = format.heldAsWritten();
             assertNotNull(held, regex);
             for (int length = 1; length <= 3; length++) {
                 List<String> values = new ArrayList<>();
@@ -134,7 +134,7 @@ class WhatAFormatHoldsAsAValueIsWhatAStringHoldsTest {
     @Test
     void overStartersTheFormatIsHeldWhole() {
         Language format = language("[ab1\\x{e1}]{1,3}");
-        Language held = format.heldAsWritten(METER);
+        StringsHeldAsWritten held = format.heldAsWritten();
         for (int length = 1; length <= 3; length++) {
             for (String each : stringsOf(length)) {
                 assertEquals(format.has(each), held.has(each), each);

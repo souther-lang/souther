@@ -44,6 +44,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.Language;
+import souther.compiler.regex.StringsHeldAsWritten;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -2158,7 +2159,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean leavesEveryRemainder(CodePointsOfTheForm form, Integer held, int work,
                                          Set<Figure> stopped) {
         Quantities.StringsOfOneLength strings = form.strings();
-        Language shown = strings.everyOneHeld();
+        StringsHeldAsWritten shown = strings.everyOneHeld();
         if (shown == null) {
             return false;
         }
