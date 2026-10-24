@@ -2,8 +2,6 @@ package souther.exact;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
@@ -133,7 +131,7 @@ public final class ExactArithmetic {
      * is one — would be divided once per digit, each time across all of its digits.
      */
     private static BigInteger withoutFives(BigInteger of, long[] taken) {
-        List<BigInteger> powers = new ArrayList<>();
+        int levels = 0;
         BigInteger power = ExactPowers.FIVE;
         while (true) {
             BigInteger[] divided = of.divideAndRemainder(power);
@@ -141,22 +139,32 @@ public final class ExactArithmetic {
                 break;
             }
             of = divided[0];
-            taken[0] += 1L << powers.size();
-            powers.add(power);
+            taken[0] += 1L << levels;
+            levels++;
             // A square with more bits than what is left cannot divide it.
             if (2L * power.bitLength() - 1 > of.bitLength()) {
                 break;
             }
             power = power.multiply(power);
         }
-        for (int i = powers.size() - 1; i >= 0; i--) {
-            BigInteger[] divided = of.divideAndRemainder(powers.get(i));
+        // Each power is squared up again rather than kept: the largest dominates the cost of all.
+        for (int i = levels - 1; i >= 0; i--) {
+            BigInteger[] divided = of.divideAndRemainder(fiveToTheTwoTo(i));
             if (divided[1].signum() == 0) {
                 of = divided[0];
                 taken[0] += 1L << i;
             }
         }
         return of;
+    }
+
+    /** Five to the power of two to the {@code level}. */
+    private static BigInteger fiveToTheTwoTo(int level) {
+        BigInteger power = ExactPowers.FIVE;
+        for (int i = 0; i < level; i++) {
+            power = power.multiply(power);
+        }
+        return power;
     }
 
     /**
