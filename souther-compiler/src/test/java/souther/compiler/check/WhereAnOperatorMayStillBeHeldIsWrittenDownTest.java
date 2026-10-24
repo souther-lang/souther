@@ -577,7 +577,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"
-                            + " placed"));
+                            + " placed"),
+            new Held("souther.compiler.check.LookupsAClauseNeeds.work",
+                    "names the conjunction and the disjunction, which are the two forms that carry"
+                            + " a false part on to the whole clause; any other operator says"
+                            + " nothing of the lookup"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {
