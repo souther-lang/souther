@@ -940,8 +940,9 @@ public final class InvariantChecker {
                                 .put(of.at(), new PartAsRead(of, partRead(came))));
                 owed = owed == null ? said : owed.and(said);
             }
+            worked.add(new WorkedClause(written.size(), view));
             written.add(new Written(new ReadingId(written.size()), stated, view, constrained,
-                    Map.of()));
+                    Map.of(), Map.of()));
             if (owed == null) {
                 owed = Predicates.Owed.unread();
             }
@@ -952,7 +953,6 @@ public final class InvariantChecker {
             Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
-            worked.add(new WorkedClause(view, constrained));
         }
         if (skipped) {
             // A rule of this value that no reading here took in, said once however many were
@@ -974,46 +974,36 @@ public final class InvariantChecker {
             }
         }
         // A value is one the clauses are worked out of and come to true, which the forms they came
-        // to do not say: they are the clauses over the whole numbers. What an operator asks of its
-        // operands is a limit on the values only where no value is left, so it is taken in then
-        // and not otherwise: a sum that fits wherever the clause holds draws no line of its own.
-        // Asked once the fields' own types are in, so that what a type already holds is not asked
-        // of a clause again.
-        Map<PartId<RuleRef.Invariant>, List<NumericConstraint>> askedOf = new LinkedHashMap<>();
-        Known past = k;
+        // to do not say: they are the clauses over the whole numbers. What a run needs of the
+        // numbers to work each part out is kept with the reading, for the projection and for what
+        // is shown to exist. And it limits the values themselves only where it leaves none: a sum
+        // that fits wherever the clause holds draws no line of its own. Asked once the fields' own
+        // types are in, so that what a type already holds is not asked of a clause again.
+        ClauseWorkingOut working = new ClauseWorkingOut(c.completion, c.predicates, k,
+                c.terms::inside);
+        Known workedOut = k;
         for (WorkedClause each : worked) {
+            Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> needs = new LinkedHashMap<>();
             for (Clauses.StatedPart part : each.view().present()) {
-                List<NumericConstraint> asked = c.completion.askedThrough(part.of().written(),
-                        part.of().positive(), past, at);
-                for (NumericConstraint one : asked) {
-                    past = past.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
+                WorkingOutNeeds asked = working.of(part.of(), at);
+                needs.put(part.id(), asked);
+                for (NumericConstraint one : asked.asked()) {
+                    workedOut = workedOut.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
                             c.terms.kindsOf(one.form()));
                 }
-                if (!asked.isEmpty()) {
-                    askedOf.put(part.id(), asked);
-                }
             }
+            written.set(each.reading(), written.get(each.reading()).alsoWorkedOut(needs));
         }
-        if (past.reachesNothing() && !k.reachesNothing()) {
-            k = past;
-            for (WorkedClause each : worked) {
-                for (Clauses.StatedPart part : each.view().present()) {
-                    List<NumericConstraint> asked = askedOf.get(part.id());
-                    if (asked == null) {
-                        continue;
+        if (workedOut.reachesNothing() && !k.reachesNothing()) {
+            k = workedOut;
+            for (Written each : written) {
+                each.view().present().forEach(part -> {
+                    WorkingOutNeeds asked = each.workedOutAt(part.id());
+                    if (asked != null) {
+                        asked.asked().forEach(one -> one.atoms()
+                                .forEach(spoken -> took.record(part.id().rule(), spoken)));
                     }
-                    Set<FactSubject> atomsAsked = new LinkedHashSet<>();
-                    asked.forEach(one -> atomsAsked.addAll(one.atoms()));
-                    atomsAsked.forEach(spoken -> took.record(part.id().rule(), spoken));
-                    Map<ClauseOccurrence, PartAsRead> occurrences = each.constrained()
-                            .computeIfAbsent(part.id(), _ -> new LinkedHashMap<>());
-                    PartAsRead before = occurrences.get(part.of().at());
-                    PartRead said = before == null
-                            ? new PartRead(atomsAsked, atomsAsked, asked)
-                            : before.said().alsoStating(atomsAsked, asked);
-                    occurrences.put(part.of().at(),
-                            new PartAsRead(before == null ? part.of() : before.of(), said));
-                }
+                });
             }
         }
         Map<RuleKey, FactSubject> atoms = new LinkedHashMap<>();
@@ -1686,10 +1676,12 @@ public final class InvariantChecker {
     record Written(ReadingId opened, Core clause, ClauseView view,
                    Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, PartAsRead>>
                            constrained,
-                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted) {
+                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted,
+                   Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> workedOut) {
 
         Written {
             constrained = Map.copyOf(constrained);
+            workedOut = Map.copyOf(workedOut);
         }
 
         /**
@@ -1714,7 +1706,25 @@ public final class InvariantChecker {
             if (authored.isEmpty()) {
                 throw new IllegalArgumentException("a clause reaching a value is written in parts");
             }
-            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of());
+            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of(),
+                    Map.of());
+        }
+
+        /**
+         * The same reading, with what a run needs of the numbers to work each of its parts out.
+         *
+         * <p>Held by the reading it is an account of, for the reason {@link #alsoAdopting} is: it is
+         * read once what holds where the value is built is known, which is after the reading of the
+         * clause was made.
+         */
+        Written alsoWorkedOut(Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> needs) {
+            return new Written(opened, clause, view, constrained, adopted, needs);
+        }
+
+        /** What a run needs to work the part {@code part} out, or null where this reading did not
+         *  ask — which is not the same as its needing nothing. */
+        WorkingOutNeeds workedOutAt(PartId<RuleRef.Invariant> part) {
+            return workedOut.get(part);
         }
 
         /**
@@ -1730,7 +1740,7 @@ public final class InvariantChecker {
             Map<ClauseOccurrence, ReadByClauses.OfAPart> out = new LinkedHashMap<>();
             account.forEach(each -> out.put(each.getKey(), each.getValue()));
             return new Written(opened, clause, view, constrained,
-                    Collections.unmodifiableMap(out));
+                    Collections.unmodifiableMap(out), workedOut);
         }
 
         /** What this reading made of the part at {@code at}, or null where it read no such part —
@@ -2086,26 +2096,17 @@ public final class InvariantChecker {
             narrowable = Set.copyOf(narrowable);
             stated = List.copyOf(stated);
         }
-
-        /** This, also stating {@code more} over {@code atoms}. */
-        PartRead alsoStating(Set<FactSubject> atoms, List<NumericConstraint> more) {
-            Set<FactSubject> spoken = new LinkedHashSet<>(constrained);
-            spoken.addAll(atoms);
-            Set<FactSubject> narrowed = new LinkedHashSet<>(narrowable);
-            narrowed.addAll(atoms);
-            List<NumericConstraint> both = new ArrayList<>(stated);
-            both.addAll(more);
-            return new PartRead(spoken, narrowed, both);
-        }
     }
 
     /**
-     * One clause of a declaration as it was read, kept until the fields' types are in and what the
-     * clause asks of the operations it works out can be told from what those already hold.
+     * One clause of a declaration as it was read, kept until the fields' types are in and what a
+     * run needs of the numbers to work it out can be told from what those already hold.
+     *
+     * @param reading which of the readings it is, where what that comes to is filed
+     * @param view    the parts it was written in
      */
-    private record WorkedClause(ClauseView view,
-                                Map<PartId<RuleRef.Invariant>,
-                                        Map<ClauseOccurrence, PartAsRead>> constrained) {}
+    private record WorkedClause(int reading, ClauseView view) {}
+
     /**
      * One occurrence of a part as that reading read it: the shape it is, and what the reading made
      * of it.

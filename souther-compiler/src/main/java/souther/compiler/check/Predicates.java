@@ -480,6 +480,26 @@ final class Predicates {
             return false;
         }
 
+        /**
+         * Whether what holds in {@code k} leaves no run on which this comes to what it states: it
+         * folded the other way on its own, or a part of it is refuted.
+         *
+         * <p>False is that nothing showed it, and not that some run does. A part the reading made
+         * nothing of refutes nothing.
+         */
+        boolean refutedBy(Known k) {
+            if (folded == Fold.FAILS) {
+                return true;
+            }
+            for (Part each : parts) {
+                if (each instanceof Part.Carried carried
+                        && carried.clause().refutedBy(k.numbers(), k.facts())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /** The same, having come out one way on its own as well. Said beside what it owes rather
          *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
          *  answered only one of them decided that for every caller there will ever be. */

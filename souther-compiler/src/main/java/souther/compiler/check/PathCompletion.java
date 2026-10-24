@@ -189,12 +189,7 @@ final class PathCompletion {
 
     private Operated operated(Core standing, Denotations at) {
         Core e = Core.withoutStanding(standing);
-        WhereAnOperatorAnswers where = switch (e) {
-            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                    binary.type(), List.of(binary.left().type(), binary.right().type()));
-            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
-            default -> null;
-        };
+        WhereAnOperatorAnswers where = whereItAnswers(e);
         LinearForm<FactSubject> form = switch (where) {
             case WhereAnOperatorAnswers.WhereItsExactValueIsHeld _ ->
                     terms.affineOf(standing, at);
@@ -204,6 +199,16 @@ final class PathCompletion {
             case null, default -> null;
         };
         return new Operated(e, where, form);
+    }
+
+    /** Where the operator {@code e} is answers, or null where {@code e} is no operator. */
+    private static WhereAnOperatorAnswers whereItAnswers(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> null;
+        };
     }
 
     /**
@@ -333,55 +338,146 @@ final class PathCompletion {
     }
 
     /**
-     * What every operator of {@code part} that a run is sure to work out asks of the operands
-     * ({@link #asked}), where {@code part} is a rule a value is held to, less what {@code k}
-     * already holds.
+     * What a run needs of the numbers to work {@code leaf} out, one part of a clause of no
+     * connective, wherever it is reached.
      *
-     * <p>A value is one the rule is worked out of and comes to true, so a value the rule stops a
-     * run in is none, whatever the form the rule comes to leaves it. Under
-     * {@code value >= 1 && value + M > 0} the sum answers where {@code value} is not above nought,
-     * and the form {@code value > -M} is the sum worked out over the whole numbers. The sum is read
+     * <p>The forms a part comes to are the part over the whole numbers, and a run works it out over
+     * the numbers a type holds. Under {@code value + M > 0} the sum answers where {@code value} is
+     * not above nought, and the form {@code value > -M} says nothing of it. Each operator is read
      * where it is written and not where it is composed into: {@code value + M - M >= 1} comes to
      * {@code value >= 1}, and the run stops at the sum all the same.
      *
-     * <p>Only the operators that are worked out whenever the rule is. The right of an {@code &&}
-     * is worked out where the rule is required to be true, because the left then was; the right of
-     * an {@code ||} is not, and is left out, as is anything below a node that is no operator.
-     * Leaving one out takes in less, which is the weaker of the two answers.
+     * <p>What an operator asks is taken in for the operators after it, so that one asked twice is
+     * asked once. A node whose children are not all worked out whenever it is — the arms of an
+     * {@code if}, the right of a connective inside an operand — is not read into, and says so if an
+     * operator under it may stop a run: leaving one out is the weaker answer, and not saying it
+     * would make it the stronger.
      *
-     * @param required whether {@code part} is held to come to true, which is what makes the right
-     *                 of an {@code &&} worked out
+     * @param k what holds where the part is worked out, which an operator's ask is not repeated of
      */
-    List<NumericConstraint> askedThrough(Core part, boolean required, Known k, Denotations at) {
-        List<NumericConstraint> out = new ArrayList<>();
-        askedThrough(part, required, k, at, out);
-        return List.copyOf(out);
+    WorkingOutNeeds workedOut(Core leaf, Known k, Denotations at) {
+        List<NumericConstraint> asked = new ArrayList<>();
+        boolean[] read = {true};
+        workedOut(leaf, k, at, asked, read);
+        return new WorkingOutNeeds(asked, read[0]);
     }
 
-    /** The same, with what is asked added to {@code out} and taken in as holding for what follows. */
-    private Known askedThrough(Core part, boolean required, Known k, Denotations at,
-                               List<NumericConstraint> out) {
-        Core e = Core.withoutStanding(part);
+    /** The same, adding to {@code asked} and clearing {@code read[0]}, and answering what holds past
+     *  {@code e}. */
+    private Known workedOut(Core e, Known k, Denotations at, List<NumericConstraint> asked,
+                            boolean[] read) {
+        Core bare = Core.withoutStanding(e);
         Known past = k;
-        switch (e) {
-            case Core.Binary binary -> {
-                past = askedThrough(binary.left(), required && binary.op() == BinOp.AND, past, at,
-                        out);
-                if (binary.op() == BinOp.AND && required) {
-                    past = askedThrough(binary.right(), true, past, at, out);
-                } else if (binary.op() != BinOp.AND && binary.op() != BinOp.OR) {
-                    past = askedThrough(binary.right(), false, past, at, out);
-                }
+        switch (bare) {
+            case Core.Binary binary when binary.op() == BinOp.AND || binary.op() == BinOp.OR -> {
+                // The left is worked out first, and the right only on the runs the left lets
+                // through.
+                past = workedOut(binary.left(), past, at, asked, read);
+                read[0] &= !mayStopARun(binary.right());
+                return past;
             }
-            case Core.Neg neg -> past = askedThrough(neg.operand(), false, past, at, out);
+            case Core.Binary binary -> {
+                past = workedOut(binary.left(), past, at, asked, read);
+                past = workedOut(binary.right(), past, at, asked, read);
+            }
+            case Core.Neg neg -> past = workedOut(neg.operand(), past, at, asked, read);
+            case Core.PreservedCall call -> {
+                for (Core argument : call.args()) {
+                    past = workedOut(argument, past, at, asked, read);
+                }
+                return past;
+            }
+            case Core.If branching -> {
+                past = workedOut(branching.cond(), past, at, asked, read);
+                read[0] &= !mayStopARun(branching.then()) && !mayStopARun(branching.els());
+                return past;
+            }
             default -> {
+                read[0] &= !mayStopARun(bare);
                 return past;
             }
         }
-        Operated operated = operated(part, at);
-        List<NumericConstraint> now = asked(operated, past);
-        out.addAll(now);
-        return taking(now, past);
+        Operated operated = operated(e, at);
+        switch (operated.where()) {
+            case WhereAnOperatorAnswers.Everywhere _ -> { }
+            case WhereAnOperatorAnswers.NotStated _ -> read[0] = false;
+            case WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest) -> {
+                past = operandsHeld(bare, least, greatest, past, at);
+                if (bare instanceof Core.Binary product && product.op() == BinOp.MUL
+                        && aProductOfValues(product, at)) {
+                    read[0] &= heldWherever(product, least, greatest, past, at);
+                } else if (operated.form() == null) {
+                    read[0] = false;
+                } else {
+                    List<NumericConstraint> now = asked(operated, past);
+                    asked.addAll(now);
+                    past = taking(now, past);
+                }
+            }
+            case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ -> {
+                if (operated.form() == null) {
+                    read[0] = false;
+                } else {
+                    List<NumericConstraint> now = asked(operated, past);
+                    asked.addAll(now);
+                    past = taking(now, past);
+                }
+            }
+        }
+        return past;
+    }
+
+    /**
+     * {@code k} with each operand of the operator {@code e} held to the numbers its type holds,
+     * from {@code least} to {@code greatest}.
+     *
+     * <p>An operand is a value of the type the operator takes, so it is there whatever the rules
+     * say of it. Without this a sum of two lengths asks that it fit and is told nothing holds that,
+     * though neither is above the greatest {@code Int}.
+     */
+    private Known operandsHeld(Core e, BigInteger least, BigInteger greatest, Known k,
+                               Denotations at) {
+        List<Core> operands = switch (Core.withoutStanding(e)) {
+            case Core.Binary binary -> List.of(binary.left(), binary.right());
+            case Core.Neg neg -> List.of(neg.operand());
+            default -> List.of();
+        };
+        Known out = k;
+        for (Core operand : operands) {
+            LinearForm<FactSubject> form = terms.affineOf(operand, at);
+            if (form == null || form.coefs().isEmpty()) {
+                continue;
+            }
+            if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
+                    instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)) {
+                out = out.taking(above, Rel.LE, Known.Held.ON_THE_PATH, terms.kindsOf(above));
+            }
+            if (form.minus(LinearForm.constant(ExactRatio.of(least)))
+                    instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)) {
+                out = out.taking(below, Rel.GE, Known.Held.ON_THE_PATH, terms.kindsOf(below));
+            }
+        }
+        return out;
+    }
+
+    /** Whether {@code product} multiplies two values, neither of which is a number written. */
+    private boolean aProductOfValues(Core.Binary product, Denotations at) {
+        LinearForm<FactSubject> left = terms.affineOf(product.left(), at);
+        LinearForm<FactSubject> right = terms.affineOf(product.right(), at);
+        return left != null && right != null && !left.coefs().isEmpty()
+                && !right.coefs().isEmpty();
+    }
+
+    /** Whether an operator under {@code e}, or {@code e} itself, answers on some operands only. */
+    private static boolean mayStopARun(Core e) {
+        Core bare = Core.withoutStanding(e);
+        if (whereItAnswers(bare) != null
+                && !(whereItAnswers(bare) instanceof WhereAnOperatorAnswers.Everywhere)) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(bare, child -> found[0] |= mayStopARun(child));
+        return found[0];
     }
 
     /**
