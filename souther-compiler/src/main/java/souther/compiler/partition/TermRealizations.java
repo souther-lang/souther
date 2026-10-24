@@ -33,6 +33,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Language;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
@@ -3368,6 +3369,45 @@ final class TermRealizations {
     }
 
     /**
+     * For each of {@code sums}, a string the rules on {@code holder} leave whose code points come
+     * to it, of a length every length asked admits.
+     *
+     * <p>Looked for among the strings the rules leave rather than written and moved, since a string
+     * of a format is made of the code points the format places, and moving one of them to reach a
+     * sum writes one the format refuses. Each is a proposal like the others, read back against
+     * every demand by whoever adopts it. Each sum is looked for in {@code steps}, and one that ran
+     * out of them is said, since a sum whose string was not found is not a sum with none.
+     */
+    private static LeftComingTo leftComingTo(TypeView holder, RuleReadingContext reading,
+                                             List<OfAString> wanted, List<Long> sums,
+                                             int steps) {
+        if (sums.isEmpty()) {
+            return new LeftComingTo(List.of(), false);
+        }
+        Partitions.StringsTheRulesLeave left = Partitions.stringsTheRulesLeave(holder, reading);
+        if (left == null) {
+            return new LeftComingTo(List.of(), false);
+        }
+        IntPredicate lengths = length -> wanted.stream()
+                .filter(each -> each.number() instanceof NumberOfAString.Length)
+                .allMatch(each -> each.holds().test(Count.of(length)));
+        List<String> out = new ArrayList<>();
+        boolean pastTheWork = false;
+        for (long sum : sums) {
+            switch (left.leaves().comingTo(sum, lengths, Integer.MAX_VALUE - 1, READABLE, steps)) {
+                case Language.ComingTo.Written(String text) -> out.add(text);
+                case Language.ComingTo.NoneDoes _ -> { }
+                case Language.ComingTo.PastTheWork _ -> pastTheWork = true;
+            }
+        }
+        return new LeftComingTo(out, pastTheWork);
+    }
+
+    /** The strings the rules leave that came to the sums, and whether looking for one ran out of
+     *  the steps it was given. */
+    private record LeftComingTo(List<String> found, boolean pastTheWork) {}
+
+    /**
      * Strings written for the number alone: {@code many} code points of the class, and the ones
      * that stand beside them where nothing is written — whitespace where the class does not count
      * it, and the separator the class leaves out. Each is a string some value holds, and none is
@@ -3731,6 +3771,10 @@ final class TermRealizations {
         for (String each : admittedStrings(holder, reading, lengths)) {
             search.adopt(each);
         }
+        LeftComingTo left = leftComingTo(holder, reading, wanted, sums, steps);
+        for (String each : left.found()) {
+            search.adopt(each);
+        }
         if (search.found().isEmpty()) {
             search.over(0, new int[kindsOfCodePoint], kinds);
         }
@@ -3774,7 +3818,7 @@ final class TermRealizations {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
         }
-        if (search.looked() >= steps || (inFull && kinds.size() <= largest)) {
+        if (search.looked() >= steps || (inFull && kinds.size() <= largest) || left.pastTheWork()) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
         }

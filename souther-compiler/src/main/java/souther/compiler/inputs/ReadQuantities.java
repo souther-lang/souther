@@ -23,6 +23,8 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.regex.Language;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -2252,6 +2254,11 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.ValueOf) {
             return admittedAt(term);
         }
+        Language.SumsOfCodePoints sums = sumsOfAFormatsCodePoints(term);
+        if (sums != null) {
+            return ValueSet.wholeNumbers(WholeNumberRuns.one(BigInteger.valueOf(sums.least()),
+                    sums.most() == null ? null : BigInteger.valueOf(sums.most())));
+        }
         if (!(admittedAt(term) instanceof ValueSet.Finite admitted)) {
             return ValueSet.ANY;
         }
@@ -2463,7 +2470,28 @@ final class ReadQuantities implements Quantities {
     private NumericDomain.Bounds ownOf(NumericTerm.FromOnePosition term) {
         Position at = byPath.get(term.position());
         PositionBounds bounds = at == null ? null : at.boundsFor(term);
-        return bounds == null ? null : bounds.admissible();
+        if (bounds != null) {
+            return bounds.admissible();
+        }
+        Language.SumsOfCodePoints sums = sumsOfAFormatsCodePoints(term);
+        return sums == null ? null : new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(sums.least())),
+                sums.most() == null ? null : Endpoint.inclusive(Count.of(sums.most())));
+    }
+
+    /**
+     * Where what the code points of a string of a format come to lies, where {@code term} is that
+     * number of a position whose values are a format's strings; null for any other number.
+     *
+     * <p>Between the least and the greatest the format's strings come to, which is every such
+     * number and may be some more: a format of {@code a} and {@code c} holds no string coming to
+     * 98. No clause states it, so no position's bounds hold it; it is what the strings the rules
+     * admit are.
+     */
+    private Language.SumsOfCodePoints sumsOfAFormatsCodePoints(NumericTerm.FromOnePosition term) {
+        return term instanceof NumericTerm.CodePointValueSum
+                && admittedAt(term) instanceof ValueSet.Matching(var language)
+                ? language.sumsOfCodePoints() : null;
     }
 
     /**

@@ -184,27 +184,55 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
      *  its string says. */
     @Test
     void everyRuleSomeStringTakesIsComposedARowThatTakesIt() {
-        ANSWERED.forEach((model, by) -> {
-            List<String> examples = new ArrayList<>();
-            Set<Integer> answers = new TreeSet<>();
-            for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
-                int answer = by.apply(textOf(row.getFirst().value()));
-                answers.add(answer);
-                examples.add("    | \"composed " + examples.size() + "\" : ("
-                        + row.getFirst().text() + ") -> " + answer);
-            }
-            assertEquals(COMPOSED_FOR.get(model), answers,
-                    () -> "a row for every rule some string takes: " + examples);
+        ANSWERED.forEach((model, by) -> composedAndAnswered(model, by, COMPOSED_FOR.get(model)));
+    }
 
-            // Run and not measured: an example whose answer is not the program's is an error,
-            // which is all this asks of the rows.
-            Compilation answeredBy = Compilation.ofSource(model + "example pick\n"
-                    + String.join("\n", examples) + "\n", "Main");
-            answeredBy.answerEverything();
-            assertEquals(List.of(), answeredBy.errors().stream()
-                    .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                    .toList(), () -> "each row is answered as its string says: " + examples);
-        });
+    /**
+     * Where the type holds its strings to a format, the strings coming to the number are ones it
+     * holds: thirteen digits come to no less than 624 and no more than 741, so a string of the
+     * format is on each side of 700, and a string written plainly and moved to the number is one
+     * the format refuses. The format that loops reaches 700 only past twelve digits.
+     */
+    @Test
+    void aStringComingToTheNumberIsOneItsTypeHolds() {
+        for (String rule : List.of("String.matches(\"[0-9]{13}\", value)",
+                "String.matches(\"[0-9]+\", value)")) {
+            composedAndAnswered("""
+                    module p
+                    data Code = String
+                        invariant %s
+                    behavior pick : (c: Code) -> Int
+                    let pick (c) = {
+                        guard List.sum(String.codePoints(c.value)) >= 700 else 0
+                        1
+                    }
+                    """.formatted(rule), text -> sumOf(text) >= 700 ? 1 : 0, Set.of(0, 1));
+        }
+    }
+
+    /** The rows composed for {@code model}'s rules, answered as {@code by} works them out and run:
+     *  {@code expected} are the answers some row is composed for. */
+    private static void composedAndAnswered(String model, Function<String, Integer> by,
+                                            Set<Integer> expected) {
+        List<String> examples = new ArrayList<>();
+        Set<Integer> answers = new TreeSet<>();
+        for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
+            int answer = by.apply(textOf(row.getFirst().value()));
+            answers.add(answer);
+            examples.add("    | \"composed " + examples.size() + "\" : ("
+                    + row.getFirst().text() + ") -> " + answer);
+        }
+        assertEquals(expected, answers,
+                () -> "a row for every rule some string takes: " + examples + "\n" + model);
+
+        // Run and not measured: an example whose answer is not the program's is an error, which
+        // is all this asks of the rows.
+        Compilation answeredBy = Compilation.ofSource(model + "example pick\n"
+                + String.join("\n", examples) + "\n", "Main");
+        answeredBy.answerEverything();
+        assertEquals(List.of(), answeredBy.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                .toList(), () -> "each row is answered as its string says: " + examples);
     }
 
     /** The total of a weighed code point is a multiple of the total, however far it is carried

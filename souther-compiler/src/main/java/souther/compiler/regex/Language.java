@@ -1,5 +1,7 @@
 package souther.compiler.regex;
 
+import java.util.function.IntPredicate;
+
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
@@ -204,6 +206,52 @@ public final class Language {
     public String someWritten() {
         return machine.shortestWritten();
     }
+
+    /**
+     * One string it holds with no control code but TAB, LF and CR, as {@link #someWritten}, whose
+     * code points come to {@code sum}, of a length {@code lengths} admits and no longer than
+     * {@code longest}; or that it holds none of those; or that finding one would take more than
+     * {@code work} steps.
+     *
+     * <p>Of the code points each symbol is, so of the string before anything makes it NFC: a caller
+     * offering it as a value asks whether the text it is let in as still answers. The code points
+     * are the least of {@code preferred} that lead to the sum, wherever there is one.
+     */
+    public ComingTo comingTo(long sum, IntPredicate lengths, int longest, CodePoints preferred,
+                             int work) {
+        return CodePointSums.comingTo(machine, sum, lengths, longest, preferred, work);
+    }
+
+    /** What looking for a string coming to a sum came to. */
+    public sealed interface ComingTo {
+
+        /** A string coming to it. */
+        record Written(String text) implements ComingTo {}
+
+        /** No string of the lengths asked comes to it. */
+        record NoneDoes() implements ComingTo {}
+
+        /** The steps allowed ran out before either was found. */
+        record PastTheWork() implements ComingTo {}
+    }
+
+    /**
+     * Where what the code points of a string it holds come to lies, or null where it holds none.
+     * Read off the machine, which is walked once.
+     */
+    public SumsOfCodePoints sumsOfCodePoints() {
+        return CodePointSums.range(machine);
+    }
+
+    /**
+     * The least and the greatest number the code points of a string of a language come to: every
+     * such number lies between them, and not every number between them is one.
+     *
+     * @param least the least of them
+     * @param most  the greatest, or null where a string of the language goes round a loop and so
+     *              they have none
+     */
+    public record SumsOfCodePoints(long least, Long most) {}
 
     /**
      * The same strings and these others, or null past what {@code meter} allows.
