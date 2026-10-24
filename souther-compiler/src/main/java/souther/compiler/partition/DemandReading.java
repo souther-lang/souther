@@ -953,15 +953,15 @@ final class DemandReading {
      */
     static final class PriorApplications {
 
-        private final Optional<List<Walked>> walked;
+        private final Optional<List<WalkedOver>> walked;
         private final Answered workedOut;
 
-        PriorApplications(Optional<List<Walked>> walked, Answered workedOut) {
+        PriorApplications(Optional<List<WalkedOver>> walked, Answered workedOut) {
             this.walked = walked.map(List::copyOf);
             this.workedOut = workedOut;
         }
 
-        Optional<List<Walked>> walked() {
+        Optional<List<WalkedOver>> walked() {
             return walked;
         }
 
@@ -970,7 +970,7 @@ final class DemandReading {
         }
 
         /** A container a closure is applied over, with the names as they stand where it is. */
-        record Walked(Core container, InputReads reads) {}
+        record WalkedOver(Core container, InputReads reads) {}
     }
 
     /** Whether {@code constraint} is an ordering of one number that holds at the least

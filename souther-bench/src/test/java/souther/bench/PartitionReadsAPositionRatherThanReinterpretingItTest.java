@@ -107,9 +107,14 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("what an operator answers over the types of its two operands, and what"
                             + " it reads them as, as the elaborator types it",
                     "souther.compiler.check.ArithmeticCheck#of", Traversal.OPAQUE),
-            new Authority("what a part of a body may end a run for itself, and where it answers,"
-                            + " each from the owner of what the part is",
-                    "souther.compiler.check.WhatARunMayEndFor", Traversal.OPAQUE),
+            new Authority("where an operator of the language answers a value, by the type it"
+                            + " answers",
+                    "souther.compiler.abort.AbortSites#completionOfAnOperator", Traversal.OPAQUE),
+            new Authority("whether every function a call is handed is a closure written at it",
+                    "souther.compiler.check.WhatARunMayEndFor#closuresWrittenAt",
+                    Traversal.OPAQUE),
+            new Authority("what is proved of the library's operations, read off their bodies",
+                    "souther.compiler.check.OperationFactBinder#bindAll", Traversal.OPAQUE),
 
             // An owner all the same, walked through. It cannot stand as a boundary: it hands its
             // decision to whichever term it is about, so a stop here would leave the place that

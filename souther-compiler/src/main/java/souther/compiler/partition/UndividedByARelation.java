@@ -1323,11 +1323,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (prior.walked().isEmpty()) {
             return false;
         }
-        for (DemandReading.PriorApplications.Walked each : prior.walked().get()) {
+        for (DemandReading.PriorApplications.WalkedOver each : prior.walked().get()) {
             if (!(each.reads().pathOf(each.container(), read.rules().newtypes())
                     instanceof PathResolution.At(TermPath collection))
-                    || !fewestOnAWitness(collection, reads, read, region, conditions,
-                            BigInteger.ONE).equals(Optional.of(BigInteger.ONE))) {
+                    || !fewestOnAWitness(collection, reads, read, region, conditions, true)
+                            .equals(Optional.of(BigInteger.ONE))) {
                 return false;
             }
         }
@@ -1371,7 +1371,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         return Optional.empty();
                     }
                     return sizes.computeIfAbsent(path, collection -> fewestOnAWitness(collection,
-                            reads, read, region, conditions, BigInteger.ZERO));
+                            reads, read, region, conditions, false));
                 });
     }
 
@@ -1389,21 +1389,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * applied. Anything else the way asks of the collection, or of what is in it, leaves no row
      * cut down to so few shown to be one of the way.
      *
-     * <p>And no fewer than {@code atLeast}, which the reader asking needs. Where that is one, a
-     * witness of one element is asked for, and what the way asks of the positions inside it is
-     * asked of that one element, the one the relation is read at: the region the relation is read
-     * over holds it there already.
+     * <p>Where {@code oneElementAsked}, the collection is asked to hold the one element the
+     * relation is read at, and no fewer: what the way asks of the positions inside it is then
+     * asked of that element, which the region the relation is read over holds there already.
      */
     private Optional<BigInteger> fewestOnAWitness(TermPath collection, List<TermPath> reads,
                                                   InputReading read, SearchRegion region,
-                                                  List<OnAWay> conditions, BigInteger atLeast) {
-        BigInteger asked = atLeast;
-        boolean ofTheOneElement = atLeast.equals(BigInteger.ONE);
+                                                  List<OnAWay> conditions,
+                                                  boolean oneElementAsked) {
+        BigInteger asked = oneElementAsked ? BigInteger.ONE : BigInteger.ZERO;
         for (OnAWay each : conditions) {
             if (each.positions().stream().noneMatch(at -> overlap(at, collection))) {
                 continue;
             }
-            if (ofTheOneElement && each.positions().stream()
+            if (oneElementAsked && each.positions().stream()
                     .allMatch(at -> !at.equals(collection) && at.isAtOrUnder(collection))) {
                 continue;
             }

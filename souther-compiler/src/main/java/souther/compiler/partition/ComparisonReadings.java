@@ -551,8 +551,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * in, and apart from that what the applications before work out
      * ({@link DemandReading.PriorApplications}) — the call applying the closure read whole, the
      * comparison apart, which is the relation's own working out wherever it is applied. A region
-     * carries what those narrow as well, which asks more of a row than a run of one application
-     * does and never less.
+     * carries only what the run up to the application narrows: what only the applications before
+     * narrow holds of a run that makes them and of no other, so it is owed with them as a stop on
+     * the places it names.
      */
     private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
         Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
@@ -563,12 +564,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return workedOut(whole, comparison, ofTheRelation, in, reads);
         }
         DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads);
-        Optional<List<DemandReading.PriorApplications.Walked>> walked =
-                walkedOneAfterAnother(first.entered(), reads);
-        return workedOut(first.parts(), comparison, ofTheRelation, in, reads)
-                .and(new DemandReading.Answered(before.narrowing(), List.of(), false))
-                .after(new DemandReading.PriorApplications(walked, new DemandReading.Answered(
-                        List.of(), before.tied(), before.unsaid(), before.owed())));
+        DemandReading.Answered upTo = workedOut(first.parts(), comparison, ofTheRelation, in,
+                reads);
+        List<Set<TermPath>> ties = new ArrayList<>(before.tied());
+        for (TakenConstraint each : before.narrowing()) {
+            if (!upTo.narrowing().contains(each)) {
+                Set<TermPath> places = new LinkedHashSet<>();
+                each.terms().forEach(term -> places.add(term.subjectPath()));
+                ties.add(places);
+            }
+        }
+        return upTo.after(new DemandReading.PriorApplications(
+                walkedOneAfterAnother(first.entered(), reads),
+                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed())));
     }
 
     /**
@@ -576,9 +584,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * what it walks one after another from the first, as far as every one of them or until one
      * answers some way — or empty where one is not shown to.
      */
-    private static Optional<List<DemandReading.PriorApplications.Walked>> walkedOneAfterAnother(
+    private static Optional<List<DemandReading.PriorApplications.WalkedOver>> walkedOneAfterAnother(
             List<WhatARunWorksOutBeforeACount.Applying> entered, InputReads reads) {
-        List<DemandReading.PriorApplications.Walked> out = new ArrayList<>();
+        List<DemandReading.PriorApplications.WalkedOver> out = new ArrayList<>();
         for (WhatARunWorksOutBeforeACount.Applying each : entered) {
             ClosureUses uses = reads.usesOf(each.closure());
             ClosureUses.Application applied = uses == null || uses.usedElsewhere() ? null
@@ -589,7 +597,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             if (applied == null || !EACH_IN_TURN.contains(applied.applied())) {
                 return Optional.empty();
             }
-            out.add(new DemandReading.PriorApplications.Walked(applied.container(), reads));
+            out.add(new DemandReading.PriorApplications.WalkedOver(applied.container(), reads));
         }
         return Optional.of(out);
     }

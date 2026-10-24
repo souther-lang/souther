@@ -501,7 +501,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * reached at every value. Where the way asks for two, or the walk is of a list the input is
      * not read as, the applications before are owed, and a division by a number the relation
      * reads may stop them. A stop before the comparison in its own application is owed whatever
-     * the list holds.
+     * the list holds: {@code p} is not shown reached at every value, and {@code r}, held against
+     * {@code p}, is not shown to be reached by it at every value.
      */
     @Test
     void theApplicationsBeforeTheOneARelationIsReachedInAreOwedOnlyWhereARunMakesThem() {
@@ -519,10 +520,31 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "List.length(xs) >= 2 && " + walk.formatted("xs")), "4:56"));
         assertEquals(notReached, leftIn(model.formatted(walk.formatted("List.reverse(xs)")),
                 "4:32"));
-        Map<String, String> divided = leftIn(model.formatted(
-                "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50");
-        assertEquals(NOT_REACHED, divided.get("xs[*].p"), divided::toString);
-        assertFalse(divided.containsValue(RELATES), divided::toString);
+        assertEquals(Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_SHOWN), leftIn(model.formatted(
+                "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));
+    }
+
+    /**
+     * A stop only the applications before the one a relation is reached in make is owed of a run
+     * that makes them, on a number outside the list as on one inside it: {@code k * 10} past the
+     * comparison stops a run at a {@code k} whose tenfold is no {@code Int}, but only at an
+     * application after the first. Where the list may hold one element, every {@code k} gets to
+     * the comparison; where the way asks for two, a run may stop on the {@code k} the relation
+     * reads.
+     */
+    @Test
+    void aStopOnlyTheApplicationsBeforeMakeIsOwedOfARunThatMakesThem() {
+        String model = """
+                module w1
+                data A = { p: Int }
+                behavior m : (xs: List<A>, k: Int) -> Bool
+                let m (xs, k) = %s
+                """;
+        String walk = "List.any(i -> i.p >= k && k * 10 >= 0, xs)";
+        assertEquals(Map.of("xs[*].p", RELATES, "k", RELATES),
+                leftIn(model.formatted(walk), "4:35"));
+        assertEquals(Map.of("xs[*].p", NOT_REACHED, "k", NOT_REACHED),
+                leftIn(model.formatted("List.length(xs) >= 2 && " + walk), "4:59"));
     }
 
     /**
