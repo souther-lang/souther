@@ -8,7 +8,7 @@
 // down every node's zones and answers by what some node it reaches meets, or what every node does.
 module conformance.searching exposing
     ( Shelf, Restock, Fine, Zone, restockByRecursion, restockByFold, restockAnyZone
-    , everyZoneStocked )
+    , everyZoneStocked, restockAnyZoneWithoutALeafRow )
 
 data Shelf = { counts: List<Int> }
 
@@ -91,3 +91,17 @@ example everyZoneStocked
         (Zone { count = 5, zones = [ Zone { count = 0, zones = [] } ] }) -> Restock
     | "a zone below the floor is restocked" :
         (Zone { count = 1, zones = [] }) -> Restock
+
+// The search again, with no row that comes back empty at a zone with nothing inside it. Every other
+// step of it has a row, so what the decision is short of is that one, and a row for it is what a
+// person is offered.
+behavior restockAnyZoneWithoutALeafRow : (zone: Zone) -> Restock | Fine
+let restockAnyZoneWithoutALeafRow (zone) = if anyShort(zone) then Restock else Fine
+
+example restockAnyZoneWithoutALeafRow
+    | "a zone below the floor is restocked" :
+        (Zone { count = 1, zones = [] }) -> Restock
+    | "a zone inside one below the floor is restocked" :
+        (Zone { count = 5, zones = [ Zone { count = 0, zones = [] } ] }) -> Restock
+    | "zones at the floor everywhere are fine" :
+        (Zone { count = 3, zones = [ Zone { count = 4, zones = [] } ] }) -> Fine

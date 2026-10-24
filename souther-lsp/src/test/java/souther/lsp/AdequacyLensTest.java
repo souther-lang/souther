@@ -132,6 +132,31 @@ class AdequacyLensTest {
                 | (Total(5000), Standard, Express) -> Fee(500)
             """;
 
+    private static final String CASES = "file:///cases.sou";
+
+    /**
+     * A behavior whose only gap is a step of a search no row was seen in: both rules are taken, no
+     * class is owed, and no row sits at a line. What a search draws inside itself is all that is
+     * left to write a row for.
+     */
+    private static final String ONLY_A_STEP_OF_A_SEARCH = """
+            module cases
+
+            data Node = { v: Int, below: List<Node> }
+            data Yes
+            data No
+            let anyBig (n: Node): Bool = n.v > 5 || List.any(c -> anyBig(c), n.below)
+
+            behavior f : (t: Node) -> Yes | No
+            let f (t) = if anyBig(t) then Yes else No
+
+            example f
+                | "the top" : (Node { v = 9, below = [] }) -> Yes
+                | "below" : (Node { v = 0, below = [ Node { v = 9, below = [] } ] }) -> Yes
+                | "a child that fails" :
+                    (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
+            """;
+
     private static ModuleGraph graphOf(Map<String, String> documents) {
         return ModuleGraph.of(new LinkedHashMap<>(documents));
     }
@@ -377,6 +402,33 @@ class AdequacyLensTest {
         assertEquals(List.of(),
                 errorsIn(TRIP.stripTrailing() + "\n" + taken.newText()),
                 "and the document goes on compiling with them in it");
+    }
+
+    /**
+     * A step of a search no row was seen in is work the offer stands for.
+     *
+     * <p>The editor decides whether to offer the rows by what is owed, and asks nothing that
+     * composes. A behavior whose only gap is a case a statement draws inside itself was written a
+     * block by the command and offered nothing by the editor, because what the editor asks did not
+     * know of cases.
+     */
+    @Test
+    void aStepOfASearchNoRowWasSeenInIsOffered() {
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph graph = graphOf(Map.of(CASES, ONLY_A_STEP_OF_A_SEARCH));
+        List<CodeAction> actions =
+                analyzer.codeActions(CASES, ONLY_A_STEP_OF_A_SEARCH, on(7), graph);
+
+        assertEquals(1, actions.size(), actions.toString());
+        CodeAction.Edit taken = analyzer.resolve(
+                assertInstanceOf(CodeAction.Deferred.class, actions.get(0)),
+                ONLY_A_STEP_OF_A_SEARCH, graph);
+        assertNotNull(taken, "and taking it writes the row");
+        assertTrue(taken.newText().contains("below = []"),
+                "the row is a node with nothing below it: " + taken.newText());
+        assertEquals(List.of(),
+                errorsIn(ONLY_A_STEP_OF_A_SEARCH.stripTrailing() + "\n" + taken.newText()),
+                "and the document goes on compiling with it in it");
     }
 
     /**

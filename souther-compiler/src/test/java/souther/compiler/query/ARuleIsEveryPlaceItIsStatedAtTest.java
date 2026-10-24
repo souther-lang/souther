@@ -284,10 +284,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         OnTheWay.Declined declinedSecond = declined(1);
         DecisionReading.Ruled one = new DecisionReading.Ruled(first.rule(),
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedFirst),
-                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE, List.of())), true);
         DecisionReading.Ruled other = new DecisionReading.Ruled(first.rule(),
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
-                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE, List.of())), true);
         SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
                 cameToNothing(), CompositionAccount.NOTHING), Set.of());
         SettledAt composed = new SettledAt(other, RuleSettlement.of(
