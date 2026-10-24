@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -244,13 +245,35 @@ public final class ElementsApart {
     /** {@link #readOffABinding(Core)}, leaving out a newtype's own {@code value} where
      *  {@code newtypes} is given. */
     private static List<String> readOffABinding(Core e, DeclarationNewtypes newtypes) {
+        ReadOff off = readOff(e, newtypes);
+        return Core.withoutStanding(off.holder()) instanceof Core.Read
+                ? off.path().steps() : null;
+    }
+
+    /**
+     * A value and the run of fields read off it.
+     *
+     * @param holder the value the first field is read off, or the value itself where none is
+     * @param path   the fields read, outermost first, as a rule of the holder names them
+     */
+    public record ReadOff(Core holder, RuleKey path) {
+
+        public ReadOff {
+            Objects.requireNonNull(holder, "fields are read off some value");
+            Objects.requireNonNull(path, "a value is read off its holder by some run of fields");
+        }
+    }
+
+    /**
+     * What {@code e} is read off, and by which fields: the rules of the holder about the value at
+     * that run are rules about {@code e} ({@link #heldAt}). A newtype's own {@code value} is no
+     * step, as a place of a value names its fields.
+     */
+    public static ReadOff readOff(Core e, DeclarationNewtypes newtypes) {
         List<String> run = new ArrayList<>();
         Core at = Core.withoutStanding(e);
         while (true) {
             switch (at) {
-                case Core.Read _ -> {
-                    return run.reversed();
-                }
                 case Core.FieldAccess access -> {
                     if (newtypes == null
                             || Location.isStep(access.target().type(), access.field(), newtypes)) {
@@ -271,7 +294,7 @@ public final class ElementsApart {
                     at = Core.withoutStanding(projection.base());
                 }
                 default -> {
-                    return null;
+                    return new ReadOff(at, new RuleKey(run.reversed()));
                 }
             }
         }
@@ -349,7 +372,7 @@ public final class ElementsApart {
 
     /** The fields {@code closure} reads off its one parameter in order, or null where it does
      *  anything else with it. */
-    private static List<String> runTaken(Core closure, DeclarationNewtypes newtypes) {
+    public static List<String> runTaken(Core closure, DeclarationNewtypes newtypes) {
         if (!(Core.withoutStanding(closure) instanceof Core.Block block)
                 || block.params().size() != 1) {
             return null;

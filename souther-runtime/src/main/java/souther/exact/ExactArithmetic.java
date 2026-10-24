@@ -89,7 +89,7 @@ public final class ExactArithmetic {
         if (numerator.bitLength() < Long.SIZE - 1 && denominator.bitLength() < Long.SIZE - 1) {
             return canonical(numerator.longValue(), denominator.longValue(), twos, fives);
         }
-        BigInteger common = numerator.gcd(denominator);
+        BigInteger common = commonFactor(numerator, denominator);
         if (!common.equals(BigInteger.ONE)) {
             numerator = numerator.divide(common);
             denominator = denominator.divide(common);
@@ -166,6 +166,18 @@ public final class ExactArithmetic {
         }
         return new ExactParts(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator),
                 twos, fives);
+    }
+
+    /**
+     * The greatest common factor of two whole numbers of any size, which is one wherever either is.
+     *
+     * <p>The one place a gcd of these is taken. A whole number is a fraction over one and the ends of
+     * an integer type, the least and greatest long, are past the long route, so these come through
+     * here at every read of such a bound; and a gcd with one is not free — it walks the bits of the
+     * other.
+     */
+    public static BigInteger commonFactor(BigInteger a, BigInteger b) {
+        return a.equals(BigInteger.ONE) || b.equals(BigInteger.ONE) ? BigInteger.ONE : a.gcd(b);
     }
 
     /** The greatest common factor of two positive longs. */
@@ -348,8 +360,8 @@ public final class ExactArithmetic {
         if (a.isZero() || b.isZero()) {
             return ExactParts.ZERO;
         }
-        BigInteger acrossOne = a.numerator().gcd(b.denominator());
-        BigInteger acrossTwo = b.numerator().gcd(a.denominator());
+        BigInteger acrossOne = commonFactor(a.numerator(), b.denominator());
+        BigInteger acrossTwo = commonFactor(b.numerator(), a.denominator());
         try {
             return new ExactParts(
                     a.numerator().divide(acrossOne).multiply(b.numerator().divide(acrossTwo)),
@@ -404,8 +416,8 @@ public final class ExactArithmetic {
         if (a.isZero()) {
             return ExactParts.ZERO;
         }
-        BigInteger acrossOne = a.numerator().gcd(b.numerator());
-        BigInteger acrossTwo = a.denominator().gcd(b.denominator());
+        BigInteger acrossOne = commonFactor(a.numerator(), b.numerator());
+        BigInteger acrossTwo = commonFactor(a.denominator(), b.denominator());
         try {
             return new ExactParts(
                     a.numerator().divide(acrossOne).multiply(b.denominator().divide(acrossTwo)),
@@ -811,12 +823,12 @@ public final class ExactArithmetic {
                 ExactPowers.lessened(b.fives(), commonFives)));
         // The denominators' common factor off before either is multiplied out, and the sum's
         // common factor with its denominator after, so the fraction is no larger than it is.
-        BigInteger shared = a.denominator().gcd(b.denominator());
+        BigInteger shared = commonFactor(a.denominator(), b.denominator());
         BigInteger overA = a.denominator().divide(shared);
         BigInteger overB = b.denominator().divide(shared);
         BigInteger sum = here.multiply(overB).add(there.multiply(overA));
         BigInteger denominator = overA.multiply(b.denominator());
-        BigInteger common = sum.gcd(denominator);
+        BigInteger common = commonFactor(sum, denominator);
         if (common.signum() != 0 && !common.equals(BigInteger.ONE)) {
             sum = sum.divide(common);
             denominator = denominator.divide(common);
@@ -922,7 +934,7 @@ public final class ExactArithmetic {
             BigInteger there = b.numerator().multiply(ExactPowers.powers(
                     ExactPowers.lessened(b.twos(), commonTwos),
                     ExactPowers.lessened(b.fives(), commonFives)));
-            BigInteger shared = a.denominator().gcd(b.denominator());
+            BigInteger shared = commonFactor(a.denominator(), b.denominator());
             BigInteger overThis = a.denominator().divide(shared);
             Summed sum = summed(
                     here.multiply(b.denominator().divide(shared)), there.multiply(overThis));

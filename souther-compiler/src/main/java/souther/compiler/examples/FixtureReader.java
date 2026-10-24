@@ -381,7 +381,7 @@ public final class FixtureReader {
      * case reads as no case at all — and resolving one in this module's scope would answer for a case
      * this module happens to declare under the same spelling rather than for the one the value is.
      */
-    private TypeSymbol caseOfValue(Object value, Type outType) {
+    TypeSymbol caseOfValue(Object value, Type outType) {
         if (value == null) {
             return null;
         }

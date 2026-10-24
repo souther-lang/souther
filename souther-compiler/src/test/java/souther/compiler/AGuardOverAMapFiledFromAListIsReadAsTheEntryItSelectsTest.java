@@ -169,6 +169,80 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
     }
 
+    /**
+     * A list whose rules keep its elements apart at the key holds no key twice, so every element
+     * is the entry of its key and the order of a repeated key is no case of the model. Beside
+     * {@link #MODEL}, which differs by the invariant alone.
+     */
+    @Test
+    void aListWhoseRulesKeepTheKeysApartHasNoOrderToMeasure() throws Exception {
+        Compilation compilation = measured("""
+                module p
+                data LI = { sku: String, q: Int }
+                data Row = { sku: String, qty: Int }
+                data Rows = { rows: List<Row> }
+                    invariant List.allDistinctBy(.sku, rows)
+                data Empty = { n: Int }
+                behavior f : (items: List<LI>, snap: Rows) -> Int | Empty
+                let f (items, snap) = {
+                    let stock = List.indexBy(.sku, snap.rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.qty >= i.q
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                """);
+        String json = AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        List<String> words = new ArrayList<>();
+        collectWeakening(JSON.readTree(json), words);
+
+        assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+        assertFalse(json.contains("last snap.rows"), json);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report(compilation)),
+                () -> report(compilation));
+    }
+
+    /**
+     * The same of a list a dependency answers: the rules of what it answers hold of every answer.
+     * Beside it, the same dependency answering a list nothing keeps apart is still said to leave the
+     * order unmeasured.
+     */
+    @Test
+    void aDependencysListWhoseRulesKeepTheKeysApartHasNoOrderToMeasure() throws Exception {
+        String model = """
+                module p
+                data LI = { sku: String, q: Int }
+                data Row = { sku: String, qty: Int }
+                data Rows = { rows: List<Row> }
+                    %s
+                data Empty = { n: Int }
+                behavior readRows : (items: List<LI>) -> Rows
+                    constructs Rows, Row
+                behavior f : (items: List<LI>) -> Int | Empty
+                    depends on readRows
+                let f (items, readRows) = {
+                    let stock = List.indexBy(.sku, readRows(items).rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.qty >= i.q
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                """;
+        List<String> apart = new ArrayList<>();
+        Compilation kept = measured(model.formatted("invariant List.allDistinctBy(.sku, rows)"));
+        collectWeakening(JSON.readTree(AdequacyReport.of(kept)
+                .json(SourceRendering.namedByIdentity(kept.texts()))), apart);
+        List<String> mayRepeat = new ArrayList<>();
+        Compilation open = measured(model.formatted("invariant List.length(rows) >= 0"));
+        collectWeakening(JSON.readTree(AdequacyReport.of(open)
+                .json(SourceRendering.namedByIdentity(open.texts()))), mayRepeat);
+
+        assertEquals(List.of(), errors(kept));
+        assertFalse(apart.contains("keyed_overwrite_cases_unmeasured"), apart::toString);
+        assertTrue(mayRepeat.contains("keyed_overwrite_cases_unmeasured"), mayRepeat::toString);
+    }
+
     private static void collectWeakening(JsonNode node, List<String> into) {
         if (node.isObject()) {
             node.properties().forEach(entry -> {
@@ -203,6 +277,155 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
                 """);
 
         assertEquals(List.of(), errors(compilation), () -> report(compilation));
+    }
+
+    /** Weakening words of {@link #MODEL} measured with {@code rows} written for it. */
+    private static List<String> weakeningWith(String rows) throws Exception {
+        return weakeningOf(MODEL + "\nexample f\n" + rows);
+    }
+
+    /**
+     * Rows where the order of a key held twice decided the guard both ways round — the last row
+     * short where the first was enough, and the last enough where the first was short — leave
+     * nothing of the order unmeasured.
+     */
+    @Test
+    void rowsWhereTheOrderDecidedBothWaysMeasureIt() throws Exception {
+        List<String> words = weakeningWith("""
+                    | "last row short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                    | "last row enough" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }]) -> 1
+                """);
+
+        assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+    }
+
+    /**
+     * The control: rows of one way round only, and rows holding a key twice where the order
+     * decides nothing, leave the other way unmeasured.
+     */
+    @Test
+    void rowsWhereTheOrderDecidedOneWayLeaveTheOtherUnmeasured() throws Exception {
+        List<String> oneWay = weakeningWith("""
+                    | "last row short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                """);
+        List<String> decidingNothing = weakeningWith("""
+                    | "both short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 1 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                    | "both enough" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 20 }]) -> 1
+                """);
+
+        assertTrue(oneWay.contains("keyed_overwrite_cases_unmeasured"), oneWay::toString);
+        assertTrue(decidingNothing.contains("keyed_overwrite_cases_unmeasured"),
+                decidingNothing::toString);
+    }
+
+    /** Weakening words of {@code source} measured as it stands, which must have no error. */
+    private static List<String> weakeningOf(String source) throws Exception {
+        Compilation compilation = measured(source);
+        assertEquals(List.of(), errors(compilation), () -> report(compilation));
+        List<String> words = new ArrayList<>();
+        collectWeakening(JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()))), words);
+        return words;
+    }
+
+    /** The lookup decides only where {@code enabled}; elsewhere the behavior answers 0 and the
+     *  lookup is never made. */
+    private static final String GUARDED = """
+            module p
+            data LI = { sku: String, q: Int }
+            data Row = { sku: String, qty: Int }
+            behavior f : (enabled: Bool, items: List<LI>, rows: List<Row>) -> Int
+            let enough (stock: Map<String, Row>, i: LI): Bool =
+                match Map.get(i.sku, stock) with
+                    | Some r -> r.qty >= i.q
+                    | None -> i.q <= 0
+            let f (enabled, items, rows) = {
+                let stock = List.indexBy(.sku, rows)
+                if enabled then (if List.all(i -> enough(stock, i), items) then 1 else 2) else 0
+            }
+            example f
+            """;
+
+    private static final String BOTH_SIDES_OF_THE_GUARD = """
+                | "enough" : (true, [LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }]) -> 1
+                | "short" : (true, [LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }]) -> 2
+            """;
+
+    /**
+     * A row is evidence about a decision where its run went through it. Rows that hold a key twice
+     * in both orders, but with the lookup switched off, are inputs the lookup would tell apart and
+     * were never asked: the order of the repeated key stays unmeasured.
+     */
+    @Test
+    void rowsThatNeverReachedTheLookupDoNotMeasureItsOrder() throws Exception {
+        List<String> words = weakeningOf(GUARDED + BOTH_SIDES_OF_THE_GUARD + """
+                | "off, last short" : (false, [LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> 0
+                | "off, last enough" : (false, [LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }]) -> 0
+                """);
+
+        assertTrue(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+    }
+
+    /** The control: the same two orders with the lookup switched on measure it. */
+    @Test
+    void rowsThatRanThroughTheLookupMeasureItsOrder() throws Exception {
+        List<String> words = weakeningOf(GUARDED + BOTH_SIDES_OF_THE_GUARD + """
+                | "on, last short" : (true, [LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> 2
+                | "on, last enough" : (true, [LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }]) -> 1
+                """);
+
+        assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+    }
+
+    /** One decision resting on the entries of two maps, each filed from a list of its own. */
+    private static final String TWO_MAPS = """
+            module p
+            data LI = { sku: String, q: Int }
+            data Row = { sku: String, qty: Int }
+            data Empty = { n: Int }
+            behavior f : (items: List<LI>, a: List<Row>, b: List<Row>) -> Int | Empty
+            let have (stock: Map<String, Row>, i: LI): Bool =
+                match Map.get(i.sku, stock) with
+                    | Some r -> r.qty >= i.q
+                    | None -> false
+            let f (items, a, b) = {
+                let sa = List.indexBy(.sku, a)
+                let sb = List.indexBy(.sku, b)
+                guard List.all(i -> have(sa, i) || have(sb, i), items) else Empty { n = 0 }
+                1
+            }
+            example f
+            """;
+
+    /**
+     * Each order is its own distinction. Rows that settle the order of the first map both ways say
+     * nothing of the second, whose order no row has been asked about.
+     */
+    @Test
+    void theOrderOfOneMapIsNotTheOrderOfAnother() throws Exception {
+        List<String> words = weakeningOf(TWO_MAPS + """
+                | "first, last short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }], []) -> Empty { n = 0 }
+                | "first, last enough" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }], []) -> 1
+                """);
+
+        assertTrue(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+    }
+
+    /**
+     * And each is measured on its own: in rows where both maps hold a key twice, reading both the
+     * other way round changes nothing — one makes the answer what the other undoes — while reading
+     * either alone does. Four such rows settle both orders both ways.
+     */
+    @Test
+    void eachOrderIsMeasuredWithTheOtherLeftAsItIs() throws Exception {
+        List<String> words = weakeningOf(TWO_MAPS + """
+                | "second decides, held" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }]) -> 1
+                | "first decides, held" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }, Row { sku = "A", qty = 10 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> 1
+                | "first decides, failed" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }], [Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                | "second decides, failed" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 2 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> Empty { n = 0 }
+                """);
+
+        assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
     }
 
     /** The control: a wrong answer for the repeated key is refused. */

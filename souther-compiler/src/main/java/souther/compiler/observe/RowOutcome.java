@@ -90,7 +90,8 @@ import java.util.Objects;
  * @param stage          how far it got
  * @param disposition    how it ended
  * @param failurePhase   where it stopped, when it did
- * @param expectedArm    the case the row's expectation constructs, or null when the text does not say
+ * @param expectedArm    the case the row's expectation is: the one it constructs, or where it
+ *                       constructs none, the one the value it builds to is. Null where neither says
  * @param resultArm      the case the behavior answered with, or null when it did not run or did not
  *                       answer with a case
  * @param answer         what the behavior answered, which a row has exactly where it got to

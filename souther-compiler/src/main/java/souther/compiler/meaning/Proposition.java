@@ -1328,14 +1328,23 @@ public sealed interface Proposition {
      * which a map filed from a list says of the entry under a key.
      */
     static boolean saysTheLastToHold(Proposition stated) {
-        return switch (stated) {
-            case LastToHold _ -> true;
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
-                 WhereItAnswers _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::saysTheLastToHold);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
-                 Carried _ -> false;
-        };
+        return !stated.lastsToHold().isEmpty();
+    }
+
+    /**
+     * Every statement inside this of which element is the last of those holding a value, in the
+     * order they are met.
+     *
+     * <p>Each is a distinction of its own: a statement resting on two maps, each filed from a list,
+     * rests on two orders, and reading one the other way round leaves the other as it is. A reader
+     * that asks what an order decides asks it of one of these and not of the statement they are
+     * parts of.
+     */
+    default List<LastToHold> lastsToHold() {
+        if (this instanceof LastToHold last) {
+            return List.of(last);
+        }
+        return partsHeld().stream().flatMap(part -> part.lastsToHold().stream()).toList();
     }
 
     /**

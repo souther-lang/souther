@@ -1871,8 +1871,13 @@ final class Pullback {
          * a dependency answered: the list's own element, under the key {@code key} makes of it.
          * Of two elements of one key the later is the entry, so what a statement is about is the
          * last element of its key.
+         *
+         * @param keysMayRepeat whether two elements of the list may come to one key. Not where
+         *                      the rules of the list keep its elements apart at the fields the key
+         *                      reads, and then every element is an entry
          */
-        record AFiledElement(DecisionSubject list, Core.Block key) implements ElementAt {
+        record AFiledElement(DecisionSubject list, Core.Block key, boolean keysMayRepeat)
+                implements ElementAt {
 
             public AFiledElement {
                 Objects.requireNonNull(list, "an entry is an element of some list");
@@ -3157,7 +3162,8 @@ final class Pullback {
                                     observe(value, aspect, in);
                             case ElementAt.AtASubject(DecisionSubject container) ->
                                     observedAt(container.element(), aspect);
-                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _) ->
+                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _,
+                                                         boolean _) ->
                                     observedAt(list.element(), aspect);
                             // Of an element known only by the side every element of an answer
                             // comes out on, that side is known and no other.
@@ -3225,7 +3231,7 @@ final class Pullback {
                 case ElementAt.AtASubject(DecisionSubject map) -> map.key();
                 // The entry under a key is an element of the list, so the key it stands under is
                 // what the closure makes of that element.
-                case ElementAt.AFiledElement(DecisionSubject list, Core.Block key) ->
+                case ElementAt.AFiledElement(DecisionSubject list, Core.Block key, boolean _) ->
                         keyOfTheFiledElement(list, key);
                 case ElementAt.AnEntry(DecisionSubject key) -> key;
                 case ElementAt.AValue _, ElementAt.APiece _,
@@ -3273,7 +3279,8 @@ final class Pullback {
                         switch (elements.get(at)) {
                             case ElementAt.AtASubject(DecisionSubject container) ->
                                     container.element();
-                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _) ->
+                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _,
+                                                         boolean _) ->
                                     list.element();
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     in.pathOf(value, read.rules().newtypes())
@@ -3378,9 +3385,13 @@ final class Pullback {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
             }
             // The entry a map holds under a key is the last element the key was made of, so what
-            // is stated of an entry is stated of the last element of its key.
+            // is stated of an entry is stated of the last element of its key. Where no two
+            // elements share a key, every element is the last of its own and there is nothing to
+            // say.
             if (located.each() instanceof ElementAt.AFiledElement(DecisionSubject list,
-                                                                   Core.Block key)) {
+                                                                   Core.Block key,
+                                                                   boolean keysMayRepeat)
+                    && keysMayRepeat) {
                 DecisionSubject filedUnder = keyOfTheFiledElement(list, key);
                 if (filedUnder == null) {
                     return unread(e, reads, new WhyUnread.AtNoPosition(
@@ -3942,7 +3953,9 @@ final class Pullback {
             if (heldAt == null) {
                 return null;
             }
-            ElementAt each = new ElementAt.AFiledElement(heldAt, indexed.key());
+            ElementAt each = new ElementAt.AFiledElement(heldAt, indexed.key(),
+                    ElementsKeptApart.keysMayRepeat(walked.value(), indexed.key(),
+                            read.ruleReading()));
             settle(pending, each, null, located);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
@@ -4404,7 +4417,7 @@ final class Pullback {
                                         case ElementAt.AtASubject(DecisionSubject container) ->
                                                 sizedAt(container.element());
                                         case ElementAt.AFiledElement(DecisionSubject list,
-                                                                     Core.Block _) ->
+                                                                     Core.Block _, boolean _) ->
                                                 sizedAt(list.element());
                                         case ElementAt.APiece _, ElementAt.AnEntry _,
                                              ElementAt.OfAnAnswerEveryElementOfWhichIs _ ->
@@ -4633,8 +4646,9 @@ final class Pullback {
                             container.element();
                     case ElementAt.AtASubject(DecisionSubject.AnAnswer _) -> null;
                     case ElementAt.AFiledElement(DecisionSubject.AnInput(TermPath list),
-                                                 Core.Block _) -> list.element();
-                    case ElementAt.AFiledElement(DecisionSubject.AnAnswer _, Core.Block _) -> null;
+                                                 Core.Block _, boolean _) -> list.element();
+                    case ElementAt.AFiledElement(DecisionSubject.AnAnswer _, Core.Block _,
+                                                 boolean _) -> null;
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
                                     instanceof PathResolution.At(TermPath inside)
