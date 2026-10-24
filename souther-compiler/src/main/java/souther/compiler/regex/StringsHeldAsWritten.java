@@ -32,15 +32,12 @@ public final class StringsHeldAsWritten {
         this.machine = machine;
     }
 
-    /** The strings of {@code language} held as written, or null where its machine is no plain
-     *  one, with a step that takes no code point. */
+    /** The strings of {@code language} held as written. The machine is a {@link Language}'s, which
+     *  is canonical: deterministic, and every step of it takes a code point. */
     static StringsHeldAsWritten of(Automaton language) {
         List<List<Automaton.Step>> steps = new ArrayList<>();
         BitSet accepting = new BitSet();
         for (int state = 0; state < language.size(); state++) {
-            if (language.freeFrom(state).length > 0) {
-                return null;
-            }
             List<Automaton.Step> kept = new ArrayList<>();
             for (Automaton.Step step : language.stepsFrom(state)) {
                 CodePoints over = StableStarters.within(step.over());
@@ -57,9 +54,10 @@ public final class StringsHeldAsWritten {
     /**
      * Whether {@code value} is one of these: walked a code point at a time, each taking the one
      * step that holds it. The language's machine takes at most one step for a code point from a
-     * state, and keeping its steps to fewer code points leaves it so.
+     * state, and keeping its steps to fewer code points leaves it so. Asked by what checks these
+     * against the values; a reading asks what they place and leave, below.
      */
-    public boolean has(String value) {
+    boolean has(String value) {
         int state = Automaton.START;
         for (int at = 0; at < value.length(); ) {
             int codePoint = value.codePointAt(at);

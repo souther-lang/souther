@@ -94,7 +94,6 @@ class WhatAFormatHoldsAsAValueIsWhatAStringHoldsTest {
         for (String regex : FORMATS) {
             Language format = language(regex);
             StringsHeldAsWritten held = format.heldAsWritten();
-            assertNotNull(held, regex);
             for (int length = 1; length <= 3; length++) {
                 List<String> values = new ArrayList<>();
                 for (String each : stringsOf(length)) {

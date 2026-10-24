@@ -237,7 +237,7 @@ public final class Language {
 
     /**
      * The strings of this one a {@code String} holds as they are written
-     * ({@link StringsHeldAsWritten}) — or null where the machine is no plain one.
+     * ({@link StringsHeldAsWritten}).
      */
     public StringsHeldAsWritten heldAsWritten() {
         return StringsHeldAsWritten.of(machine);
