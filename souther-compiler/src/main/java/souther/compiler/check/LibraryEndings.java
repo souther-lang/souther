@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.Completion;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
@@ -15,6 +16,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -54,10 +56,14 @@ final class LibraryEndings {
 
     private final Map<ValueName.Stdlib.Operation, Endings> ofItsOwn;
 
+    private final Map<ValueName.Stdlib.Operation, Completion> completions;
+
     private LibraryEndings(Map<ValueName.Stdlib.Operation, Endings> ending,
-                           Map<ValueName.Stdlib.Operation, Endings> ofItsOwn) {
+                           Map<ValueName.Stdlib.Operation, Endings> ofItsOwn,
+                           Map<ValueName.Stdlib.Operation, Completion> completions) {
         this.ending = Map.copyOf(ending);
         this.ofItsOwn = Map.copyOf(ofItsOwn);
+        this.completions = Map.copyOf(completions);
     }
 
     /** What every operation of {@code library}, and every sugar for one, ends a run for. */
@@ -76,7 +82,83 @@ final class LibraryEndings {
         Reading apart = new Reading(library, facts);
         library.entries().keySet().forEach(apart::of);
         library.rewrites().keySet().forEach(apart::of);
-        return new LibraryEndings(whole.settled, apart.settled);
+        Map<ValueName.Stdlib.Operation, Completion> completions = new HashMap<>();
+        apart.settled.forEach((operation, own) ->
+                completions.put(operation, completionOf(library, facts, operation, own)));
+        return new LibraryEndings(whole.settled, apart.settled, completions);
+    }
+
+    /**
+     * Where a call of {@code operation} answers apart from the functions it is handed, of what it
+     * ends a run for apart from them ({@code own}).
+     *
+     * <p>Where that is nothing, always. Otherwise from the owner of how the answer is built: one
+     * assembled of a piece for each element of a list of any number of elements answers where the
+     * pieces together fit, since it puts them end to end along the walk and holds no more on the
+     * way ({@link BoundOperationFacts#assembles}); a kernel answers where its contract says
+     * ({@link KernelContracts#completionOf}); and an operation whose body is one operator applied
+     * to two of its parameters answers where that operator does on them, answering what the
+     * operation answers ({@link AbortSites#completionOfAnOperator}). Nothing else is said here.
+     */
+    private static Completion completionOf(Stdlib library, BoundOperationFacts facts,
+                                           ValueName.Stdlib.Operation operation, Endings own) {
+        if (own.endsNone()) {
+            return new Completion.Always();
+        }
+        BoundOperationFacts.Assembled assembled = facts.assembles(operation);
+        if (assembled != null && assembled.piece() == PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            return new Completion.WhereTheAnswerFits(new Completion.AnswerSize.PiecesOf(
+                    assembled.source().position(), assembled.closure().position()));
+        }
+        Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
+        if (intrinsic != null) {
+            return KernelContracts.completionOf(intrinsic.kernel());
+        }
+        Hir.FnDef declaration = library.helpers().get(operation);
+        Stdlib.Entry entry = library.entry(operation);
+        if (declaration != null && entry != null
+                && declaration.writtenBody() instanceof Hir.Binary binary) {
+            int left = parameterRead(declaration, binary.left());
+            int right = parameterRead(declaration, binary.right());
+            Completion ofTheOperator = AbortSites.completionOfAnOperator(binary.op(),
+                    entry.signature().result());
+            if (left >= 0 && right >= 0
+                    && ofTheOperator instanceof Completion.WhereTheAnswerFits(
+                            Completion.AnswerSize.SumOf(List<Integer> operands, int more))) {
+                return new Completion.WhereTheAnswerFits(new Completion.AnswerSize.SumOf(
+                        operands.stream().map(at -> at == 0 ? left : right).toList(), more));
+            }
+        }
+        return new Completion.NotKnown();
+    }
+
+    /** Which of {@code declaration}'s parameters {@code e} reads, as it stands, or -1. */
+    private static int parameterRead(Hir.FnDef declaration, Hir.Expr e) {
+        if (!(e instanceof Hir.Var.Denoting name)
+                || !(name.reachedAs() instanceof ReachName.InScope(ValueName.Local(var _, var id)))) {
+            return -1;
+        }
+        for (int at = 0; at < declaration.params().size(); at++) {
+            if (declaration.params().get(at).binder().binding().equals(id)) {
+                return at;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Where a call of {@code operation} answers apart from the functions it is handed, for a
+     * caller that asks the body of each of those itself ({@link #completionOf}).
+     *
+     * @throws IllegalArgumentException where the library has no such operation
+     */
+    Completion completionApartFromWhatItIsHanded(ValueName.Stdlib.Operation operation) {
+        Completion found = completions.get(operation);
+        if (found == null) {
+            throw new IllegalArgumentException(
+                    "`" + operation.qualified() + "` is no operation of the library read");
+        }
+        return found;
     }
 
     /** The shipped library's, which is the same for every compilation. */

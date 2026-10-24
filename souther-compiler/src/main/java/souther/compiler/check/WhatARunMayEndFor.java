@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.Completion;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.types.Type;
@@ -119,14 +120,45 @@ public final class WhatARunMayEndFor {
      */
     public static Endings itselfApartFromTheClosuresWrittenAtIt(Core e) {
         if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)
-                || !kept.args().stream().allMatch(arg -> !(arg.type() instanceof Type.FnOf)
-                        || Core.withoutStanding(arg) instanceof Core.Block)) {
+                || !closuresWrittenAt(kept)) {
             return itself(e);
         }
         AnOperationApplied applied = AnOperationApplied.of(kept);
         return applied != null && applied.operation() instanceof ValueName.Stdlib.Operation operation
                 ? LibraryEndings.shipped().apartFromWhatItIsHanded(operation)
                 : new Endings.NotKnown();
+    }
+
+    /**
+     * Where {@code e} itself answers ({@link Completion}), apart from the closures written at it
+     * as {@link #itselfApartFromTheClosuresWrittenAtIt} reads it, each from the owner of what it
+     * is: an operator's from {@link AbortSites}, a kernel's from {@link KernelContracts}, and an
+     * operation of the library's from {@link LibraryEndings}. Its operands are counted in the order
+     * they are written, a binary's left one first.
+     */
+    public static Completion completionApartFromTheClosuresWrittenAtIt(Core e) {
+        if (itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
+            return new Completion.Always();
+        }
+        return switch (Core.withoutStanding(e)) {
+            case Core.Binary binary -> AbortSites.completionOfAnOperator(binary.op(), binary.type());
+            case Core.Call call when call.fn() instanceof Core.Reached.OfKernel kernel ->
+                    KernelContracts.completionOf(kernel.kernel());
+            case Core.PreservedCall kept when closuresWrittenAt(kept) -> {
+                AnOperationApplied applied = AnOperationApplied.of(kept);
+                yield applied != null
+                        && applied.operation() instanceof ValueName.Stdlib.Operation operation
+                        ? LibraryEndings.shipped().completionApartFromWhatItIsHanded(operation)
+                        : new Completion.NotKnown();
+            }
+            default -> new Completion.NotKnown();
+        };
+    }
+
+    /** Whether every function {@code kept} is handed is a closure written at the call. */
+    private static boolean closuresWrittenAt(Core.PreservedCall kept) {
+        return kept.args().stream().allMatch(arg -> !(arg.type() instanceof Type.FnOf)
+                || Core.withoutStanding(arg) instanceof Core.Block);
     }
 
     /** What an operation of the library a call keeps ends a run for, over every call of it

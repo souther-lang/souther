@@ -296,6 +296,9 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                             + " that only operations apply"),
             new Reader("souther.compiler.check.Reductions",
                     "what a call hands its closure, for a walk from a seed"),
+            new Reader("souther.compiler.check.ContainerSizesUnderAWitness",
+                    "which argument is the step and which the list a walk from a seed is handed,"
+                            + " for how many what it carries holds by induction on the list"),
             new Reader("souther.compiler.check.OrderOfElements",
                     "which argument is the closure an operation goes through a list with until it"
                             + " answers one way, for what that closure may end a run for"),

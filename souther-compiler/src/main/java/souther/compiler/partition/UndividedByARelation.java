@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
+import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.FieldDomains;
@@ -18,8 +19,10 @@ import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
@@ -598,7 +601,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
-                    each.unsaid());
+                    each.unsaid(), each.owed());
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
                             remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
@@ -1139,7 +1142,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
             }
-            return reachedAlong(new WhatItLeaves(out, settled), past);
+            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written);
         }
         if (kind == Kind.DIVISIBILITY) {
             boolean apart = !overlapping(sides.get(0), sides.get(1))
@@ -1149,7 +1152,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(1), at == 0, relation, apart, endsOf(carriers.get(0)),
                         endsOf(carriers.get(1))), out, settled);
             }
-            return reachedAlong(new WhatItLeaves(out, settled), past);
+            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written);
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
@@ -1175,7 +1178,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return new WhatItLeaves(out, settled);
             }
             putDown(within.whole(), ofTheWhole, out, settled);
-            return reachedAlong(new WhatItLeaves(out, settled), past);
+            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written);
         }
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
@@ -1233,7 +1236,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        return reachedAlong(new WhatItLeaves(out, settled, true, stopped), past);
+        return reachedAlong(new WhatItLeaves(out, settled, true, stopped), past, read, along,
+                written);
     }
 
     /**
@@ -1248,8 +1252,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * none of its places whichever values get there. And no line is drawn where a run may stop:
      * that is no line of the model, and where it falls is what nothing here says.
      */
-    private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past) {
-        return mayStopOnWhatItReads(past) ? shown.mayStopBefore(places()) : shown;
+    private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
+                                      InputReading read, SearchRegion region,
+                                      List<OnAWay> conditions) {
+        return mayStopOnWhatItReads(past, read, region, conditions)
+                ? shown.mayStopBefore(places()) : shown;
     }
 
     /**
@@ -1257,34 +1264,135 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * relation reads: an operator on what no place holds, after which no number is known to take
      * every value it did, or one tying a place a side reads to others
      * ({@link DemandReading.Answered#tied}), which the region the relation is read over does not
-     * hold. A side whose places are not known is taken to read any.
+     * hold — or an operator owed a proof that some run gets past it, reading such a place, that no
+     * witness is shown to get past ({@link #answersOnAWitness}). A side whose places are not known
+     * is taken to read any.
      */
-    private boolean mayStopOnWhatItReads(DemandReading.Answered past) {
+    private boolean mayStopOnWhatItReads(DemandReading.Answered past, InputReading read,
+                                         SearchRegion region, List<OnAWay> conditions) {
         if (past.unsaid()) {
             return true;
         }
-        if (past.tied().isEmpty()) {
+        if (past.tied().isEmpty() && past.owed().isEmpty()) {
             return false;
         }
         List<TermPath> reads = new ArrayList<>();
         amongThemselves.forEach(each -> reads.add(each.path()));
         for (Side side : sides) {
-            Optional<List<TermPath>> read = placesRead(side);
-            if (read.isEmpty()) {
+            Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+            if (placesOfTheSide.isEmpty()) {
                 return true;
             }
-            reads.addAll(read.get());
+            reads.addAll(placesOfTheSide.get());
         }
         for (Set<TermPath> ties : past.tied()) {
-            for (TermPath tie : ties) {
-                for (TermPath at : reads) {
-                    if (overlap(tie, at)) {
-                        return true;
-                    }
+            if (touchesAny(ties, reads)) {
+                return true;
+            }
+        }
+        for (Pullback.StopObligation owed : past.owed()) {
+            if ((owed.onWhatNoPlaceHolds() || touchesAny(owed.places(), reads))
+                    && !answersOnAWitness(owed, reads, read, region, conditions)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether some place of {@code places} overlaps one of {@code reads}. */
+    private static boolean touchesAny(Set<TermPath> places, List<TermPath> reads) {
+        for (TermPath place : places) {
+            for (TermPath at : reads) {
+                if (overlap(place, at)) {
+                    return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code owed} answers on a run that is a witness of every value this relation shows
+     * of its places: one whose input collections hold as few elements as the rules leave them,
+     * and no fewer than the relation's values need to stand in.
+     *
+     * <p>Such a run is one wherever how many a collection holds is no part of what is shown here:
+     * no condition of the way and no side of the relation reads the collection, or anything
+     * around or inside it, other than the places the relation reads, so any row showing a value
+     * here shows it with the collection cut down to the elements those places are in. How many
+     * the rules leave it is what a row can be written at ({@link #howManyAreHeld}), and where that
+     * is not read, or it does not reach as few as needed, nothing is shown. What the run holds on
+     * the way from there is {@link ContainerSizesUnderAWitness}'s to say.
+     */
+    private boolean answersOnAWitness(Pullback.StopObligation owed, List<TermPath> reads,
+                                      InputReading read, SearchRegion region,
+                                      List<OnAWay> conditions) {
+        Map<TermPath, Optional<BigInteger>> sizes = new HashMap<>();
+        return ContainerSizesUnderAWitness.answersOn(owed.within(), owed.operation(),
+                owed.completion(), node -> {
+                    InputReads at = owed.readsAt(node);
+                    if (at == null || !(at.pathOf(node, read.rules().newtypes())
+                            instanceof PathResolution.At(TermPath path))) {
+                        return Optional.empty();
+                    }
+                    return sizes.computeIfAbsent(path, collection ->
+                            fewestOnAWitness(collection, reads, read, region, conditions));
+                });
+    }
+
+    /**
+     * How many elements the collection at {@code collection} holds on a witness
+     * ({@link #answersOnAWitness}), or nothing where no witness is shown with so few: the fewest
+     * the rules leave it, and no fewer than one for each place of the relation inside it, and one
+     * more in the outermost collection holding a place whose values the relation holds against
+     * each other — the two values stand in two of its elements, and every collection inside each
+     * holds one.
+     */
+    private Optional<BigInteger> fewestOnAWitness(TermPath collection, List<TermPath> reads,
+                                                  InputReading read, SearchRegion region,
+                                                  List<OnAWay> conditions) {
+        for (OnAWay each : conditions) {
+            for (TermPath at : each.positions()) {
+                if (overlap(at, collection)) {
+                    return Optional.empty();
+                }
+            }
+        }
+        long inside = 0;
+        for (TermPath at : reads) {
+            if (at.equals(collection) || collection.isAtOrUnder(at)) {
+                return Optional.empty();
+            }
+            if (at.isAtOrUnder(collection)) {
+                inside++;
+            }
+        }
+        if (amongThemselves.stream().anyMatch(each -> each.path().isAtOrUnder(collection)
+                && each.path().containersHoldingIt().getFirst().equals(collection))) {
+            inside++;
+        }
+        NumericDomain.Bounds held = howManyAreHeld(collection, read, region);
+        if (held == null || !held.holdsAValue()) {
+            return Optional.empty();
+        }
+        BigInteger fewest = BigInteger.ZERO;
+        if (held.min() != null) {
+            if (!(held.min().at() instanceof Count least)
+                    || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger up))) {
+                return Optional.empty();
+            }
+            fewest = held.min().inclusive() || !least.exactly().isWhole() ? up
+                    : up.add(BigInteger.ONE);
+        }
+        BigInteger witness = fewest.max(BigInteger.valueOf(inside));
+        if (held.max() != null) {
+            if (!(held.max().at() instanceof Count most)
+                    || most.exactly().compareTo(ExactRatio.of(witness)) < 0) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(witness);
     }
 
     /**
@@ -1496,7 +1604,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
                                Optional<Set<String>> declined, DemandReading.Answered past,
                                InputReading read) {
-        if (!(term instanceof NumericTerm.FromOnePosition number) || past.unsaid()) {
+        if (!(term instanceof NumericTerm.FromOnePosition number)
+                || past.unsaidOrOwedOnWhatNoPlaceHolds()) {
             return false;
         }
         for (Side side : sides) {
@@ -1511,7 +1620,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
         }
-        for (Set<TermPath> ties : past.tied()) {
+        for (Set<TermPath> ties : past.tiedOrOwed()) {
             if (touches(number, ties)) {
                 return false;
             }

@@ -492,15 +492,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A relation every row getting to it comes out one way at divides none of its places,
-     * whichever values get there: past {@code a * a}, {@code a >= b} with {@code b} below nought
-     * is true wherever a row arrives.
+     * whichever values get there: {@code n == String.length(s)} under the same statement is true
+     * wherever a row arrives, and past {@code n * n}, which may stop a run on {@code n}, the two
+     * are related as they are without it.
      */
     @Test
     void aRelationThatComesOutOneWayWhereverARowGetsThereIsNotHeldBackByAStop() {
-        String declared = "data Yen = Int invariant value >= 0\n"
-                + "data Debt = Int invariant value < 0";
-        assertEquals(Map.of("a", RELATES, "b", RELATES), left("a: Yen, b: Debt", declared,
-                "{\n    let before = a.value * a.value\n    a.value >= b.value\n}", "6:13"));
+        String decided = "if n == String.length(s) then n == String.length(s) else false";
+        Map<String, String> without = left("n: Int, s: String", "", decided, "4:48");
+        assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES), without);
+        assertEquals(without, left("n: Int, s: String", "",
+                "{\n    let before = n * n\n    " + decided + "\n}", "6:37"));
     }
 
     /**

@@ -2,8 +2,10 @@ package souther.compiler.core;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.Completion;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -135,5 +137,31 @@ public final class KernelContracts {
             case RATIONAL_DIVIDE ->
                     AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
         };
+    }
+
+    /**
+     * Where a call of {@code kernel} answers ({@link Completion}), apart from a function it is
+     * handed.
+     *
+     * <p>Said of the kernels whose one reason, {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}, is the
+     * collection they answer growing past what a collection holds, and of what that collection
+     * holds at most. A union puts the elements of its second set into its first, an insert puts
+     * one value into its set or map, and each asks the collection for one more where it grows and
+     * nowhere else ({@code Capacity.oneMore}, {@code PersistentHashSet.union}). Every other kernel
+     * answers always where {@link #abortsOf} says it ends no run, and is not known here where it
+     * says it may.
+     */
+    public static Completion completionOf(Kernel kernel) {
+        return switch (kernel) {
+            case SET_UNION -> fits(new Completion.AnswerSize.SumOf(List.of(0, 1), 0));
+            case SET_INSERT -> fits(new Completion.AnswerSize.SumOf(List.of(1), 1));
+            case MAP_INSERT -> fits(new Completion.AnswerSize.SumOf(List.of(2), 1));
+            default -> abortsOf(kernel).isEmpty() ? new Completion.Always()
+                    : new Completion.NotKnown();
+        };
+    }
+
+    private static Completion fits(Completion.AnswerSize answer) {
+        return new Completion.WhereTheAnswerFits(answer);
     }
 }

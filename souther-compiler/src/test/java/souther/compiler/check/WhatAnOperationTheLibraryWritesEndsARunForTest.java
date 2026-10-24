@@ -5,11 +5,13 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.Completion;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
+import java.util.List;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -151,6 +153,59 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         Stdlib rewritten = rewritten(IS_EMPTY_BODY, "List.length(xs) + 0 == 0");
 
         assertEquals(new Endings.NotKnown(), LibraryEndings.of(rewritten).of(IS_EMPTY));
+    }
+
+    /**
+     * Apart from the functions it is handed, the walk ends nothing of its own, and nor does an
+     * operation putting together at most one element for each element of a list: what it holds on
+     * the way is no longer than the part walked. One putting any number together for each holds
+     * as many as the pieces do, and answers where they fit. Read whole, each is the function it
+     * applies, which nothing here says.
+     */
+    @Test
+    void apartFromWhatItIsHandedAWalkEndsWhatItsPiecesDo() {
+        LibraryEndings endings = LibraryEndings.of(DefaultStdlib.get());
+        for (String each : new String[] {"foldFrom", "map", "filter"}) {
+            ValueName.Stdlib.Operation operation = ValueName.Stdlib.operation("List", each);
+            assertEquals(NONE, endings.apartFromWhatItIsHanded(operation), each);
+            assertEquals(new Completion.Always(),
+                    endings.completionApartFromWhatItIsHanded(operation), each);
+            assertEquals(new Endings.NotKnown(), endings.of(operation), each);
+        }
+        ValueName.Stdlib.Operation flatMap = ValueName.Stdlib.operation("List", "flatMap");
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endings.apartFromWhatItIsHanded(flatMap));
+        assertEquals(new Completion.WhereTheAnswerFits(new Completion.AnswerSize.PiecesOf(1, 0)),
+                endings.completionApartFromWhatItIsHanded(flatMap));
+    }
+
+    /** A join of two lists answers where the two fit together, and so does an operation whose
+     *  body is that join of two of its parameters, in the order the body names them. */
+    @Test
+    void anOperationThatIsAJoinOfItsParametersAnswersWhereTheyFitTogether() {
+        assertEquals(new Completion.WhereTheAnswerFits(
+                        new Completion.AnswerSize.SumOf(List.of(0, 1), 0)),
+                LibraryEndings.of(DefaultStdlib.get()).completionApartFromWhatItIsHanded(APPEND));
+        assertEquals(new Completion.WhereTheAnswerFits(
+                        new Completion.AnswerSize.SumOf(List.of(1, 0), 0)),
+                LibraryEndings.of(rewritten(APPEND_BODY, "= b ++ a"))
+                        .completionApartFromWhatItIsHanded(APPEND));
+    }
+
+    /**
+     * A filter whose step joins what it carried to itself is no longer one putting together at
+     * most one element for each: that is proved of the body, and the body here does not prove it,
+     * so what it holds on the way is not bounded by the list and its join is not known to fit.
+     */
+    @Test
+    void aFilterThatDoublesWhatItCarriedIsNotKnownToFit() {
+        LibraryEndings endings = LibraryEndings.of(rewritten(
+                "if keep(x) then acc ++ [x] else acc", "if keep(x) then acc ++ acc ++ [x] else acc"));
+        ValueName.Stdlib.Operation filter = ValueName.Stdlib.operation("List", "filter");
+
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endings.apartFromWhatItIsHanded(filter));
+        assertEquals(new Completion.NotKnown(), endings.completionApartFromWhatItIsHanded(filter));
     }
 
     /** An operation the library does not have is refused, and not answered as not known. */

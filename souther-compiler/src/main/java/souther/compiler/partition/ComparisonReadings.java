@@ -16,8 +16,10 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
@@ -35,6 +37,7 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.OperationLaw;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -541,19 +544,47 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
         DemandReading.Answered out = DemandReading.Answered.NOTHING;
+        Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
         for (Core part : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison)) {
             Pullback.OperatorsAnswer operators =
                     in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
             DemandReading.Answered ofIt = operators.answers().isPresent()
                     ? DemandReading.regionAnswered(operators.answers().get(), in.read())
                     : DemandReading.Answered.NOTHING;
-            if (part == comparison) {
+            if (part == comparison || ofTheRelation.contains(part)) {
                 out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
             } else {
-                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators)));
+                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators,
+                        in.root())));
             }
         }
         return out;
+    }
+
+    /**
+     * The values {@code root} binds to the names {@code comparison} reads, by way of others or
+     * not: the terms of what it relates, so the arithmetic in them is its relation's as the
+     * arithmetic written in it is — the same relation, whether a term is written there or under a
+     * name.
+     */
+    private static Set<Core> valuesTheComparisonReads(Core root, Core comparison) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (root == null) {
+            return out;
+        }
+        Set<BindingId> read = WhatABodyReads.namesReadBy(root, comparison);
+        boundTo(root, read, out);
+        return out;
+    }
+
+    private static void boundTo(Core e, Set<BindingId> names, Set<Core> out) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.LetIn li && li.binder() != null
+                && names.contains(li.binder().binding())) {
+            out.add(li.value());
+            out.add(Core.withoutStanding(li.value()));
+        }
+        Core.forEachChild(node, child -> boundTo(child, names, out));
     }
 
     /**

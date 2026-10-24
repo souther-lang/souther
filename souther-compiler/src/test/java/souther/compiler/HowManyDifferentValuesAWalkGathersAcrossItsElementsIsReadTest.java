@@ -34,7 +34,12 @@ class HowManyDifferentValuesAWalkGathersAcrossItsElementsIsReadTest {
             """;
 
     private static List<String> notRead(String behavior, String name) {
-        Compilation compilation = Compilation.ofSource(HEAD + behavior, "Main");
+        return notReadUnder(HEAD, behavior, name);
+    }
+
+    /** The same, under declarations {@code head} of the module's own. */
+    private static List<String> notReadUnder(String head, String behavior, String name) {
+        Compilation compilation = Compilation.ofSource(head + behavior, "Main");
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
@@ -63,6 +68,43 @@ class HowManyDifferentValuesAWalkGathersAcrossItsElementsIsReadTest {
                     1
                 }
                 """, "f"));
+    }
+
+    /**
+     * The union the walk takes at each meeting stops a run where the set it answers would hold
+     * more than a set holds, so the values are related among themselves only where some run gets
+     * past every union with them. Two meetings of one attendee each are such a run, and what the
+     * walk carries holds no more than what it was handed: the relation stands. Where the rules
+     * leave every meeting's set holding as many as a set holds, two of them may join past it, and
+     * where a guard reads how many meetings there are, cutting the list down to the two is no
+     * longer a row of the way: in neither is every value shown to get to the guard.
+     */
+    @Test
+    void theValuesTheSetsHoldAreRelatedOnlyWhereARunIsShownToGetPastEveryUnion() {
+        String walk = """
+                behavior f : (meetings: List<Meeting>) -> Int | Mixed
+                let f (meetings) = {
+                    %s
+                    let everyone: Set<ContactId> =
+                        List.fold((acc, m) -> Set.union(acc, m.attendees.value), Set.empty,
+                                  meetings)
+                    guard Set.size(everyone) <= 1 else Mixed { n = Set.size(everyone) }
+                    1
+                }
+                """;
+        assertEquals(List.of("meetings[*].attendees[*] RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE"),
+                notRead(walk.formatted("guard List.length(meetings) >= 2 else 0"), "f"));
+        assertEquals(List.of("meetings[*].attendees[*] RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE"),
+                notReadUnder("""
+                        module probe.across
+
+                        data ContactId = String
+                        data Attendees = Set<ContactId>
+                            invariant Set.size(value) >= 2147483647
+                        data Meeting = { minutes: Int, attendees: Attendees }
+                        data Mixed = { n: Int }
+
+                        """, walk.formatted(""), "f"));
     }
 
     /**

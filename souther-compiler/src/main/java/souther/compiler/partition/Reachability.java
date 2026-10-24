@@ -291,18 +291,22 @@ public sealed interface Reachability {
      *                        when, which a region does not say
      * @param unsaid          whether that run may stop on something no place names, so that no
      *                        number is known free of what it works out
+     * @param owed            the operators that run may stop at whose owner says where they
+     *                        answer, each owed a proof some run gets past it
+     *                        ({@link DemandReading.Answered#owed})
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
                     Optional<List<TakenConstraint>> narrowedBy,
-                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied, boolean unsaid)
+                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied, boolean unsaid,
+                    List<Pullback.StopObligation> owed)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
                     || declined == null || narrowedBy == null || gotPast == null
-                    || tied == null) {
+                    || tied == null || owed == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
@@ -311,6 +315,7 @@ public sealed interface Reachability {
             narrowedBy = narrowedBy.map(List::copyOf);
             gotPast = List.copyOf(gotPast);
             tied = List.copyOf(tied);
+            owed = List.copyOf(owed);
         }
 
         /** A way a run has got past nothing on that a region says or that ties places. */
@@ -319,7 +324,7 @@ public sealed interface Reachability {
                         List<OnTheWay.Declined> declined,
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
-                    List.of(), List.of(), false);
+                    List.of(), List.of(), false, List.of());
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -351,7 +356,7 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy, gotPast, tied, unsaid);
+                    narrowedBy, gotPast, tied, unsaid, owed);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -427,15 +432,17 @@ public sealed interface Reachability {
                                         whole.from().declarations())));
             };
             boolean unsaidNow = unsaid || answered.unsaid();
+            List<Pullback.StopObligation> owedNow = new ArrayList<>(owed);
+            owedNow.addAll(answered.owed());
             // A region nothing moved is the one the way already had, which is asked nothing again.
             if (!narrowing.isEmpty() && narrowed.emptiness().isPresent()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
-                        declined, narrowedBy, gotPast, ties, unsaidNow);
+                        declined, narrowedBy, gotPast, ties, unsaidNow, owedNow);
             }
             List<TakenConstraint> past = new ArrayList<>(gotPast);
             past.addAll(narrowing);
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, past, ties, unsaidNow);
+                    by, past, ties, unsaidNow, owedNow);
         }
 
         /**

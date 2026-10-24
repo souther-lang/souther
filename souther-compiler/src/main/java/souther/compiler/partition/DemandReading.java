@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Core;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
@@ -797,14 +798,36 @@ final class DemandReading {
      *                  reader that takes two places to take any pair of values asks
      * @param unsaid    whether an operator not said may stop the run on something that is no
      *                  number of a place: no two places are then known free of one another
+     * @param owed      the operators the run may stop at whose owner says where they answer, each
+     *                  owed a proof that some run gets past it ({@link Pullback.StopObligation}):
+     *                  until a reader shows that, the places it reads are as tied as those above
      */
-    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
+    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
+                    List<Pullback.StopObligation> owed) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
         Answered {
             narrowing = List.copyOf(narrowing);
             tied = List.copyOf(tied);
+            owed = List.copyOf(owed);
+        }
+
+        /** What a run asks of a row with nothing owed beside it. */
+        Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
+            this(narrowing, tied, unsaid, List.of());
+        }
+
+        /** The places each of {@code tied} names, and each owed operator reads. */
+        List<Set<TermPath>> tiedOrOwed() {
+            List<Set<TermPath>> out = new ArrayList<>(tied);
+            owed.forEach(each -> out.add(each.places()));
+            return out;
+        }
+
+        /** Whether the run may stop on something no place names, unsaid or owed. */
+        boolean unsaidOrOwedOnWhatNoPlaceHolds() {
+            return unsaid || owed.stream().anyMatch(Pullback.StopObligation::onWhatNoPlaceHolds);
         }
 
         /**
@@ -863,10 +886,15 @@ final class DemandReading {
                     && !TakenConstraint.holdsOverTheRunsOf(form, rel, declarations);
         }
 
-        /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */
-        static Answered leavingUnsaid(Pullback.OperatorsAnswer operators) {
-            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere() ? NOTHING
-                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere());
+        /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run, the
+         *  part they were read in standing in {@code body}, where the names an owed operator is
+         *  handed are bound. */
+        static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
+            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere()
+                    && operators.obligations().isEmpty() ? NOTHING
+                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere(),
+                            operators.obligations().stream().map(each -> each.readIn(body))
+                                    .toList());
         }
 
         /** This and {@code other}, both. */
@@ -875,7 +903,9 @@ final class DemandReading {
             narrows.addAll(other.narrowing);
             List<Set<TermPath>> places = new ArrayList<>(tied);
             places.addAll(other.tied);
-            return new Answered(narrows, places, unsaid || other.unsaid);
+            List<Pullback.StopObligation> both = new ArrayList<>(owed);
+            both.addAll(other.owed);
+            return new Answered(narrows, places, unsaid || other.unsaid, both);
         }
     }
 
