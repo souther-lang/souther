@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,6 +109,258 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         assertEquals(run(LOW, HIGH), domain.meet(told).wholeRunOf("c"));
         assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(endless("a", "b", "c"))
                 .over(each -> each + "'", CanonicalOrder.asTheyAreSpelled()).wholeRunOf("c'"));
+    }
+
+    /**
+     * A limit on a sum, {@code a + b <= 5} over two whole numbers from nought to seven, leaves each
+     * of its atoms the run it leaves with the other at its least: any value of one up to five has
+     * the other at nought. A rule that is no box and no limit on a sum beside it — {@code 2a < 3c}
+     * — leaves its atoms no run, as it does alone.
+     */
+    @Test
+    void aLimitOnASumLeavesEachOfItsAtomsTheRunItLeavesWithTheOthersAtTheirLeast() {
+        Map<String, Long> limit = new LinkedHashMap<>();
+        limit.put("a", 1L);
+        limit.put("b", 1L);
+        NumericDomain<String> alone = domainOf(List.of(new Written(limit, -5, Rel.LE)))
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertEquals(run(LOW, 5), alone.wholeRunOf("a"));
+        assertEquals(run(LOW, 5), alone.wholeRunOf("b"));
+        assertEquals(run(LOW, HIGH), alone.wholeRunOf("c"));
+
+        Map<String, Long> mixed = new LinkedHashMap<>();
+        mixed.put("a", 2L);
+        mixed.put("c", -3L);
+        NumericDomain<String> beside = domainOf(
+                List.of(new Written(limit, -5, Rel.LE), new Written(mixed, 0, Rel.LT)))
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertNull(beside.wholeRunOf("a"));
+        assertNull(beside.wholeRunOf("b"));
+    }
+
+    /**
+     * Over two decimals kept above nought, {@code a + b < 1} leaves each the whole open run from
+     * nought to one: for any {@code a} below one, a {@code b} between nought and what {@code a}
+     * leaves exists. A least end that is left out is not a value the atom takes, and the proof
+     * does not stand any atom on a value near it.
+     */
+    @Test
+    void aLimitOnASumOverDecimalsKeptAboveNoughtLeavesEachTheOpenRun() {
+        Map<String, Long> limit = new LinkedHashMap<>();
+        limit.put("a", 1L);
+        limit.put("b", 1L);
+        Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
+                "b", Granularity.DENSE, "c", Granularity.DISCRETE);
+        NumericDomain<String> domain = domainOf(List.of(new Written(Map.of("a", 1L), 0, Rel.GT),
+                new Written(Map.of("b", 1L), 0, Rel.GT), new Written(limit, -1, Rel.LT)), spacing)
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain.Bounds open = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(0)),
+                Endpoint.exclusive(Count.of(1)));
+        assertEquals(open, domain.wholeRunOf("a"));
+        assertEquals(open, domain.wholeRunOf("b"));
+        assertEquals(run(LOW, HIGH), domain.wholeRunOf("c"));
+
+        // At the limit itself, with the least ends left out, nothing is left.
+        NumericDomain<String> none = domainOf(List.of(new Written(Map.of("a", 1L), 0, Rel.GT),
+                new Written(Map.of("b", 1L), 0, Rel.GT), new Written(limit, 0, Rel.LE)), spacing)
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertNull(none.wholeRunOf("a"));
+        assertNull(none.wholeRunOf("c"));
+    }
+
+    /**
+     * Rules over two decimals kept above nought that no difference holds — {@code 2a < 3b}, with
+     * or without {@code a + b < 1} — leave a point, since each bound taken strictly still leaves
+     * rational values and the set is open. So a whole number beside them, which they bound
+     * nothing of, is left its run: no value is picked near an open end for the point.
+     */
+    @Test
+    void rulesOverOpenDecimalsThatLeaveAnOpenSetLeaveAWholeNumberApartItsRun() {
+        Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
+                "b", Granularity.DENSE, "c", Granularity.DISCRETE);
+        List<Written> above = List.of(over("a", 1, Rel.GT), over("b", 1, Rel.GT));
+        List<Written> skew = List.of(new Written(coefsOf("a", 2, "b", -3), 0, Rel.LT));
+        List<Written> bounded = List.of(new Written(coefsOf("a", 1, "b", 1), -1, Rel.LT));
+        for (List<Written> extra : List.of(skew, concat(skew, bounded),
+                List.of(new Written(coefsOf("a", 4, "b", -3), 0, Rel.LT),
+                        new Written(coefsOf("a", -1, "b", 2), -1, Rel.LT)))) {
+            NumericDomain<String> domain = domainOf(concat(above, extra), spacing)
+                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            assertEquals(run(LOW, HIGH), domain.wholeRunOf("c"), extra::toString);
+        }
+        // No point meets 2a < 3b and 3b < a beside a, b > 0.
+        NumericDomain<String> none = domainOf(concat(concat(above, skew),
+                List.of(new Written(coefsOf("a", -1, "b", 3), 0, Rel.LT))), spacing)
+                .heldInsideTheirOrders(endless("a", "b", "c"));
+        assertNull(none.wholeRunOf("c"));
+    }
+
+    /**
+     * Whenever the rules over two decimals are shown to leave a point, one is there: the rules are
+     * strict, written at random over weights of three either way, and a grid of twenty-fourths
+     * across the box holds a point of every one of them that was shown to.
+     */
+    @Test
+    void rulesOverTwoDecimalsShownToLeaveAPointLeaveOne() {
+        Random random = new Random(26782);
+        Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
+                "b", Granularity.DENSE, "c", Granularity.DISCRETE);
+        int shown = 0;
+        for (int s = 0; s < STATES; s++) {
+            List<Written> rules = new ArrayList<>(List.of(over("a", 1, Rel.GT),
+                    over("b", 1, Rel.GT)));
+            for (int r = 1 + random.nextInt(3); r > 0; r--) {
+                long a = random.nextInt(7) - 3L;
+                long b = random.nextInt(7) - 3L;
+                if (a != 0 || b != 0) {
+                    rules.add(new Written(coefsOf("a", a, "b", b), random.nextInt(7) - 3L,
+                            random.nextBoolean() ? Rel.LT : Rel.GT));
+                }
+            }
+            NumericDomain<String> domain = domainOf(rules, spacing)
+                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            if (domain.wholeRunOf("c") == null) {
+                continue;
+            }
+            shown++;
+            assertTrue(aGridPointHolds(rules), rules::toString);
+        }
+        assertTrue(shown > STATES / 4, "a point was shown in " + shown + " systems");
+    }
+
+    /** Whether a point of the grid of twenty-fourths over the box holds every one of
+     *  {@code rules}. */
+    private static boolean aGridPointHolds(List<Written> rules) {
+        int steps = 24;
+        for (int a = 0; a <= HIGH * steps; a++) {
+            for (int b = 0; b <= HIGH * steps; b++) {
+                long sa = a;
+                long sb = b;
+                if (rules.stream().allMatch(each -> holdsAtScaled(each, sa, sb, steps))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean holdsAtScaled(Written rule, long a, long b, int steps) {
+        long sum = rule.constant() * steps;
+        for (Map.Entry<String, Long> each : rule.coefs().entrySet()) {
+            sum += each.getValue() * (each.getKey().equals("a") ? a : b);
+        }
+        return switch (rule.rel()) {
+            case LT -> sum < 0;
+            case LE -> sum <= 0;
+            case GT -> sum > 0;
+            case GE -> sum >= 0;
+            case EQ -> sum == 0;
+            case NE -> sum != 0;
+        };
+    }
+
+    private static Written over(String atom, long weight, Rel rel) {
+        return new Written(Map.of(atom, weight), 0, rel);
+    }
+
+    private static Map<String, Long> coefsOf(String one, long weight, String other, long by) {
+        Map<String, Long> coefs = new LinkedHashMap<>();
+        coefs.put(one, weight);
+        coefs.put(other, by);
+        return coefs;
+    }
+
+    private static List<Written> concat(List<Written> first, List<Written> second) {
+        List<Written> out = new ArrayList<>(first);
+        out.addAll(second);
+        return out;
+    }
+
+    /**
+     * A limit on a sum is held at the low corner of the orders the atoms are counted on and not
+     * of their boxes: {@code a + b <= 5} beside orders that start at three has its box's corner at
+     * nought, which holds it, and no row, since the rows start at three each.
+     */
+    @Test
+    void aLimitOnASumTheLowCornerOfTheOrdersBreaksLeavesNoRun() {
+        Map<String, Long> limit = new LinkedHashMap<>();
+        limit.put("a", 1L);
+        limit.put("b", 1L);
+        Map<String, NumericDomain.Bounds> orders = endless("a", "b", "c");
+        NumericDomain.Bounds fromThree = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(3)), null);
+        orders.put("a", fromThree);
+        orders.put("b", fromThree);
+        NumericDomain<String> domain = domainOf(List.of(new Written(limit, -5, Rel.LE)))
+                .heldInsideTheirOrders(orders);
+        assertNull(domain.wholeRunOf("a"));
+        assertNull(domain.wholeRunOf("b"));
+        assertNull(domain.wholeRunOf("c"));
+    }
+
+    /**
+     * Limits on sums over three whole numbers from nought to seven, the lower ends raised at
+     * random: every value of a run shown of an atom is one some point of the rules carries. And
+     * a run is shown of some atom in most of the states, so the limits are being read.
+     */
+    @Test
+    void aRunShownOfAnAtomUnderLimitsOnSumsIsCarriedByPointsOfTheRules() {
+        Random random = new Random(2678);
+        int shown = 0;
+        for (int s = 0; s < STATES; s++) {
+            List<Written> rules = new ArrayList<>();
+            for (int r = 1 + random.nextInt(2); r > 0; r--) {
+                Map<String, Long> limit = new LinkedHashMap<>();
+                List<String> atoms = new ArrayList<>(List.of("a", "b", "c"));
+                Collections.shuffle(atoms, random);
+                // At least two atoms are weighed, so every state holds a limit on a sum.
+                for (String atom : atoms.subList(0, 2 + random.nextInt(2))) {
+                    limit.put(atom, 1L + random.nextInt(2));
+                }
+                rules.add(new Written(limit, -(2L + random.nextInt(2 * HIGH)),
+                        random.nextBoolean() ? Rel.LE : Rel.LT));
+            }
+            for (String atom : List.of("a", "b", "c")) {
+                int least = random.nextInt(3);
+                if (least > 0) {
+                    rules.add(new Written(Map.of(atom, 1L), -least, Rel.GE));
+                }
+            }
+            NumericDomain<String> domain = domainOf(rules)
+                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            for (String atom : List.of("a", "b", "c")) {
+                NumericDomain.Bounds run = domain.wholeRunOf(atom);
+                if (run == null) {
+                    continue;
+                }
+                shown++;
+                for (int v = LOW; v <= HIGH; v++) {
+                    if (run.admits(ExactRatio.of(v))) {
+                        assertTrue(somePointHolds(rules, atom, v),
+                                () -> atom + " was shown " + run + " beside " + rules);
+                    }
+                }
+            }
+        }
+        assertTrue(shown > STATES, "a run was shown in " + shown + " reads, so the limits on"
+                + " sums were not being read");
+    }
+
+    /** Whether some whole point of the box with {@code atom} at {@code v} holds every one of
+     *  {@code rules}. */
+    private static boolean somePointHolds(List<Written> rules, String atom, int v) {
+        for (int a = LOW; a <= HIGH; a++) {
+            for (int b = LOW; b <= HIGH; b++) {
+                for (int c = LOW; c <= HIGH; c++) {
+                    Map<String, Integer> point = Map.of("a", a, "b", b, "c", c);
+                    if (point.get(atom) == v
+                            && rules.stream().allMatch(each -> holdsAt(each, point))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /** Each of {@code atoms} on an order with no end either way. */

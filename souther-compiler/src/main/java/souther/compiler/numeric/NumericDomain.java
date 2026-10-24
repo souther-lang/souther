@@ -1133,7 +1133,9 @@ public final class NumericDomain<A> {
      * box inside those ends each of its rules holds at ({@link #aPointOfTheBoxHolds}). The atom's
      * own system is proven so too. {@code 4h - 3s < 0} over two decimals running nought to 168 is
      * no difference and is not proven, and leaves a whole number apart from both the whole of its
-     * run, since {@code h} at nought and {@code s} at 168 hold it.
+     * run, since {@code h} at nought and {@code s} at 168 hold it. A system of boxes and limits on
+     * sums ({@code a + b <= M}) leaves each atom the whole of its run too, with the others at the
+     * low corner of their boxes ({@link #limitsOnSumsHoldAtTheLowCorner}).
      *
      * <p>What each system is shown to be is the domain's alone, worked out where an atom first
      * asks it and kept for every other atom, and asked no further than the first system that
@@ -1149,7 +1151,8 @@ public final class NumericDomain<A> {
             return false;
         }
         A its = had.groupOf().get(atom);
-        if (its != null && shownOf(had, its) != Shown.PROVEN) {
+        if (its != null && shownOf(had, its) != Shown.PROVEN
+                && shownOf(had, its) != Shown.AT_THE_LOW_CORNER) {
             return false;
         }
         for (A group : had.rulesOf().keySet()) {
@@ -1161,8 +1164,9 @@ public final class NumericDomain<A> {
     }
 
     /** What one system of the rules is shown to leave inside where its atoms' orders stop: its
-     *  runs whole, some point, or neither shown. */
-    private enum Shown { PROVEN, A_POINT, NOTHING }
+     *  runs whole, its runs whole as limits on sums hold at the low corner of the box
+     *  ({@link #limitsOnSumsHoldAtTheLowCorner}), some point, or neither shown. */
+    private enum Shown { PROVEN, AT_THE_LOW_CORNER, A_POINT, NOTHING }
 
     /** What the system of {@code group} is shown to leave, worked out once. */
     private Shown shownOf(Systems<A> systems, A group) {
@@ -1176,8 +1180,140 @@ public final class NumericDomain<A> {
                     && rules.stream().allMatch(rule -> proven(rule, false))) {
                 return leavesAValueInside(atoms) ? Shown.PROVEN : Shown.NOTHING;
             }
-            return aPointOfTheBoxHolds(atoms, rules) ? Shown.A_POINT : Shown.NOTHING;
+            if (limitsOnSumsHoldAtTheLowCorner(atoms, rules)) {
+                return Shown.AT_THE_LOW_CORNER;
+            }
+            if (anOpenSetOfDecimalsIsLeft(atoms, rules)
+                    || aPointOfTheBoxHolds(atoms, rules)) {
+                return Shown.A_POINT;
+            }
+            return Shown.NOTHING;
         });
+    }
+
+    /** The pairs of bounds put together in asking whether a system of decimals leaves a point. */
+    private static final long PAIRS_ASKED_OF_A_SYSTEM = 4096;
+
+    /**
+     * Whether the rules over decimals leave a point inside where the orders of {@code atoms} stop,
+     * because they leave an open set: each bound taken strictly still leaves rational values
+     * ({@link LaterNumbersEliminated}), and a set open in every direction holds a point whose
+     * every coordinate is a finite decimal. A value held off a number leaves such a set a point,
+     * and an equality leaves it none, so a system with one is not asked.
+     *
+     * <p>No value is picked inside a run: what is asked is whether the bounds meet, and the
+     * elimination answers that for every system its pairs allow.
+     */
+    private boolean anOpenSetOfDecimalsIsLeft(List<A> atoms, List<AffineConstraint<A>> rules) {
+        List<LaterNumbersEliminated.Bound<A>> bounds = new ArrayList<>();
+        for (AffineConstraint<A> rule : rules) {
+            switch (rule) {
+                case AffineConstraint.HalfSpace<A> half -> {
+                    Map<A, ExactRatio> weighed = new LinkedHashMap<>();
+                    for (Map.Entry<A, ExactRatio> each : half.form().entriesIn(order)) {
+                        weighed.put(each.getKey(), each.getValue());
+                    }
+                    bounds.add(new LaterNumbersEliminated.Bound<>(
+                            new LinearForm<>(half.bound().at().negated(), weighed), true));
+                }
+                case AffineConstraint.Disequality<A> _ -> { }
+                case AffineConstraint.Equality<A> _ -> {
+                    return false;
+                }
+            }
+        }
+        for (A atom : atoms) {
+            Bounds order = orders.get(atom);
+            if (spacingOf(atom) != Granularity.DENSE || order == null) {
+                return false;
+            }
+            if (order.min() != null) {
+                if (!(order.min().at() instanceof Count least)) {
+                    return false;
+                }
+                bounds.add(new LaterNumbersEliminated.Bound<>(new LinearForm<>(least.exactly(),
+                        Map.of(atom, ExactRatio.ONE.negated())), true));
+            }
+            if (order.max() != null) {
+                if (!(order.max().at() instanceof Count most)) {
+                    return false;
+                }
+                bounds.add(new LaterNumbersEliminated.Bound<>(new LinearForm<>(
+                        most.exactly().negated(), Map.of(atom, ExactRatio.ONE)), true));
+            }
+        }
+        return LaterNumbersEliminated.of(bounds, atoms, PAIRS_ASKED_OF_A_SYSTEM)
+                instanceof LaterNumbersEliminated.Eliminated<A>;
+    }
+
+    /**
+     * Whether the rules over {@code atoms} are boxes and limits on sums that the least ends of
+     * the atoms' runs, inside where their orders stop, leave some point of.
+     *
+     * <p>A limit on a sum is a half-space every weight of which is positive: lowering an atom
+     * keeps it held. So with each atom but one at its least, the one is held at every value up to
+     * the greatest the limits leave it, and that greatest is the end the closure answers for it.
+     * What stands the others is their least end and nothing near it: a whole-numbered atom takes
+     * its least whole number, and a decimal's least end is a value it takes only where the run
+     * holds it. A limit the least ends meet exactly is held only where every atom it weighs takes
+     * its least end, and one they pass is held by values as near the ends as asked. No value is
+     * picked inside a run left open.
+     */
+    private boolean limitsOnSumsHoldAtTheLowCorner(List<A> atoms,
+                                                   List<AffineConstraint<A>> rules) {
+        Map<A, ExactRatio> least = new LinkedHashMap<>();
+        Set<A> taken = new LinkedHashSet<>();
+        for (A atom : atoms) {
+            Bounds box = boxOf(atom);
+            Bounds run = box == null ? null : box.meet(orders.get(atom));
+            Granularity spacing = spacingOf(atom);
+            if (run == null || !run.holdsAValue() || spacing == null) {
+                return false;
+            }
+            ExactRatio end = spacing == Granularity.DISCRETE
+                    ? run.aValueNearestItsEnd(false, spacing)
+                    : run.min() != null && run.min().at() instanceof Count count ? count.exactly()
+                            : null;
+            if (end == null) {
+                return false;
+            }
+            least.put(atom, end);
+            if (spacing == Granularity.DISCRETE || run.min().inclusive()) {
+                taken.add(atom);
+            }
+        }
+        for (AffineConstraint<A> rule : rules) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
+                return false;
+            }
+            if (weighedAtoms(half) <= 1) {
+                continue;
+            }
+            ExactRatio sum = ExactRatio.ZERO;
+            boolean everyAtomTakesItsLeast = true;
+            for (Map.Entry<A, ExactRatio> each : half.form().coefs().entrySet()) {
+                if (each.getValue().signum() < 0) {
+                    return false;
+                }
+                if (!each.getValue().isZero()) {
+                    ExactRatio weighed = least.get(each.getKey()).times(each.getValue()).orNull();
+                    sum = weighed == null || sum == null ? null : sum.plus(weighed).orNull();
+                    everyAtomTakesItsLeast &= taken.contains(each.getKey());
+                }
+            }
+            if (sum == null) {
+                return false;
+            }
+            int order = sum.compareTo(half.bound().at());
+            if (order > 0 || (order == 0 && !(half.bound().inclusive() && everyAtomTakesItsLeast))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static <A> long weighedAtoms(AffineConstraint.HalfSpace<A> half) {
+        return half.form().coefs().values().stream().filter(weight -> !weight.isZero()).count();
     }
 
     /**
