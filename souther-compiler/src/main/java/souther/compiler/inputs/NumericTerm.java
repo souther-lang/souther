@@ -590,7 +590,7 @@ public sealed interface NumericTerm
          */
         @Override
         public boolean sharesAPlaceWith(NumericTerm other) {
-            return other instanceof CodePointAt at && position.equals(at.position)
+            return (other instanceof CodePointAt at && position.equals(at.position))
                     ? index == at.index : FromOnePosition.super.sharesAPlaceWith(other);
         }
 
