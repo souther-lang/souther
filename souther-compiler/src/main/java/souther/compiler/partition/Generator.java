@@ -16,7 +16,6 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.ClassMembers;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
@@ -6987,22 +6986,20 @@ public final class Generator {
      * Where the numbers of the form {@code remainder} is of stand inside {@code here} so that it
      * leaves one of the remainders asked for, or what this found out about there being none.
      *
-     * <p>The values of the form that leave a remainder are a class, those the divisor leaves it at
-     * among the multiples of the step the form's coefficients take, and the class is walked inside
-     * the run {@code here} leaves the form from its nearer end, as the border's own search walks it
-     * ({@link LevelRealizer}): at each value, the form held to it and its numbers put to the
-     * region. As many values in all as one position on the way is tried at, whichever remainders
-     * they are of.
+     * <p>Each remainder in turn, as a congruence the walk holds its numbers to: every number but
+     * the last is walked as any number of the region is, from where it usually is, and the last
+     * over the class the others leave it ({@link NumericWitness.Congruent}). The form is never put
+     * at a value first — a value chosen before its numbers is one their own runs may not reach
+     * together — and as many remainders are tried as one position on the way is tried at.
      *
-     * <p>Proof that none stands only where every member of every class was walked and the region
-     * left none of them a place: a run with an end nothing bounds has members past the last one
-     * tried.
+     * <p>Proof that none stands only where the region leaves the numbers nothing, or no value of
+     * the form leaves any of the remainders: a walk that found no assignment proves nothing, since
+     * it walked some values of each number.
      */
     private static NumericWitness.Standing standingOnARemainder(SearchRegion here,
             RowDemand.OnARemainder remainder, Function<NumericTerm, Carrier> on,
             WitnessSearch looking) {
         LinearForm<NumericTerm> dividend = remainder.remainder().dividend();
-        LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, dividend.coefs());
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
         BigInteger divisor = remainder.remainder().divisor();
         BigInteger step = BigInteger.ZERO;
@@ -7013,17 +7010,10 @@ public final class Generator {
             }
             step = step.gcd(whole);
         }
+        // What the form's coefficients reach, every multiple of the step they generate: a
+        // remainder whose class holds none of those is one no value of the form leaves.
         Congruences reached = new Congruences(BigInteger.ZERO,
                 step.signum() == 0 ? BigInteger.ONE : step);
-        NumericDomain.Bounds reach = switch (here.projectionOf(form)) {
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    held == null ? NumericDomain.Bounds.OPEN : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
-            case null -> NumericDomain.Bounds.OPEN;
-        };
-        if (reach == null) {
-            return new NumericWitness.Standing.ProvedImpossible();
-        }
         List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
         for (NumericTerm term : NumericTerms.inOrder(dividend.coefs().keySet())) {
             terms.add(term.atOnePosition());
@@ -7033,37 +7023,22 @@ public final class Generator {
         CompositionShortfall met = CompositionShortfall.NONE;
         for (WholeNumberRuns.Run run : remainder.leaves().runs()) {
             for (BigInteger r = run.from(); r.compareTo(run.to()) <= 0; r = r.add(BigInteger.ONE)) {
-                if (left <= 0) {
+                if (new Congruences(r.subtract(moved), divisor).meet(reached) == null) {
+                    continue;
+                }
+                if (left-- <= 0) {
                     return new NumericWitness.Standing.NotFound(met.and(CompositionShortfall.of(
                             Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
                 }
-                Congruences wanted = new Congruences(r.subtract(moved), divisor).meet(reached);
-                if (wanted == null) {
-                    continue;
-                }
-                ClassMembers members = ClassMembers.within(wanted, reach, null, left);
-                if (members.stoppedShort()) {
-                    proved = false;
-                    met = met.and(CompositionShortfall.of(
-                            Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT)));
-                }
-                for (BigInteger value : members.values()) {
-                    left--;
-                    if (!(here.assuming(new LinearForm<>(ExactRatio.of(value).negated(),
-                            form.coefs()), Rel.EQ)
-                            instanceof SearchRegion.Assumption.Taken(SearchRegion at))) {
-                        proved = false;
-                        continue;
+                switch (NumericWitness.of(here, terms, on, looking,
+                        new NumericWitness.Congruent(dividend, divisor, r))) {
+                    case NumericWitness.Standing.Found found -> {
+                        return found;
                     }
-                    switch (NumericWitness.of(at, terms, on, looking)) {
-                        case NumericWitness.Standing.Found found -> {
-                            return found;
-                        }
-                        case NumericWitness.Standing.ProvedImpossible _ -> { }
-                        case NumericWitness.Standing.NotFound(CompositionShortfall shortOf) -> {
-                            proved = false;
-                            met = met.and(shortOf);
-                        }
+                    case NumericWitness.Standing.ProvedImpossible _ -> { }
+                    case NumericWitness.Standing.NotFound(CompositionShortfall shortOf) -> {
+                        proved = false;
+                        met = met.and(shortOf);
                     }
                 }
             }

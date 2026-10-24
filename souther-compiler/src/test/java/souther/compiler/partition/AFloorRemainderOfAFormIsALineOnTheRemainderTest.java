@@ -558,6 +558,40 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         }
     }
 
+    /**
+     * A remainder of what the code points of a formatted string come to less as many of one
+     * number as the string is long — a digit's value, summed — is written a row at each point of
+     * its line: thirteen digits whose values leave the remainder the point is for, worked out here
+     * of the string the row holds. The length is walked from the format's own, and what the code
+     * points come to is what the remainder leaves to be chosen.
+     */
+    @Test
+    void aRemainderOfADigitSumIsWrittenADigitStringAtEachPoint() {
+        Compilation compilation = compiled("data Code = String\n"
+                        + "    invariant String.matches(\"[0-9]{13}\", value)", "c: Code",
+                "Int.floorMod(List.sum(List.map((x) -> x - 48, String.codePoints(c.value))), 10)"
+                        + " == 0");
+        List<String> labels = new ArrayList<>();
+        for (Row row : certifiedRows(linesOf(compilation))) {
+            String text = row.inputs().get(0);
+            String digits = text.substring(text.indexOf('"') + 1, text.lastIndexOf('"'));
+            assertTrue(digits.matches("[0-9]{13}"), text);
+            long remainder = Math.floorMod(digits.chars().map(c -> c - '0').sum(), 10);
+            for (String label : row.labels()) {
+                if (label.contains(" = ")) {
+                    assertEquals(Long.parseLong(label.substring(label.lastIndexOf(' ') + 1)),
+                            remainder, label + " at " + text);
+                    labels.add(label.substring(label.lastIndexOf(' ') + 1));
+                } else if (label.contains(" < ")) {
+                    assertTrue(remainder > 1, label + " at " + text);
+                    labels.add("above");
+                }
+            }
+        }
+        assertEquals(List.of("0", "1", "above"), labels.stream().sorted().toList(),
+                "a row at the line, beside it and past it");
+    }
+
     /** One row of a measurement: what each input was written as and what each point is for. */
     private record Row(List<String> inputs, List<String> labels) {}
 
