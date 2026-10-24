@@ -13,6 +13,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -488,7 +489,10 @@ final class AStatementAtARow {
      *               elements grouped are every element of all of those ({@link #elementsIn})
      */
     TurnsOn turnsOnAmong(TermPath container, Quantity.TheValue under, Optional<TermPath> across) {
-        TurnsOn out = TurnsOn.THE_ELEMENT;
+        // Whether an element is the last of those holding a value is read off the elements beside
+        // it, and is no number or position to gather.
+        TurnsOn out = Proposition.saysTheLastToHold(stated) ? TurnsOn.OTHER_ELEMENTS
+                : TurnsOn.THE_ELEMENT;
         for (NumericTerm each : numbers()) {
             out = out.orMore(readOf(each, container, under, across).turnsOn());
         }
@@ -514,26 +518,18 @@ final class AStatementAtARow {
      * each answers is read of them there. It is the same answer wherever they are written only
      * for a statement that reads the element itself, what is read of every element of all the
      * containers, and what stands outside {@code across}.
+     *
+     * <p>Asked of the statement and not of what was gathered from it to put to a row
+     * ({@link #gather}), which leaves out what a row needs no number for: the last of the elements
+     * holding a value is no number and no position of its own, and is read off the order of the
+     * elements in the container that holds them. A statement that reads something that is no
+     * place of the input is not known to be the same wherever they are written.
      */
     boolean answersHoweverTheElementsAreSharedOut(TermPath container, TermPath across) {
-        for (NumericTerm each : numbers()) {
-            if (readsAroundTheElement(each, container, across)) {
-                return false;
-            }
-        }
-        for (TermPath each : positions) {
-            if (aroundTheElement(each, container, across)) {
-                return false;
-            }
-        }
-        for (OverTheElements each : elements.values()) {
-            if (aroundTheElement(each.container(), container, across)
-                    || !each.ofTheElement().answersHoweverTheElementsAreSharedOut(container,
-                            across)) {
-                return false;
-            }
-        }
-        return true;
+        return PositionsAStatementReads.everyPlaceOf(stated)
+                .map(places -> places.stream()
+                        .noneMatch(place -> aroundTheElement(place, container, across)))
+                .orElse(false);
     }
 
     /** Whether {@code term} is read off a place around an element of {@code container}, inside
@@ -560,6 +556,9 @@ final class AStatementAtARow {
      */
     boolean readsTheValueAt(TermPath container, Quantity.TheValue at,
                             Optional<TermPath> across) {
+        if (Proposition.saysTheLastToHold(stated)) {
+            return true;
+        }
         for (NumericTerm each : numbers()) {
             WhatItReads read = readOf(each, container, at, across);
             if (read.turnsOn() == TurnsOn.OTHER_ELEMENTS || read.theValue()) {

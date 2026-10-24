@@ -29,15 +29,29 @@ public final class PositionsAStatementReads {
     /** Where the positions go, and whether an answer is read as naming nothing of the input. */
     private final Set<TermPath> out = new LinkedHashSet<>();
     private final boolean answersNameNothing;
+    private final boolean everyPlace;
 
-    private PositionsAStatementReads(boolean answersNameNothing) {
+    private PositionsAStatementReads(boolean answersNameNothing, boolean everyPlace) {
         this.answersNameNothing = answersNameNothing;
+        this.everyPlace = everyPlace;
     }
 
     /** The positions {@code stated} reads, in the order it names them, or empty where it reads
      *  something else as well. */
     public static Optional<List<TermPath>> of(Proposition stated) {
-        PositionsAStatementReads reading = new PositionsAStatementReads(false);
+        PositionsAStatementReads reading = new PositionsAStatementReads(false, false);
+        return reading.reads(stated) ? Optional.of(List.copyOf(reading.out)) : Optional.empty();
+    }
+
+    /**
+     * Every place {@code stated} is read off, in the order it names them — each place a number is
+     * read off ({@link NumericTerm#placesReadOff}) and not only the one it is filed under — or
+     * empty where it reads something that is no place. Whatever the statement says of an element
+     * stands at some of these places, and a form of statement this does not know is empty rather
+     * than silent, so that no question asked of the places leaves one unasked.
+     */
+    public static Optional<List<TermPath>> everyPlaceOf(Proposition stated) {
+        PositionsAStatementReads reading = new PositionsAStatementReads(false, true);
         return reading.reads(stated) ? Optional.of(List.copyOf(reading.out)) : Optional.empty();
     }
 
@@ -50,7 +64,7 @@ public final class PositionsAStatementReads {
         if (!Proposition.aboutAnAnswer(stated)) {
             return Optional.empty();
         }
-        PositionsAStatementReads reading = new PositionsAStatementReads(true);
+        PositionsAStatementReads reading = new PositionsAStatementReads(true, false);
         return reading.reads(stated) ? Optional.of(List.copyOf(reading.out)) : Optional.empty();
     }
 
@@ -124,7 +138,11 @@ public final class PositionsAStatementReads {
     }
 
     private boolean reads(NumericTerm term) {
-        out.add(term.subjectPath());
+        if (everyPlace) {
+            out.addAll(term.placesReadOff());
+        } else {
+            out.add(term.subjectPath());
+        }
         return true;
     }
     private boolean reads(DecisionSubject subject) {

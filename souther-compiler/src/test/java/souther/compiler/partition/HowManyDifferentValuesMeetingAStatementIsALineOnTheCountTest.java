@@ -558,6 +558,21 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 + " [total(ds[*].forecasts[*].amount by currency) == 150]");
     }
 
+    /**
+     * What keeps an element may read the list holding it, and then it turns on which list each
+     * element is put in, as it does when it reads the element holding the list.
+     */
+    @Test
+    void aStatementReadingTheListHoldingTheElementHasNoRowsChosenAcrossThem() {
+        JsonNode line = only(differentCounts(reportOf(ACROSS.formatted(
+                "Set.size(Set.fromList(List.map(.currency, List.flatMap(d ->"
+                        + " List.filter(f -> f.amount > List.length(d.forecasts), d.forecasts),"
+                        + " ds)))) == 1"))));
+        for (JsonNode item : line.path("items")) {
+            assertFalse(item.path("knownWritable").asBoolean(), item::toString);
+        }
+    }
+
     /** Forecasts with a region, kept by it on the way to the count. */
     private static final String REGIONED = """
             module probe
