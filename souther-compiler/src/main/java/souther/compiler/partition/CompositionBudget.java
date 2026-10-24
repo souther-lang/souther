@@ -83,6 +83,19 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many whole numbers a total is tried at for one sharing of a container's elements, where
+     *  what an element answers turns on the total of the container it is in. The totals the
+     *  sharing can come to are an interval over the rationals, which is exact; the whole numbers
+     *  in it are walked from the one nearest nought and from either end, and a sharing that no
+     *  whole number tried meets is not shown to have none. */
+    TOTALS_A_SHARING_IS_TRIED_AT(8),
+
+    /** How many pairs of a bound below a number and a bound above it are put together to leave a
+     *  sharing of a container's elements the totals it can come to, where what an element answers
+     *  turns on that total. Each pair is a bound, so the bounds may multiply with each number
+     *  eliminated; past it, the sharing is not shown to come to any total. */
+    PAIRS_OF_BOUNDS_A_TOTAL_IS_SOLVED_WITH(4096),
+
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a
      *  walk over them is held to this and not to the containers it offers, which count only the
@@ -663,6 +676,12 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case TOTALS_A_SHARING_IS_TRIED_AT ->
+                    "how many whole numbers a total is tried at for one way of sharing out a"
+                            + " container's elements";
+            case PAIRS_OF_BOUNDS_A_TOTAL_IS_SOLVED_WITH ->
+                    "how many pairs of bounds are put together to find the totals a way of"
+                            + " sharing out a container's elements can come to";
             case COUNTS_OF_KEYS_TRIED ->
                     "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
@@ -786,7 +805,8 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                 SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_SHARING_IS_TRIED_AT,
+                 PAIRS_OF_BOUNDS_A_TOTAL_IS_SOLVED_WITH, COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,

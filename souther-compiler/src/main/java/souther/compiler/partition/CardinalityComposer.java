@@ -9,7 +9,6 @@ import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
-import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -28,9 +27,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -201,12 +198,19 @@ final class CardinalityComposer {
         Element element = Element.of(counts, container);
         boolean inside = standingAt.stream()
                 .anyMatch(each -> !each.term().subjectPath().equals(container.element()));
-        if (element == null && size == null && standingAt.isEmpty()
+        // Counts whose statements read the total of the element's number are composed with the
+        // total chosen first ({@link CoupledCardinalityComposer}): what a row holding an element
+        // alone answers is not what the element answers in the container it is in. Counts it does
+        // not take are chosen as below.
+        if (element == null && standingAt.isEmpty()
                 && ElementsKeptApart.at(view, keptApart, reading).isEmpty()) {
-            CoupledToTheTotal coupled = CoupledToTheTotal.of(asked, container, measuring);
-            if (coupled != null) {
-                return amongTheTotal(coupled, container, sourceType, holding, measuring, within,
-                        reading);
+            CoupledCardinalityComposer.Coupled coupled =
+                    CoupledCardinalityComposer.Coupled.of(asked, container, measuring);
+            TermRealizations.Realization composed = coupled == null ? null
+                    : CoupledCardinalityComposer.compose(coupled, container, size, sourceType,
+                            holding, measuring, within, reading);
+            if (composed != null) {
+                return composed;
             }
         }
         // An element that is more than one number is chosen among the values it is read at
@@ -401,7 +405,7 @@ final class CardinalityComposer {
      * Where the elements chosen for a container stand in the input: the row a container of them
      * is read as, and the rows written holding them.
      */
-    private sealed interface Standing {
+    sealed interface Standing {
 
         /** {@code holding}, a row holding a container of the elements chosen, as it is read. */
         BorderQuantity.Observation read(BorderQuantity.Observation holding);
@@ -778,343 +782,6 @@ final class CardinalityComposer {
                 : none("no container of `" + container + "` this composed meets every count asked");
     }
 
-    private static final ValueName.Stdlib.Operation SUM = ValueName.Stdlib.operation("List", "sum");
-
-    /**
-     * A count of the elements meeting a statement that reads, beside each element's number, the
-     * total of that number over the container the element is in.
-     *
-     * @param asked   the count
-     * @param number  the element's number
-     * @param carrier the order the number is written on
-     * @param kept    the place of an element whose different values among those meeting the
-     *                statement are what is counted, or null where the elements are
-     */
-    private record CoupledToTheTotal(Asked.SoManyMeeting asked, NumericTerm.ValueOf number,
-                                     Carrier carrier, TermPath kept) {
-
-        /** The count as this reads it, or null where the statement reads anything besides a number
-         *  of the element and the total of it, or where more is asked than the one count. */
-        static CoupledToTheTotal of(List<Asked> asked, TermPath container, Quantities measuring) {
-            if (asked.size() != 1 || !(asked.getFirst() instanceof Asked.SoManyMeeting many)
-                    || many.across().isPresent()) {
-                return null;
-            }
-            TermPath kept = null;
-            if (many.differentAt().isPresent()) {
-                Quantity.TheValue at = many.differentAt().get();
-                if (!(at instanceof Quantity.TheValue.AtAPlace) || at.heldAt().size() != 1) {
-                    return null;
-                }
-                kept = at.heldAt().getFirst();
-            }
-            NumericTerm.ValueOf own = null;
-            List<NumericTerm.TakenOver> totals = new ArrayList<>();
-            for (NumericTerm term : many.perElement().numbers()) {
-                if (term instanceof NumericTerm.ValueOf value
-                        && value.position().isAtOrUnder(container.element())
-                        && !value.position().equals(container.element())
-                        && (own == null || own.equals(value))) {
-                    own = value;
-                } else if (term instanceof NumericTerm.TakenOver over
-                        && SUM.equals(over.operation())
-                        && over.source() instanceof RunSource.ProjectedOccurrences) {
-                    totals.add(over);
-                } else {
-                    return null;
-                }
-            }
-            if (own == null || totals.isEmpty()) {
-                return null;
-            }
-            for (NumericTerm.TakenOver total : totals) {
-                if (!total.subjectPath().equals(own.position())) {
-                    return null;
-                }
-            }
-            if (kept != null && (kept.equals(own.position())
-                    || !kept.isAtOrUnder(container.element()))) {
-                return null;
-            }
-            TermOrders orders = measuring.ordersOf(own);
-            Carrier carrier = orders == null ? null : orders.observed();
-            return carrier == null || !carrier.counts() ? null
-                    : new CoupledToTheTotal(many, own, carrier, kept);
-        }
-    }
-
-    /**
-     * A row holding one element, read as if the container it is in came to {@code total}: the
-     * values at {@code place} are the element's own and what is left of the total beside it.
-     */
-    private record WithTheTotal(BorderQuantity.Observation holding, TermPath place,
-                                ObservedValue own, ObservedValue rest)
-            implements BorderQuantity.Observation {
-
-        @Override
-        public WalkResult<ObservationAtPoint> at(TermPath path) {
-            return holding.at(path);
-        }
-
-        @Override
-        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
-            return path.equals(place) ? WalkResult.reached(List.of(own, rest))
-                    : holding.everyValueAt(path);
-        }
-
-        @Override
-        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
-            return holding.eachElementOf(of);
-        }
-    }
-
-    /**
-     * Containers whose elements meet a statement that reads the total of their own number, so
-     * many of them.
-     *
-     * <p>What an element answers there is not what a row holding it alone answers, since the total
-     * is the container's. So the total is chosen first: for each total, each whole number the
-     * element may be is read as one element of a container coming to it, and falls in the class
-     * of those meeting the statement or the class of those not. A container of so many meeting
-     * and so many not holds one value of each class, and the two values come to the total where
-     * the first of them settles the second. Every container is read again whole before it is
-     * offered, so what the classes promise is a proposal and never the answer.
-     */
-    private static TermRealizations.Realization amongTheTotal(CoupledToTheTotal coupled,
-                                                              TermPath container, Type sourceType,
-                                                              Shape.Sequence holding,
-                                                              Quantities measuring,
-                                                              SearchRegion within,
-                                                              RuleReadingContext reading) {
-        NumericTerm.ValueOf number = coupled.number();
-        Carrier carrier = coupled.carrier();
-        Asked.SoManyMeeting meeting = coupled.asked();
-        NumericDomain.Bounds run = switch (within.projectionOf(number)) {
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    held == null ? NumericDomain.Bounds.OPEN : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
-            case null -> NumericDomain.Bounds.OPEN;
-        };
-        if (run == null) {
-            return none("no value of `" + number + "` is left for the elements of `" + container
-                    + "`");
-        }
-        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
-        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        // Whole numbers by their distance from nought, as many as a container has elements.
-        List<Integer> numbers = new ArrayList<>();
-        List<Place> places = new ArrayList<>();
-        for (int distance = 0; distance <= MOST_ELEMENTS; distance++) {
-            for (int sign = 1; sign >= -1; sign -= 2) {
-                if (distance == 0 && sign < 0) {
-                    continue;
-                }
-                int at = sign * distance;
-                Place place = carrier.onTheGrid(new Count(BigDecimal.valueOf(at)));
-                if (place != null && run.admits(place)) {
-                    numbers.add(at);
-                    places.add(place);
-                }
-            }
-        }
-        if (numbers.isEmpty()) {
-            return none("no whole number is left for the elements of `" + container + "`");
-        }
-        // The element holding the number at a place of the grid and, where the different values
-        // of a part are counted, the value of it that is the k-th of those offered.
-        List<ElementValues> listings = new ArrayList<>();
-        List<List<ObservedValue>> offered = new ArrayList<>();
-        Map<Integer, ObservedValue> made = new HashMap<>();
-        BiFunction<Integer, Integer, ObservedValue> elementAt = (at, k) -> made.computeIfAbsent(
-                at * MOST_ELEMENTS + k, key -> {
-                    ElementValues listing = ElementValues.of(container, holding.element(),
-                            reading, (position, part) -> {
-                                if (position.equals(number.position())) {
-                                    return List.of(carrier.valueOf(places.get(at)));
-                                }
-                                if (position.equals(coupled.kept())) {
-                                    if (offered.isEmpty()) {
-                                        offered.add(numbersAt(position,
-                                                OfTheType.manyOf(part, reading), List.of(meeting),
-                                                null, measuring, within, Map.of(), MOST_ELEMENTS,
-                                                unheld, unnamed, reading.today()));
-                                    }
-                                    List<ObservedValue> all = offered.getFirst();
-                                    return all == null || all.size() <= k ? null
-                                            : List.of(all.get(k));
-                                }
-                                return firstOf(numbersAt(position, OfTheType.of(part, reading),
-                                        List.of(meeting), null, measuring, within, Map.of(), 1,
-                                        unheld, unnamed, reading.today()));
-                            });
-                    if (listing == null || listing.listed().values().isEmpty()) {
-                        return null;
-                    }
-                    listings.add(listing);
-                    return listing.listed().values().getFirst();
-                });
-        List<ObservedValue> alongside = new ArrayList<>();
-        for (int i = 0; i < numbers.size(); i++) {
-            ObservedValue one = elementAt.apply(i, 0);
-            if (one == null) {
-                return notChosen("an element of `" + container + "` has a part whose values are"
-                        + " neither one of so many nor numbers the statements part");
-            }
-            alongside.add(one);
-        }
-        Standing standing = new Standing.WhereItIsWritten(sourceType, reading);
-        ElementValues listing = listings.getFirst();
-        Map<Integer, Integer> indexOf = new HashMap<>();
-        List<BorderQuantity.Observation> alone = new ArrayList<>();
-        for (int i = 0; i < numbers.size(); i++) {
-            indexOf.put(numbers.get(i), i);
-            alone.add(standing.read(listing.holding(sourceType, List.of(alongside.get(i)))));
-        }
-        List<FixtureTemplate> built = new ArrayList<>();
-        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
-        int tried = 0;
-        boolean walked = true;
-        // The classes under each total are worked out when the total is first asked for.
-        Map<Integer, byte[]> classes = new HashMap<>();
-        search:
-        for (int elementsHeld = 0; elementsHeld <= MOST_ELEMENTS; elementsHeld++) {
-            for (int meetingIt = 0; meetingIt <= elementsHeld; meetingIt++) {
-                int rest = elementsHeld - meetingIt;
-                // What is counted: the elements meeting the statement, or the different values of
-                // the part they hold, which are one to as many as they are.
-                int fewest = coupled.kept() != null && meetingIt > 0 ? 1 : meetingIt;
-                for (int counted = fewest; counted <= meetingIt; counted++) {
-                    if (!meeting.asMany(counted)) {
-                        continue;
-                    }
-                    for (int total : numbers) {
-                        if (tried++ == MOST_SHARES) {
-                            refused.add(CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT);
-                            walked = false;
-                            break search;
-                        }
-                        byte[] under = classes.computeIfAbsent(total, at -> classesUnder(at,
-                                numbers, alone, meeting, number, carrier));
-                        int[] picked = pickedFor(meetingIt, rest, total, under, numbers, indexOf);
-                        if (picked == null) {
-                            continue;
-                        }
-                        List<ObservedValue> values = new ArrayList<>();
-                        for (int i = 0; i < meetingIt; i++) {
-                            values.add(elementAt.apply(picked[0],
-                                    coupled.kept() == null ? 0 : i % counted));
-                        }
-                        for (int i = 0; i < rest; i++) {
-                            values.add(elementAt.apply(picked[1], 0));
-                        }
-                        if (values.contains(null)) {
-                            continue;
-                        }
-                        BorderQuantity.Observation whole =
-                                standing.read(listing.holding(sourceType, values));
-                        if (!(meeting.over(container, List.of(), whole)
-                                instanceof AStatementAtARow.Answer.Holds)) {
-                            continue;
-                        }
-                        TermRealizations.Realization rows =
-                                standing.written(values, MOST_OFFERED - built.size());
-                        if (rows instanceof TermRealizations.Realization.Built offeredRows) {
-                            offeredRows.values().forEach(built::add);
-                        }
-                        if (rows != null) {
-                            CompositionShortfall met = rows.shortfall();
-                            refused.addAll(met.figures());
-                            unnamed.addAll(met.populations());
-                            unheld.addAll(met.unheld());
-                        }
-                        if (built.size() >= MOST_OFFERED) {
-                            refused.add(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
-                            walked = false;
-                            break search;
-                        }
-                    }
-                }
-            }
-        }
-        if (walked) {
-            refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
-        }
-        CompositionShortfall shortfall = CompositionShortfall.of(refused, unnamed, unheld);
-        if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built, shortfall);
-        }
-        if (!shortfall.figures().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(shortfall);
-        }
-        return notChosen("what an element of `" + container + "` answers turns on the total of"
-                + " `" + number + "`, and no container this composed meets the count");
-    }
-
-    private static List<ObservedValue> firstOf(List<ObservedValue> values) {
-        return values == null || values.isEmpty() ? values : List.of(values.getFirst());
-    }
-
-    /**
-     * For each of {@code numbers}, whether an element of that number meets the statement in a
-     * container coming to {@code total}: 1 where it does, 2 where it does not, and 0 where that
-     * could not be read.
-     */
-    private static byte[] classesUnder(int total, List<Integer> numbers,
-                                       List<BorderQuantity.Observation> alone,
-                                       Asked.SoManyMeeting meeting, NumericTerm.ValueOf number,
-                                       Carrier carrier) {
-        byte[] out = new byte[numbers.size()];
-        for (int i = 0; i < out.length; i++) {
-            Place own = carrier.onTheGrid(new Count(BigDecimal.valueOf(numbers.get(i))));
-            Place left = carrier.onTheGrid(new Count(BigDecimal.valueOf((long) total
-                    - numbers.get(i))));
-            if (own == null || left == null) {
-                continue;
-            }
-            out[i] = (byte) switch (meeting.perElement().at(new WithTheTotal(alone.get(i),
-                    number.position(), carrier.valueOf(own), carrier.valueOf(left)))) {
-                case AStatementAtARow.Answer.Holds _ -> 1;
-                case AStatementAtARow.Answer.Fails _ -> 2;
-                case AStatementAtARow.Answer.CouldNotTell _ -> 0;
-            };
-        }
-        return out;
-    }
-
-    /**
-     * The places in {@code numbers} of the value {@code meeting} elements all hold and of the one
-     * {@code rest} others all hold, the two coming to {@code total}, the first of the class
-     * meeting the statement and the second of the class not — or null where no two do.
-     */
-    private static int[] pickedFor(int meeting, int rest, int total, byte[] under,
-                                   List<Integer> numbers, Map<Integer, Integer> indexOf) {
-        if (meeting == 0 || rest == 0) {
-            int held = meeting + rest;
-            if (held == 0) {
-                return total == 0 ? new int[] {0, 0} : null;
-            }
-            if (total % held != 0) {
-                return null;
-            }
-            Integer at = indexOf.get(total / held);
-            if (at == null || under[at] != (meeting == 0 ? 2 : 1)) {
-                return null;
-            }
-            return new int[] {at, at};
-        }
-        for (int a = 0; a < numbers.size(); a++) {
-            long left = (long) total - (long) meeting * numbers.get(a);
-            if (under[a] != 1 || left % rest != 0) {
-                continue;
-            }
-            Integer b = indexOf.get((int) (left / rest));
-            if (b != null && under[b] == 2) {
-                return new int[] {a, b};
-            }
-        }
-        return null;
-    }
-
     /**
      * Why finding no container of {@code container} for {@code asked} shows none, or null where it
      * does. The elements are chosen by what a row holding a group of them alone answers — the
@@ -1300,7 +967,7 @@ final class CardinalityComposer {
      * turns, over a group of so many elements, where the number stands at that share of the place
      * ({@link #turningWith}): those shares are where an element is chosen too.
      */
-    private static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
+    static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
                                                  Quantity.TheValue apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
@@ -2132,7 +1799,7 @@ final class CardinalityComposer {
      * are a question each value answers and a number of the elements that answer it, so a container
      * composed for both is composed by sharing elements out among what they answer together.
      */
-    private sealed interface Asked {
+    sealed interface Asked {
 
         /** Whether {@code value}, as the element {@code row} reads, answers this. */
         AStatementAtARow.Answer at(Place value, BorderQuantity.Observation row);
@@ -2467,7 +2134,7 @@ final class CardinalityComposer {
      * the region leaves it at, and the value it is written as in {@code written}; a number the
      * region leaves at more or none, or that stands on no order, is in neither.
      */
-    private static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
+    static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
                                                           Quantities measuring,
                                                           SearchRegion within,
                                                           Map<TermPath, ObservedValue> written) {
@@ -2915,7 +2582,7 @@ final class CardinalityComposer {
 
     /** {@code row}, with {@code written} in it where there is any: a row asked once for each way
      *  the elements are shared out is not wrapped for nothing. */
-    private static BorderQuantity.Observation withNumbersBeside(
+    static BorderQuantity.Observation withNumbersBeside(
             BorderQuantity.Observation row, Map<TermPath, ObservedValue> written) {
         return written.isEmpty() ? row : new WithNumbersBeside(row, written);
     }
@@ -3700,13 +3367,13 @@ final class CardinalityComposer {
         }
     }
 
-    private static TermRealizations.Realization none(String why) {
+    static TermRealizations.Realization none(String why) {
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, why);
     }
 
     /** Elements of a kind nothing here chooses, which is the population and no proof. */
-    private static TermRealizations.Realization notChosen(String why) {
+    static TermRealizations.Realization notChosen(String why) {
         return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)), why);
     }

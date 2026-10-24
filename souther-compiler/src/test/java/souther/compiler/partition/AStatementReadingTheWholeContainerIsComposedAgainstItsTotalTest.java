@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,47 +30,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * container it is in, not against a container of that element alone: the elements are chosen
  * together with what the container comes to, so each is read against the total of the container
  * it stands in.
+ *
+ * <p>Each row composed is run as an example answering what the language computes of it, and none
+ * is refused: a row composed against a container of its element alone holds another count than
+ * the point it was composed for.
  */
 class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private static final String HEAD = """
-            module probe
+    private static final String PLAIN = "data Forecast = { currency: String, amount: Int }\n";
 
-            data Forecast = { currency: String, amount: Int }
+    private static final String HALF = "f.amount * 2 > List.sum(List.map(.amount, fs))";
 
-            behavior f : (fs: List<Forecast>) -> Int
-            """;
+    private static final Pattern ELEMENT = Pattern.compile(
+            "currency = \"([^\"]*)\", amount = (-?\\d+)(?:, active = (true|false))?");
 
-    private static final String ELEMENTS = """
-            let f (fs) = if List.length(List.filter(f ->
-                f.amount * 2 > List.sum(List.map(.amount, fs)), fs)) == 1 then 1 else 0
-            """;
-
-    private static final String CURRENCIES = """
-            let f (fs) = if Set.size(Set.fromList(List.map(.currency, List.filter(f ->
-                f.amount * 2 > List.sum(List.map(.amount, fs)), fs)))) == 1 then 1 else 0
-            """;
-
-    /** An element above the total of the container by ten: one that no element meets in a
-     *  container of itself alone. */
-    private static final String ABOVE_THE_REST = """
-            let f (fs) = if List.length(List.filter(f ->
-                f.amount > List.sum(List.map(.amount, fs)) + 10, fs)) == 1 then 1 else 0
-            """;
-
-    private static final String COUNT_OF_ELEMENTS =
-            "f/#fs [List.sum(fs[*].amount) - 2 * fs[*].amount < 0]";
-
-    private static final String COUNT_OF_CURRENCIES = "f/#different fs [fs[*].currency] where"
-            + " [List.sum(fs[*].amount) - 2 * fs[*].amount < 0]";
-
-    private static final Pattern ELEMENT =
-            Pattern.compile("currency = \"([^\"]*)\", amount = (-?\\d+)");
+    private static final Pattern BESIDE = Pattern.compile("\\(\\s*(-?\\d+)\\s*,\\s*\\[");
 
     /** An element of a row composed. */
-    private record Forecast(String currency, int amount) {}
+    private record Forecast(String currency, int amount, boolean active) {}
+
+    /** A row composed: the number beside the list, where there is one, and the list. */
+    private record Row(int k, List<Forecast> elements) {
+
+        int total() {
+            return elements.stream().mapToInt(Forecast::amount).sum();
+        }
+
+        long countOf(java.util.function.Predicate<Forecast> meets) {
+            return elements.stream().filter(meets).count();
+        }
+    }
+
+    private static String source(String data, String parameters, String body) {
+        return "module probe\n\n" + data + "\nbehavior f : (" + parameters + ") -> Int\n"
+                + "let f (" + parameters.replaceAll(": [^,]*", "") + ") = " + body + "\n";
+    }
+
+    private static String listCount(String statement) {
+        return "List.length(List.filter(f -> " + statement + ", fs))";
+    }
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -82,104 +84,115 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
         return compilation;
     }
 
-    private static JsonNode line(Compilation compilation, String axis) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+    private static JsonNode lines(Compilation compilation) {
+        return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
-        for (JsonNode behavior : report.at("/modules/0/behaviors")) {
+    }
+
+    private static List<JsonNode> countLines(Compilation compilation) {
+        List<JsonNode> out = new ArrayList<>();
+        for (JsonNode behavior : lines(compilation).at("/modules/0/behaviors")) {
             for (JsonNode each : behavior.at("/partition/boundaries")) {
-                if (axis.equals(each.path("axis").asString())) {
-                    return each;
+                if (each.path("axis").asString().startsWith("f/#")) {
+                    out.add(each);
                 }
             }
-        }
-        throw new AssertionError("a line on " + axis + ": " + report);
-    }
-
-    private static JsonNode pointAgainst(JsonNode line, String against) {
-        for (JsonNode each : line.path("items")) {
-            if (against.equals(each.path("against").asString())) {
-                return each;
-            }
-        }
-        throw new AssertionError("a point against " + against + " on " + line);
-    }
-
-    /** The elements of a row composed, as the amounts and currencies it writes. */
-    private static List<Forecast> elementsOf(CharSequence row) {
-        List<Forecast> out = new ArrayList<>();
-        Matcher found = ELEMENT.matcher(row);
-        while (found.find()) {
-            out.add(new Forecast(found.group(1), Integer.parseInt(found.group(2))));
         }
         return out;
     }
 
-    private static List<Forecast> meeting(List<Forecast> row) {
-        int total = row.stream().mapToInt(Forecast::amount).sum();
-        return row.stream().filter(each -> each.amount() * 2 > total).toList();
-    }
-
-    private static long elementsMeeting(List<Forecast> row) {
-        return meeting(row).size();
-    }
-
-    private static long currenciesMeeting(List<Forecast> row) {
-        return meeting(row).stream().map(Forecast::currency).distinct().count();
-    }
-
-    /** Every point of the line that a value can stand at has a row, as the elements of the
-     *  container are chosen together. */
-    private static void everyPointHasARow(String behavior, String axis) {
-        JsonNode line = line(measured(HEAD + behavior), axis);
-        assertFalse(line.path("items").isEmpty(), line::toString);
-        for (JsonNode item : line.path("items")) {
-            assertTrue(item.has("notOwed") || item.path("knownWritable").asBoolean(),
-                    item::toString);
+    private static Row rowOf(CharSequence text) {
+        List<Forecast> elements = new ArrayList<>();
+        Matcher found = ELEMENT.matcher(text);
+        while (found.find()) {
+            elements.add(new Forecast(found.group(1), Integer.parseInt(found.group(2)),
+                    found.group(3) == null || Boolean.parseBoolean(found.group(3))));
         }
+        Matcher beside = BESIDE.matcher(text);
+        return new Row(beside.find() ? Integer.parseInt(beside.group(1)) : 0, elements);
     }
 
     /**
-     * Each row composed is run as an example answering what the language computes of it, and
-     * none is refused. The counts the rows hold are the ones the line is drawn at, so a row
-     * composed against a container of its element alone, which holds another, is not among them.
+     * Every row composed, run as an example answering what {@code answer} says of it.
      *
-     * @return the number each row holds of what is counted
+     * @param held  how many of what is counted the row holds, which the line is drawn at
+     * @param every what each row composed keeps to besides
+     * @return the counts the rows hold
      */
-    private static Set<Long> rowsComposedHold(String behavior, ToLongFunction<List<Forecast>> held) {
-        Compilation compilation = measured(HEAD + behavior);
+    private static Set<Long> rowsComposedHold(String source, ToIntFunction<Row> answer,
+                                              ToLongFunction<Row> held, Consumer<Row> every) {
+        Compilation compilation = measured(source);
         String rows = GeneratedRows.of(compilation, "probe", null,
                 SourceRendering.namedByIdentity(compilation.texts())).text();
         StringBuilder examples = new StringBuilder("\nexample f\n");
-        StringBuilder row = new StringBuilder();
+        StringBuilder text = new StringBuilder();
         Set<Long> counts = new HashSet<>();
-        for (String text : rows.split("\n")) {
-            if (text.startsWith("//")) {
+        for (String line : rows.split("\n")) {
+            if (line.startsWith("//")) {
                 continue;
             }
-            if (text.startsWith("    |")) {
-                row = new StringBuilder();
+            if (line.startsWith("    |")) {
+                text = new StringBuilder();
             }
-            row.append(text).append('\n');
-            if (!text.contains("<?>")) {
+            text.append(line).append('\n');
+            if (!line.contains("<?>")) {
                 continue;
             }
-            long count = held.applyAsLong(elementsOf(row));
-            counts.add(count);
-            examples.append(row.toString().replace("<?>", count == 1 ? "1" : "0"));
+            Row row = rowOf(text);
+            counts.add(held.applyAsLong(row));
+            every.accept(row);
+            examples.append(text.toString().replace("<?>", String.valueOf(answer.applyAsInt(row))));
         }
         assertFalse(counts.isEmpty(), () -> "rows composed: " + rows);
-        measured(HEAD + behavior + examples);
+        measured(source + examples);
         return counts;
+    }
+
+    private static Set<Long> rowsComposedHold(String source, ToIntFunction<Row> answer,
+                                              ToLongFunction<Row> held) {
+        return rowsComposedHold(source, answer, held, _ -> { });
+    }
+
+    private static boolean aboveHalf(Row row, Forecast each) {
+        return each.amount() * 2 > row.total();
+    }
+
+    private static long elementsAboveHalf(Row row) {
+        return row.countOf(each -> aboveHalf(row, each));
+    }
+
+    private static long currenciesAboveHalf(Row row) {
+        return row.elements().stream().filter(each -> aboveHalf(row, each))
+                .map(Forecast::currency).distinct().count();
+    }
+
+    private static final String ONE_ABOVE_HALF = source(PLAIN, "fs: List<Forecast>",
+            "if " + listCount(HALF) + " == 1 then 1 else 0");
+
+    private static final String CURRENCIES_ABOVE_HALF = source(PLAIN, "fs: List<Forecast>",
+            "if Set.size(Set.fromList(List.map(.currency, List.filter(f -> " + HALF
+                    + ", fs)))) == 1 then 1 else 0");
+
+    /** Every point of the line that a value can stand at has a row. */
+    private static void everyPointHasARow(String source) {
+        List<JsonNode> lines = countLines(measured(source));
+        assertFalse(lines.isEmpty());
+        for (JsonNode line : lines) {
+            for (JsonNode item : line.path("items")) {
+                assertTrue(item.has("notOwed") || item.path("knownWritable").asBoolean(),
+                        item::toString);
+            }
+        }
     }
 
     @Test
     void everyPointOfTheLineOnTheElementsMeetingItHasARow() {
-        everyPointHasARow(ELEMENTS, COUNT_OF_ELEMENTS);
+        everyPointHasARow(ONE_ABOVE_HALF);
     }
 
     @Test
     void everyPointOfTheLineOnTheCurrenciesOfThoseMeetingItHasARow() {
-        everyPointHasARow(CURRENCIES, COUNT_OF_CURRENCIES);
+        everyPointHasARow(CURRENCIES_ABOVE_HALF);
     }
 
     /**
@@ -189,8 +202,17 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      */
     @Test
     void theRowsComposedHoldTheCountOfElementsTheirPointsAsk() {
-        Set<Long> counts = rowsComposedHold(ELEMENTS,
-                AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest::elementsMeeting);
+        Set<Long> counts = rowsComposedHold(ONE_ABOVE_HALF,
+                row -> elementsAboveHalf(row) == 1 ? 1 : 0, row -> elementsAboveHalf(row));
+        assertTrue(counts.containsAll(List.of(0L, 1L, 2L)), counts::toString);
+        assertTrue(counts.stream().anyMatch(count -> count > 2), counts::toString);
+    }
+
+    @Test
+    void theRowsComposedHoldTheCountOfCurrenciesTheirPointsAsk() {
+        Set<Long> counts = rowsComposedHold(CURRENCIES_ABOVE_HALF,
+                row -> currenciesAboveHalf(row) == 1 ? 1 : 0,
+                AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest::currenciesAboveHalf);
         assertTrue(counts.containsAll(List.of(0L, 1L, 2L)), counts::toString);
         assertTrue(counts.stream().anyMatch(count -> count > 2), counts::toString);
     }
@@ -199,38 +221,144 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      *  composed all the same: it is the total of the container that the element is above. */
     @Test
     void anElementAboveTheRestByTenIsComposedThoughNoneIsAboveItselfByTen() {
-        Set<Long> counts = rowsComposedHold(ABOVE_THE_REST, row -> {
-            int total = row.stream().mapToInt(Forecast::amount).sum();
-            return row.stream().filter(each -> each.amount() > total + 10).count();
-        });
+        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(
+                "f.amount > List.sum(List.map(.amount, fs)) + 10") + " == 1 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source, row -> row.countOf(
+                each -> each.amount() > row.total() + 10) == 1 ? 1 : 0,
+                row -> row.countOf(each -> each.amount() > row.total() + 10));
         assertTrue(counts.contains(1L), counts::toString);
     }
 
+    /**
+     * What the elements may be is what their type leaves them, and has nothing to do with how
+     * many a container holds: every element is a hundred or more, and one of them above half of
+     * the total is still composed.
+     */
     @Test
-    void theRowsComposedHoldTheCountOfCurrenciesTheirPointsAsk() {
-        Set<Long> counts = rowsComposedHold(CURRENCIES,
-                AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest::currenciesMeeting);
-        assertTrue(counts.containsAll(List.of(0L, 1L, 2L)), counts::toString);
-        assertTrue(counts.stream().anyMatch(count -> count > 2), counts::toString);
+    void theValuesAnElementMayBeAreWhatItsTypeLeavesIt() {
+        String source = source("data Forecast = { currency: String, amount: Int }"
+                + " invariant amount >= 100\n", "fs: List<Forecast>",
+                "if " + listCount(HALF) + " == 1 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source, row -> elementsAboveHalf(row) == 1 ? 1 : 0,
+                row -> elementsAboveHalf(row),
+                row -> row.elements().forEach(each -> assertTrue(each.amount() >= 100,
+                        () -> "an element of the type: " + each)));
+        assertTrue(counts.contains(1L), counts::toString);
+        assertTrue(counts.contains(0L), counts::toString);
     }
 
-    /** A row that stands on the line is at the point of its count. */
+    /** A threshold far from the sizes of the container is reached: the values follow the
+     *  statement and not the container's size. */
     @Test
-    void aRowHoldingSoManyAboveHalfTheTotalIsAtThePointOfThatCount() {
-        String examples = """
+    void anElementAboveTheRestByAThousandIsComposed() {
+        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(
+                "f.amount > List.sum(List.map(.amount, fs)) + 1000") + " == 1 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source, row -> row.countOf(
+                each -> each.amount() > row.total() + 1000) == 1 ? 1 : 0,
+                row -> row.countOf(each -> each.amount() > row.total() + 1000));
+        assertTrue(counts.contains(1L), counts::toString);
+    }
 
-                example f
-                    | "none" : ([]) -> 0
-                    | "one" : ([Forecast { currency = "USD", amount = 2 },
-                        Forecast { currency = "USD", amount = 1 }]) -> 1
-                    | "two" : ([Forecast { currency = "USD", amount = 4 },
-                        Forecast { currency = "JPY", amount = 4 },
-                        Forecast { currency = "EUR", amount = -3 }]) -> 0
-                """;
-        JsonNode line = line(measured(HEAD + ELEMENTS + examples), COUNT_OF_ELEMENTS);
-        for (String against : List.of("1", "0", "2")) {
-            assertTrue(pointAgainst(line, against).path("hit").asBoolean(),
-                    () -> "a row at " + against + " in " + line);
+    /**
+     * What an element's other positions say changes what it answers, and a row is composed for
+     * each: an element above half of the total that is not active does not meet the statement,
+     * and one that is, does.
+     */
+    @Test
+    void aTruthOfTheElementIsChosenBothWays() {
+        String source = source("data Forecast = { currency: String, amount: Int, active: Bool }\n",
+                "fs: List<Forecast>", "if " + listCount(HALF + " && f.active") + " == 1 then 1 else 0");
+        boolean[] aboveHalfButInactive = {false};
+        boolean[] aboveHalfAndActive = {false};
+        Set<Long> counts = rowsComposedHold(source,
+                row -> row.countOf(each -> aboveHalf(row, each) && each.active()) == 1 ? 1 : 0,
+                row -> row.countOf(each -> aboveHalf(row, each) && each.active()),
+                row -> {
+                    aboveHalfButInactive[0] |= row.elements().stream()
+                            .anyMatch(each -> aboveHalf(row, each) && !each.active());
+                    aboveHalfAndActive[0] |= row.elements().stream()
+                            .anyMatch(each -> aboveHalf(row, each) && each.active());
+                });
+        assertTrue(counts.containsAll(List.of(0L, 1L)), counts::toString);
+        assertTrue(aboveHalfButInactive[0], "an element above half that is not active");
+        assertTrue(aboveHalfAndActive[0], "an element above half that is active");
+    }
+
+    /**
+     * The elements of one way of answering are not all one value. Between nought and two, with
+     * the total at three, exactly two below two are nought and one, and the third is two.
+     */
+    @Test
+    void theElementsOfOneKindAreNotAllOneValue() {
+        String source = source("data Forecast = { currency: String, amount: Int }"
+                + " invariant amount >= 0 invariant amount <= 2\n", "fs: List<Forecast>",
+                "if " + listCount("f.amount < 2 && List.sum(List.map(.amount, fs)) == 3")
+                        + " == 2 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source,
+                row -> row.total() == 3 && row.countOf(each -> each.amount() < 2) == 2 ? 1 : 0,
+                row -> row.total() == 3 ? row.countOf(each -> each.amount() < 2) : 0);
+        assertTrue(counts.contains(2L), counts::toString);
+    }
+
+    /**
+     * How many the container holds is asked as well. Three of nine: a container of the least
+     * size that holds three above half of its total is a smaller one, and the containers offered
+     * for a count are few, so the ones of the size asked are reached only by walking the sizes
+     * that are.
+     */
+    @Test
+    void theSizeOfTheContainerIsAskedAsWell() {
+        String source = source(PLAIN, "fs: List<Forecast>", "if List.length(fs) == 9 && "
+                + listCount(HALF) + " == 3 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source,
+                row -> row.elements().size() == 9 && elementsAboveHalf(row) == 3 ? 1 : 0,
+                row -> elementsAboveHalf(row) == 3 && row.elements().size() == 9 ? 3 : 0);
+        assertTrue(counts.contains(3L), counts::toString);
+    }
+
+    /** A number outside the container is read at the one value the row is fixed at, which is not
+     *  nought here: the rows keep to above three. */
+    @Test
+    void aNumberBesideTheContainerIsReadAtTheValueTheRowHolds() {
+        String source = source(PLAIN, "k: Int, fs: List<Forecast>", "if k > 3 && " + listCount(
+                "f.amount * 2 > List.sum(List.map(.amount, fs)) + k") + " == 1 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source, row -> row.k() > 3 && row.countOf(
+                each -> each.amount() * 2 > row.total() + row.k()) == 1 ? 1 : 0,
+                row -> row.countOf(each -> each.amount() * 2 > row.total() + row.k()));
+        assertTrue(counts.contains(1L), counts::toString);
+    }
+
+    /** Two counts asked together are composed together. */
+    @Test
+    void twoCountsAskedTogetherAreComposedTogether() {
+        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(HALF)
+                + " == 1 && " + listCount("f.amount < 0") + " == 1 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source,
+                row -> elementsAboveHalf(row) == 1 && row.countOf(each -> each.amount() < 0) == 1
+                        ? 1 : 0,
+                row -> row.countOf(each -> each.amount() < 0));
+        assertTrue(counts.containsAll(List.of(0L, 1L, 2L)), counts::toString);
+    }
+
+    /**
+     * A count more elements than a container is composed with is not shown to have no row: the
+     * point is said to be one a figure stopped, and never one no value can stand at.
+     */
+    @Test
+    void aCountPastTheElementsAContainerIsComposedWithIsNotShownToBeOutOfReach() {
+        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(HALF)
+                + " == 20 then 1 else 0");
+        List<JsonNode> lines = countLines(measured(source));
+        assertFalse(lines.isEmpty());
+        boolean unwritable = false;
+        for (JsonNode line : lines) {
+            for (JsonNode item : line.path("items")) {
+                if ("20".equals(item.path("against").asString())) {
+                    unwritable |= !item.path("knownWritable").asBoolean();
+                    assertFalse(item.has("notOwed"), item::toString);
+                }
+            }
         }
+        assertTrue(unwritable, "the point at twenty has no row composed");
     }
 }

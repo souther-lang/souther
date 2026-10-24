@@ -164,17 +164,35 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
-            Map.entry("souther.compiler.partition.CardinalityComposer#amongTheTotal("
-                            + "Lsouther/compiler/partition/CardinalityComposer$CoupledToTheTotal;"
-                            + "Lsouther/compiler/inputs/TermPath;"
-                            + "Lsouther/compiler/types/Type;"
-                            + "Lsouther/compiler/check/Shape$Sequence;"
-                            + "Lsouther/compiler/inputs/Quantities;"
-                            + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
+            // Counts composed against the total of their container: each figure is read where the
+            // search it bounds is, and said under its own name in what the composing comes back
+            // with.
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer#<clinit>()V",
+                    "how many elements a container is composed with, how many containers are"
+                            + " offered, how many ways of sharing its elements out are looked at,"
+                            + " how many totals each is tried at and how many pairs of bounds are"
+                            + " put together to find them"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition#run()"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
-                    "stops at a size, at the totals tried or at the containers offered, and hands"
-                            + " the figure over in the shortfall it comes back with"),
+                    "says the sizes walked to the end and the values an element is listed at in"
+                            + " what it comes back with"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
+                            + "#totalsIn(Lsouther/compiler/partition/CoupledCardinalityComposer$Span;)"
+                            + "Ljava/util/List;",
+                    "stops at the totals tried for a sharing, and puts that figure in what it"
+                            + " comes back with"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
+                            + "#standingIn(Ljava/util/List;)[Ljava/math/BigInteger;",
+                    "stops putting bounds together for the ways a statement can stand, and puts"
+                            + " that figure in what it comes back with"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
+                            + "#totalsOf(Ljava/util/List;[ILjava/util/List;)Ljava/util/List;",
+                    "stops putting bounds together for the totals a sharing can come to, and puts"
+                            + " that figure in what it comes back with"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
+                            + "#tried(Ljava/util/List;[I)Z",
+                    "stops at the ways of sharing out looked at or at the containers offered, and"
+                            + " puts the figure in what it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
                             + "Lsouther/compiler/inputs/TermPath;"

@@ -451,6 +451,30 @@ final class AStatementAtARow {
         return NumericTerms.inOrder(out);
     }
 
+    /** A form of the row's numbers against nought: {@code form rel 0}. */
+    record AffineRelation(LinearForm<NumericTerm> form, Rel rel) {}
+
+    /**
+     * The relations the statement is made of, each a form of numbers against nought — or empty
+     * where some part of it is anything else, a product, a remainder, or a statement about the
+     * elements of a container. Which of them holds is all the statement asks of the numbers it
+     * reads; what else it asks, of positions that are no numbers, is asked of a row.
+     */
+    Optional<List<AffineRelation>> affineRelations() {
+        if (!elements.isEmpty()) {
+            return Optional.empty();
+        }
+        List<AffineRelation> out = new ArrayList<>();
+        for (OneRelation each : relations.values()) {
+            if (!(each instanceof OneRelation.OfAForm(LinearQuantity _,
+                    LinearForm<NumericTerm> form, Rel rel))) {
+                return Optional.empty();
+            }
+            out.add(new AffineRelation(form, rel));
+        }
+        return Optional.of(List.copyOf(out));
+    }
+
     /**
      * What one element's answer to a statement turns on, among the elements of a container held
      * as groups under one value at a place inside each — or each on its own where there is no such
