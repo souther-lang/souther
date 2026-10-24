@@ -86,6 +86,15 @@ final class ElementValues {
      * @param type the container's type
      */
     BorderQuantity.Observation holding(Type type, List<ObservedValue> values) {
+        return holding(container, reading, type, values);
+    }
+
+    /**
+     * {@link #holding(Type, List)} of the container at {@code container}, which needs no listing
+     * of the values of an element: a container of none is one whether or not an element can be.
+     */
+    static BorderQuantity.Observation holding(TermPath container, RuleReadingContext reading,
+                                              Type type, List<ObservedValue> values) {
         boolean aParameter = container.steps().isEmpty();
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
                 new StandingAtAPoint.RowWalk(new BehaviorInputs(
