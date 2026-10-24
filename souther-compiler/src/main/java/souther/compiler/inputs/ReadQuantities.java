@@ -25,6 +25,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.regex.Language;
+import souther.compiler.regex.PatternPlan;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -1854,9 +1856,16 @@ final class ReadQuantities implements Quantities {
                         at, string, ruleReading.source().inners(),
                         ruleReading.source().symbols());
         Integer held = length == null ? null : position.codePointsHeld(length);
-        return held != null
-                && position.admitted().approximation() instanceof ValueSet.Matching(var format)
-                ? new StringsOfOneLength(format, held) : null;
+        if (held == null
+                || !(position.admitted().approximation() instanceof ValueSet.Matching(var format))) {
+            return null;
+        }
+        // Each string of the format is one the rules leave only where the format is the whole of
+        // what they say, and a value only where the format's sequence is one a String holds.
+        Language everyOneHeld = position.completeness()
+                instanceof AdmissibleSet.Completeness.Complete
+                ? format.heldAsWritten(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()) : null;
+        return new StringsOfOneLength(format, everyOneHeld, held);
     }
 
     @Override

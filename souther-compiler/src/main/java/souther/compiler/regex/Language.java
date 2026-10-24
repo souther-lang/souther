@@ -1,5 +1,6 @@
 package souther.compiler.regex;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
@@ -233,6 +234,39 @@ public final class Language {
     public ComingTo holding(Map<Integer, CodePoints> at, Long sum, IntPredicate lengths,
                             int longest, CodePoints preferred, int work) {
         return CodePointSums.holding(machine, at, sum, lengths, longest, preferred, work);
+    }
+
+    /**
+     * The strings of this one a {@code String} holds as they are written — or null where the
+     * machine is no plain one, or past what {@code meter} allows.
+     *
+     * <p>What this holds is sequences of code points, and a {@code String} holds a sequence only
+     * as its Normalization Form C. A sequence the form changes is no value: {@code a} and a
+     * combining acute are one code point held, and a language holding the two as two holds a
+     * string no value is. So what is asked of the values a language leaves — that each code point
+     * it places stands somewhere, that every number they come to is reached — is asked of these,
+     * every one of which is a value as written ({@link StableStarters}). What every value is, a
+     * bound on them, is asked of the language itself, which holds them all.
+     */
+    public Language heldAsWritten(Meter meter) {
+        CodePoints stable = StableStarters.all();
+        List<List<Automaton.Step>> steps = new ArrayList<>();
+        BitSet accepting = new BitSet();
+        for (int state = 0; state < machine.size(); state++) {
+            if (machine.freeFrom(state).length > 0) {
+                return null;
+            }
+            List<Automaton.Step> kept = new ArrayList<>();
+            for (Automaton.Step step : machine.stepsFrom(state)) {
+                CodePoints over = step.over().and(stable);
+                if (!over.isEmpty()) {
+                    kept.add(new Automaton.Step(over, step.to()));
+                }
+            }
+            steps.add(kept);
+            accepting.set(state, machine.stopsAt(state));
+        }
+        return canonical(Automaton.madeOf(steps, accepting), meter);
     }
 
     /** Where the code point a string it holds has at {@code index} lies, or null where it holds

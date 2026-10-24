@@ -2158,6 +2158,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean leavesEveryRemainder(CodePointsOfTheForm form, Integer held, int work,
                                          Set<Figure> stopped) {
         Quantities.StringsOfOneLength strings = form.strings();
+        Language shown = strings.everyOneHeld();
+        if (shown == null) {
+            return false;
+        }
         int divisor = remainder.divisor().intValueExact();
         Map<Integer, Long> weights = new LinkedHashMap<>(form.weights());
         List<Integer> fixed = new ArrayList<>(form.beside());
@@ -2165,11 +2169,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             weights.remove(held);
             fixed.add(held);
         }
+        // Whatever a code point held still is, of every one a value may hold at its index; and
+        // a remainder reached, by a string that is a value. So every code point some value may
+        // hold there is one a string shown to be a value holds there too.
         List<List<CodePoints>> alike = new ArrayList<>();
         long sets = 1;
         for (int index : fixed) {
-            alike.add(strings.format().alikeAt(strings.length(), index,
-                    strings.format().codePointsAt(strings.length(), index)));
+            CodePoints taken = shown.codePointsAt(strings.length(), index);
+            if (!strings.holding().codePointsAt(strings.length(), index).less(taken).isEmpty()) {
+                return false;
+            }
+            alike.add(shown.alikeAt(strings.length(), index, taken));
             sets *= alike.getLast().size();
             if (sets > work) {
                 stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.figure());
@@ -2183,7 +2193,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (int i = 0; i < fixed.size(); i++) {
                 at.put(fixed.get(i), alike.get(i).get(chosen[i]));
             }
-            BitSet left = strings.format().remaindersLeft(strings.length(), weights,
+            BitSet left = shown.remaindersLeft(strings.length(), weights,
                     remainder.shift().mod(remainder.divisor()).longValueExact(), divisor, at,
                     each);
             if (left == null) {
@@ -2282,15 +2292,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The strings at {@code string}, where they are a format's strings of one length that is the
-     * whole of what the rules leave them, and no rule of a value around them reads them — or null.
+     * The strings at {@code string}, where they are a format's strings of one length and no rule
+     * of a value around them reads them — or null. Which of them are shown to be values is the
+     * reading's to say ({@link Quantities.StringsOfOneLength#everyOneHeld}).
      */
     private static Quantities.StringsOfOneLength theStringsOf(TermPath string,
                                                               InputReading read) {
-        Position at = read.domain().at(string.position());
-        return at == null
-                || !(at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete)
-                || namedByTheDeclarations(string, read) == Named.UNSEEN
+        return namedByTheDeclarations(string, read) == Named.UNSEEN
                 ? null : read.quantities().stringsOfOneLength(string);
     }
 
@@ -2309,13 +2317,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 .count();
         Quantities.StringsOfOneLength strings = ofTheString == 1
                 ? theStringsOf(at.position(), read) : null;
-        if (strings == null || wayOf(at, stating.stream().filter(each ->
-                !heldByEveryStringOf(each, at.position(), strings.length())).toList())
+        if (strings == null || strings.everyOneHeld() == null
+                || wayOf(at, stating.stream().filter(each ->
+                        !heldByEveryStringOf(each, at.position(), strings.length())).toList())
                 != Way.UNTOUCHED) {
             return null;
         }
-        List<CodePoints.Range> runs = strings.format().codePointsAt(strings.length(), at.index())
-                .ranges();
+        // Taken is what a string shown to be a value holds there, and not what the format places
+        // there: a format places code points in sequences no value is.
+        List<CodePoints.Range> runs = strings.everyOneHeld()
+                .codePointsAt(strings.length(), at.index()).ranges();
         return runs.size() != 1 ? null : new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(runs.getFirst().from())),
                 Endpoint.inclusive(Count.of(runs.getFirst().to())));

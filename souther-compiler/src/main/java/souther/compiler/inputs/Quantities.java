@@ -233,22 +233,35 @@ public sealed interface Quantities permits ReadQuantities {
     Optional<EmptyInput> emptiness();
 
     /**
-     * The format the strings at {@code at} are written in, and the one number of code points the
-     * rules leave them — or null where no format holds them or the rules leave more than one
-     * number.
+     * The strings at {@code at}, as a format every one of them is written in, the strings of it
+     * every one of which is one of them, and the one number of code points the rules leave them
+     * — or null where no format holds them or the rules leave more than one number.
      */
     StringsOfOneLength stringsOfOneLength(TermPath at);
 
     /**
-     * The strings a position holds, as a format and how many code points each holds.
+     * The strings a position holds, by two languages that answer two questions, and how many code
+     * points each holds.
      *
-     * @param format the format
-     * @param length how many code points each holds
+     * <p>A question about every string there — that each meets something — is asked of
+     * {@code holding}, which holds them all and maybe more: what every one of its strings meets,
+     * every value does. A question about some string there — that a code point stands somewhere,
+     * that a number is reached — is asked of {@code everyOneHeld}, every string of which is a
+     * value: what one of its strings shows, a value shows. The two are not one language, and
+     * neither answers the other's question. A format holds sequences of code points a value is
+     * not ({@link Language#heldAsWritten}), and a format standing for rules it only bounds holds
+     * strings the rules refuse.
+     *
+     * @param holding      every string the position holds is one of these
+     * @param everyOneHeld every one of these is a string the position holds; null where nothing
+     *                     here shows of any string that the position holds it — where the format
+     *                     is not the whole of what the rules say of the strings
+     * @param length       how many code points each holds
      */
-    record StringsOfOneLength(Language format, int length) {
+    record StringsOfOneLength(Language holding, Language everyOneHeld, int length) {
 
         public StringsOfOneLength {
-            Objects.requireNonNull(format, "strings of some format");
+            Objects.requireNonNull(holding, "strings of some format");
         }
     }
 }

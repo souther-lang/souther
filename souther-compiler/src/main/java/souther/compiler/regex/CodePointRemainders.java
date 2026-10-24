@@ -42,7 +42,9 @@ final class CodePointRemainders {
         }
         here[Automaton.START] = new BitSet(divisor);
         here[Automaton.START].set(Math.floorMod(shift, divisor));
-        int spent = 0;
+        // Counted wide, and asked of what is left before it is spent, so a large step neither
+        // passes the work unnoticed nor wraps round below it.
+        long spent = 0;
         for (int index = 0; index < length; index++) {
             long weight = Math.floorMod(weights.getOrDefault(index, 0L), divisor);
             BitSet[] next = new BitSet[states];
@@ -56,16 +58,17 @@ final class CodePointRemainders {
                         continue;
                     }
                     BitSet moves = movesOf(over, weight, divisor);
-                    spent += here[state].cardinality() * moves.cardinality() + divisor;
-                    if (spent > work) {
+                    long cost = (long) here[state].cardinality() * moves.cardinality() + divisor;
+                    if (cost > work - spent) {
                         return null;
                     }
+                    spent += cost;
                     BitSet reached = next[step.to()] == null ? new BitSet(divisor)
                             : next[step.to()];
                     for (int from = here[state].nextSetBit(0); from >= 0;
                          from = here[state].nextSetBit(from + 1)) {
                         for (int by = moves.nextSetBit(0); by >= 0; by = moves.nextSetBit(by + 1)) {
-                            reached.set((from + by) % divisor);
+                            reached.set((int) (((long) from + by) % divisor));
                         }
                     }
                     next[step.to()] = reached;

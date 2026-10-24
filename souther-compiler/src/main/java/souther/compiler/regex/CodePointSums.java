@@ -1,9 +1,13 @@
 package souther.compiler.regex;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.function.IntPredicate;
 import java.util.function.ToLongFunction;
 
@@ -119,26 +123,26 @@ final class CodePointSums {
         boolean[] settled = new boolean[states];
         long fewest = Long.MAX_VALUE;
         // Code points are no less than nought, so the least sum at a state is settled once it is
-        // the least of those not settled.
-        for (int round = 0; round < states; round++) {
-            int here = -1;
-            for (int state = 0; state < states; state++) {
-                if (!settled[state] && reaches[state] && least[state] != Long.MAX_VALUE
-                        && (here < 0 || least[state] < least[here])) {
-                    here = state;
-                }
-            }
-            if (here < 0) {
-                break;
+        // the least of those not settled, which the queue hands over first: each state is settled
+        // once and each step tried once from it.
+        PriorityQueue<long[]> waiting = new PriorityQueue<>(Comparator.comparingLong(
+                (long[] each) -> each[0]));
+        waiting.add(new long[] {0, Automaton.START});
+        while (!waiting.isEmpty()) {
+            long[] next = waiting.poll();
+            int here = (int) next[1];
+            if (settled[here] || next[0] != least[here]) {
+                continue;
             }
             settled[here] = true;
             if (machine.stopsAt(here)) {
                 fewest = Math.min(fewest, least[here]);
             }
             for (Automaton.Step step : machine.stepsFrom(here)) {
-                if (reaches[step.to()]) {
-                    least[step.to()] = Math.min(least[step.to()],
-                            least[here] + leastOf.applyAsLong(step.over()));
+                long through = least[here] + leastOf.applyAsLong(step.over());
+                if (reaches[step.to()] && !settled[step.to()] && through < least[step.to()]) {
+                    least[step.to()] = through;
+                    waiting.add(new long[] {through, step.to()});
                 }
             }
         }
@@ -198,35 +202,41 @@ final class CodePointSums {
                                  ToLongFunction<CodePoints> mostOf) {
         int states = machine.size();
         long[] most = new long[states];
-        // 0 not yet walked, 1 being walked, 2 walked.
+        // 0 not yet walked, 1 being walked, 2 walked. Walked with a stack of its own rather than
+        // the call stack, which a format of many code points would run past: a state is worked
+        // out once every state a step from it reaches has been, and one met again while it is
+        // being walked is on a loop, which has no greatest.
         int[] seen = new int[states];
-        return greatestFrom(machine, Automaton.START, reaches, mostOf, most, seen)
-                ? most[Automaton.START] : null;
-    }
-
-    private static boolean greatestFrom(Automaton machine, int state, boolean[] reaches,
-                                        ToLongFunction<CodePoints> mostOf, long[] most,
-                                        int[] seen) {
-        if (seen[state] == 2) {
-            return true;
-        }
-        if (seen[state] == 1) {
-            return false;
-        }
-        seen[state] = 1;
-        long out = machine.stopsAt(state) ? 0 : Long.MIN_VALUE;
-        for (Automaton.Step step : machine.stepsFrom(state)) {
-            if (!reaches[step.to()]) {
+        Deque<int[]> walking = new ArrayDeque<>();
+        walking.push(new int[] {Automaton.START, 0});
+        seen[Automaton.START] = 1;
+        while (!walking.isEmpty()) {
+            int[] top = walking.peek();
+            int state = top[0];
+            List<Automaton.Step> steps = machine.stepsFrom(state);
+            if (top[1] < steps.size()) {
+                int to = steps.get(top[1]++).to();
+                if (!reaches[to] || seen[to] == 2) {
+                    continue;
+                }
+                if (seen[to] == 1) {
+                    return null;
+                }
+                seen[to] = 1;
+                walking.push(new int[] {to, 0});
                 continue;
             }
-            if (!greatestFrom(machine, step.to(), reaches, mostOf, most, seen)) {
-                return false;
+            long out = machine.stopsAt(state) ? 0 : Long.MIN_VALUE;
+            for (Automaton.Step step : steps) {
+                if (reaches[step.to()]) {
+                    out = Math.max(out, most[step.to()] + mostOf.applyAsLong(step.over()));
+                }
             }
-            out = Math.max(out, most[step.to()] + mostOf.applyAsLong(step.over()));
+            most[state] = out;
+            seen[state] = 2;
+            walking.pop();
         }
-        most[state] = out;
-        seen[state] = 2;
-        return true;
+        return most[Automaton.START];
     }
 
     private String walk(IntPredicate lengths, int longest) {

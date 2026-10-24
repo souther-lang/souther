@@ -186,6 +186,53 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
         assertTrue(report(measured(free)).contains(apart), () -> report(measured(free)));
     }
 
+    /**
+     * A remainder is shown reached only by strings that are values. The second digit six, and
+     * with it the remainder five, stands only before a letter and a combining acute, which a
+     * {@code String} holds as one code point and the format then refuses: no value leaves five,
+     * and the code point held against the remainder is not taken apart from it. Its sequences
+     * read as written, the same format would show every remainder.
+     */
+    @Test
+    void aRemainderOnlyASequenceNoValueIsLeavesIsNotTakenToBeLeft() {
+        String apart = "it relates the value here to another value rather than dividing";
+        String nfc = report(measured(pair("[0-9][0-5][0-9]bb|[0-9]6[0-9]a\\\\x{301}")));
+        assertFalse(nfc.contains(apart), nfc);
+        assertTrue(nfc.contains("not shown to reach every value"), nfc);
+        String written = report(measured(pair("[0-9][0-5][0-9]bb|[0-9]6[0-9]ab")));
+        assertTrue(written.contains(apart), written);
+        // A dot above after a digit joins nothing, so the string is a value whose third code point
+        // is the dot, and the remainder beside it five alone: whatever the code point is is asked
+        // of every value, the ones read as written or not.
+        String marked = report(measured(pair("[0-9][0-6][0-9]bb|[0-9]6\\\\x{307}bb")));
+        assertFalse(marked.contains(apart), marked);
+    }
+
+    /**
+     * A code point is taken to take only what a value holds at its index. The format places a
+     * letter first in a letter and a combining acute, which a {@code String} holds as one code
+     * point and the format then refuses, so the only string of two is {@code bb}: the code point is
+     * ninety-eight and nothing else, and a number held against it is not shown to have rows on
+     * both sides of ninety-seven.
+     */
+    @Test
+    void aCodePointOnlyASequenceNoValueIsPlacesIsNotTakenToBeTaken() {
+        String report = report(measured("""
+                module nfc
+                data Two = String
+                    invariant String.matches("a\\\\x{301}|bb", value)
+                behavior atLeast : (s: Two, n: Int) -> Int
+                let atLeast (s, n) =
+                    match List.get(0, String.codePoints(s.value)) with
+                        | Some c -> if n >= c then 1 else 0
+                        | None -> 2
+                """));
+        assertFalse(report.contains("relates the value here to another value rather than dividing"
+                + " the values here, about `n`"), report);
+        assertTrue(report.contains("not shown to reach every value here, so which values here"
+                + " settle it on their own is not worked out, about `n`"), report);
+    }
+
     private static String pair(String format) {
         return """
                 module p
