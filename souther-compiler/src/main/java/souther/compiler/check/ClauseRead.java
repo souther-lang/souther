@@ -50,6 +50,14 @@ public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
          * else of the element: what a call saying no two elements share them reads
          * ({@code ElementsApart}).
          */
-        EACH_ELEMENTS_RUN
+        EACH_ELEMENTS_RUN,
+
+        /**
+         * The entry of the map there that a key names, and no other entry: what a lookup or a
+         * membership test of a key reads ({@code Map.get}, {@code Map.containsKey}). The key is
+         * read as any other value the clause reads is; the entries under other keys are not
+         * read.
+         */
+        AN_ENTRY_AT_A_KEY
     }
 }

@@ -6,6 +6,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -402,7 +403,7 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    bindings, reads).walk(read);
+                    new HashMap<>(), bindings, reads).walk(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
                 String name = declared.get(each);
@@ -437,17 +438,29 @@ final class Clauses {
      *               record's fields are each a place of their own
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
-                                  DeclarationNewtypes newtypes,
+                                  DeclarationNewtypes newtypes, Map<BindingId, Location> aliases,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
+
+        private static final ValueName.Stdlib.Operation MAP_GET =
+                ValueName.Stdlib.operation("Map", "get");
+        private static final ValueName.Stdlib.Operation MAP_CONTAINS_KEY =
+                ValueName.Stdlib.operation("Map", "containsKey");
 
         ReadsOfAClause {
             Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
+            Objects.requireNonNull(aliases, "a walk of a clause knows what a name was given");
             Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
             Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
         }
 
         void walk(Core e) {
+            if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null
+                    && locationOf(let.value()) != null) {
+                aliases.put(let.binder().binding(), locationOf(let.value()));
+                walk(let.body());
+                return;
+            }
             Location at = locationOf(e);
             if (at != null) {
                 read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
@@ -464,13 +477,27 @@ final class Clauses {
                 bindings.add(r.binding());
             }
             Core counted = call == null ? null : countedArgument(call);
+            Core looked = entryLookedUp(e);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
                     read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
+                } else if (child == looked) {
+                    read(locationOf(child), ClauseRead.Kind.AN_ENTRY_AT_A_KEY, RuleKey.THE_VALUE);
                 } else {
                     walk(child);
                 }
             });
+        }
+
+        /** The map {@code e} looks an entry up in or asks a key of, where that is a place of the
+         *  value; null otherwise. */
+        private Core entryLookedUp(Core e) {
+            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(var operation, var args))
+                    || !(operation.equals(MAP_GET) || operation.equals(MAP_CONTAINS_KEY))) {
+                return null;
+            }
+            Core map = args.get(1);
+            return locationOf(map) != null ? map : null;
         }
 
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
@@ -486,7 +513,8 @@ final class Clauses {
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */
         private Location locationOf(Core e) {
             return Location.of(e, newtypes,
-                    binding -> fields.containsKey(binding) ? Location.of(binding) : null,
+                    binding -> fields.containsKey(binding) ? Location.of(binding)
+                            : aliases.get(binding),
                     this::stepsOf);
         }
 

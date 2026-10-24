@@ -3446,14 +3446,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // A rule naming the place relates it to the places beside it, which leaves it whatever its
         // bounds say only where they are shown to be the whole of what the rules leave it, and
         // where no end of its order cuts them.
-        Named named = namedByTheDeclarations(value.position(), read);
-        if (named == Named.UNSEEN || (named == Named.BY_A_RULE
+        Named named = namedByTheDeclarations(value.position(), read);        if (named == Named.UNSEEN || (named == Named.BY_A_RULE
                 && (!at.projection().isCertified() || !wholeOnItsOrder(value, read)))) {
             return null;
         }
         boolean byARule = named == Named.BY_A_RULE;
-        NumericDomain.Bounds ends = endsOf(at.boundsFor(value), byARule);
-        AdmissibleSet admitted = at.admitted();
+        NumericDomain.Bounds ends = endsOf(at.boundsFor(value), byARule);        AdmissibleSet admitted = at.admitted();
         // Every value where nothing holds any back: the reading of the values here took every rule
         // in, or the relation is the one rule it did not and the bounds, shown to hold all the
         // rules leave, place no end on any number of it. An end on how long a string is keeps it
@@ -3872,6 +3870,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (reading.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN) {
             return namedByARunOfEachElement(reading, here, place, read);
         }
+        if (reading.kind() == ClauseRead.Kind.AN_ENTRY_AT_A_KEY) {
+            return namedByAnEntryAtAKey(at.size() == fields, here, rest, read);
+        }
         if (at.size() > fields || reading.kind() != ClauseRead.Kind.HOW_MANY_IT_HOLDS) {
             return Named.UNSEEN;
         }
@@ -3884,6 +3885,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TermPath.Step> container = new ArrayList<>(here.steps());
         container.addAll(rest.subList(0, fields));
         return mayHoldOne(new TermPath(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
+    }
+
+    /**
+     * What a rule reading the entry of a map at a key says of the place below the map that
+     * {@code rest} goes on to after the fields: nothing of the keys, where the map may hold two
+     * entries, and unseen of everything else.
+     *
+     * <p>The rule holds the entry under one key to what it says and leaves the entries under the
+     * other keys alone. Any value is then a key of some map the rule accepts: the entry the rule
+     * reads is under the key it names, and the value is the key of a second entry beside it. That
+     * second entry is what asks the map for room to hold two, and a map that may hold one has no
+     * key but the one the rule names. The values of the entries are left out: a second entry
+     * takes a value only under a key the type has a second value of.
+     *
+     * @param atTheMap whether the fields the rule names end where the fields of the path do
+     */
+    private static Named namedByAnEntryAtAKey(boolean atTheMap, TermPath here,
+                                              List<TermPath.Step> rest, InputReading read) {
+        int fields = 0;
+        while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
+            fields++;
+        }
+        boolean belowTheMapAtAKey = atTheMap && fields + 1 == rest.size()
+                && rest.get(fields) instanceof TermPath.Step.Key;
+        if (!belowTheMapAtAKey) {
+            return Named.UNSEEN;
+        }
+        List<TermPath.Step> map = new ArrayList<>(here.steps());
+        map.addAll(rest.subList(0, fields));
+        return mayHold(new TermPath(here.head(), map), read, 2) ? Named.NOT : Named.UNSEEN;
     }
 
     /**
@@ -3922,6 +3953,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * beside it is held to says nothing of how many it holds.
      */
     private static boolean mayHoldOne(TermPath at, InputReading read) {
+        return mayHold(at, read, 1);
+    }
+
+    /** Whether the container at {@code at} is shown to hold {@code howMany} elements in some
+     *  value of it ({@link #mayHoldOne}, which says what is shown and of what). */
+    private static boolean mayHold(TermPath at, InputReading read, long howMany) {
         Position container = read.domain().at(at.position());
         if (container == null || container.nothingExists()) {
             return false;
@@ -3930,7 +3967,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (each.term() instanceof NumericTerm.TakenOf taken
                     && taken.takenAs() instanceof TakenAs.HowManyItHolds) {
                 NumericDomain.Bounds whole = read.quantities().region().wholeRunOf(taken);
-                return whole != null && whole.admits(ExactRatio.ONE);
+                return whole != null && whole.admits(ExactRatio.of(howMany));
             }
         }
         return false;
