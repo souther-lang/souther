@@ -3110,13 +3110,15 @@ public final class Partitions {
         if (patterns.isEmpty()) {
             return StringsPartedInto.NONE;
         }
+        // Copied here, so that the work is the same work whoever's list it was asked with.
         return reading.revision().settled(new StringsPartedInto(
-                rulesReadOn(position, reading), patterns, separator, through, pieces));
+                rulesReadOn(position, reading), List.copyOf(patterns), separator, through,
+                List.copyOf(pieces)));
     }
 
     /**
-     * A string the rules admit that parts into {@code pieces} pieces of {@code piece}, as work
-     * settled by those rules.
+     * A string the rules admit that parts into the pieces of a shape, each a string every pattern of
+     * a type admits or the string it is, as work settled by those rules.
      *
      * <p>The parts and the meet are made here, under the allowance of one witness: they are a
      * machine this question composes, which is nobody's rule. The pattern of a piece is borrowed
@@ -3142,11 +3144,6 @@ public final class Partitions {
 
         /** Nothing to make: the position or the type says nothing this reads. */
         static final Parted NONE = new StringsMade(List.of());
-
-        public StringsPartedInto {
-            patterns = List.copyOf(patterns);
-            pieces = List.copyOf(pieces);
-        }
 
         @Override
         public Parted workedOut(RevisionKnowledge revision) {
