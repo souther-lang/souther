@@ -70,11 +70,66 @@ public final class ContainerSizesUnderAWitness {
      *                   nothing where the node reads no collection of the input or nothing bounds
      *                   it
      */
-    public static boolean answersOn(Core within, Core operator, Completion.WhereTheAnswerFits fits,
+    public static boolean answersOn(Core within, Core operator, Completion completion,
                                     Function<Core, Optional<BigInteger>> ofTheInput) {
-        return new ContainerSizesUnderAWitness(within, ofTheInput).answer(operator, fits.answer())
-                .map(most -> most.compareTo(Completion.MOST_ELEMENTS) <= 0)
-                .orElse(false);
+        ContainerSizesUnderAWitness reading = new ContainerSizesUnderAWitness(within, ofTheInput);
+        return switch (completion) {
+            case Completion.Always _ -> true;
+            case Completion.WhereTheAnswerFits(Completion.AnswerSize answer) ->
+                    reading.answer(operator, answer)
+                            .map(most -> most.compareTo(Completion.MOST_ELEMENTS) <= 0)
+                            .orElse(false);
+            // A total of no {@code Int} or of one is nought or that one, which is an {@code Int};
+            // of two or more it turns on the values, which are read only where they are written
+            // out, and added up exactly.
+            case Completion.WhereTheTotalFits(int at) -> {
+                List<Core> operands = operandsOf(operator);
+                if (operands == null || at >= operands.size()) {
+                    yield false;
+                }
+                Optional<BigInteger> written = writtenTotal(operands.get(at));
+                yield written.isPresent()
+                        ? written.get().bitLength() < Long.SIZE
+                        : reading.most(operands.get(at))
+                                .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false);
+            }
+            case Completion.NotKnown _ -> false;
+        };
+    }
+
+    /** The exact total of {@code list} where it is written out of whole numbers written out, or
+     *  nothing where it is not. */
+    private static Optional<BigInteger> writtenTotal(Core list) {
+        if (!(Core.withoutStanding(list) instanceof Core.ListLit written)) {
+            return Optional.empty();
+        }
+        BigInteger total = BigInteger.ZERO;
+        for (Core each : written.elements()) {
+            Optional<BigInteger> number = writtenWhole(each);
+            if (number.isEmpty()) {
+                return Optional.empty();
+            }
+            total = total.add(number.get());
+        }
+        return Optional.of(total);
+    }
+
+    /** {@code e} where it is a whole number written out, or one negated. */
+    private static Optional<BigInteger> writtenWhole(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Int number -> Optional.of(BigInteger.valueOf(number.value()));
+            case Core.Neg negated -> writtenWhole(negated.operand()).map(BigInteger::negate);
+            default -> Optional.empty();
+        };
+    }
+
+    /** What {@code node} is handed, in the order it is written, or null where it applies
+     *  nothing. */
+    private static List<Core> operandsOf(Core node) {
+        AnOperationApplied applied = AnOperationApplied.of(node);
+        return applied != null ? applied.args()
+                : Core.withoutStanding(node) instanceof Core.Binary binary
+                        ? List.of(binary.left(), binary.right()) : null;
     }
 
     /** Every name {@code e} binds to a value, and every name a walk in it carries its value
@@ -93,10 +148,7 @@ public final class ContainerSizesUnderAWitness {
 
     /** The most the answer of {@code node} holds, as {@code size} says of what it is handed. */
     private Optional<BigInteger> answer(Core node, Completion.AnswerSize size) {
-        AnOperationApplied applied = AnOperationApplied.of(node);
-        List<Core> operands = applied != null ? applied.args()
-                : Core.withoutStanding(node) instanceof Core.Binary binary
-                        ? List.of(binary.left(), binary.right()) : null;
+        List<Core> operands = operandsOf(node);
         if (operands == null) {
             return Optional.empty();
         }

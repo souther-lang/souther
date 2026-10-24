@@ -216,13 +216,21 @@ final class WhatARunWorksOutBeforeACount {
 
     /**
      * What a run works out up to {@code comparison}, a node of {@code root}'s tree, in the order
-     * it does, the comparison last — or null where it is not in the tree, or stands in a closure.
+     * it does, the comparison last — or null where it is not in the tree, or stands in a closure
+     * no call it is handed to applies.
      *
      * <p>The value of every {@code let} whose body it is in, and every part of each node on the
      * way that runs before the part it is in: an operand before it, a condition deciding the
      * branch it is in. A part that runs only on some runs is counted as running, which asks more
      * of the way and never less — or left out, where {@code onlyWhatAlwaysRuns}, which says less
      * of the way and never more.
+     *
+     * <p>Where the way goes into a closure a call is handed, the call whole: whatever it is
+     * handed beside the closure is worked out before it applies the closure, and every
+     * application of the closure before the one the comparison is reached in runs the closure's
+     * body whole, the parts after the comparison as well, as the call's own working out between
+     * applications does. Read whole the call says more than any one application runs, which asks
+     * more of the way and never less.
      */
     private static List<Core> workedOutUpTo(Core root, Core comparison,
                                             boolean onlyWhatAlwaysRuns) {
@@ -234,8 +242,15 @@ final class WhatARunWorksOutBeforeACount {
         for (int i = 0; i + 1 < way.size(); i++) {
             Core child = way.get(i + 1);
             switch (way.get(i)) {
-                case Core.Block _ -> {
-                    return null;
+                case Core.Block block -> {
+                    Core applying = i == 0 ? null : way.get(i - 1);
+                    if (applying == null || Within.argumentsOf(applying).stream()
+                            .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
+                        return null;
+                    }
+                    out.add(applying);
+                    out.add(comparison);
+                    return out;
                 }
                 // Standing as a wider type works nothing out of its own.
                 case Core.Widen _ -> { }

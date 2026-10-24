@@ -1290,8 +1290,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return true;
             }
         }
+        // An owed operator reading no place stops a run, where it does, whatever the input is, so
+        // it is asked of every relation; one reading places only of those it reads.
         for (Pullback.StopObligation owed : past.owed()) {
-            if ((owed.onWhatNoPlaceHolds() || touchesAny(owed.places(), reads))
+            if ((owed.onWhatNoPlaceHolds() || owed.places().isEmpty()
+                    || touchesAny(owed.places(), reads))
                     && !answersOnAWitness(owed, reads, read, region, conditions)) {
                 return true;
             }
@@ -1347,15 +1350,47 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * more in the outermost collection holding a place whose values the relation holds against
      * each other — the two values stand in two of its elements, and every collection inside each
      * holds one.
+     *
+     * <p>And no fewer than the way asks, where what it asks of the collection is only that it hold
+     * so many at least: a call applying a closure to its elements has one where the closure is
+     * applied. Anything else the way asks of the collection, or of what is in it, leaves no row
+     * cut down to so few shown to be one of the way.
      */
     private Optional<BigInteger> fewestOnAWitness(TermPath collection, List<TermPath> reads,
                                                   InputReading read, SearchRegion region,
                                                   List<OnAWay> conditions) {
+        BigInteger asked = BigInteger.ZERO;
         for (OnAWay each : conditions) {
-            for (TermPath at : each.positions()) {
-                if (overlap(at, collection)) {
-                    return Optional.empty();
-                }
+            if (each.positions().stream().noneMatch(at -> overlap(at, collection))) {
+                continue;
+            }
+            Optional<BigInteger> least = holdsAtLeast(each, collection, read);
+            if (least.isEmpty()) {
+                return Optional.empty();
+            }
+            asked = asked.max(least.get());
+        }
+        // A term made of the collection is another number of the collection cut down, unless it
+        // takes each of its values from one element: a total, and the end a walk keeps, which the
+        // relation is read to reach at every value with one element. How many there are, where an
+        // element stands, and anything else taken of the collection are not, so no witness is cut
+        // down for one.
+        for (Side side : sides) {
+            Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+            boolean ofOneElement = (side.along() == null
+                            && side.number() instanceof NumericTerm.ValueOf)
+                    || side.along() instanceof Quantity.KeptSoFar
+                    || (side.number() instanceof NumericTerm.TakenOver over
+                            && over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
+                    || (side.number() instanceof NumericTerm.TakenOf of
+                            && of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
+                    || (side.number() instanceof NumericTerm.GatheredUnderItsKey filed
+                            && !(filed.gathering() instanceof
+                                    NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut))
+                    || side.number() instanceof NumericTerm.ExtremeOfItsKey;
+            if (!ofOneElement && (placesOfTheSide.isEmpty() || placesOfTheSide.get().stream()
+                    .anyMatch(at -> overlap(at, collection)))) {
+                return Optional.empty();
             }
         }
         long inside = 0;
@@ -1385,7 +1420,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             fewest = held.min().inclusive() || !least.exactly().isWhole() ? up
                     : up.add(BigInteger.ONE);
         }
-        BigInteger witness = fewest.max(BigInteger.valueOf(inside));
+        BigInteger witness = fewest.max(asked).max(BigInteger.valueOf(inside));
         if (held.max() != null) {
             if (!(held.max().at() instanceof Count most)
                     || most.exactly().compareTo(ExactRatio.of(witness)) < 0) {
@@ -1393,6 +1428,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return Optional.of(witness);
+    }
+
+    /**
+     * The fewest elements {@code statement} asks the collection at {@code collection} to hold,
+     * where all it asks is that: a number of them held at least, said of how many it holds and of
+     * nothing else. Nothing where it asks anything else of it.
+     */
+    private static Optional<BigInteger> holdsAtLeast(OnAWay statement, TermPath collection,
+                                                     InputReading read) {
+        if (!statement.positions().equals(Set.of(collection))
+                || !(statement.relation() instanceof TakenConstraint.Affine(var form, var rel))
+                || (rel != Rel.GE && rel != Rel.GT) || form.coefs().size() != 1) {
+            return Optional.empty();
+        }
+        RuleReadingSource rules = read.rules();
+        Type type = read.domain().typeAt(collection, rules);
+        NumericTerm.TakenOf count = type == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
+                        collection, type, rules.inners(), rules.symbols());
+        ExactRatio weight = count == null ? null : form.coefs().get(count);
+        if (weight == null || weight.signum() <= 0
+                || !(form.constant().negated().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio bound))
+                || !(bound.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger up))) {
+            return Optional.empty();
+        }
+        boolean strict = rel == Rel.GT && bound.isWhole();
+        return Optional.of((strict ? up.add(BigInteger.ONE) : up).max(BigInteger.ZERO));
     }
 
     /**

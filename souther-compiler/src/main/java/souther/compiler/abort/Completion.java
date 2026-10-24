@@ -37,6 +37,16 @@ public sealed interface Completion {
         }
     }
 
+    /**
+     * It answers wherever the exact total of the {@code Int}s the list at {@code operand} holds is
+     * an {@code Int}, and ends a run for nothing else: it adds them up exactly however far a total
+     * on the way strays, and holds only the last to the type ({@code Lists.sumInt}). Not what a
+     * sum of two answers, which is held to the type where it is worked out.
+     *
+     * @param operand which of the site's operands is the list, counted from nought
+     */
+    record WhereTheTotalFits(int operand) implements Completion {}
+
     /** Nothing here says where it answers. */
     record NotKnown() implements Completion {}
 

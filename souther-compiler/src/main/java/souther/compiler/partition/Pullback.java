@@ -1094,8 +1094,9 @@ final class Pullback {
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
         operated.readsAt.putIfAbsent(e, reads);
+        Completion completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
-                && !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
+                && !(completion instanceof Completion.Always)) {
             operated.beginGroup();
             boolean[] hasOperands = {false};
             boolean elsewhereBefore = operated.unsaidElsewhere;
@@ -1110,11 +1111,9 @@ final class Pullback {
             if (!hasOperands[0]) {
                 operated.leaveUnsaidOverUnreadOperands();
             }
-            if (operated.within != null
-                    && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e)
-                            instanceof Completion.WhereTheAnswerFits fits) {
+            if (operated.within != null && !(completion instanceof Completion.NotKnown)) {
                 operated.obligations.add(new StopObligation(e, operated.unsaidAt,
-                        operated.unsaidElsewhere != elsewhereBefore, fits, operated.within,
+                        operated.unsaidElsewhere != elsewhereBefore, completion, operated.within,
                         operated.readsAt));
                 operated.unsaidAt.clear();
                 operated.unsaidElsewhere = elsewhereBefore;
@@ -5691,9 +5690,10 @@ final class Pullback {
 
     /**
      * An operator a run may stop at, whose owner says where it answers: wherever the collection
-     * it answers fits ({@link Completion.WhereTheAnswerFits}). Not a place it ties, since what is
-     * owed of it is a proof that some run gets past it, which a reader asks
-     * ({@link ContainerSizesUnderAWitness}) and drops it on.
+     * it answers fits ({@link Completion.WhereTheAnswerFits}), or the total it answers
+     * ({@link Completion.WhereTheTotalFits}). Not a place it ties, since what is owed of it is a
+     * proof that some run gets past it, which a reader asks ({@link ContainerSizesUnderAWitness})
+     * and drops it on.
      *
      * <p>Told apart by which node it is and not by what it is made of: two obligations of one
      * reading at two nodes are two, and comparing the trees under them would walk them.
@@ -5702,7 +5702,7 @@ final class Pullback {
         private final Core operation;
         private final Set<TermPath> places;
         private final boolean onWhatNoPlaceHolds;
-        private final Completion.WhereTheAnswerFits completion;
+        private final Completion completion;
         private final Core within;
         private final Core startedIn;
         private final Map<Core, InputReads> readsAt;
@@ -5718,14 +5718,18 @@ final class Pullback {
          * @param readsAt            how names read at each node of {@code within} are read there
          */
         StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
-                       Completion.WhereTheAnswerFits completion, Core within,
-                       Map<Core, InputReads> readsAt) {
+                       Completion completion, Core within, Map<Core, InputReads> readsAt) {
             this(operation, places, onWhatNoPlaceHolds, completion, within, within, readsAt);
         }
 
         private StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
-                               Completion.WhereTheAnswerFits completion, Core within,
-                               Core startedIn, Map<Core, InputReads> readsAt) {
+                               Completion completion, Core within, Core startedIn,
+                               Map<Core, InputReads> readsAt) {
+            if (completion instanceof Completion.Always
+                    || completion instanceof Completion.NotKnown) {
+                throw new IllegalArgumentException("an operator is owed where it answers somewhere"
+                        + " and only somewhere");
+            }
             this.operation = Objects.requireNonNull(operation, "some operator is owed");
             this.places = Set.copyOf(places);
             this.onWhatNoPlaceHolds = onWhatNoPlaceHolds;
@@ -5747,7 +5751,7 @@ final class Pullback {
             return onWhatNoPlaceHolds;
         }
 
-        Completion.WhereTheAnswerFits completion() {
+        Completion completion() {
             return completion;
         }
 

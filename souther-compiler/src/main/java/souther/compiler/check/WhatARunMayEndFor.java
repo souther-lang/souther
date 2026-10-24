@@ -5,6 +5,7 @@ import souther.compiler.abort.AbortSites;
 import souther.compiler.abort.Completion;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
+import souther.compiler.semantics.Accumulation;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -140,6 +141,10 @@ public final class WhatARunMayEndFor {
         if (itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
             return new Completion.Always();
         }
+        Completion total = whereTheTotalFits(Core.withoutStanding(e));
+        if (total != null) {
+            return total;
+        }
         return switch (Core.withoutStanding(e)) {
             case Core.Binary binary -> AbortSites.completionOfAnOperator(binary.op(), binary.type());
             case Core.Call call when call.fn() instanceof Core.Reached.OfKernel kernel ->
@@ -153,6 +158,28 @@ public final class WhatARunMayEndFor {
             }
             default -> new Completion.NotKnown();
         };
+    }
+
+    /**
+     * Where a call adding up the {@code Int}s of a list answers, or null where {@code e} is no
+     * such call: what it accumulates is the operation's own account ({@link Accumulations}), from
+     * nought by adding, and the total it answers is an {@code Int}.
+     */
+    private static Completion whereTheTotalFits(Core e) {
+        if (!(e instanceof Core.PreservedCall kept) || kept.type() != Type.INT) {
+            return null;
+        }
+        Accumulations.Accumulating accumulating = Accumulations.accumulating(kept);
+        if (accumulating == null || !accumulating.what().equals(new Accumulation(
+                Accumulation.Identity.ZERO, Accumulation.Combine.ADD))) {
+            return null;
+        }
+        for (int at = 0; at < kept.args().size(); at++) {
+            if (kept.args().get(at) == accumulating.container()) {
+                return new Completion.WhereTheTotalFits(at);
+            }
+        }
+        return null;
     }
 
     /** Whether every function {@code kept} is handed is a closure written at the call. */

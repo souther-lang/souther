@@ -491,6 +491,25 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A total of {@code Int}s stops a run only where the exact total is past an {@code Int}, however
+     * far a total on the way strays: a total of one value is that value, and the greatest
+     * {@code Int}, one and minus one come to the greatest, so a run gets past either and the two
+     * are related. The greatest and one come to one past it on every run, and no value is shown to
+     * get to the comparison.
+     */
+    @Test
+    void aTotalStopsARunOnlyWhereTheExactTotalIsNoInt() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "{\n    let total = List.sum(%s)\n    a.value == b.value\n}";
+        for (String list : List.of("[ a.value ]", "[ 9223372036854775807, 1, -1 ]")) {
+            assertEquals(Map.of("a", RELATES, "b", RELATES),
+                    left("a: Yen, b: Yen", yen, body.formatted(list), "6:13"), list);
+        }
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED), left("a: Yen, b: Yen", yen,
+                body.formatted("[ 9223372036854775807, 1 ]"), "6:13"));
+    }
+
+    /**
      * A relation every row getting to it comes out one way at divides none of its places,
      * whichever values get there: {@code n == String.length(s)} under the same statement is true
      * wherever a row arrives, and past {@code n * n}, which may stop a run on {@code n}, the two
@@ -1333,11 +1352,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * drawn on it; the bar is parted by its line at one. A rule putting the bar at the greatest
      * {@code Int} at most draws the same line as the model's, and a count has no position to draw
      * it at.
+     *
+     * <p>Read so, the count is not shown to get to the comparison at every value: a count of so
+     * many is a list of so many issues, which no witness of fewer stands for, and counting each
+     * label adds one to what it has counted, which nothing here holds to an {@code Int}.
      */
     @Test
     void aCountSettledOnlyWhereTheOtherTypeStopsIsRead() {
         String inputs = "issues: List<Issue>, atLeast: Int";
-        assertEquals(Map.of("occurrences(issues[*].labels[*])", RELATES),
+        assertEquals(Map.of("occurrences(issues[*].labels[*])", NOT_REACHED),
                 left(inputs, LABELLED, BUSY, atThe(">=", LABELLED, inputs, BUSY)));
 
         String barred = "issues: List<Issue>, atLeast: Bar";

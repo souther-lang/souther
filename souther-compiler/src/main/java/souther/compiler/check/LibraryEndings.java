@@ -8,14 +8,20 @@ import souther.compiler.abort.Completion;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
+import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,8 +89,10 @@ final class LibraryEndings {
         library.entries().keySet().forEach(apart::of);
         library.rewrites().keySet().forEach(apart::of);
         Map<ValueName.Stdlib.Operation, Completion> completions = new HashMap<>();
-        apart.settled.forEach((operation, own) ->
-                completions.put(operation, completionOf(library, facts, operation, own)));
+        Map<ValueName.Stdlib.Operation, Endings> own = new HashMap<>(apart.settled);
+        own.forEach((operation, ends) -> completions.put(operation,
+                apart.walksNoFurtherThanItsList(operation) ? new Completion.Always()
+                        : completionOf(library, facts, operation, ends, apart)));
         return new LibraryEndings(whole.settled, apart.settled, completions);
     }
 
@@ -96,12 +104,14 @@ final class LibraryEndings {
      * assembled of a piece for each element of a list of any number of elements answers where the
      * pieces together fit, since it puts them end to end along the walk and holds no more on the
      * way ({@link BoundOperationFacts#assembles}); a kernel answers where its contract says
-     * ({@link KernelContracts#completionOf}); and an operation whose body is one operator applied
-     * to two of its parameters answers where that operator does on them, answering what the
-     * operation answers ({@link AbortSites#completionOfAnOperator}). Nothing else is said here.
+     * ({@link KernelContracts#completionOf}); and an operation whose body answers, in each way it
+     * may go, what an operator answering where its collection fits answers of the operation's
+     * parameters, answers where the most any of those may hold fits
+     * ({@link Reading#answerOfTheBody}). Nothing else is said here.
      */
     private static Completion completionOf(Stdlib library, BoundOperationFacts facts,
-                                           ValueName.Stdlib.Operation operation, Endings own) {
+                                           ValueName.Stdlib.Operation operation, Endings own,
+                                           Reading apart) {
         if (own.endsNone()) {
             return new Completion.Always();
         }
@@ -116,17 +126,11 @@ final class LibraryEndings {
         }
         Hir.FnDef declaration = library.helpers().get(operation);
         Stdlib.Entry entry = library.entry(operation);
-        if (declaration != null && entry != null
-                && declaration.writtenBody() instanceof Hir.Binary binary) {
-            int left = parameterRead(declaration, binary.left());
-            int right = parameterRead(declaration, binary.right());
-            Completion ofTheOperator = AbortSites.completionOfAnOperator(binary.op(),
-                    entry.signature().result());
-            if (left >= 0 && right >= 0
-                    && ofTheOperator instanceof Completion.WhereTheAnswerFits(
-                            Completion.AnswerSize.SumOf(List<Integer> operands, int more))) {
-                return new Completion.WhereTheAnswerFits(new Completion.AnswerSize.SumOf(
-                        operands.stream().map(at -> at == 0 ? left : right).toList(), more));
+        if (declaration != null && entry != null) {
+            Completion.AnswerSize.SumOf answer = apart.answerOfTheBody(declaration,
+                    declaration.writtenBody(), entry.signature().result());
+            if (answer != null) {
+                return new Completion.WhereTheAnswerFits(answer);
             }
         }
         return new Completion.NotKnown();
@@ -288,6 +292,360 @@ final class LibraryEndings {
             }
             throw new IllegalArgumentException(
                     "`" + operation.qualified() + "` is no operation of this library");
+        }
+
+        /**
+         * Whether {@code operation}, apart from the functions it is handed, ends no run because
+         * its body walks a list once and builds no more than it walks.
+         *
+         * <p>The body is one walk of the library, and nothing else in it ends a run. The walk
+         * starts from a collection holding nothing, or from a tuple of such collections and of
+         * whole numbers written out; and its step answers what it carries with each collection
+         * as it was or with at most one element put into it, by an operation that answers where
+         * the collection fits ({@link Completion.WhereTheAnswerFits}), and each number as it was
+         * or with a number written out added to it. Nothing else in the step ends a run.
+         *
+         * <p>Then by induction on the elements walked, after {@code k} of them each collection
+         * holds at most {@code k} and each number is at most {@code k} times what is added to it:
+         * no more than the list holds, which has a place, and no more than an {@code Int} holds,
+         * since a list holds fewer than the square root of what an {@code Int} does and what is
+         * added is written out no larger. So every collection put together on the way fits, and
+         * every sum worked out on the way is an {@code Int}.
+         */
+        boolean walksNoFurtherThanItsList(ValueName.Stdlib.Operation operation) {
+            Hir.FnDef declaration = library.helpers().get(operation);
+            if (declaration == null || facts == null) {
+                return false;
+            }
+            List<Hir.Apply> walks = new ArrayList<>();
+            boolean[] endsElsewhere = {false};
+            visitOutsideTheWalk(declaration.writtenBody(), walks, endsElsewhere);
+            if (walks.size() != 1 || endsElsewhere[0]) {
+                return false;
+            }
+            Hir.Apply walk = walks.getFirst();
+            ValueName.Stdlib.Operation walked = ((ReachName.OfLibrary) ((Hir.Var.Denoting)
+                    walk.function()).reachedAs()).denotes();
+            Reductions.Reduction reduction = Reductions.of(walked);
+            Combinator handing = Combinators.of(walked);
+            List<Hir.Expr> args = walk.args();
+            if (reduction.seedArg() >= args.size() || handing.containerArg() >= args.size()
+                    || handing.closureArg() >= args.size()
+                    || !(args.get(handing.closureArg()) instanceof Hir.Block step)
+                    || reduction.accumulatorParam() >= step.params().size()) {
+                return false;
+            }
+            for (int at = 0; at < args.size(); at++) {
+                if (at != handing.closureArg() && !of(args.get(at)).endsNone()) {
+                    return false;
+                }
+            }
+            List<Boolean> counts = seedOf(args.get(reduction.seedArg()));
+            if (counts == null) {
+                return false;
+            }
+            Set<BindingId> carried = new HashSet<>();
+            carried.add(step.params().get(reduction.accumulatorParam()).binding());
+            return answersWhatItCarriedGrown(step.body(), carried, counts, new HashMap<>(),
+                    new HashMap<>());
+        }
+
+        /**
+         * Every walk of the library under {@code e}, not looking into one, and whether anything
+         * else under it ends a run.
+         */
+        private void visitOutsideTheWalk(Hir.Expr e, List<Hir.Apply> walks,
+                                         boolean[] endsElsewhere) {
+            if (e instanceof Hir.Apply apply && apply.function() instanceof Hir.Var.Denoting callee
+                    && callee.reachedAs() instanceof ReachName.OfLibrary library
+                    && Reductions.of(library.denotes()) != null
+                    && Combinators.of(library.denotes()) != null) {
+                walks.add(apply);
+                return;
+            }
+            if (!itself(e).endsNone()) {
+                endsElsewhere[0] = true;
+            }
+            Hir.forEachChild(e, child -> visitOutsideTheWalk(child, walks, endsElsewhere));
+        }
+
+        /**
+         * What the walk starts from, as a list of its parts each saying whether it is a number:
+         * one part where it is a collection holding nothing, and one for each element where it is
+         * a tuple of those and of whole numbers written out — or null where it is anything else.
+         */
+        private List<Boolean> seedOf(Hir.Expr seed) {
+            if (holdsNothing(seed)) {
+                return List.of(false);
+            }
+            if (!(seed instanceof Hir.Tuple tuple)) {
+                return null;
+            }
+            List<Boolean> out = new ArrayList<>();
+            for (Hir.Expr each : tuple.elements()) {
+                if (each instanceof Hir.IntLit) {
+                    out.add(true);
+                } else if (holdsNothing(each)) {
+                    out.add(false);
+                } else {
+                    return null;
+                }
+            }
+            return out;
+        }
+
+        /** Whether {@code e} is a collection holding nothing: written out empty, or an operation
+         *  of the library taking nothing whose answer the library says holds none. */
+        private boolean holdsNothing(Hir.Expr e) {
+            if (e instanceof Hir.ListLit written) {
+                return written.elements().isEmpty();
+            }
+            if (!(e instanceof Hir.Var.Denoting name)
+                    || !(name.reachedAs() instanceof ReachName.OfLibrary library)) {
+                return false;
+            }
+            return facts.settled(library.denotes(), OperationLaw.Observed.SIZE)
+                    instanceof BoundOperationFacts.Settled.ByALaw(
+                            OperationLaw.Size<DeclaredArgument> law, var _)
+                    && law.unconditional() != null && law.unconditional().coefs().isEmpty()
+                    && law.unconditional().constant().signum() == 0;
+        }
+
+        /**
+         * Whether {@code body} answers what is carried under any of {@code carried}, of
+         * {@code counts.size()} parts, with each part grown as {@link #walksNoFurtherThanItsList}
+         * says, and ends a run nowhere else. {@code parts} holds the names bound to a part of it,
+         * and {@code added} the names bound to a number part with a number written out added.
+         */
+        private boolean answersWhatItCarriedGrown(Hir.Expr body, Set<BindingId> carried,
+                                                  List<Boolean> counts,
+                                                  Map<BindingId, Integer> parts,
+                                                  Map<BindingId, Integer> added) {
+            switch (body) {
+                case Hir.LetIn let -> {
+                    BindingId name = let.binder().binding();
+                    Integer part = partRead(let.value(), carried, counts, parts);
+                    if (let.value() instanceof Hir.Var.Denoting read && isCarried(read, carried)) {
+                        carried.add(name);
+                    } else if (part != null) {
+                        parts.put(name, part);
+                    } else if (counted(let.value(), counts, parts) != null) {
+                        added.put(name, counted(let.value(), counts, parts));
+                    } else if (!of(let.value()).endsNone()) {
+                        return false;
+                    }
+                    return answersWhatItCarriedGrown(let.body(), carried, counts, parts, added);
+                }
+                case Hir.If fork -> {
+                    return of(fork.cond()).endsNone()
+                            && answersWhatItCarriedGrown(fork.then(), carried, counts, parts,
+                                    added)
+                            && answersWhatItCarriedGrown(fork.els(), carried, counts, parts,
+                                    added);
+                }
+                case Hir.Tuple tuple -> {
+                    if (tuple.elements().size() != counts.size()) {
+                        return false;
+                    }
+                    for (int at = 0; at < counts.size(); at++) {
+                        Hir.Expr each = tuple.elements().get(at);
+                        boolean grown = counts.get(at)
+                                ? isPart(each, at, parts) || addedTo(each, at, added, counts, parts)
+                                : isPart(each, at, parts) || putInOne(each, at, parts);
+                        if (!grown) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                default -> {
+                    if (counts.size() != 1 || counts.getFirst()) {
+                        return false;
+                    }
+                    Map<BindingId, Integer> whole = new HashMap<>(parts);
+                    carried.forEach(name -> whole.put(name, 0));
+                    return isPart(body, 0, whole) || putInOne(body, 0, whole);
+                }
+            }
+        }
+
+        /** Whether {@code read} reads what is carried, under one of {@code carried}. */
+        private static boolean isCarried(Hir.Var.Denoting read, Set<BindingId> carried) {
+            return read.reachedAs() instanceof ReachName.InScope(ValueName.Local(var _, var id))
+                    && carried.contains(id);
+        }
+
+        /** Which part of what is carried {@code e} reads as it is, or null. */
+        private static Integer partRead(Hir.Expr e, Set<BindingId> carried, List<Boolean> counts,
+                                        Map<BindingId, Integer> parts) {
+            if (e instanceof Hir.TupleGet get && get.tuple() instanceof Hir.Var.Denoting read
+                    && isCarried(read, carried) && get.index() < counts.size()) {
+                return get.index();
+            }
+            return e instanceof Hir.Var.Denoting read
+                    && read.reachedAs() instanceof ReachName.InScope(ValueName.Local(var _, var id))
+                    ? parts.get(id) : null;
+        }
+
+        /** Whether {@code e} reads part {@code at} of what is carried, as it is. */
+        private static boolean isPart(Hir.Expr e, int at, Map<BindingId, Integer> parts) {
+            return e instanceof Hir.Var.Denoting read
+                    && read.reachedAs() instanceof ReachName.InScope(ValueName.Local(var _, var id))
+                    && Integer.valueOf(at).equals(parts.get(id));
+        }
+
+        /** Which number part {@code e} adds a number written out, no larger than a list holds,
+         *  to — or null. */
+        private static Integer counted(Hir.Expr e, List<Boolean> counts,
+                                       Map<BindingId, Integer> parts) {
+            if (!(e instanceof Hir.Binary sum) || sum.op() != BinOp.ADD
+                    || !(sum.right() instanceof Hir.IntLit step) || step.value() < 0
+                    || step.value() > Integer.MAX_VALUE) {
+                return null;
+            }
+            for (int at = 0; at < counts.size(); at++) {
+                if (counts.get(at) && isPart(sum.left(), at, parts)) {
+                    return at;
+                }
+            }
+            return null;
+        }
+
+        /** Whether {@code e} is number part {@code at} with a number written out added. */
+        private static boolean addedTo(Hir.Expr e, int at, Map<BindingId, Integer> added,
+                                       List<Boolean> counts, Map<BindingId, Integer> parts) {
+            if (e instanceof Hir.Var.Denoting read
+                    && read.reachedAs() instanceof ReachName.InScope(ValueName.Local(var _, var id))
+                    && Integer.valueOf(at).equals(added.get(id))) {
+                return true;
+            }
+            return Integer.valueOf(at).equals(counted(e, counts, parts));
+        }
+
+        /**
+         * Whether {@code e} is collection part {@code at} with at most one element put in, by an
+         * operation answering where the collection fits whose answer holds the part and one more
+         * at most, and whatever else it is handed ends no run.
+         */
+        private boolean putInOne(Hir.Expr e, int at, Map<BindingId, Integer> parts) {
+            if (e instanceof Hir.Binary join && join.op() == BinOp.CONCAT) {
+                return isPart(join.left(), at, parts) && join.right() instanceof Hir.ListLit one
+                        && one.elements().size() <= 1
+                        && one.elements().stream().allMatch(each -> of(each).endsNone());
+            }
+            if (!(e instanceof Hir.Apply apply)
+                    || !(apply.function() instanceof Hir.Var.Denoting callee)
+                    || !(callee.reachedAs() instanceof ReachName.OfLibrary library)) {
+                return false;
+            }
+            Stdlib.Intrinsic intrinsic = this.library.intrinsicOf(library.denotes());
+            if (intrinsic == null || !(KernelContracts.completionOf(intrinsic.kernel())
+                    instanceof Completion.WhereTheAnswerFits(
+                            Completion.AnswerSize.SumOf(List<Integer> operands, int more)))
+                    || operands.size() != 1 || more > 1
+                    || operands.getFirst() >= apply.args().size()
+                    || !isPart(apply.args().get(operands.getFirst()), at, parts)) {
+                return false;
+            }
+            for (int each = 0; each < apply.args().size(); each++) {
+                if (each != operands.getFirst() && !of(apply.args().get(each)).endsNone()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * How many elements {@code e}, standing in {@code declaration}'s body and answering a
+         * value of {@code answer}, holds at most, where it ends a run only where that collection
+         * fits: in each way it may go — an arm of a choice, the body of a {@code let} — an
+         * operator answering where its collection fits applied to the operation's parameters
+         * ({@link KernelContracts#completionOf}, {@link AbortSites#completionOfAnOperator}), and
+         * nothing else on the way ending a run. The most of all the ways is what any of them
+         * holds at most. Null where it is not that.
+         */
+        Completion.AnswerSize.SumOf answerOfTheBody(Hir.FnDef declaration, Hir.Expr e,
+                                                    Type answer) {
+            switch (e) {
+                case Hir.LetIn let -> {
+                    return of(let.value()).endsNone()
+                            ? answerOfTheBody(declaration, let.body(), answer) : null;
+                }
+                case Hir.If fork -> {
+                    return of(fork.cond()).endsNone()
+                            ? either(answerOfTheBody(declaration, fork.then(), answer),
+                                    answerOfTheBody(declaration, fork.els(), answer))
+                            : null;
+                }
+                case Hir.Match match -> {
+                    if (!of(match.scrutinee()).endsNone() || match.cases().isEmpty()) {
+                        return null;
+                    }
+                    Completion.AnswerSize.SumOf out = null;
+                    for (Hir.Case arm : match.cases()) {
+                        Completion.AnswerSize.SumOf one =
+                                answerOfTheBody(declaration, arm.body(), answer);
+                        if (one == null) {
+                            return null;
+                        }
+                        out = out == null ? one : either(out, one);
+                    }
+                    return out;
+                }
+                case Hir.Binary binary -> {
+                    return ofTheParameters(declaration,
+                            AbortSites.completionOfAnOperator(binary.op(), answer),
+                            List.of(binary.left(), binary.right()));
+                }
+                case Hir.Apply apply when apply.function() instanceof Hir.Var.Denoting callee
+                        && callee.reachedAs() instanceof ReachName.OfLibrary called
+                        && library.intrinsicOf(called.denotes()) != null -> {
+                    return ofTheParameters(declaration, KernelContracts.completionOf(
+                            library.intrinsicOf(called.denotes()).kernel()), apply.args());
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+
+        /**
+         * {@code completion} of a site handed {@code operands}, as a count of the operation's
+         * parameters: each operand it counts is a parameter as it stands, and every other operand
+         * ends no run. Null where it is not that.
+         */
+        private Completion.AnswerSize.SumOf ofTheParameters(Hir.FnDef declaration,
+                                                            Completion completion,
+                                                            List<Hir.Expr> operands) {
+            if (!(completion instanceof Completion.WhereTheAnswerFits(
+                    Completion.AnswerSize.SumOf(List<Integer> counted, int more)))) {
+                return null;
+            }
+            List<Integer> parameters = new ArrayList<>();
+            for (int at = 0; at < operands.size(); at++) {
+                if (counted.contains(at)) {
+                    int parameter = parameterRead(declaration, operands.get(at));
+                    if (parameter < 0) {
+                        return null;
+                    }
+                    parameters.add(parameter);
+                } else if (!of(operands.get(at)).endsNone()) {
+                    return null;
+                }
+            }
+            return new Completion.AnswerSize.SumOf(parameters, more);
+        }
+
+        /** What holds as many as either of {@code one} and {@code other} at most. */
+        private static Completion.AnswerSize.SumOf either(Completion.AnswerSize.SumOf one,
+                                                          Completion.AnswerSize.SumOf other) {
+            if (one == null || other == null) {
+                return null;
+            }
+            Set<Integer> operands = new LinkedHashSet<>(one.operands());
+            operands.addAll(other.operands());
+            return new Completion.AnswerSize.SumOf(List.copyOf(operands),
+                    Math.max(one.more(), other.more()));
         }
 
         /** Whether the kernel {@code operation} is takes a function, which it may apply. */

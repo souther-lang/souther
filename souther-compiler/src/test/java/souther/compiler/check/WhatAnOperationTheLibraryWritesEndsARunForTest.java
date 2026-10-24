@@ -208,6 +208,36 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         assertEquals(new Completion.NotKnown(), endings.completionApartFromWhatItIsHanded(filter));
     }
 
+    /**
+     * A walk of a list that puts at most one element into what it carries for each element, and
+     * adds a number written out to what it counts, holds no more than the list and counts no
+     * further than an {@code Int} holds: taking, dropping and filing by a key answer always,
+     * apart from the key they are handed.
+     */
+    @Test
+    void aWalkThatPutsInOneForEachElementAnswersAlways() {
+        LibraryEndings endings = LibraryEndings.of(DefaultStdlib.get());
+        for (String each : new String[] {"take", "drop", "indexBy"}) {
+            assertEquals(new Completion.Always(), endings.completionApartFromWhatItIsHanded(
+                    ValueName.Stdlib.operation("List", each)), each);
+        }
+    }
+
+    /** One putting two in for an element, or joining what it carries to itself, may hold more
+     *  than the list, and nothing is said of where it answers. */
+    @Test
+    void aWalkThatPutsInMoreThanOneIsNotKnownToAnswer() {
+        LibraryEndings twice = LibraryEndings.of(rewritten("Map.insert(key(x), x, acc)",
+                "Map.insert(key(x), x, Map.insert(key(x), x, acc))"));
+        assertEquals(new Completion.NotKnown(), twice.completionApartFromWhatItIsHanded(
+                ValueName.Stdlib.operation("List", "indexBy")));
+        LibraryEndings doubled = LibraryEndings.of(rewritten(
+                "if i < n then (next, ys ++ [x]) else (next, ys)",
+                "if i < n then (next, ys ++ ys) else (next, ys)"));
+        assertEquals(new Completion.NotKnown(), doubled.completionApartFromWhatItIsHanded(
+                ValueName.Stdlib.operation("List", "take")));
+    }
+
     /** An operation the library does not have is refused, and not answered as not known. */
     @Test
     void anOperationTheLibraryDoesNotHaveIsRefused() {

@@ -143,9 +143,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.abort.AbortSites.completionOfAnOperator",
                     "which operator answers where the collection it answers fits, and of which"
                             + " operands: the join of two lists"),
-            new Held("souther.compiler.check.LibraryEndings.completionOf",
-                    "hands the one operator a library operation's body is to AbortSites, which"
-                            + " answers where it answers"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.answerOfTheBody",
+                    "hands the operator a way of a library operation's body ends in to"
+                            + " AbortSites, which answers where it answers"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.counted",
+                    "names the addition a walk of the library counts by"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.putInOne",
+                    "names the join a walk of the library puts one element in by"),
             new Held("souther.compiler.check.WhatARunMayEndFor"
                     + ".completionApartFromTheClosuresWrittenAtIt",
                     "hands an operator the analysis reads to AbortSites, which answers where it"
