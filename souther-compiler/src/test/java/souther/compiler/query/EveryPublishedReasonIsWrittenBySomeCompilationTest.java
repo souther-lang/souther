@@ -300,6 +300,17 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: Int, s: S) -> Answer
                 let f (n, s) = if n == String.length(s.value) then Yes else No
                 """.formatted(ANSWER)));
+        // A relation a run may stop on the way to: a square past the end of `Int` stops before
+        // the comparison, and which values of `a` get to it is what nothing here says.
+        out.put(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = {
+                    let square = a * a
+                    if a == b then Yes else No
+                }
+                """.formatted(ANSWER)));
         // A rule about how a list's elements stand to each other, offered as one alternative of a
         // choice: no builder keeps either of two such rules, and no set of the list's own values
         // holds it.
