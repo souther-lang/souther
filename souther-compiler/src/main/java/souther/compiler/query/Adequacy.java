@@ -9766,7 +9766,7 @@ public final class Adequacy {
                     specified.add(row.expectedArm());
                 }
             } else if (!declaredOut.isEmpty()) {
-                unreadableOut++;   // an expectation whose case the text does not say
+                unreadableOut++;   // an expectation neither the text nor its value says a case of
             }
             if (row.answered()) {
                 answered++;
