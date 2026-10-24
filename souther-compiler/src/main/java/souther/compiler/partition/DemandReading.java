@@ -38,6 +38,7 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -851,6 +852,13 @@ final class DemandReading {
             List<PriorApplications> all = new ArrayList<>(before);
             all.add(prior);
             return new Answered(narrowing, tied, unsaid, owed, all);
+        }
+
+        /** The same, without the statements of {@code met} among what the run narrows. */
+        Answered without(Collection<TakenConstraint.Affine> met) {
+            return new Answered(narrowing.stream().filter(each ->
+                    !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
+                    .toList(), tied, unsaid);
         }
 
         /**
