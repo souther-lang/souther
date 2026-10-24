@@ -285,10 +285,15 @@ final class PathCompletion {
      * gets past and never under-reads it.
      */
     private Known answering(Operated operated, Known k) {
+        return taking(asked(operated, k), k);
+    }
+
+    /** {@code k} with {@code asked} taken in as holding on the path. */
+    private Known taking(List<NumericConstraint> asked, Known k) {
         Known out = k;
-        for (NumericConstraint asked : asked(operated, k)) {
-            out = out.taking(asked.form(), asked.rel(), Known.Held.ON_THE_PATH,
-                    terms.kindsOf(asked.form()));
+        for (NumericConstraint one : asked) {
+            out = out.taking(one.form(), one.rel(), Known.Held.ON_THE_PATH,
+                    terms.kindsOf(one.form()));
         }
         return out;
     }
@@ -374,8 +379,9 @@ final class PathCompletion {
             }
         }
         Operated operated = operated(part, at);
-        out.addAll(asked(operated, past));
-        return answering(operated, past);
+        List<NumericConstraint> now = asked(operated, past);
+        out.addAll(now);
+        return taking(now, past);
     }
 
     /**

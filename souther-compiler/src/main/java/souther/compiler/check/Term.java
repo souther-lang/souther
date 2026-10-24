@@ -748,7 +748,12 @@ final class Term {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof Term term && same(this, term, new IdentityHashMap<>());
+        // Asked of every probe of a hash table a term is a key of, and almost always of two that a
+        // look at the fields tells apart, so nothing is allocated until that look has not.
+        return other instanceof Term term
+                && (term == this || (term.hash == hash && term.shape == shape
+                        && term.parts.size() == parts.size()
+                        && same(this, term, new IdentityHashMap<>())));
     }
 
     private static boolean same(Term one, Term other, Map<Term, Map<Term, Boolean>> met) {
