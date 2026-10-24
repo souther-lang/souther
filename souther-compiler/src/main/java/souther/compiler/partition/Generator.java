@@ -2344,7 +2344,7 @@ public final class Generator {
         return beside(seen, axes, purposes, looking, check, answers,
                 (value, type, reading, parameter) ->
                         NearbyValues.demanded(value, type, reading, parameter, demands, seen,
-                                budget -> looking.composingStopped(List.of(budget.figure()))));
+                                looking::composingStoppedAt));
     }
 
     private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
@@ -9626,6 +9626,11 @@ public final class Generator {
                 case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
             }
             return null;
+        }
+
+        /** Composing the rows the search looked through stopped at {@code budget}. */
+        void composingStoppedAt(CompositionBudget budget) {
+            composingStopped(List.of(budget.figure()));
         }
 
         /** The inputs of the row a composing took, or null ({@link #tookFrom}). */
