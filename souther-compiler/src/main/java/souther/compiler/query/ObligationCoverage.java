@@ -44,14 +44,51 @@ public sealed interface ObligationCoverage {
      * in the part nobody read. Never weakened by nothing, for the reason {@link Measurement.Partial}
      * is not — a state that says it is short of something and cannot say what would be the absence
      * of the answer written as an answer.
+     *
+     * <p><b>And the readings nobody asked that could be holding a row, beside what left it
+     * undecided.</b> They rank below the readings that did not run to the end, so the state is
+     * this one and not {@link NotMeasured}; but they are as much a reason a row may be hiding
+     * somewhere as the weakenings are, and a state that kept only the weakenings would say a point
+     * is held open by them alone when it is not.
+     *
+     * @param by            what the readings that did not run to the end went without
+     * @param unaskedBeside why the readings that were not asked and could be holding a row were
+     *                      not, or none where there are no such readings
      */
-    record Undecided(WeakeningSet by) implements ObligationCoverage {
+    record Undecided(WeakeningSet by, Optional<UnaskedReasons> unaskedBeside)
+            implements ObligationCoverage {
 
         public Undecided {
             if (by == null || by.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an obligation left undecided says what left it so");
             }
+            Objects.requireNonNull(unaskedBeside, "readings nobody asked are some or none");
+            if (unaskedBeside.isPresent() && !unaskedBeside.get().mayHideARow()) {
+                throw new IllegalArgumentException("only a reason a row may hide behind is kept"
+                        + " beside what left a point undecided: " + unaskedBeside.get());
+            }
+        }
+
+        /** Undecided by what the readings went without, with no reading nobody asked beside it. */
+        public Undecided(WeakeningSet by) {
+            this(by, Optional.empty());
+        }
+
+        /**
+         * Whether the only thing that holds the point open is a reading no row can settle it
+         * through ({@link Weakening.AReadingNotTiedToItsLine}).
+         *
+         * <p>Such a reading hides no row that would count: what stands at its place is evidence
+         * about the line and is counted neither for the point nor against it, so a row written for
+         * the point can only be settled by a reading that is tied to it. A point held open by
+         * nothing else is one a row can be offered for, and the row cannot be one already written.
+         * Held open by anything else too — a reading that did not run to the end, or one nobody
+         * asked that could be holding a row — and it can.
+         */
+        boolean heldOpenOnlyByUntiedReadings() {
+            return unaskedBeside.isEmpty() && by.causes().stream()
+                    .allMatch(Weakening.AReadingNotTiedToItsLine.class::isInstance);
         }
     }
 
@@ -198,23 +235,30 @@ public sealed interface ObligationCoverage {
         if (found != null) {
             return new Witnessed(found.done());
         }
-        if (!unread.isEmpty()) {
-            return new Undecided(unread);
-        }
-        // Above a miss another reading established, because a reading that looked at nothing leaves
-        // the rows it would have looked at unaccounted for. All of them and not one, and every one
-        // of them is one that could be hiding a row: what a debt says is what put it in the state
-        // it is in, the way an undecided one says what left it undecided. A reading with nothing to
-        // look at did not put it here — it hides nothing, so it neither takes back a miss nor joins
-        // the reasons that outranked one.
+        // The readings nobody asked that could be holding a row: every one of them and not one,
+        // since each is a place a row may be that nothing looked at. A reading with nothing to look
+        // at is not among them — it hides nothing, so it neither takes back a miss nor joins the
+        // reasons that outranked one.
         List<ItemAssessment.Coverage.NotAsked> mayHideARow = new ArrayList<>();
         for (ItemAssessment.Coverage.NotAsked each : unasked) {
             if (each.mayHideARow()) {
                 mayHideARow.add(each);
             }
         }
-        if (!mayHideARow.isEmpty()) {
-            return new NotMeasured(UnaskedReasons.ofAll(mayHideARow));
+        // Undecided keeps them beside what the readings went without, which outranks them: a state
+        // keeps every reason that accounts for it, and these account for a point not being known
+        // missed as much as the weakenings do.
+        Optional<UnaskedReasons> hiding = mayHideARow.isEmpty() ? Optional.empty()
+                : Optional.of(UnaskedReasons.ofAll(mayHideARow));
+        if (!unread.isEmpty()) {
+            return new Undecided(unread, hiding);
+        }
+        // Above a miss another reading established, because a reading that looked at nothing leaves
+        // the rows it would have looked at unaccounted for. All of them and not one, and every one
+        // of them is one that could be hiding a row: what a debt says is what put it in the state
+        // it is in, the way an undecided one says what left it undecided.
+        if (hiding.isPresent()) {
+            return new NotMeasured(hiding.get());
         }
         // Nothing among them hides a row, so a miss another reading established stands. Where there
         // was no such reading, every reading had nothing to look at and neither has the debt — said
