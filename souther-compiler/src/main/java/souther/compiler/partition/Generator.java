@@ -2161,11 +2161,21 @@ public final class Generator {
                     }
                     yield seen;
                 }
-                case ReplacementOwed.ByOneAnswer _ -> {
+                case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
                     // answering one value is told apart by any row it answers differently, and a
                     // behavior whose positions nothing divides has no class to look in.
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
+                    // Beside the rows it answered, first: the values the classes offer may be ones
+                    // the body gives no answer on, and these are known to come back.
+                    GeneratedRow beside = null;
+                    for (int at = 0; beside == null && at < one.answeredOn().size(); at++) {
+                        beside = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
+                                answers);
+                    }
+                    if (beside != null) {
+                        yield beside;
+                    }
                     List<FixtureTemplate> composedFirst = looking.tookFromComposing(() -> composed(
                             axes, composes(axes.axes()), HeldTogether.Asked.NOTHING, check,
                             Map.of(), witnessedBy(looking, purposes, answers)));
@@ -2260,6 +2270,54 @@ public final class Generator {
                     witnessedBy(looking, purposes, answers)));
             if (inputs != null) {
                 return new GeneratedRow(purposes, inputs, answers);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found one step from the
+     * inputs of a row a run was seen coming back on — or null where none is.
+     *
+     * <p>Where the classes offer values the body does not answer on, they leave nothing to compare
+     * the rewrite against; the run that came back is the one place known to. One whole number in the
+     * inputs is moved by one at a time and the rest is kept as it was, each candidate written
+     * through the same check a composed value goes through. Which candidate answers, and whether it
+     * answers differently, is what running it says, as it is for every candidate the rewrite is
+     * asked about.
+     */
+    private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
+                                       List<Purpose> purposes, ReplacementWitness looking,
+                                       CandidateCheck check, List<StoodInAnswer> answers) {
+        MeasuredInput subject = axes.subject();
+        for (int moved = 0; moved < seen.size(); moved++) {
+            for (ObservedValue near : NearbyValues.of(seen.get(moved))) {
+                List<FixtureTemplate> inputs = new ArrayList<>();
+                boolean written = true;
+                for (int p = 0; p < seen.size() && written; p++) {
+                    if (ObservedFixtures.of(p == moved ? near : seen.get(p),
+                            subject.types().get(p), subject.ruleReading())
+                            instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                    FixtureTemplate value)
+                            && check.refuse(p, value).isEmpty()) {
+                        inputs.add(value);
+                    } else {
+                        written = false;
+                    }
+                }
+                if (!written) {
+                    continue;
+                }
+                GeneratedRow row = new GeneratedRow(purposes, inputs, answers);
+                switch (looking.of(row, null)) {
+                    case TAKEN -> {
+                        return row;
+                    }
+                    case STOPPED -> {
+                        return null;
+                    }
+                    case PASSED -> { }
+                }
             }
         }
         return null;
