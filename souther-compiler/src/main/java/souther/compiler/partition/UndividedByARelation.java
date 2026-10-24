@@ -1142,7 +1142,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
             }
-            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written);
+            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
+                    declined);
         }
         if (kind == Kind.DIVISIBILITY) {
             boolean apart = !overlapping(sides.get(0), sides.get(1))
@@ -1152,7 +1153,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(1), at == 0, relation, apart, endsOf(carriers.get(0)),
                         endsOf(carriers.get(1))), out, settled);
             }
-            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written);
+            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
+                    declined);
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
@@ -1178,7 +1180,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return new WhatItLeaves(out, settled);
             }
             putDown(within.whole(), ofTheWhole, out, settled);
-            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written);
+            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
+                    declined);
         }
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
@@ -1237,7 +1240,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return reachedAlong(new WhatItLeaves(out, settled, true, stopped), past, read, along,
-                written);
+                written, declined);
     }
 
     /**
@@ -1254,8 +1257,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
                                       InputReading read, SearchRegion region,
-                                      List<OnAWay> conditions) {
-        return mayStopOnWhatItReads(past, read, region, conditions)
+                                      List<OnAWay> conditions, Optional<Set<String>> declined) {
+        return mayStopOnWhatItReads(past, read, region, conditions, declined)
                 ? shown.mayStopBefore(places()) : shown;
     }
 
@@ -1264,15 +1267,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * relation reads: an operator on what no place holds, after which no number is known to take
      * every value it did, or one tying a place a side reads to others
      * ({@link DemandReading.Answered#tied}), which the region the relation is read over does not
-     * hold — or an operator owed a proof that some run gets past it, reading such a place, that no
-     * witness is shown to get past ({@link #answersOnAWitness}). A side whose places are not known
-     * is taken to read any.
+     * hold — or an operator owed a proof that some run gets past it, reading such a place, that the
+     * witness is not shown to get past ({@link Witness}). A side whose places are not known is
+     * taken to read any.
      *
      * <p>Or where what the applications of a closure before the one the relation is reached in
-     * work out may, unless a witness is shown to make none ({@link #noApplicationBefore}).
+     * work out may. Every operator owed is asked of one witness, so that what is shown of each is
+     * shown of one row: one where every container those applications walk holds the one element
+     * the relation is read at, so that there are none, where such a witness is shown; and
+     * otherwise one holding as few as the way and the rules leave, on which the applications
+     * before are asked like the rest.
      */
     private boolean mayStopOnWhatItReads(DemandReading.Answered past, InputReading read,
-                                         SearchRegion region, List<OnAWay> conditions) {
+                                         SearchRegion region, List<OnAWay> conditions,
+                                         Optional<Set<String>> declined) {
         if (past.unsaid()) {
             return true;
         }
@@ -1288,6 +1296,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             reads.addAll(placesOfTheSide.get());
         }
+        Witness witness = new Witness(reads, read, region, conditions, declined, Set.of());
+        Optional<Set<TermPath>> walked = walkedByTheApplicationsBefore(past, read);
+        if (walked.isPresent() && !walked.get().isEmpty()) {
+            Witness ofOne = new Witness(reads, read, region, conditions, declined, walked.get());
+            if (walked.get().stream()
+                    .allMatch(each -> ofOne.holds(each).equals(Optional.of(BigInteger.ONE)))) {
+                return stopsOn(past, reads, ofOne, false);
+            }
+        }
+        return stopsOn(past, reads, witness, true);
+    }
+
+    /**
+     * Whether a run working out {@code past} may stop on a value the relation reads, shown of
+     * {@code witness} ({@link #mayStopOnWhatItReads}); what the applications before work out is
+     * asked as well where {@code applicationsBefore}, and is not where the witness makes none.
+     */
+    private boolean stopsOn(DemandReading.Answered past, List<TermPath> reads, Witness witness,
+                            boolean applicationsBefore) {
+        if (past.unsaid()) {
+            return true;
+        }
         for (Set<TermPath> ties : past.tied()) {
             if (touchesAny(ties, reads)) {
                 return true;
@@ -1298,40 +1328,42 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Pullback.StopObligation owed : past.owed()) {
             if ((owed.onWhatNoPlaceHolds() || owed.places().isEmpty()
                     || touchesAny(owed.places(), reads))
-                    && !answersOnAWitness(owed, reads, read, region, conditions)) {
+                    && !witness.answers(owed)) {
                 return true;
             }
         }
-        for (DemandReading.PriorApplications prior : past.before()) {
-            if (!noApplicationBefore(prior, reads, read, region, conditions)
-                    && mayStopOnWhatItReads(prior.workedOut(), read, region, conditions)) {
-                return true;
+        if (applicationsBefore) {
+            for (DemandReading.PriorApplications prior : past.before()) {
+                if (stopsOn(prior.workedOut(), reads, witness, true)) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
     /**
-     * Whether a witness of every value this relation shows of its places makes no application of
-     * a closure before the one the relation is reached in ({@code prior}): one where every
-     * container walked holds the one element the relation is reached at. Every call walking one
-     * applies its closure from the first element, so the one is the first.
+     * Every container walked by a call applying a closure the relation is reached in, where each
+     * such call applies its closure from the first element one after another, so that a witness
+     * holding one element in each makes no application before — or empty where one does not, or
+     * walks what is at no position of the input.
      */
-    private boolean noApplicationBefore(DemandReading.PriorApplications prior,
-                                        List<TermPath> reads, InputReading read,
-                                        SearchRegion region, List<OnAWay> conditions) {
-        if (prior.walked().isEmpty()) {
-            return false;
-        }
-        for (DemandReading.PriorApplications.WalkedOver each : prior.walked().get()) {
-            if (!(each.reads().pathOf(each.container(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath collection))
-                    || !fewestOnAWitness(collection, reads, read, region, conditions, true)
-                            .equals(Optional.of(BigInteger.ONE))) {
-                return false;
+    private static Optional<Set<TermPath>> walkedByTheApplicationsBefore(
+            DemandReading.Answered past, InputReading read) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (DemandReading.PriorApplications prior : past.before()) {
+            if (prior.walked().isEmpty()) {
+                return Optional.empty();
+            }
+            for (DemandReading.PriorApplications.WalkedOver each : prior.walked().get()) {
+                if (!(each.reads().pathOf(each.container(), read.rules().newtypes())
+                        instanceof PathResolution.At(TermPath collection))) {
+                    return Optional.empty();
+                }
+                out.add(collection);
             }
         }
-        return true;
+        return Optional.of(out);
     }
 
     /** Whether some place of {@code places} overlaps one of {@code reads}. */
@@ -1347,129 +1379,218 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether {@code owed} answers on a run that is a witness of every value this relation shows
-     * of its places: one whose input collections hold as few elements as the rules leave them,
-     * and no fewer than the relation's values need to stand in.
+     * One run standing for every value this relation shows of its places, by how many elements
+     * each collection of the input holds on it — of which a run gets past an owed operator where
+     * {@link ContainerSizesUnderAWitness} shows it does.
      *
-     * <p>Such a run is one wherever how many a collection holds is no part of what is shown here:
-     * no condition of the way and no side of the relation reads the collection, or anything
-     * around or inside it, other than the places the relation reads, so any row showing a value
-     * here shows it with the collection cut down to the elements those places are in. How many
-     * the rules leave it is what a row can be written at ({@link #howManyAreHeld}), and where that
-     * is not read, or it does not reach as few as needed, nothing is shown. What the run holds on
-     * the way from there is {@link ContainerSizesUnderAWitness}'s to say.
+     * <p>A row showing a value here, with a collection cut down to so many, is a row of that value
+     * and of the way where each of these holds. The rules leave the collection that many, and
+     * nothing of theirs reads inside its elements, which a cut could break
+     * ({@link UndividedByARelation#howManyAreHeld}). Nothing the way states, or declined to read,
+     * says anything of the
+     * collection or of what is in it but how many it holds at least — a statement turning on no
+     * position it names may say anything of it; or, where the collection is
+     * held to the one element the relation is read at, of what is in that element alone, which
+     * the region the relation is read over took in. And each side keeps its value cut down: an
+     * element's own value, and an end, kept by copies of the element holding it; a total only
+     * where one element is left, since the relation reads a total on the run of one element's
+     * value ({@link UndividedByARelation#summedAs}); nothing else made of the collection. Where
+     * any of these is not
+     * shown, nothing is.
      */
-    private boolean answersOnAWitness(Pullback.StopObligation owed, List<TermPath> reads,
-                                      InputReading read, SearchRegion region,
-                                      List<OnAWay> conditions) {
-        Map<TermPath, Optional<BigInteger>> sizes = new HashMap<>();
-        return ContainerSizesUnderAWitness.answersOn(owed.within(), owed.operation(),
-                owed.completion(), node -> {
-                    InputReads at = owed.readsAt(node);
-                    if (at == null || !(at.pathOf(node, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath path))) {
-                        return Optional.empty();
+    private final class Witness {
+
+        private final List<TermPath> reads;
+        private final InputReading read;
+        private final SearchRegion region;
+        private final List<OnAWay> conditions;
+        private final Optional<Set<String>> declined;
+        private final Set<TermPath> heldToOne;
+        private final Map<TermPath, Optional<BigInteger>> sizes = new HashMap<>();
+
+        /**
+         * @param reads     the places the relation reads
+         * @param read      the reading of the input
+         * @param region    the region the relation is read over
+         * @param conditions what the way states
+         * @param declined  the parameters what the way declined may name a position under, or
+         *                  empty where it may name any
+         * @param heldToOne the collections held to the one element the relation is read at
+         */
+        Witness(List<TermPath> reads, InputReading read, SearchRegion region,
+                List<OnAWay> conditions, Optional<Set<String>> declined,
+                Set<TermPath> heldToOne) {
+            this.reads = reads;
+            this.read = read;
+            this.region = region;
+            this.conditions = conditions;
+            this.declined = declined;
+            this.heldToOne = heldToOne;
+        }
+
+        /** Whether a run gets past {@code owed} on this witness. */
+        boolean answers(Pullback.StopObligation owed) {
+            return ContainerSizesUnderAWitness.answersOn(owed.within(), owed.operation(),
+                    owed.completion(), node -> {
+                        InputReads at = owed.readsAt(node);
+                        return at != null && at.pathOf(node, read.rules().newtypes())
+                                instanceof PathResolution.At(TermPath path)
+                                ? holds(path) : Optional.empty();
+                    });
+        }
+
+        /** How many elements {@code collection} holds here, or nothing where no such run is
+         *  shown. */
+        Optional<BigInteger> holds(TermPath collection) {
+            return sizes.computeIfAbsent(collection, this::fewest);
+        }
+
+        private Optional<BigInteger> fewest(TermPath collection) {
+            boolean ofOne = heldToOne.contains(collection);
+            if (declined.isEmpty() || declined.get().contains(collection.head())) {
+                return Optional.empty();
+            }
+            BigInteger asked = ofOne ? BigInteger.ONE : BigInteger.ZERO;
+            for (OnAWay each : conditions) {
+                // A statement turning on no position the way names may turn on anything,
+                // the collection and what is in it as well.
+                if (each.positions().isEmpty()) {
+                    return Optional.empty();
+                }
+                if (each.positions().stream().noneMatch(at -> overlap(at, collection))) {
+                    continue;
+                }
+                if (ofOne && ofTheElementAtHand(each, collection)) {
+                    continue;
+                }
+                Optional<BigInteger> least = holdsAtLeast(each, collection, read);
+                if (least.isEmpty()) {
+                    return Optional.empty();
+                }
+                asked = asked.max(least.get());
+            }
+            boolean aTotal = false;
+            for (Side side : sides) {
+                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
+                        .stream().anyMatch(at -> overlap(at, collection));
+                switch (keptCutDown(side)) {
+                    case AT_ANY_SIZE -> { }
+                    case AT_ONE -> aTotal |= ofTheCollection;
+                    case NOT -> {
+                        if (ofTheCollection) {
+                            return Optional.empty();
+                        }
                     }
-                    return sizes.computeIfAbsent(path, collection -> fewestOnAWitness(collection,
-                            reads, read, region, conditions, false));
-                });
+                }
+            }
+            BigInteger inside = BigInteger.ZERO;
+            for (TermPath at : reads) {
+                if (at.equals(collection) || collection.isAtOrUnder(at)) {
+                    return Optional.empty();
+                }
+                if (at.isAtOrUnder(collection)) {
+                    inside = BigInteger.ONE;
+                }
+            }
+            inside = inside.max(heldAgainstEachOther(collection));
+            NumericDomain.Bounds held = howManyAreHeld(collection, read, region);
+            if (held == null || !held.holdsAValue()) {
+                return Optional.empty();
+            }
+            BigInteger fewest = BigInteger.ZERO;
+            if (held.min() != null) {
+                if (!(held.min().at() instanceof Count least)
+                        || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                                BigInteger up))) {
+                    return Optional.empty();
+                }
+                fewest = held.min().inclusive() || !least.exactly().isWhole() ? up
+                        : up.add(BigInteger.ONE);
+            }
+            BigInteger witness = fewest.max(asked).max(inside);
+            if (held.max() != null) {
+                if (!(held.max().at() instanceof Count most)
+                        || most.exactly().compareTo(ExactRatio.of(witness)) < 0) {
+                    return Optional.empty();
+                }
+            }
+            if ((aTotal || ofOne) && !witness.equals(BigInteger.ONE)) {
+                return Optional.empty();
+            }
+            return Optional.of(witness);
+        }
     }
 
     /**
-     * How many elements the collection at {@code collection} holds on a witness
-     * ({@link #answersOnAWitness}), or nothing where no witness is shown with so few: the fewest
-     * the rules leave it, and no fewer than one where a place of the relation is inside it — the
-     * places it reads apart from one another are all of one element, the one it is read at — and
-     * one more in the outermost collection holding a place whose values the relation holds against
-     * each other — the two values stand in two of its elements, and every collection inside each
-     * holds one.
-     *
-     * <p>And no fewer than the way asks, where what it asks of the collection is only that it hold
-     * so many at least: a call applying a closure to its elements has one where the closure is
-     * applied. Anything else the way asks of the collection, or of what is in it, leaves no row
-     * cut down to so few shown to be one of the way.
-     *
-     * <p>Where {@code oneElementAsked}, the collection is asked to hold the one element the
-     * relation is read at, and no fewer: what the way asks of the positions inside it is then
-     * asked of that element, which the region the relation is read over holds there already.
+     * Whether {@code statement} says something of the element at hand in {@code collection} and of
+     * nothing else, which the region the relation is read over took in: a relation of positions
+     * inside the element, not a statement of what some or every element meets.
      */
-    private Optional<BigInteger> fewestOnAWitness(TermPath collection, List<TermPath> reads,
-                                                  InputReading read, SearchRegion region,
-                                                  List<OnAWay> conditions,
-                                                  boolean oneElementAsked) {
-        BigInteger asked = oneElementAsked ? BigInteger.ONE : BigInteger.ZERO;
-        for (OnAWay each : conditions) {
-            if (each.positions().stream().noneMatch(at -> overlap(at, collection))) {
+    private static boolean ofTheElementAtHand(OnAWay statement, TermPath collection) {
+        return statement.elementsOf() == null && statement.relation() != null
+                && !statement.whatStands()
+                && statement.positions().stream()
+                        .allMatch(at -> !at.equals(collection) && at.isAtOrUnder(collection));
+    }
+
+    /** How a side keeps its value where a collection it is made of is cut down. */
+    private enum CutDown {
+        /** At any number of elements: an element's own value, or an end, kept by copies of the
+         *  element holding it. */
+        AT_ANY_SIZE,
+        /** Only at one element: a total, which the relation reads on one element's run. */
+        AT_ONE,
+        /** Not shown to keep it. */
+        NOT
+    }
+
+    /** How {@code side} keeps its value where a collection it is made of is cut down. */
+    private static CutDown keptCutDown(Side side) {
+        if (side.along() instanceof Quantity.KeptSoFar) {
+            return CutDown.AT_ANY_SIZE;
+        }
+        if (side.along() != null) {
+            return CutDown.NOT;
+        }
+        return switch (side.number()) {
+            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ -> CutDown.AT_ANY_SIZE;
+            case NumericTerm.TakenOver over ->
+                    over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? CutDown.AT_ONE
+                            : CutDown.NOT;
+            case NumericTerm.TakenOf of ->
+                    of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? CutDown.AT_ONE
+                            : CutDown.NOT;
+            case NumericTerm.GatheredUnderItsKey filed -> switch (filed.gathering()) {
+                case NumericTerm.GatheredUnderItsKey.Gathering.End _ -> CutDown.AT_ANY_SIZE;
+                case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> CutDown.AT_ONE;
+                case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ -> CutDown.NOT;
+            };
+            case null -> CutDown.NOT;
+            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                 NumericTerm.CodePointAt _, NumericTerm.Multiplicity _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderAKey _ -> CutDown.NOT;
+        };
+    }
+
+    /**
+     * How many elements of {@code collection}, the outermost holding a place whose values this
+     * relation holds against each other, those values stand in: one for each side reading the
+     * place, and two at least. Nought where it is the outermost holding none.
+     */
+    private BigInteger heldAgainstEachOther(TermPath collection) {
+        BigInteger out = BigInteger.ZERO;
+        for (FilingCoordinate each : amongThemselves) {
+            if (!each.path().isAtOrUnder(collection)
+                    || !each.path().containersHoldingIt().getFirst().equals(collection)) {
                 continue;
             }
-            if (oneElementAsked && each.positions().stream()
-                    .allMatch(at -> !at.equals(collection) && at.isAtOrUnder(collection))) {
-                continue;
-            }
-            Optional<BigInteger> least = holdsAtLeast(each, collection, read);
-            if (least.isEmpty()) {
-                return Optional.empty();
-            }
-            asked = asked.max(least.get());
+            long reading = sides.stream().filter(side -> side.madeOf().stream()
+                    .anyMatch(place -> place.path().equals(each.path()))).count();
+            out = out.max(BigInteger.valueOf(Math.max(2, reading)));
         }
-        // A term made of the collection is another number of the collection cut down, unless it
-        // takes each of its values from one element: a total, and the end a walk keeps, which the
-        // relation is read to reach at every value with one element. How many there are, where an
-        // element stands, and anything else taken of the collection are not, so no witness is cut
-        // down for one.
-        for (Side side : sides) {
-            Optional<List<TermPath>> placesOfTheSide = placesRead(side);
-            boolean ofOneElement = (side.along() == null
-                            && side.number() instanceof NumericTerm.ValueOf)
-                    || side.along() instanceof Quantity.KeptSoFar
-                    || (side.number() instanceof NumericTerm.TakenOver over
-                            && over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
-                    || (side.number() instanceof NumericTerm.TakenOf of
-                            && of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
-                    || (side.number() instanceof NumericTerm.GatheredUnderItsKey filed
-                            && !(filed.gathering() instanceof
-                                    NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut))
-                    || side.number() instanceof NumericTerm.ExtremeOfItsKey;
-            if (!ofOneElement && (placesOfTheSide.isEmpty() || placesOfTheSide.get().stream()
-                    .anyMatch(at -> overlap(at, collection)))) {
-                return Optional.empty();
-            }
-        }
-        long inside = 0;
-        for (TermPath at : reads) {
-            if (at.equals(collection) || collection.isAtOrUnder(at)) {
-                return Optional.empty();
-            }
-            if (at.isAtOrUnder(collection)) {
-                inside = 1;
-            }
-        }
-        if (amongThemselves.stream().anyMatch(each -> each.path().isAtOrUnder(collection)
-                && each.path().containersHoldingIt().getFirst().equals(collection))) {
-            inside++;
-        }
-        NumericDomain.Bounds held = howManyAreHeld(collection, read, region);
-        if (held == null || !held.holdsAValue()) {
-            return Optional.empty();
-        }
-        BigInteger fewest = BigInteger.ZERO;
-        if (held.min() != null) {
-            if (!(held.min().at() instanceof Count least)
-                    || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
-                            BigInteger up))) {
-                return Optional.empty();
-            }
-            fewest = held.min().inclusive() || !least.exactly().isWhole() ? up
-                    : up.add(BigInteger.ONE);
-        }
-        BigInteger witness = fewest.max(asked).max(BigInteger.valueOf(inside));
-        if (held.max() != null) {
-            if (!(held.max().at() instanceof Count most)
-                    || most.exactly().compareTo(ExactRatio.of(witness)) < 0) {
-                return Optional.empty();
-            }
-        }
-        return Optional.of(witness);
+        return out;
     }
 
     /**

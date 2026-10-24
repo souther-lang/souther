@@ -150,6 +150,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the addition a walk of the library counts by"),
             new Held("souther.compiler.check.LibraryEndings.Reading.putInOne",
                     "names the join a walk of the library puts one element in by"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.everyNumberStaysAnInt",
+                    "asks WhereAnOperatorAnswers where the addition a walk of the library counts"
+                            + " by answers"),
+            new Held("souther.compiler.check.ContainerSizesUnderAWitness.anIntSumAnswersAt",
+                    "asks WhereAnOperatorAnswers where the addition a total of Ints is worked"
+                            + " out by answers"),
             new Held("souther.compiler.check.WhatARunMayEndFor"
                     + ".completionApartFromTheClosuresWrittenAtIt",
                     "hands an operator the analysis reads to AbortSites, which answers where it"

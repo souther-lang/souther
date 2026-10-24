@@ -525,6 +525,29 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A witness of one element meets what the way states of that element, and nothing it states
+     * of some other element: an element of the list with {@code q} at nought and one with it at
+     * one are two, so the walk applies its closure before the one the relation is reached in, and
+     * the division there may stop the run. A statement of the element at hand, as a choice the
+     * closure makes before the comparison, is one the element the relation is read at meets.
+     */
+    @Test
+    void aWitnessOfOneElementMeetsOnlyWhatTheWayStatesOfThatElement() {
+        String model = """
+                module w1
+                data A = { p: Int, q: Int, r: Int }
+                behavior m : (xs: List<A>) -> Bool
+                let m (xs) = %s
+                """;
+        assertEquals(Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_REACHED),
+                leftIn(model.formatted("List.any(e -> e.q == 0, xs) && List.any(e -> e.q == 1, xs)"
+                        + " && List.any(i -> i.p >= i.r && i.q / i.p >= 0, xs)"), "4:94"));
+        assertEquals(Map.of("xs[*].p", RELATES, "xs[*].r", RELATES), leftIn(model.formatted(
+                "List.any(i -> if i.q > 0 then i.p >= i.r && i.q / i.p >= 0 else false, xs)"),
+                "4:48"));
+    }
+
+    /**
      * A stop only the applications before the one a relation is reached in make is owed of a run
      * that makes them, on a number outside the list as on one inside it: {@code k * 10} past the
      * comparison stops a run at a {@code k} whose tenfold is no {@code Int}, but only at an

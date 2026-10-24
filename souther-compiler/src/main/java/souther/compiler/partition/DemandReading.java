@@ -944,18 +944,19 @@ final class DemandReading {
      * a run that holds more, and a reader showing a run of one owes nothing of it.
      *
      * <p>Equal only to itself, as an owed operator is.
-     *
-     * @param walked    what each call applying one of the closures walks, as the names stand
-     *                  there — or empty where some call is not shown to apply its closure to its
-     *                  elements one after another from the first, so that no run is shown to make
-     *                  none before
-     * @param workedOut what those applications work out
      */
     static final class PriorApplications {
 
         private final Optional<List<WalkedOver>> walked;
         private final Answered workedOut;
 
+        /**
+         * @param walked    what each call applying one of the closures walks, as the names stand
+         *                  there — or empty where some call is not shown to apply its closure to
+         *                  its elements one after another from the first, so that no run is shown
+         *                  to make none before
+         * @param workedOut what those applications work out
+         */
         PriorApplications(Optional<List<WalkedOver>> walked, Answered workedOut) {
             this.walked = walked.map(List::copyOf);
             this.workedOut = workedOut;

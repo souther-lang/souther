@@ -10,7 +10,10 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.HashMap;
@@ -89,12 +92,22 @@ public final class ContainerSizesUnderAWitness {
                 }
                 Optional<BigInteger> written = writtenTotal(operands.get(at));
                 yield written.isPresent()
-                        ? written.get().bitLength() < Long.SIZE
+                        ? anIntSumAnswersAt(written.get())
                         : reading.most(operands.get(at))
                                 .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false);
             }
             case GetsPast.NotKnown _ -> false;
         };
+    }
+
+    /** Whether an {@code Int} sum coming to {@code total} answers it, as the language says
+     *  ({@link WhereAnOperatorAnswers}). */
+    private static boolean anIntSumAnswersAt(BigInteger total) {
+        return WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD, Type.INT,
+                List.of(Type.INT, Type.INT))
+                instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                        BigInteger least, BigInteger greatest)
+                && total.compareTo(least) >= 0 && total.compareTo(greatest) <= 0;
     }
 
     /** The exact total of {@code list} where it is written out of whole numbers written out, or

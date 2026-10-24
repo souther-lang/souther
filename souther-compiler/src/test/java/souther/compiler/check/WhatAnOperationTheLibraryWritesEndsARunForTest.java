@@ -223,6 +223,23 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         }
     }
 
+    /**
+     * What a walk counts starts where it is written: one counting by one from as far below the
+     * greatest {@code Int} as a list holds elements stays an {@code Int} however many it walks,
+     * and one counting from a step nearer, or from the greatest itself, passes it on a list long
+     * enough, so nothing is said of where it answers.
+     */
+    @Test
+    void aWalkCountingFromWhereItStartsAnswersOnlyWhereItCannotPassAnInt() {
+        ValueName.Stdlib.Operation take = ValueName.Stdlib.operation("List", "take");
+        assertEquals(new GetsPast.Always(), LibraryEndings.of(rewritten("(0, [])",
+                "(9223372034707292160, [])")).completionApartFromWhatItIsHanded(take));
+        for (String seed : new String[] {"9223372034707292161", "9223372036854775807"}) {
+            assertEquals(new GetsPast.NotKnown(), LibraryEndings.of(rewritten("(0, [])",
+                    "(" + seed + ", [])")).completionApartFromWhatItIsHanded(take), seed);
+        }
+    }
+
     /** One putting two in for an element, or joining what it carries to itself, may hold more
      *  than the list, and nothing is said of where it answers. */
     @Test

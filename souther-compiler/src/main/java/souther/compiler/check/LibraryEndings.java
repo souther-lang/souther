@@ -11,6 +11,7 @@ import souther.compiler.core.KernelContracts;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -18,6 +19,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -320,14 +322,15 @@ final class LibraryEndings {
          * whole numbers written out; and its step answers what it carries with each collection
          * as it was or with at most one element put into it, by an operation that answers where
          * the collection fits ({@link GetsPast.WhereTheAnswerFits}), and each number as it was
-         * or with a number written out added to it. Nothing else in the step ends a run.
+         * or with a number written out, not below nought, added to it. Nothing else in the step
+         * ends a run.
          *
          * <p>Then by induction on the elements walked, after {@code k} of them each collection
-         * holds at most {@code k} and each number is at most {@code k} times what is added to it:
-         * no more than the list holds, which has a place, and no more than an {@code Int} holds,
-         * since a list holds fewer than the square root of what an {@code Int} does and what is
-         * added is written out no larger. So every collection put together on the way fits, and
-         * every sum worked out on the way is an {@code Int}.
+         * holds at most {@code k}, no more than the list holds, which has a place; and each number
+         * lies from where it started to that and {@code k} times the most added to it in one
+         * step. A walk takes no more steps than a collection holds elements
+         * ({@link GetsPast#MOST_ELEMENTS}), so where that far still lies where an {@code Int} sum
+         * answers ({@link WhereAnOperatorAnswers}), every sum worked out on the way is one.
          */
         boolean walksNoFurtherThanItsList(ValueName.Stdlib.Operation operation) {
             Hir.FnDef declaration = library.helpers().get(operation);
@@ -357,14 +360,59 @@ final class LibraryEndings {
                     return false;
                 }
             }
-            List<Boolean> counts = seedOf(args.get(reduction.seedArg()));
+            List<Carried> counts = seedOf(args.get(reduction.seedArg()));
             if (counts == null) {
                 return false;
             }
             Set<BindingId> carried = new HashSet<>();
             carried.add(step.params().get(reduction.accumulatorParam()).binding());
+            Map<Integer, BigInteger> mostAdded = new HashMap<>();
             return answersWhatItCarriedGrown(step.body(), carried, counts, new HashMap<>(),
-                    new HashMap<>());
+                    new HashMap<>(), mostAdded)
+                    && everyNumberStaysAnInt(counts, mostAdded);
+        }
+
+        /**
+         * What a walk carries, part by part: a collection, or a whole number starting where it
+         * is written.
+         *
+         * @param from where a number starts, or null where the part is a collection
+         */
+        private record Carried(BigInteger from) {
+
+            boolean aNumber() {
+                return from != null;
+            }
+        }
+
+        /** A name bound to number part {@code part} with {@code by} added to it. */
+        private record Added(int part, BigInteger by) {}
+
+        /**
+         * Whether each number of {@code counts}, starting where it does and grown in a step by no
+         * more than {@code mostAdded} says, lies where an {@code Int} sum answers after as many
+         * steps as a walk takes at most.
+         */
+        private static boolean everyNumberStaysAnInt(List<Carried> counts,
+                                                     Map<Integer, BigInteger> mostAdded) {
+            if (!(WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD, Type.INT,
+                    List.of(Type.INT, Type.INT))
+                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                            BigInteger least, BigInteger greatest))) {
+                return false;
+            }
+            for (int at = 0; at < counts.size(); at++) {
+                if (!counts.get(at).aNumber()) {
+                    continue;
+                }
+                BigInteger from = counts.get(at).from();
+                BigInteger furthest = from.add(GetsPast.MOST_ELEMENTS.multiply(
+                        mostAdded.getOrDefault(at, BigInteger.ZERO)));
+                if (from.compareTo(least) < 0 || furthest.compareTo(greatest) > 0) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /**
@@ -387,23 +435,23 @@ final class LibraryEndings {
         }
 
         /**
-         * What the walk starts from, as a list of its parts each saying whether it is a number:
-         * one part where it is a collection holding nothing, and one for each element where it is
-         * a tuple of those and of whole numbers written out — or null where it is anything else.
+         * What the walk starts from, part by part: one part where it is a collection holding
+         * nothing, and one for each element where it is a tuple of those and of whole numbers
+         * written out, each starting where it is written — or null where it is anything else.
          */
-        private List<Boolean> seedOf(Hir.Expr seed) {
+        private List<Carried> seedOf(Hir.Expr seed) {
             if (holdsNothing(seed)) {
-                return List.of(false);
+                return List.of(new Carried(null));
             }
             if (!(seed instanceof Hir.Tuple tuple)) {
                 return null;
             }
-            List<Boolean> out = new ArrayList<>();
+            List<Carried> out = new ArrayList<>();
             for (Hir.Expr each : tuple.elements()) {
-                if (each instanceof Hir.IntLit) {
-                    out.add(true);
+                if (each instanceof Hir.IntLit written) {
+                    out.add(new Carried(BigInteger.valueOf(written.value())));
                 } else if (holdsNothing(each)) {
-                    out.add(false);
+                    out.add(new Carried(null));
                 } else {
                     return null;
                 }
@@ -432,33 +480,39 @@ final class LibraryEndings {
          * Whether {@code body} answers what is carried under any of {@code carried}, of
          * {@code counts.size()} parts, with each part grown as {@link #walksNoFurtherThanItsList}
          * says, and ends a run nowhere else. {@code parts} holds the names bound to a part of it,
-         * and {@code added} the names bound to a number part with a number written out added.
+         * and {@code added} the names bound to a number part with a number written out added;
+         * {@code mostAdded} is told the most each number part is grown by in a step, the sums
+         * worked out on the way and not answered as well, since each is worked out.
          */
         private boolean answersWhatItCarriedGrown(Hir.Expr body, Set<BindingId> carried,
-                                                  List<Boolean> counts,
+                                                  List<Carried> counts,
                                                   Map<BindingId, Integer> parts,
-                                                  Map<BindingId, Integer> added) {
+                                                  Map<BindingId, Added> added,
+                                                  Map<Integer, BigInteger> mostAdded) {
             switch (body) {
                 case Hir.LetIn let -> {
                     BindingId name = let.binder().binding();
                     Integer part = partRead(let.value(), carried, counts, parts);
+                    Added sum = counted(let.value(), counts, parts);
                     if (let.value() instanceof Hir.Var.Denoting read && isCarried(read, carried)) {
                         carried.add(name);
                     } else if (part != null) {
                         parts.put(name, part);
-                    } else if (counted(let.value(), counts, parts) != null) {
-                        added.put(name, counted(let.value(), counts, parts));
+                    } else if (sum != null) {
+                        added.put(name, sum);
+                        mostAdded.merge(sum.part(), sum.by(), BigInteger::max);
                     } else if (!of(let.value()).endsNone()) {
                         return false;
                     }
-                    return answersWhatItCarriedGrown(let.body(), carried, counts, parts, added);
+                    return answersWhatItCarriedGrown(let.body(), carried, counts, parts, added,
+                            mostAdded);
                 }
                 case Hir.If fork -> {
                     return of(fork.cond()).endsNone()
                             && answersWhatItCarriedGrown(fork.then(), carried, counts, parts,
-                                    added)
+                                    added, mostAdded)
                             && answersWhatItCarriedGrown(fork.els(), carried, counts, parts,
-                                    added);
+                                    added, mostAdded);
                 }
                 case Hir.Tuple tuple -> {
                     if (tuple.elements().size() != counts.size()) {
@@ -466,8 +520,9 @@ final class LibraryEndings {
                     }
                     for (int at = 0; at < counts.size(); at++) {
                         Hir.Expr each = tuple.elements().get(at);
-                        boolean grown = counts.get(at)
-                                ? isPart(each, at, parts) || addedTo(each, at, added, counts, parts)
+                        boolean grown = counts.get(at).aNumber()
+                                ? isPart(each, at, parts)
+                                        || addedTo(each, at, added, counts, parts, mostAdded)
                                 : isPart(each, at, parts) || putInOne(each, at, parts);
                         if (!grown) {
                             return false;
@@ -476,7 +531,7 @@ final class LibraryEndings {
                     return true;
                 }
                 default -> {
-                    if (counts.size() != 1 || counts.getFirst()) {
+                    if (counts.size() != 1 || counts.getFirst().aNumber()) {
                         return false;
                     }
                     Map<BindingId, Integer> whole = new HashMap<>(parts);
@@ -493,7 +548,7 @@ final class LibraryEndings {
         }
 
         /** Which part of what is carried {@code e} reads as it is, or null. */
-        private static Integer partRead(Hir.Expr e, Set<BindingId> carried, List<Boolean> counts,
+        private static Integer partRead(Hir.Expr e, Set<BindingId> carried, List<Carried> counts,
                                         Map<BindingId, Integer> parts) {
             if (e instanceof Hir.TupleGet get && get.tuple() instanceof Hir.Var.Denoting read
                     && isCarried(read, carried) && get.index() < counts.size()) {
@@ -511,32 +566,35 @@ final class LibraryEndings {
                     && Integer.valueOf(at).equals(parts.get(id));
         }
 
-        /** Which number part {@code e} adds a number written out, no larger than a list holds,
-         *  to — or null. */
-        private static Integer counted(Hir.Expr e, List<Boolean> counts,
-                                       Map<BindingId, Integer> parts) {
+        /** Which number part {@code e} adds a number written out, not below nought, to, and that
+         *  number — or null. */
+        private static Added counted(Hir.Expr e, List<Carried> counts,
+                                     Map<BindingId, Integer> parts) {
             if (!(e instanceof Hir.Binary sum) || sum.op() != BinOp.ADD
-                    || !(sum.right() instanceof Hir.IntLit step) || step.value() < 0
-                    || step.value() > Integer.MAX_VALUE) {
+                    || !(sum.right() instanceof Hir.IntLit step) || step.value() < 0) {
                 return null;
             }
             for (int at = 0; at < counts.size(); at++) {
-                if (counts.get(at) && isPart(sum.left(), at, parts)) {
-                    return at;
+                if (counts.get(at).aNumber() && isPart(sum.left(), at, parts)) {
+                    return new Added(at, BigInteger.valueOf(step.value()));
                 }
             }
             return null;
         }
 
-        /** Whether {@code e} is number part {@code at} with a number written out added. */
-        private static boolean addedTo(Hir.Expr e, int at, Map<BindingId, Integer> added,
-                                       List<Boolean> counts, Map<BindingId, Integer> parts) {
-            if (e instanceof Hir.Var.Denoting read
+        /** Whether {@code e} is number part {@code at} with a number written out added, telling
+         *  {@code mostAdded} how much. */
+        private static boolean addedTo(Hir.Expr e, int at, Map<BindingId, Added> added,
+                                       List<Carried> counts, Map<BindingId, Integer> parts,
+                                       Map<Integer, BigInteger> mostAdded) {
+            Added sum = e instanceof Hir.Var.Denoting read
                     && read.reachedAs() instanceof ReachName.InScope(ValueName.Local(var _, var id))
-                    && Integer.valueOf(at).equals(added.get(id))) {
-                return true;
+                    ? added.get(id) : counted(e, counts, parts);
+            if (sum == null || sum.part() != at) {
+                return false;
             }
-            return Integer.valueOf(at).equals(counted(e, counts, parts));
+            mostAdded.merge(at, sum.by(), BigInteger::max);
+            return true;
         }
 
         /**
