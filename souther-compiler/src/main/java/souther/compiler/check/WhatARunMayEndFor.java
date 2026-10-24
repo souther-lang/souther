@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.semantics.Accumulation;
@@ -131,17 +131,17 @@ public final class WhatARunMayEndFor {
     }
 
     /**
-     * Where {@code e} itself answers ({@link Completion}), apart from the closures written at it
+     * Where {@code e} itself answers ({@link GetsPast}), apart from the closures written at it
      * as {@link #itselfApartFromTheClosuresWrittenAtIt} reads it, each from the owner of what it
      * is: an operator's from {@link AbortSites}, a kernel's from {@link KernelContracts}, and an
      * operation of the library's from {@link LibraryEndings}. Its operands are counted in the order
      * they are written, a binary's left one first.
      */
-    public static Completion completionApartFromTheClosuresWrittenAtIt(Core e) {
+    public static GetsPast completionApartFromTheClosuresWrittenAtIt(Core e) {
         if (itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
-            return new Completion.Always();
+            return new GetsPast.Always();
         }
-        Completion total = whereTheTotalFits(Core.withoutStanding(e));
+        GetsPast total = whereTheTotalFits(e);
         if (total != null) {
             return total;
         }
@@ -154,9 +154,9 @@ public final class WhatARunMayEndFor {
                 yield applied != null
                         && applied.operation() instanceof ValueName.Stdlib.Operation operation
                         ? LibraryEndings.shipped().completionApartFromWhatItIsHanded(operation)
-                        : new Completion.NotKnown();
+                        : new GetsPast.NotKnown();
             }
-            default -> new Completion.NotKnown();
+            default -> new GetsPast.NotKnown();
         };
     }
 
@@ -165,8 +165,9 @@ public final class WhatARunMayEndFor {
      * such call: what it accumulates is the operation's own account ({@link Accumulations}), from
      * nought by adding, and the total it answers is an {@code Int}.
      */
-    private static Completion whereTheTotalFits(Core e) {
-        if (!(e instanceof Core.PreservedCall kept) || kept.type() != Type.INT) {
+    private static GetsPast whereTheTotalFits(Core e) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)
+                || kept.type() != Type.INT) {
             return null;
         }
         Accumulations.Accumulating accumulating = Accumulations.accumulating(kept);
@@ -176,7 +177,7 @@ public final class WhatARunMayEndFor {
         }
         for (int at = 0; at < kept.args().size(); at++) {
             if (kept.args().get(at) == accumulating.container()) {
-                return new Completion.WhereTheTotalFits(at);
+                return new GetsPast.WhereTheTotalFits(at);
             }
         }
         return null;

@@ -491,6 +491,38 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A relation in a closure is reached at the application of an element, and the applications
+     * before it run the closure whole: here each divides by {@code p} past the comparison, and
+     * one at nought stops the run before the next element is handed over. A run with one element
+     * makes no application before, so where the way lets the list hold one, the relation is
+     * reached at every value. Where the way asks for two, or the walk is of a list the input is
+     * not read as, the applications before are owed, and a division by a number the relation
+     * reads may stop them. A stop before the comparison in its own application is owed whatever
+     * the list holds.
+     */
+    @Test
+    void theApplicationsBeforeTheOneARelationIsReachedInAreOwedOnlyWhereARunMakesThem() {
+        String model = """
+                module w1
+                data A = { p: Int, q: Int, r: Int }
+                behavior m : (xs: List<A>) -> Bool
+                let m (xs) = %s
+                """;
+        String walk = "List.any(i -> i.p >= i.r && i.q / i.p >= 0, %s)";
+        Map<String, String> related = Map.of("xs[*].p", RELATES, "xs[*].r", RELATES);
+        Map<String, String> notReached = Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_REACHED);
+        assertEquals(related, leftIn(model.formatted(walk.formatted("xs")), "4:32"));
+        assertEquals(notReached, leftIn(model.formatted(
+                "List.length(xs) >= 2 && " + walk.formatted("xs")), "4:56"));
+        assertEquals(notReached, leftIn(model.formatted(walk.formatted("List.reverse(xs)")),
+                "4:32"));
+        Map<String, String> divided = leftIn(model.formatted(
+                "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50");
+        assertEquals(NOT_REACHED, divided.get("xs[*].p"), divided::toString);
+        assertFalse(divided.containsValue(RELATES), divided::toString);
+    }
+
+    /**
      * A total of {@code Int}s stops a run only where the exact total is past an {@code Int}, however
      * far a total on the way strays: a total of one value is that value, and the greatest
      * {@code Int}, one and minus one come to the greatest, so a run gets past either and the two
@@ -2464,7 +2496,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * A run whose end the rules put at a third is handed over from a hair below it, which no
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
-     * asked of it are all above a third, as anywhere. An end at a half is written as it is.
+     * asked of it are all above a third, as anywhere.
+     *
+     * <p>An end at a half is not taken as a run either, though nothing rounds it: a {@code Decimal}
+     * sum stops a run where its digits or scale have no room, which no region here says, so the run
+     * may stop working out {@code x + x} on a value {@code x} takes, and no value of {@code y} is
+     * shown to be got to.
      *
      * <p>The places named are the ones left unshown or related: {@code x} is neither, being parted
      * by lines at the ends of the run {@code y} takes.
@@ -2475,7 +2512,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("y", NOT_SHOWN),
                 left("x: Decimal, y: Y", declarations,
                         "if x + x + x >= 1m && x <= 1m then x == y.value else false", "4:53"));
-        assertEquals(Map.of("y", RELATES),
+        assertEquals(Map.of("y", NOT_REACHED),
                 left("x: Decimal, y: Y", declarations,
                         "if x + x >= 1m && x <= 1m then x == y.value else false", "4:49"));
     }

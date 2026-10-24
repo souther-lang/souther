@@ -107,6 +107,9 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("what an operator answers over the types of its two operands, and what"
                             + " it reads them as, as the elaborator types it",
                     "souther.compiler.check.ArithmeticCheck#of", Traversal.OPAQUE),
+            new Authority("what a part of a body may end a run for itself, and where it answers,"
+                            + " each from the owner of what the part is",
+                    "souther.compiler.check.WhatARunMayEndFor", Traversal.OPAQUE),
 
             // An owner all the same, walked through. It cannot stand as a boundary: it hands its
             // decision to whichever term it is about, so a stop here would leave the place that

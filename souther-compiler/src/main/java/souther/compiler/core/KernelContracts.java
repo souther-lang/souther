@@ -2,7 +2,7 @@ package souther.compiler.core;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -140,7 +140,7 @@ public final class KernelContracts {
     }
 
     /**
-     * Where a call of {@code kernel} answers ({@link Completion}), apart from a function it is
+     * Where a call of {@code kernel} answers ({@link GetsPast}), apart from a function it is
      * handed.
      *
      * <p>Said of the kernels whose one reason, {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}, is the
@@ -151,17 +151,17 @@ public final class KernelContracts {
      * answers always where {@link #abortsOf} says it ends no run, and is not known here where it
      * says it may.
      */
-    public static Completion completionOf(Kernel kernel) {
+    public static GetsPast completionOf(Kernel kernel) {
         return switch (kernel) {
-            case SET_UNION -> fits(new Completion.AnswerSize.SumOf(List.of(0, 1), 0));
-            case SET_INSERT -> fits(new Completion.AnswerSize.SumOf(List.of(1), 1));
-            case MAP_INSERT -> fits(new Completion.AnswerSize.SumOf(List.of(2), 1));
-            default -> abortsOf(kernel).isEmpty() ? new Completion.Always()
-                    : new Completion.NotKnown();
+            case SET_UNION -> fits(new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0));
+            case SET_INSERT -> fits(new GetsPast.AnswerSize.SumOf(List.of(1), 1));
+            case MAP_INSERT -> fits(new GetsPast.AnswerSize.SumOf(List.of(2), 1));
+            default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
+                    : new GetsPast.NotKnown();
         };
     }
 
-    private static Completion fits(Completion.AnswerSize answer) {
-        return new Completion.WhereTheAnswerFits(answer);
+    private static GetsPast fits(GetsPast.AnswerSize answer) {
+        return new GetsPast.WhereTheAnswerFits(answer);
     }
 }

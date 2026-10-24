@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
 
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AddsWhatItDoesNotHold;
 import souther.compiler.check.AffineForms;
@@ -1006,7 +1006,20 @@ final class Pullback {
     static OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
                                                    InputReading read) {
         return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
-                null);
+                null, null);
+    }
+
+    /**
+     * The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}: a
+     * comparison a closure the body applies holds, which is the relation's own working out and
+     * is read as the relation reads it, at the application it is reached in as at every one
+     * before.
+     */
+    static OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                             InputReads reads,
+                                                             InputReading read) {
+        return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
+                null, leftOut);
     }
 
     /**
@@ -1019,7 +1032,7 @@ final class Pullback {
      * reader that takes a run to get past them everywhere is wrong about the rows that arrive.
      */
     private OperatorsAnswer whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
-                                                            Core.Read apart) {
+                                                            Core.Read apart, Core leftOut) {
         Set<BindingId> ofTheRelation = apart == null ? Set.of()
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
@@ -1027,6 +1040,7 @@ final class Pullback {
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
                 operated.within = body;
+                operated.leftOut = leftOut == null ? null : Core.withoutStanding(leftOut);
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated;
@@ -1093,10 +1107,13 @@ final class Pullback {
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
+        if (e == operated.leftOut) {
+            return;
+        }
         operated.readsAt.putIfAbsent(e, reads);
-        Completion completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
-                && !(completion instanceof Completion.Always)) {
+                && !(completion instanceof GetsPast.Always)) {
             operated.beginGroup();
             boolean[] hasOperands = {false};
             boolean elsewhereBefore = operated.unsaidElsewhere;
@@ -1111,7 +1128,7 @@ final class Pullback {
             if (!hasOperands[0]) {
                 operated.leaveUnsaidOverUnreadOperands();
             }
-            if (operated.within != null && !(completion instanceof Completion.NotKnown)) {
+            if (operated.within != null && !(completion instanceof GetsPast.NotKnown)) {
                 operated.obligations.add(new StopObligation(e, operated.unsaidAt,
                         operated.unsaidElsewhere != elsewhereBefore, completion, operated.within,
                         operated.readsAt));
@@ -5614,6 +5631,7 @@ final class Pullback {
         private final List<StopObligation> obligations = new ArrayList<>();
         private final Map<Core, InputReads> readsAt = new IdentityHashMap<>();
         private Core within;
+        private Core leftOut;
 
         Operators() {
             unsaidGroups.add(unsaidAt);
@@ -5690,8 +5708,8 @@ final class Pullback {
 
     /**
      * An operator a run may stop at, whose owner says where it answers: wherever the collection
-     * it answers fits ({@link Completion.WhereTheAnswerFits}), or the total it answers
-     * ({@link Completion.WhereTheTotalFits}). Not a place it ties, since what is owed of it is a
+     * it answers fits ({@link GetsPast.WhereTheAnswerFits}), or the total it answers
+     * ({@link GetsPast.WhereTheTotalFits}). Not a place it ties, since what is owed of it is a
      * proof that some run gets past it, which a reader asks ({@link ContainerSizesUnderAWitness})
      * and drops it on.
      *
@@ -5702,7 +5720,7 @@ final class Pullback {
         private final Core operation;
         private final Set<TermPath> places;
         private final boolean onWhatNoPlaceHolds;
-        private final Completion completion;
+        private final GetsPast completion;
         private final Core within;
         private final Core startedIn;
         private final Map<Core, InputReads> readsAt;
@@ -5718,15 +5736,15 @@ final class Pullback {
          * @param readsAt            how names read at each node of {@code within} are read there
          */
         StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
-                       Completion completion, Core within, Map<Core, InputReads> readsAt) {
+                       GetsPast completion, Core within, Map<Core, InputReads> readsAt) {
             this(operation, places, onWhatNoPlaceHolds, completion, within, within, readsAt);
         }
 
         private StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
-                               Completion completion, Core within, Core startedIn,
+                               GetsPast completion, Core within, Core startedIn,
                                Map<Core, InputReads> readsAt) {
-            if (completion instanceof Completion.Always
-                    || completion instanceof Completion.NotKnown) {
+            if (completion instanceof GetsPast.Always
+                    || completion instanceof GetsPast.NotKnown) {
                 throw new IllegalArgumentException("an operator is owed where it answers somewhere"
                         + " and only somewhere");
             }
@@ -5751,7 +5769,7 @@ final class Pullback {
             return onWhatNoPlaceHolds;
         }
 
-        Completion completion() {
+        GetsPast completion() {
             return completion;
         }
 
@@ -7361,7 +7379,8 @@ final class Pullback {
         inside.askingWhereAStepAnswers = true;
         Core.Block step = at.usesOfTheClosureTaking(name.binding()).applications().getFirst()
                 .step();
-        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name).answers().isEmpty()
+        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name, null).answers()
+                .isEmpty()
                 ? handed : Optional.empty();
     }
 

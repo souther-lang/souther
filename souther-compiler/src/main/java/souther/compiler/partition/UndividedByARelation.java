@@ -601,7 +601,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
-                    each.unsaid(), each.owed());
+                    each.unsaid(), each.owed(), each.before());
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
                             remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
@@ -1267,13 +1267,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * hold — or an operator owed a proof that some run gets past it, reading such a place, that no
      * witness is shown to get past ({@link #answersOnAWitness}). A side whose places are not known
      * is taken to read any.
+     *
+     * <p>Or where what the applications of a closure before the one the relation is reached in
+     * work out may, unless a witness is shown to make none ({@link #noApplicationBefore}).
      */
     private boolean mayStopOnWhatItReads(DemandReading.Answered past, InputReading read,
                                          SearchRegion region, List<OnAWay> conditions) {
         if (past.unsaid()) {
             return true;
         }
-        if (past.tied().isEmpty() && past.owed().isEmpty()) {
+        if (past.tied().isEmpty() && past.owed().isEmpty() && past.before().isEmpty()) {
             return false;
         }
         List<TermPath> reads = new ArrayList<>();
@@ -1299,7 +1302,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return true;
             }
         }
+        for (DemandReading.PriorApplications prior : past.before()) {
+            if (!noApplicationBefore(prior, reads, read, region, conditions)
+                    && mayStopOnWhatItReads(prior.workedOut(), read, region, conditions)) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    /**
+     * Whether a witness of every value this relation shows of its places makes no application of
+     * a closure before the one the relation is reached in ({@code prior}): one where every
+     * container walked holds the one element the relation is reached at. Every call walking one
+     * applies its closure from the first element, so the one is the first.
+     */
+    private boolean noApplicationBefore(DemandReading.PriorApplications prior,
+                                        List<TermPath> reads, InputReading read,
+                                        SearchRegion region, List<OnAWay> conditions) {
+        if (prior.walked().isEmpty()) {
+            return false;
+        }
+        for (DemandReading.PriorApplications.Walked each : prior.walked().get()) {
+            if (!(each.reads().pathOf(each.container(), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath collection))
+                    || !fewestOnAWitness(collection, reads, read, region, conditions,
+                            BigInteger.ONE).equals(Optional.of(BigInteger.ONE))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether some place of {@code places} overlaps one of {@code reads}. */
@@ -1338,16 +1370,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             instanceof PathResolution.At(TermPath path))) {
                         return Optional.empty();
                     }
-                    return sizes.computeIfAbsent(path, collection ->
-                            fewestOnAWitness(collection, reads, read, region, conditions));
+                    return sizes.computeIfAbsent(path, collection -> fewestOnAWitness(collection,
+                            reads, read, region, conditions, BigInteger.ZERO));
                 });
     }
 
     /**
      * How many elements the collection at {@code collection} holds on a witness
      * ({@link #answersOnAWitness}), or nothing where no witness is shown with so few: the fewest
-     * the rules leave it, and no fewer than one for each place of the relation inside it, and one
-     * more in the outermost collection holding a place whose values the relation holds against
+     * the rules leave it, and no fewer than one where a place of the relation is inside it — the
+     * places it reads apart from one another are all of one element, the one it is read at — and
+     * one more in the outermost collection holding a place whose values the relation holds against
      * each other — the two values stand in two of its elements, and every collection inside each
      * holds one.
      *
@@ -1355,13 +1388,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * so many at least: a call applying a closure to its elements has one where the closure is
      * applied. Anything else the way asks of the collection, or of what is in it, leaves no row
      * cut down to so few shown to be one of the way.
+     *
+     * <p>And no fewer than {@code atLeast}, which the reader asking needs. Where that is one, a
+     * witness of one element is asked for, and what the way asks of the positions inside it is
+     * asked of that one element, the one the relation is read at: the region the relation is read
+     * over holds it there already.
      */
     private Optional<BigInteger> fewestOnAWitness(TermPath collection, List<TermPath> reads,
                                                   InputReading read, SearchRegion region,
-                                                  List<OnAWay> conditions) {
-        BigInteger asked = BigInteger.ZERO;
+                                                  List<OnAWay> conditions, BigInteger atLeast) {
+        BigInteger asked = atLeast;
+        boolean ofTheOneElement = atLeast.equals(BigInteger.ONE);
         for (OnAWay each : conditions) {
             if (each.positions().stream().noneMatch(at -> overlap(at, collection))) {
+                continue;
+            }
+            if (ofTheOneElement && each.positions().stream()
+                    .allMatch(at -> !at.equals(collection) && at.isAtOrUnder(collection))) {
                 continue;
             }
             Optional<BigInteger> least = holdsAtLeast(each, collection, read);
@@ -1399,7 +1442,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return Optional.empty();
             }
             if (at.isAtOrUnder(collection)) {
-                inside++;
+                inside = 1;
             }
         }
         if (amongThemselves.stream().anyMatch(each -> each.path().isAtOrUnder(collection)

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -23,7 +23,7 @@ import java.util.function.Function;
 
 /**
  * Whether an operator that answers where the collection it answers fits
- * ({@link Completion.WhereTheAnswerFits}) answers on a run of a witness: one whose input
+ * ({@link GetsPast.WhereTheAnswerFits}) answers on a run of a witness: one whose input
  * collections hold no more than its caller says they do.
  *
  * <p>How many elements each collection the run holds on the way to the operator holds at most,
@@ -70,19 +70,19 @@ public final class ContainerSizesUnderAWitness {
      *                   nothing where the node reads no collection of the input or nothing bounds
      *                   it
      */
-    public static boolean answersOn(Core within, Core operator, Completion completion,
+    public static boolean answersOn(Core within, Core operator, GetsPast completion,
                                     Function<Core, Optional<BigInteger>> ofTheInput) {
         ContainerSizesUnderAWitness reading = new ContainerSizesUnderAWitness(within, ofTheInput);
         return switch (completion) {
-            case Completion.Always _ -> true;
-            case Completion.WhereTheAnswerFits(Completion.AnswerSize answer) ->
+            case GetsPast.Always _ -> true;
+            case GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize answer) ->
                     reading.answer(operator, answer)
-                            .map(most -> most.compareTo(Completion.MOST_ELEMENTS) <= 0)
+                            .map(most -> most.compareTo(GetsPast.MOST_ELEMENTS) <= 0)
                             .orElse(false);
             // A total of no {@code Int} or of one is nought or that one, which is an {@code Int};
             // of two or more it turns on the values, which are read only where they are written
             // out, and added up exactly.
-            case Completion.WhereTheTotalFits(int at) -> {
+            case GetsPast.WhereTheTotalFits(int at) -> {
                 List<Core> operands = operandsOf(operator);
                 if (operands == null || at >= operands.size()) {
                     yield false;
@@ -93,7 +93,7 @@ public final class ContainerSizesUnderAWitness {
                         : reading.most(operands.get(at))
                                 .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false);
             }
-            case Completion.NotKnown _ -> false;
+            case GetsPast.NotKnown _ -> false;
         };
     }
 
@@ -147,13 +147,13 @@ public final class ContainerSizesUnderAWitness {
     }
 
     /** The most the answer of {@code node} holds, as {@code size} says of what it is handed. */
-    private Optional<BigInteger> answer(Core node, Completion.AnswerSize size) {
+    private Optional<BigInteger> answer(Core node, GetsPast.AnswerSize size) {
         List<Core> operands = operandsOf(node);
         if (operands == null) {
             return Optional.empty();
         }
         return switch (size) {
-            case Completion.AnswerSize.SumOf(List<Integer> at, int more) -> {
+            case GetsPast.AnswerSize.SumOf(List<Integer> at, int more) -> {
                 BigInteger total = BigInteger.valueOf(more);
                 for (int each : at) {
                     Optional<BigInteger> one = each < operands.size()
@@ -165,7 +165,7 @@ public final class ContainerSizesUnderAWitness {
                 }
                 yield Optional.of(total);
             }
-            case Completion.AnswerSize.PiecesOf(int source, int function) -> {
+            case GetsPast.AnswerSize.PiecesOf(int source, int function) -> {
                 if (source >= operands.size() || function >= operands.size()
                         || !(Core.withoutStanding(operands.get(function))
                                 instanceof Core.Block made)) {
@@ -198,7 +198,7 @@ public final class ContainerSizesUnderAWitness {
     }
 
     private Optional<BigInteger> mostOf(Core node) {
-        switch (node) {
+        switch (Core.withoutStanding(node)) {
             case Core.ListLit written -> {
                 return Optional.of(BigInteger.valueOf(written.elements().size()));
             }
@@ -229,7 +229,7 @@ public final class ContainerSizesUnderAWitness {
                     return carried(walk, false);
                 }
                 if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof Completion.WhereTheAnswerFits(Completion.AnswerSize size)) {
+                        instanceof GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize size)) {
                     return answer(node, size);
                 }
                 return assembledOrStated(node);
@@ -349,8 +349,8 @@ public final class ContainerSizesUnderAWitness {
             }
             default -> {
                 if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof Completion.WhereTheAnswerFits(
-                                Completion.AnswerSize.SumOf(List<Integer> at, int more)))) {
+                        instanceof GetsPast.WhereTheAnswerFits(
+                                GetsPast.AnswerSize.SumOf(List<Integer> at, int more)))) {
                     return Optional.empty();
                 }
                 AnOperationApplied applied = AnOperationApplied.of(node);

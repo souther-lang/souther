@@ -4,7 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
@@ -62,11 +62,11 @@ final class LibraryEndings {
 
     private final Map<ValueName.Stdlib.Operation, Endings> ofItsOwn;
 
-    private final Map<ValueName.Stdlib.Operation, Completion> completions;
+    private final Map<ValueName.Stdlib.Operation, GetsPast> completions;
 
     private LibraryEndings(Map<ValueName.Stdlib.Operation, Endings> ending,
                            Map<ValueName.Stdlib.Operation, Endings> ofItsOwn,
-                           Map<ValueName.Stdlib.Operation, Completion> completions) {
+                           Map<ValueName.Stdlib.Operation, GetsPast> completions) {
         this.ending = Map.copyOf(ending);
         this.ofItsOwn = Map.copyOf(ofItsOwn);
         this.completions = Map.copyOf(completions);
@@ -88,10 +88,10 @@ final class LibraryEndings {
         Reading apart = new Reading(library, facts);
         library.entries().keySet().forEach(apart::of);
         library.rewrites().keySet().forEach(apart::of);
-        Map<ValueName.Stdlib.Operation, Completion> completions = new HashMap<>();
+        Map<ValueName.Stdlib.Operation, GetsPast> completions = new HashMap<>();
         Map<ValueName.Stdlib.Operation, Endings> own = new HashMap<>(apart.settled);
         own.forEach((operation, ends) -> completions.put(operation,
-                apart.walksNoFurtherThanItsList(operation) ? new Completion.Always()
+                apart.walksNoFurtherThanItsList(operation) ? new GetsPast.Always()
                         : completionOf(library, facts, operation, ends, apart)));
         return new LibraryEndings(whole.settled, apart.settled, completions);
     }
@@ -109,15 +109,15 @@ final class LibraryEndings {
      * parameters, answers where the most any of those may hold fits
      * ({@link Reading#answerOfTheBody}). Nothing else is said here.
      */
-    private static Completion completionOf(Stdlib library, BoundOperationFacts facts,
+    private static GetsPast completionOf(Stdlib library, BoundOperationFacts facts,
                                            ValueName.Stdlib.Operation operation, Endings own,
                                            Reading apart) {
         if (own.endsNone()) {
-            return new Completion.Always();
+            return new GetsPast.Always();
         }
         BoundOperationFacts.Assembled assembled = facts.assembles(operation);
         if (assembled != null && assembled.piece() == PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
-            return new Completion.WhereTheAnswerFits(new Completion.AnswerSize.PiecesOf(
+            return new GetsPast.WhereTheAnswerFits(new GetsPast.AnswerSize.PiecesOf(
                     assembled.source().position(), assembled.closure().position()));
         }
         Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
@@ -127,13 +127,13 @@ final class LibraryEndings {
         Hir.FnDef declaration = library.helpers().get(operation);
         Stdlib.Entry entry = library.entry(operation);
         if (declaration != null && entry != null) {
-            Completion.AnswerSize.SumOf answer = apart.answerOfTheBody(declaration,
+            GetsPast.AnswerSize.SumOf answer = apart.answerOfTheBody(declaration,
                     declaration.writtenBody(), entry.signature().result());
             if (answer != null) {
-                return new Completion.WhereTheAnswerFits(answer);
+                return new GetsPast.WhereTheAnswerFits(answer);
             }
         }
-        return new Completion.NotKnown();
+        return new GetsPast.NotKnown();
     }
 
     /** Which of {@code declaration}'s parameters {@code e} reads, as it stands, or -1. */
@@ -156,8 +156,8 @@ final class LibraryEndings {
      *
      * @throws IllegalArgumentException where the library has no such operation
      */
-    Completion completionApartFromWhatItIsHanded(ValueName.Stdlib.Operation operation) {
-        Completion found = completions.get(operation);
+    GetsPast completionApartFromWhatItIsHanded(ValueName.Stdlib.Operation operation) {
+        GetsPast found = completions.get(operation);
         if (found == null) {
             throw new IllegalArgumentException(
                     "`" + operation.qualified() + "` is no operation of the library read");
@@ -302,7 +302,7 @@ final class LibraryEndings {
          * starts from a collection holding nothing, or from a tuple of such collections and of
          * whole numbers written out; and its step answers what it carries with each collection
          * as it was or with at most one element put into it, by an operation that answers where
-         * the collection fits ({@link Completion.WhereTheAnswerFits}), and each number as it was
+         * the collection fits ({@link GetsPast.WhereTheAnswerFits}), and each number as it was
          * or with a number written out added to it. Nothing else in the step ends a run.
          *
          * <p>Then by induction on the elements walked, after {@code k} of them each collection
@@ -540,8 +540,8 @@ final class LibraryEndings {
             }
             Stdlib.Intrinsic intrinsic = this.library.intrinsicOf(library.denotes());
             if (intrinsic == null || !(KernelContracts.completionOf(intrinsic.kernel())
-                    instanceof Completion.WhereTheAnswerFits(
-                            Completion.AnswerSize.SumOf(List<Integer> operands, int more)))
+                    instanceof GetsPast.WhereTheAnswerFits(
+                            GetsPast.AnswerSize.SumOf(List<Integer> operands, int more)))
                     || operands.size() != 1 || more > 1
                     || operands.getFirst() >= apply.args().size()
                     || !isPart(apply.args().get(operands.getFirst()), at, parts)) {
@@ -564,7 +564,7 @@ final class LibraryEndings {
          * nothing else on the way ending a run. The most of all the ways is what any of them
          * holds at most. Null where it is not that.
          */
-        Completion.AnswerSize.SumOf answerOfTheBody(Hir.FnDef declaration, Hir.Expr e,
+        GetsPast.AnswerSize.SumOf answerOfTheBody(Hir.FnDef declaration, Hir.Expr e,
                                                     Type answer) {
             switch (e) {
                 case Hir.LetIn let -> {
@@ -581,9 +581,9 @@ final class LibraryEndings {
                     if (!of(match.scrutinee()).endsNone() || match.cases().isEmpty()) {
                         return null;
                     }
-                    Completion.AnswerSize.SumOf out = null;
+                    GetsPast.AnswerSize.SumOf out = null;
                     for (Hir.Case arm : match.cases()) {
-                        Completion.AnswerSize.SumOf one =
+                        GetsPast.AnswerSize.SumOf one =
                                 answerOfTheBody(declaration, arm.body(), answer);
                         if (one == null) {
                             return null;
@@ -614,11 +614,11 @@ final class LibraryEndings {
          * parameters: each operand it counts is a parameter as it stands, and every other operand
          * ends no run. Null where it is not that.
          */
-        private Completion.AnswerSize.SumOf ofTheParameters(Hir.FnDef declaration,
-                                                            Completion completion,
+        private GetsPast.AnswerSize.SumOf ofTheParameters(Hir.FnDef declaration,
+                                                            GetsPast completion,
                                                             List<Hir.Expr> operands) {
-            if (!(completion instanceof Completion.WhereTheAnswerFits(
-                    Completion.AnswerSize.SumOf(List<Integer> counted, int more)))) {
+            if (!(completion instanceof GetsPast.WhereTheAnswerFits(
+                    GetsPast.AnswerSize.SumOf(List<Integer> counted, int more)))) {
                 return null;
             }
             List<Integer> parameters = new ArrayList<>();
@@ -633,18 +633,18 @@ final class LibraryEndings {
                     return null;
                 }
             }
-            return new Completion.AnswerSize.SumOf(parameters, more);
+            return new GetsPast.AnswerSize.SumOf(parameters, more);
         }
 
         /** What holds as many as either of {@code one} and {@code other} at most. */
-        private static Completion.AnswerSize.SumOf either(Completion.AnswerSize.SumOf one,
-                                                          Completion.AnswerSize.SumOf other) {
+        private static GetsPast.AnswerSize.SumOf either(GetsPast.AnswerSize.SumOf one,
+                                                          GetsPast.AnswerSize.SumOf other) {
             if (one == null || other == null) {
                 return null;
             }
             Set<Integer> operands = new LinkedHashSet<>(one.operands());
             operands.addAll(other.operands());
-            return new Completion.AnswerSize.SumOf(List.copyOf(operands),
+            return new GetsPast.AnswerSize.SumOf(List.copyOf(operands),
                     Math.max(one.more(), other.more()));
         }
 

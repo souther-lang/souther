@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.runtime.Capacity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,7 +37,7 @@ class TheCollectionBoundTheSpecificationStatesIsTheOneTheRuntimeHoldsTest {
      *  because a reasoning about a declaration names no backend's package. */
     @Test
     void theCompilerReasonsWithTheBoundTheRuntimeHolds() {
-        assertEquals(BigInteger.valueOf(Capacity.MOST_ELEMENTS), Completion.MOST_ELEMENTS);
+        assertEquals(BigInteger.valueOf(Capacity.MOST_ELEMENTS), GetsPast.MOST_ELEMENTS);
     }
 
     /** The number is stated in the paragraph once: a second, different one would be a bound the

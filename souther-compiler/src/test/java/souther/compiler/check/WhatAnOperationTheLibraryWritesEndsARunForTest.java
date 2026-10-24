@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.stdlib.Stdlib;
@@ -168,14 +168,14 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         for (String each : new String[] {"foldFrom", "map", "filter"}) {
             ValueName.Stdlib.Operation operation = ValueName.Stdlib.operation("List", each);
             assertEquals(NONE, endings.apartFromWhatItIsHanded(operation), each);
-            assertEquals(new Completion.Always(),
+            assertEquals(new GetsPast.Always(),
                     endings.completionApartFromWhatItIsHanded(operation), each);
             assertEquals(new Endings.NotKnown(), endings.of(operation), each);
         }
         ValueName.Stdlib.Operation flatMap = ValueName.Stdlib.operation("List", "flatMap");
         assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
                 endings.apartFromWhatItIsHanded(flatMap));
-        assertEquals(new Completion.WhereTheAnswerFits(new Completion.AnswerSize.PiecesOf(1, 0)),
+        assertEquals(new GetsPast.WhereTheAnswerFits(new GetsPast.AnswerSize.PiecesOf(1, 0)),
                 endings.completionApartFromWhatItIsHanded(flatMap));
     }
 
@@ -183,11 +183,11 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
      *  body is that join of two of its parameters, in the order the body names them. */
     @Test
     void anOperationThatIsAJoinOfItsParametersAnswersWhereTheyFitTogether() {
-        assertEquals(new Completion.WhereTheAnswerFits(
-                        new Completion.AnswerSize.SumOf(List.of(0, 1), 0)),
+        assertEquals(new GetsPast.WhereTheAnswerFits(
+                        new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0)),
                 LibraryEndings.of(DefaultStdlib.get()).completionApartFromWhatItIsHanded(APPEND));
-        assertEquals(new Completion.WhereTheAnswerFits(
-                        new Completion.AnswerSize.SumOf(List.of(1, 0), 0)),
+        assertEquals(new GetsPast.WhereTheAnswerFits(
+                        new GetsPast.AnswerSize.SumOf(List.of(1, 0), 0)),
                 LibraryEndings.of(rewritten(APPEND_BODY, "= b ++ a"))
                         .completionApartFromWhatItIsHanded(APPEND));
     }
@@ -205,7 +205,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
 
         assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
                 endings.apartFromWhatItIsHanded(filter));
-        assertEquals(new Completion.NotKnown(), endings.completionApartFromWhatItIsHanded(filter));
+        assertEquals(new GetsPast.NotKnown(), endings.completionApartFromWhatItIsHanded(filter));
     }
 
     /**
@@ -218,7 +218,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     void aWalkThatPutsInOneForEachElementAnswersAlways() {
         LibraryEndings endings = LibraryEndings.of(DefaultStdlib.get());
         for (String each : new String[] {"take", "drop", "indexBy"}) {
-            assertEquals(new Completion.Always(), endings.completionApartFromWhatItIsHanded(
+            assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
                     ValueName.Stdlib.operation("List", each)), each);
         }
     }
@@ -229,12 +229,12 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     void aWalkThatPutsInMoreThanOneIsNotKnownToAnswer() {
         LibraryEndings twice = LibraryEndings.of(rewritten("Map.insert(key(x), x, acc)",
                 "Map.insert(key(x), x, Map.insert(key(x), x, acc))"));
-        assertEquals(new Completion.NotKnown(), twice.completionApartFromWhatItIsHanded(
+        assertEquals(new GetsPast.NotKnown(), twice.completionApartFromWhatItIsHanded(
                 ValueName.Stdlib.operation("List", "indexBy")));
         LibraryEndings doubled = LibraryEndings.of(rewritten(
                 "if i < n then (next, ys ++ [x]) else (next, ys)",
                 "if i < n then (next, ys ++ ys) else (next, ys)"));
-        assertEquals(new Completion.NotKnown(), doubled.completionApartFromWhatItIsHanded(
+        assertEquals(new GetsPast.NotKnown(), doubled.completionApartFromWhatItIsHanded(
                 ValueName.Stdlib.operation("List", "take")));
     }
 

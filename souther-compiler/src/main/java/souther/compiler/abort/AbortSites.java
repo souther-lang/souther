@@ -386,7 +386,7 @@ public final class AbortSites {
     }
 
     /**
-     * Where {@code op}, answering a value of {@code answer}, answers ({@link Completion}).
+     * Where {@code op}, answering a value of {@code answer}, answers ({@link GetsPast}).
      *
      * <p>{@code ++} of two lists puts the elements of the second after those of the first, so it
      * answers wherever the two together hold no more than a list holds ({@code Capacity}). Of two
@@ -394,15 +394,15 @@ public final class AbortSites {
      * the two says ({@code Strings.append}). An operator that ends no run whatever its types
      * answers always; any other is not known here.
      */
-    public static Completion completionOfAnOperator(BinOp op, Type answer) {
+    public static GetsPast completionOfAnOperator(BinOp op, Type answer) {
         return switch (op) {
             case BinOp.CONCAT -> answer instanceof Type.ListOf
-                    ? new Completion.WhereTheAnswerFits(
-                            new Completion.AnswerSize.SumOf(List.of(0, 1), 0))
-                    : new Completion.NotKnown();
+                    ? new GetsPast.WhereTheAnswerFits(
+                            new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0))
+                    : new GetsPast.NotKnown();
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND,
-                 BinOp.OR -> new Completion.Always();
-            case BinOp.ADD, BinOp.SUB, BinOp.MUL, BinOp.DIV -> new Completion.NotKnown();
+                 BinOp.OR -> new GetsPast.Always();
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL, BinOp.DIV -> new GetsPast.NotKnown();
         };
     }
 

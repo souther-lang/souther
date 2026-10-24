@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.abort.Completion;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -68,8 +68,8 @@ class ContainerSizesUnderAWitnessTest {
 
     private static boolean answers(Core body, Core union,
                                    Function<Core, Optional<BigInteger>> witness) {
-        Completion completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(union);
-        return completion instanceof Completion.WhereTheAnswerFits fits
+        GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(union);
+        return completion instanceof GetsPast.WhereTheAnswerFits fits
                 && ContainerSizesUnderAWitness.answersOn(body, union, fits, witness);
     }
 

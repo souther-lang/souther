@@ -17,10 +17,10 @@ import java.util.Objects;
  * <p>Said only where the operation's own account of how it builds its answer says it. A site this
  * does not know of is {@link NotKnown}, which is not that it ends a run.
  */
-public sealed interface Completion {
+public sealed interface GetsPast {
 
     /** It answers whatever it is handed. */
-    record Always() implements Completion {}
+    record Always() implements GetsPast {}
 
     /**
      * It answers wherever the collection it answers holds no more elements than a collection holds
@@ -30,7 +30,7 @@ public sealed interface Completion {
      *
      * @param answer how many elements the answer holds at most, of what the site is handed
      */
-    record WhereTheAnswerFits(AnswerSize answer) implements Completion {
+    record WhereTheAnswerFits(AnswerSize answer) implements GetsPast {
 
         public WhereTheAnswerFits {
             Objects.requireNonNull(answer, "an answer fits by some count");
@@ -45,10 +45,10 @@ public sealed interface Completion {
      *
      * @param operand which of the site's operands is the list, counted from nought
      */
-    record WhereTheTotalFits(int operand) implements Completion {}
+    record WhereTheTotalFits(int operand) implements GetsPast {}
 
     /** Nothing here says where it answers. */
-    record NotKnown() implements Completion {}
+    record NotKnown() implements GetsPast {}
 
     /**
      * How many elements a {@code List}, a {@code Map} or a {@code Set} holds at most (spec

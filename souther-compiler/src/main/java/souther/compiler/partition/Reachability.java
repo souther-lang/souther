@@ -294,19 +294,22 @@ public sealed interface Reachability {
      * @param owed            the operators that run may stop at whose owner says where they
      *                        answer, each owed a proof some run gets past it
      *                        ({@link DemandReading.Answered#owed})
+     * @param before          what the applications of a closure before the one the border is
+     *                        reached in work out ({@link DemandReading.Answered#before})
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
                     Optional<List<TakenConstraint>> narrowedBy,
                     List<TakenConstraint> gotPast, List<Set<TermPath>> tied, boolean unsaid,
-                    List<Pullback.StopObligation> owed)
+                    List<Pullback.StopObligation> owed,
+                    List<DemandReading.PriorApplications> before)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
                     || declined == null || narrowedBy == null || gotPast == null
-                    || tied == null || owed == null) {
+                    || tied == null || owed == null || before == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
@@ -316,6 +319,7 @@ public sealed interface Reachability {
             gotPast = List.copyOf(gotPast);
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
+            before = List.copyOf(before);
         }
 
         /** A way a run has got past nothing on that a region says or that ties places. */
@@ -324,7 +328,7 @@ public sealed interface Reachability {
                         List<OnTheWay.Declined> declined,
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
-                    List.of(), List.of(), false, List.of());
+                    List.of(), List.of(), false, List.of(), List.of());
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -356,7 +360,7 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy, gotPast, tied, unsaid, owed);
+                    narrowedBy, gotPast, tied, unsaid, owed, before);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -434,15 +438,17 @@ public sealed interface Reachability {
             boolean unsaidNow = unsaid || answered.unsaid();
             List<Pullback.StopObligation> owedNow = new ArrayList<>(owed);
             owedNow.addAll(answered.owed());
+            List<DemandReading.PriorApplications> beforeNow = new ArrayList<>(before);
+            beforeNow.addAll(answered.before());
             // A region nothing moved is the one the way already had, which is asked nothing again.
             if (!narrowing.isEmpty() && narrowed.emptiness().isPresent()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
-                        declined, narrowedBy, gotPast, ties, unsaidNow, owedNow);
+                        declined, narrowedBy, gotPast, ties, unsaidNow, owedNow, beforeNow);
             }
             List<TakenConstraint> past = new ArrayList<>(gotPast);
             past.addAll(narrowing);
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, past, ties, unsaidNow, owedNow);
+                    by, past, ties, unsaidNow, owedNow, beforeNow);
         }
 
         /**

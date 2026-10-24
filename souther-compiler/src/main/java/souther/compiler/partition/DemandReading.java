@@ -8,6 +8,7 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
@@ -801,9 +802,12 @@ final class DemandReading {
      * @param owed      the operators the run may stop at whose owner says where they answer, each
      *                  owed a proof that some run gets past it ({@link Pullback.StopObligation}):
      *                  until a reader shows that, the places it reads are as tied as those above
+     * @param before    what the applications of a closure before the one a comparison is reached
+     *                  in work out, for each closure it is read in ({@link PriorApplications}):
+     *                  until a reader shows a run with none, as much the run's as the above
      */
     record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
-                    List<Pullback.StopObligation> owed) {
+                    List<Pullback.StopObligation> owed, List<PriorApplications> before) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
@@ -811,6 +815,13 @@ final class DemandReading {
             narrowing = List.copyOf(narrowing);
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
+            before = List.copyOf(before);
+        }
+
+        /** What a run asks of a row with no application before it. */
+        Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
+                 List<Pullback.StopObligation> owed) {
+            this(narrowing, tied, unsaid, owed, List.of());
         }
 
         /** What a run asks of a row with nothing owed beside it. */
@@ -818,16 +829,28 @@ final class DemandReading {
             this(narrowing, tied, unsaid, List.of());
         }
 
-        /** The places each of {@code tied} names, and each owed operator reads. */
+        /** The places each of {@code tied} names, and each owed operator reads — those the
+         *  applications before work out among them. */
         List<Set<TermPath>> tiedOrOwed() {
             List<Set<TermPath>> out = new ArrayList<>(tied);
             owed.forEach(each -> out.add(each.places()));
+            before.forEach(each -> out.addAll(each.workedOut().tiedOrOwed()));
             return out;
         }
 
-        /** Whether the run may stop on something no place names, unsaid or owed. */
+        /** Whether the run may stop on something no place names, unsaid or owed — here or in the
+         *  applications before. */
         boolean unsaidOrOwedOnWhatNoPlaceHolds() {
-            return unsaid || owed.stream().anyMatch(Pullback.StopObligation::onWhatNoPlaceHolds);
+            return unsaid || owed.stream().anyMatch(Pullback.StopObligation::onWhatNoPlaceHolds)
+                    || before.stream()
+                            .anyMatch(each -> each.workedOut().unsaidOrOwedOnWhatNoPlaceHolds());
+        }
+
+        /** This, with {@code prior} worked out by the applications before it. */
+        Answered after(PriorApplications prior) {
+            List<PriorApplications> all = new ArrayList<>(before);
+            all.add(prior);
+            return new Answered(narrowing, tied, unsaid, owed, all);
         }
 
         /**
@@ -905,8 +928,49 @@ final class DemandReading {
             places.addAll(other.tied);
             List<Pullback.StopObligation> both = new ArrayList<>(owed);
             both.addAll(other.owed);
-            return new Answered(narrows, places, unsaid || other.unsaid, both);
+            List<PriorApplications> priors = new ArrayList<>(before);
+            priors.addAll(other.before);
+            return new Answered(narrows, places, unsaid || other.unsaid, both, priors);
         }
+    }
+
+    /**
+     * What the applications of the closures a comparison stands in before the one it is reached in
+     * work out: each runs the closure's body whole, the comparison's own working out apart, and
+     * the call works out what it does between them.
+     *
+     * <p>A run whose every walked container holds one element makes none: its one application of
+     * each closure is the one the comparison is reached in. So what they work out is owed only of
+     * a run that holds more, and a reader showing a run of one owes nothing of it.
+     *
+     * <p>Equal only to itself, as an owed operator is.
+     *
+     * @param walked    what each call applying one of the closures walks, as the names stand
+     *                  there — or empty where some call is not shown to apply its closure to its
+     *                  elements one after another from the first, so that no run is shown to make
+     *                  none before
+     * @param workedOut what those applications work out
+     */
+    static final class PriorApplications {
+
+        private final Optional<List<Walked>> walked;
+        private final Answered workedOut;
+
+        PriorApplications(Optional<List<Walked>> walked, Answered workedOut) {
+            this.walked = walked.map(List::copyOf);
+            this.workedOut = workedOut;
+        }
+
+        Optional<List<Walked>> walked() {
+            return walked;
+        }
+
+        Answered workedOut() {
+            return workedOut;
+        }
+
+        /** A container a closure is applied over, with the names as they stand where it is. */
+        record Walked(Core container, InputReads reads) {}
     }
 
     /** Whether {@code constraint} is an ordering of one number that holds at the least
