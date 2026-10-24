@@ -155,17 +155,19 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/Shape$Sequence;Ljava/util/List;"
-                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/meaning/Quantity$TheValue;"
                             + "Lsouther/compiler/inputs/Quantities;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;"
+                            + "Lsouther/compiler/partition/CardinalityComposer$Standing;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
-                            + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/meaning/Quantity$TheValue;"
                             + "Ljava/util/List;ZZLjava/util/Set;)"
                             + "Lsouther/compiler/partition/CardinalityComposer$UnderEachValue;",
                     "stops listing the groups of elements under one value at the values an element"
@@ -282,11 +284,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;I)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "has no room for a grouping of the leaves past as many elements as a row"
-                            + " carries, and hands the figure over in the shortfall it comes"
-                            + " back with"),
+                            + " carries, nor for more rows than it is given room for, and hands"
+                            + " the figures over in the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.NestedContainersAddingUp#holdingThe("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;I)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "has no room for a grouping of the elements past as many elements as a row"
+                            + " carries, nor for more rows than it is given room for, and hands"
+                            + " the figures over in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"

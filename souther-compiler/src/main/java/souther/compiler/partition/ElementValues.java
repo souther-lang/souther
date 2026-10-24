@@ -97,6 +97,53 @@ final class ElementValues {
         return aParameter ? row : new Alone(container, row);
     }
 
+    /**
+     * {@code holding}, a row holding the container, read as the one element of the container at
+     * {@code outer} holding it: what is read of every element of that container is read of this
+     * one, and of the container inside it, which is all of them there are.
+     *
+     * <p>For the elements of the containers inside the elements of {@code outer}, every one of them
+     * put end to end, chosen as one container of them: so many elements in one container, read
+     * across all of them, are what they are across any containers they are shared out over.
+     */
+    static BorderQuantity.Observation asTheOneElementOf(TermPath outer,
+                                                        BorderQuantity.Observation holding) {
+        return new TheOneElementOf(outer, holding);
+    }
+
+    /** {@link #asTheOneElementOf}. */
+    private record TheOneElementOf(TermPath outer, BorderQuantity.Observation within)
+            implements BorderQuantity.Observation {
+
+        @Override
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            return within.at(path);
+        }
+
+        @Override
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            return within.everyValueAt(path);
+        }
+
+        /** This one, as the one element of the outer container; the rest as the row holds, each
+         *  read the same way. */
+        @Override
+        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
+            if (of.equals(outer)) {
+                return WalkResult.reached(List.of(this));
+            }
+            return switch (within.eachElementOf(of)) {
+                case WalkResult.CouldNotWalk<List<BorderQuantity.Observation>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BorderQuantity.Observation> each) -> {
+                    List<BorderQuantity.Observation> out = new ArrayList<>();
+                    each.forEach(one -> out.add(new TheOneElementOf(outer, one)));
+                    yield WalkResult.reached(out);
+                }
+            };
+        }
+    }
+
     /** The element alone, holding {@code value}. */
     BorderQuantity.Observation alone(ObservedValue value) {
         return new Alone(container.element(), new StandingAtAPoint.DiscoveringRow(
