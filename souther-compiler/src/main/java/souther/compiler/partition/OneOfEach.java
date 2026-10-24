@@ -271,7 +271,7 @@ final class OneOfEach {
         if (stoppedBy == null && noMoreThan(handing.maximum(), open)) {
             handedOn = everyCombination(open);
         } else {
-            handedOn = fairly(vocabulary, groups, walkedGroups, base, left, handing.maximum());
+            handedOn = fairly(vocabulary, groups, walkedGroups, base, handing.maximum());
             stoppedBy = stoppedBy == null ? handing : stoppedBy;
         }
         List<Way<E>> ways = new ArrayList<>();
@@ -396,7 +396,7 @@ final class OneOfEach {
      */
     private static <E, S, R> List<Map<E, Integer>> fairly(
             Vocabulary<E, S, R> vocabulary, List<List<E>> groups, List<Group<E, S, R>> walked,
-            S base, int[] left, int most) {
+            S base, int most) {
         List<Integer> live = new ArrayList<>();
         for (int at = 0; at < walked.size(); at++) {
             if (!walked.get(at).open.isEmpty()) {
@@ -404,7 +404,7 @@ final class OneOfEach {
             }
         }
         List<Map<E, Integer>> out = new ArrayList<>();
-        Map<E, Integer> firsts = together(walked, live, -1, null);
+        Map<E, Integer> firsts = firstsOf(walked, live);
         out.add(firsts);
         Map<E, Set<Integer>> covered = new IdentityHashMap<>();
         noteCovered(covered, firsts);
@@ -448,6 +448,16 @@ final class OneOfEach {
             if (!more) {
                 break;
             }
+        }
+        return out;
+    }
+
+    /** The first way of every group in {@code live}. */
+    private static <E, S, R> Map<E, Integer> firstsOf(List<Group<E, S, R>> walked,
+                                                      List<Integer> live) {
+        Map<E, Integer> out = new IdentityHashMap<>();
+        for (int at : live) {
+            out.putAll(walked.get(at).open.getFirst());
         }
         return out;
     }
