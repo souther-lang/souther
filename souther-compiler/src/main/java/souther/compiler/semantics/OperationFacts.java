@@ -219,6 +219,10 @@ public final class OperationFacts {
             // of the number at the step's edge.
             about("Decimal", "toInt", roundsToAWholeNumber(at(0), at(1))),
             about("Rational", "toInt", roundsToAWholeNumber(at(0), at(1))),
+            // A rounding at a scale is the same rounding of the number taken in steps of ten to
+            // the minus that scale, and answers a decimal, whichever number it rounds.
+            about("Decimal", "round", roundsToAStep(at(0), at(1), at(2))),
+            about("Rational", "toDecimal", roundsToAStep(at(0), at(1), at(2))),
 
             // A comparison answers a sign and answers it as one of three numbers. That it is one of
             // three is not what {@code StatesTheOrderOfItsArguments} says: that one says which
@@ -1469,7 +1473,12 @@ public final class OperationFacts {
     }
 
     private static OperationFact roundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) {
-        return new OperationFact.RoundsToAWholeNumber(mode, value);
+        return new OperationFact.RoundsToAStep(null, mode, value);
+    }
+
+    private static OperationFact roundsToAStep(ArgumentRef scale, ArgumentRef mode,
+                                               ArgumentRef value) {
+        return new OperationFact.RoundsToAStep(scale, mode, value);
     }
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,

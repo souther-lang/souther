@@ -6,6 +6,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -402,7 +403,7 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    bindings, reads).walk(read);
+                    new HashMap<>(), new ArrayList<>(), bindings, reads).readsOf(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
                 String name = declared.get(each);
@@ -437,17 +438,53 @@ final class Clauses {
      *               record's fields are each a place of their own
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
-                                  DeclarationNewtypes newtypes,
+                                  DeclarationNewtypes newtypes, Map<BindingId, Location> aliases,
+                                  List<Lookup> lookups,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
+
+        /** The operations that take what to look for and the container to look in, in that order,
+         *  and read the member that is looked for. */
+        private static final Set<ValueName> LOOKUPS = Set.of(
+                ValueName.Stdlib.operation("Map", "get"),
+                ValueName.Stdlib.operation("Map", "containsKey"),
+                ValueName.Stdlib.operation("Set", "contains"),
+                ValueName.Stdlib.operation("List", "contains"));
 
         ReadsOfAClause {
             Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
+            Objects.requireNonNull(aliases, "a walk of a clause knows what a name was given");
+            Objects.requireNonNull(lookups, "a walk of a clause gathers its lookups somewhere");
             Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
             Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
         }
 
-        void walk(Core e) {
+        /** A lookup in a container that is a place of the value: the lookup, and the container. */
+        private record Lookup(Core lookup, Location container) {}
+
+        /**
+         * Every place of {@code clause} it reads. The containers it looks members up in are read
+         * once the whole clause has been walked, because whether a lookup is one the clause
+         * cannot be true without is a question about the clause around it.
+         */
+        void readsOf(Core clause) {
+            walk(clause);
+            for (Lookup each : lookups) {
+                read(each.container(), LookupsAClauseNeeds.needs(clause, each.lookup())
+                        ? ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS
+                        : ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+            }
+        }
+
+        private void walk(Core e) {
+            if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null) {
+                Location given = locationOf(let.value());
+                if (given != null) {
+                    aliases.put(let.binder().binding(), given);
+                    walk(let.body());
+                    return;
+                }
+            }
             Location at = locationOf(e);
             if (at != null) {
                 read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
@@ -464,13 +501,27 @@ final class Clauses {
                 bindings.add(r.binding());
             }
             Core counted = call == null ? null : countedArgument(call);
+            Core looked = entryLookedUp(e);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
                     read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
+                } else if (child == looked) {
+                    lookups.add(new Lookup(e, locationOf(child)));
                 } else {
                     walk(child);
                 }
             });
+        }
+
+        /** The container {@code e} looks a member up in or asks the membership of, where that is a
+         *  place of the value; null otherwise. */
+        private Core entryLookedUp(Core e) {
+            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(var operation, var args))
+                    || !LOOKUPS.contains(operation)) {
+                return null;
+            }
+            Core container = args.get(1);
+            return locationOf(container) != null ? container : null;
         }
 
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
@@ -486,7 +537,8 @@ final class Clauses {
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */
         private Location locationOf(Core e) {
             return Location.of(e, newtypes,
-                    binding -> fields.containsKey(binding) ? Location.of(binding) : null,
+                    binding -> fields.containsKey(binding) ? Location.of(binding)
+                            : aliases.get(binding),
                     this::stepsOf);
         }
 

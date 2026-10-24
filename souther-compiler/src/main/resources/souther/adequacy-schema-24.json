@@ -1421,7 +1421,7 @@
       ]
     },
     "elementComputation": {
-      "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, the choice between two by where the element stands, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
+      "description": "What one element's number is made of: a sum of its fields each weighed by a number, a sum of products of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, the choice between two by where the element stands, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
       "oneOf": [
         {
           "type": "object",
@@ -1622,6 +1622,83 @@
                   },
                   "value": {
                     "$ref": "#/$defs/elementComputation"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A sum of products of the element's fields and of roundings of numbers made of it, each term at its weight, and a constant beside. A product names each of its fields once, in the order their names sort; a product of one field is that field. A rounding stands alone: `scale` is how many places it keeps, `mode` how it rounds, and `value` what it rounds. At least one term is a product of two fields or more, or a rounding. Terms are listed in the order their spellings sort.",
+          "required": [
+            "kind",
+            "constant",
+            "terms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "products"
+            },
+            "constant": {
+              "type": "string",
+              "description": "An exact number, written one way for one value."
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "weight"
+                ],
+                "oneOf": [
+                  {
+                    "required": [
+                      "fields"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "rounding"
+                    ]
+                  }
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "fields": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "rounding": {
+                    "type": "object",
+                    "required": [
+                      "scale",
+                      "mode",
+                      "value"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "scale": {
+                        "type": "string",
+                        "description": "A whole number, written one way for one value."
+                      },
+                      "mode": {
+                        "type": "string",
+                        "description": "How it rounds, in this document's words: `half_up`, `half_even` and `half_down` to the nearer step, parting at an exact half up, to the even step, or down; `away_from_nought`, `toward_nought`, `toward_the_greater` and `toward_the_lesser` to the step that way."
+                      },
+                      "value": {
+                        "$ref": "#/$defs/elementComputation"
+                      }
+                    }
+                  },
+                  "weight": {
+                    "type": "string",
+                    "description": "An exact number, written one way for one value."
                   }
                 }
               }
@@ -6216,7 +6293,8 @@
                           "elements_a_computed_total_is_solved_for",
                           "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count",
-                          "strings_a_case_conversion_is_written_for"
+                          "strings_a_case_conversion_is_written_for",
+                          "elements_with_the_other_fields_held_still"
                         ]
                       }
                     },

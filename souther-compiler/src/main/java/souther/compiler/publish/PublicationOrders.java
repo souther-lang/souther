@@ -390,6 +390,7 @@ public final class PublicationOrders {
                             CompositionRepertoire.TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                             CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
                             CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                            CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
                             CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,

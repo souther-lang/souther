@@ -64,11 +64,18 @@ public sealed interface ReplacementOwed {
     /**
      * The body answering one value whatever it is given: a value the rows of the behavior came to,
      * which is the rewrite they did not tell from the body.
+     *
+     * @param answeredOn the inputs of each row stating its answer that the body answered in full, in
+     *                   the order the rows are written. Somewhere a run is known to come back, which
+     *                   is where a row the rewrite answers differently on is looked for beside the
+     *                   values the classes offer
      */
-    record ByOneAnswer(Replacement.ByOneAnswer replacement) implements ReplacementOwed {
+    record ByOneAnswer(Replacement.ByOneAnswer replacement,
+                       List<List<ObservedValue>> answeredOn) implements ReplacementOwed {
 
         public ByOneAnswer {
             Objects.requireNonNull(replacement, "a body answering one value answers some value");
+            answeredOn = answeredOn.stream().map(List::copyOf).toList();
         }
 
         /** The value the rewritten body answers. */

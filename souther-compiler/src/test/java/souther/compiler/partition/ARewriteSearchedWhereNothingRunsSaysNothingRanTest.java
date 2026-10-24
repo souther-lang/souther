@@ -80,7 +80,8 @@ class ARewriteSearchedWhereNothingRunsSaysNothingRanTest {
                 inputs.reading(rules));
         ReplacementOwed owed = new ReplacementOwed.ByOneAnswer(new Replacement.ByOneAnswer(
                 new ObservedValue.Integer(0),
-                new RowRef("doubled", new SourceId("m.sou"), new RowIdentity.Unnamed(1))));
+                new RowRef("doubled", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
+                List.of(List.of(new ObservedValue.Integer(0))));
         FillResult filled = Generator.fill(GenerationPlan.of(subject, List.of(), List.of(),
                         List.of(), List.of(), List.of(owed),
                         new RewriteSearch(RewriteSearch.For.THE_MEASURE, 8)),

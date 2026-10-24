@@ -18,6 +18,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -208,7 +209,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         instanceof ExactAnswer.Held<LinearForm<NumericTerm>> difference)) {
                     return new OfAComparison.NotHeld(named);
                 }
-                LinearForm<NumericTerm> whole = difference.value();
+                LinearForm<NumericTerm> whole =
+                        TotalsOfOneRun.addedUp(difference.value(), inputs, ruleSource);
                 if (whole.coefs().isEmpty()) {
                     return new OfAComparison.CutsNothing(named, whole.constant());
                 }
@@ -238,8 +240,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * @param leftSide the comparison's left side as written, which is only asked which position it
      *                 names first
      */
-    static AffineReading stating(LinearForm<NumericTerm> form, Rel stated, Core leftSide,
-                                 InputReads reads, RuleReadingSource ruleSource) {
+    static AffineReading stating(LinearForm<NumericTerm> written, Rel stated, Core leftSide,
+                                 InputReads reads, InputReading read) {
+        RuleReadingSource ruleSource = read.rules();
+        LinearForm<NumericTerm> form = TotalsOfOneRun.addedUp(written, read.domain(), ruleSource);
         AffineReading here = new AffineReading(new LinearForm<>(ExactRatio.ZERO, form.coefs()),
                 form.constant().negated(), ComparisonClaim.stating(stated));
         return here.facesTheOtherWay(subjectOf(leftSide, form, reads, ruleSource))

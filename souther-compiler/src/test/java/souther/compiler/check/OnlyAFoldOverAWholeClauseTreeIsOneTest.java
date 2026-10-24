@@ -45,13 +45,18 @@ class OnlyAFoldOverAWholeClauseTreeIsOneTest {
      * shape already recognised rather than either recognising them again. {@code
      * Predicates.Assuming} says what taking a condition in makes known, which is the third answer
      * over that same shape; it composes a conjunction by taking its right half under what the left
-     * half left, so what it reads a clause into is a state and not a value.
+     * half left, so what it reads a clause into is a state and not a value. {@code
+     * ClauseWorkingOut} says what a run needs of the numbers to work a clause out: it composes a
+     * conjunction and takes a choice whole, then reads the choice's two halves itself, because the
+     * right of a choice is worked out only on the runs its left lets through — which a composition
+     * of the two answers cannot say. What it makes of a leaf is {@code PathCompletion}'s.
      *
      * <p>A row for a reading of one language — the values, the ranges, or whatever is written next
      * — is the edge this exists to refuse. Those interpret leaves, and the fold that composes them
      * is the one above.
      */
     private static final Set<String> FOLDS = Set.of(
+            "souther.compiler.check.ClauseWorkingOut",
             "souther.compiler.check.Conditions$Stating",
             "souther.compiler.check.ExpansionCost",
             "souther.compiler.check.Predicates$Assuming",

@@ -50,6 +50,23 @@ public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
          * else of the element: what a call saying no two elements share them reads
          * ({@code ElementsApart}).
          */
-        EACH_ELEMENTS_RUN
+        EACH_ELEMENTS_RUN,
+
+        /**
+         * The member of the map, set or list there that a lookup names, and no other member: what
+         * a lookup or a membership test reads ({@code Map.get}, {@code Map.containsKey},
+         * {@code Set.contains}, {@code List.contains}). What it looks for is read as any other
+         * value the clause reads is; the other members are not read. Of whether the clause wants
+         * that member there or wants it missing, or does not turn on it at all, this says
+         * nothing.
+         */
+        A_LOOKED_UP_MEMBER,
+
+        /**
+         * The same read, of a lookup the clause cannot be true without: it is false wherever the
+         * container holds no member the lookup names. A container the clause holds to such
+         * members and to nothing else of it is one any further member can be added to.
+         */
+        A_MEMBER_THE_CLAUSE_NEEDS
     }
 }
