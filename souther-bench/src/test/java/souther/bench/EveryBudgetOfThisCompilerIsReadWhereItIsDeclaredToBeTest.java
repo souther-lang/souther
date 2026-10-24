@@ -164,6 +164,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#amongTheTotal("
+                            + "Lsouther/compiler/partition/CardinalityComposer$CoupledToTheTotal;"
+                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/check/Shape$Sequence;"
+                            + "Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at a size, at the totals tried or at the containers offered, and hands"
+                            + " the figure over in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
                             + "Lsouther/compiler/inputs/TermPath;"
