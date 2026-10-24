@@ -10,11 +10,15 @@ package souther.compiler.check;
  * the ones it had been taught the spelling of.
  *
  * <p>A conjunction is worked out on both sides wherever it holds. A choice is worked out on its
- * left, and on its right only on the runs the left lets through — so what the right asks is asked of
- * every run exactly where the left cannot hold, which is read off what is known
- * ({@link Predicates.Owed#refutedBy}) and not off the spelling. Where the left may hold, the right asks what it
- * asks of some runs only: nothing is added, and the reading says that something may be lost
- * ({@link WorkingOutNeeds#onlyOnSomeRuns}).
+ * left, and on its right only on the runs the left lets through, which is read off what is known
+ * and not off the spelling. Where the left cannot hold ({@link Predicates.Owed#refutedBy}) the
+ * right is worked out on every run, and what it asks is asked of them all. Where the left holds on
+ * every run ({@link Predicates.Owed#dischargedBy}) the right is worked out on none, and asks
+ * nothing. Where either may happen, the right asks what it asks of some runs only: nothing is
+ * added, and the reading says that something may be lost ({@link WorkingOutNeeds#onlyOnSomeRuns}).
+ *
+ * <p>A binding's value is worked out where the binding stands, whether or not the clause under it
+ * reads the name ({@link ClauseReading#crossing}).
  */
 final class ClauseWorkingOut implements ClauseReading<WorkingOutNeeds, Denotations> {
 
@@ -58,14 +62,25 @@ final class ClauseWorkingOut implements ClauseReading<WorkingOutNeeds, Denotatio
             case ClauseExpr.Leaf leaf -> completion.workedOut(leaf.of(), known, at);
             case ClauseExpr.Joined choice -> {
                 WorkingOutNeeds left = of(choice.left(), at);
+                Predicates.Owed stated = predicates.assumed(choice.left(), at, false, null);
+                if (stated.dischargedBy(known)) {
+                    // The left comes to what it states on every run, so the right is never
+                    // reached.
+                    yield left;
+                }
                 WorkingOutNeeds right = of(choice.right(), at);
-                yield left.and(refuted(choice.left(), at) ? right : right.onlyOnSomeRuns());
+                yield left.and(stated.refutedBy(known) ? right : right.onlyOnSomeRuns());
             }
         };
     }
 
-    /** Whether what holds leaves no run on which {@code stated} comes to what it states. */
-    private boolean refuted(ClauseExpr stated, Denotations at) {
-        return predicates.assumed(stated, at, false, null).refutedBy(known);
+    /**
+     * The value a binding is given, which is worked out where the binding stands and whether or not
+     * the clause under it reads the name.
+     */
+    @Override
+    public WorkingOutNeeds crossing(ClauseExpr.Scoped binding, Denotations outside,
+                                    WorkingOutNeeds body) {
+        return completion.workedOut(binding.binding().value(), known, outside).and(body);
     }
 }

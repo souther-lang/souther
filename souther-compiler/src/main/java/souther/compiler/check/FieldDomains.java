@@ -2212,7 +2212,7 @@ public final class FieldDomains {
                     "2 " + orderOf(it.rule()) + " " + it.path();
             case ProjectionEvidence.Cause.Lossy it ->
                     "3 " + orderOf(it.rule()) + " " + it.atom() + " " + it.unstated();
-            case ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays it ->
+            case ProjectionEvidence.Cause.OperatorsNotShownToAnswer it ->
                     "3 " + orderOf(it.rule());
             case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
@@ -3111,7 +3111,7 @@ public final class FieldDomains {
                 }
             }
             if (!needs.read()) {
-                unsaid.add(new ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays(
+                unsaid.add(new ProjectionEvidence.Cause.OperatorsNotShownToAnswer(
                         part.rule()));
             }
         }));

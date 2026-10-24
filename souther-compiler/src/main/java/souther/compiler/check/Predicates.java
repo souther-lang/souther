@@ -500,6 +500,28 @@ final class Predicates {
             return false;
         }
 
+        /**
+         * Whether what holds in {@code k} leaves every run one on which this comes to what it
+         * states: it folded that way on its own, or it has parts and every one is established.
+         *
+         * <p>False is that nothing showed it. A part the reading made nothing of establishes
+         * nothing, and no part at all is not every part established.
+         */
+        boolean dischargedBy(Known k) {
+            if (folded == Fold.HOLDS) {
+                return true;
+            }
+            boolean any = false;
+            for (Part each : parts) {
+                if (!(each instanceof Part.Carried carried)
+                        || !carried.clause().dischargedBy(k.numbers(), k.facts())) {
+                    return false;
+                }
+                any = true;
+            }
+            return any;
+        }
+
         /** The same, having come out one way on its own as well. Said beside what it owes rather
          *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
          *  answered only one of them decided that for every caller there will ever be. */

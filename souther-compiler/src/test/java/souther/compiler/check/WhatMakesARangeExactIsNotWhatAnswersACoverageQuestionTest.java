@@ -169,7 +169,7 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
      *  {@code Int}, which nothing here says the region of: a second cause beside the first. */
     @Test
     void aRuleNothingReadIsUnansweredAndLeavesTheRangeApproximate() {
-        assertEquals(new Answers(false, "Unrepresented, OperatorsStopARunWhereNothingSays"),
+        assertEquals(new Answers(false, "Unrepresented, OperatorsNotShownToAnswer"),
                 Answers.of("invariant said = Int.abs(value) >= 2"));
     }
 

@@ -186,21 +186,23 @@ public sealed interface ProjectionEvidence {
         }
 
         /**
-         * A rule works out an operator that may stop a run, and nothing here says on which operands.
+         * A rule works out something that is not shown to answer on every run the bounds leave.
          *
-         * <p>The bounds are the rule over the whole numbers, and a value is one the rule is worked
-         * out of. Where the operator's region is written and the bounds do not hold it, the rule is
-         * {@link Lossy} with what it asks; this is for the operators whose region is not written —
-         * a {@code Decimal} sum that may have no room for its digits, a product of two values, an
-         * operator on a side of a choice that is reached only on some runs. A rule with one of them
-         * leaves the bounds short of what it leaves, by an amount nothing says.
+         * <p>Not that it stops a run: that is what no value is left for. The bounds are the rule over
+         * the whole numbers, and a value is one the rule is worked out of. Where an operator's
+         * region is written and the bounds do not hold it, the rule is {@link Lossy} with what it
+         * asks; this is for what is not shown to answer and has no region written — a {@code Decimal}
+         * sum that may have no room for its digits, a product of two values nothing holds, a
+         * library operation that may end a run, an operator on a side of a choice that is reached
+         * only on some runs. A rule with one of them leaves the bounds short of what it leaves, by
+         * an amount nothing says.
          *
          * <p>Its own cause and not a {@link Lossy} one: there is no atom and no relation it is
          * about, and a cause naming either would be naming what nothing was found.
          */
-        record OperatorsStopARunWhereNothingSays(RuleRef rule) implements Cause {
+        record OperatorsNotShownToAnswer(RuleRef rule) implements Cause {
 
-            public OperatorsStopARunWhereNothingSays {
+            public OperatorsNotShownToAnswer {
                 if (rule == null) {
                     throw new IllegalArgumentException("an operator is worked out by some rule");
                 }

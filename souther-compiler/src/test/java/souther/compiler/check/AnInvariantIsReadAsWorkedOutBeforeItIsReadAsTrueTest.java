@@ -38,8 +38,15 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
 
     /** {@code invariants} are written whole, one rule to a line. */
     private static FieldDomains domainsOfRules(String carrier, String... invariants) {
+        return domainsWith("", carrier, invariants);
+    }
+
+    /** The same beside {@code helpers}, which are declared before the type. */
+    private static FieldDomains domainsWith(String helpers, String carrier, String... invariants) {
         String source = """
                 module example.worked
+
+                %s
 
                 data Subject = %s
                     %s
@@ -48,7 +55,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
 
                 behavior take : (n: Subject) -> Ok
                 let take (n) = Ok
-                """.formatted(carrier, String.join("\n    ", invariants));
+                """.formatted(helpers, carrier, String.join("\n    ", invariants));
         Compilation compilation = Compilation.ofSource(source, "Main");
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
@@ -122,7 +129,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     void aProductOfTwoHeldValuesIsReadAsAnswering() {
         FieldDomains read = domainsOf("value >= 1 && value <= 1000 && value * value >= 4");
         assertFalse(read.projection().causes().stream().anyMatch(cause ->
-                cause instanceof ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays));
+                cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer));
     }
 
     /** And where nothing holds them, it may stop a run where no region says. */
@@ -130,7 +137,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     void aProductOfTwoUnheldValuesIsNotReadAsAnswering() {
         FieldDomains read = domainsOf("value * value >= 4");
         assertTrue(read.projection().causes().stream().anyMatch(cause ->
-                cause instanceof ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays));
+                cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer));
     }
 
     /** An operand is a value of the type the operator takes, so it is held to what the type holds. */
@@ -143,12 +150,56 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
         assertInstanceOf(ProjectionEvidence.CertifiedExact.class, read.projection());
     }
 
+    /** What a helper is handed is worked out where the helper is called, whatever it does with it. */
+    @Test
+    void aSumHandedToAHelperIsWorkedOut() {
+        FieldDomains read = domainsWith("let positive (n: Int): Bool = n > 0", "Int",
+                "invariant only = value >= 1 && positive(value + " + MAX + ")");
+        assertTrue(read.holdsNothing().isPresent());
+    }
+
+    /** And through a helper that hands it on. */
+    @Test
+    void aSumHandedThroughTwoHelpersIsWorkedOut() {
+        FieldDomains read = domainsWith("""
+                let inner (n: Int): Bool = n > 0
+                let outer (n: Int): Bool = inner(n)""", "Int",
+                "invariant only = value >= 1 && outer(value + " + MAX + ")");
+        assertTrue(read.holdsNothing().isPresent());
+    }
+
+    /** And one the helper never reads is worked out all the same. */
+    @Test
+    void aSumHandedToAHelperThatIgnoresItIsWorkedOut() {
+        FieldDomains read = domainsWith("let always (n: Int): Bool = true", "Int",
+                "invariant only = value >= 1 && always(value + " + MAX + ")");
+        assertTrue(read.holdsNothing().isPresent());
+    }
+
+    /** The right of a choice whose left holds wherever the clause does is never worked out. */
+    @Test
+    void theRightOfAChoiceTheLeftAlwaysSatisfiesIsNotAsked() {
+        FieldDomains read = domainsOf("value == 1 && (value == 1 || value + " + MAX + " > 0)");
+        assertTrue(read.holdsNothing().isEmpty(), "one gets through");
+        assertFalse(read.projection().causes().stream().anyMatch(cause ->
+                cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer));
+    }
+
+    /** What a rule asks does not turn on the order its clauses were written in. */
+    @Test
+    void whatTwoClausesAskIsTheSameInEitherOrder() {
+        String sum = "invariant sum = value + " + MAX + " > 0";
+        String floor = "invariant floor = value >= 1";
+        assertTrue(domainsOfRules("Int", sum, floor).holdsNothing().isPresent());
+        assertTrue(domainsOfRules("Int", floor, sum).holdsNothing().isPresent());
+    }
+
     /** A call that may end a run is no less one for not being an operator. */
     @Test
     void aCallThatMayEndARunLeavesTheBoundsShortOfTheRule() {
         FieldDomains read = domainsOf("value >= 0 && value <= 5 && Int.floorMod(7, value) == 1");
         assertTrue(read.projection().causes().stream().anyMatch(cause ->
-                cause instanceof ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays),
+                cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer),
                 "a floor remainder by nought ends the run");
     }
 
@@ -157,7 +208,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     void aCallThatEndsNoRunIsReadAsAnyOtherPartIs() {
         FieldDomains read = domainsOf("String", "String.length(value) >= 1");
         assertFalse(read.projection().causes().stream().anyMatch(cause ->
-                cause instanceof ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays));
+                cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer));
     }
 
     /** An operator no region is written for is not read as answering everywhere. */
