@@ -13,12 +13,14 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,7 +55,39 @@ class WhatAnElementsAnswerTurnsOnIsReadOffEachNumberTest {
                     false);
 
     private static AStatementAtARow.WhatItReads read(NumericTerm term, TermPath under) {
-        return AStatementAtARow.readOf(term, FS, under);
+        return AStatementAtARow.readOf(term, FS, at(under), Optional.empty());
+    }
+
+    /** The value at {@code place} of every element, or null where the elements stand alone. */
+    private static Quantity.TheValue at(TermPath place) {
+        return place == null ? null
+                : new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(place));
+    }
+
+    /**
+     * Grouped over every element of the lists inside the elements of an outer list, what is
+     * gathered under a value of all of them turns on those holding it, as it does over one
+     * list; read with the elements of one list grouped, it turns on the other lists' too. How
+     * often a value occurs in one of the lists turns on which list it is.
+     */
+    @Test
+    void whatTheElementsOfAValueAcrossTheListsComeToTurnsOnThoseHoldingIt() {
+        TermPath ds = TermPath.of("ds");
+        TermPath forecasts = ds.element().then("forecasts");
+        TermPath place = forecasts.element().then("currency");
+        Quantity.TheValue currency = at(place);
+        NumericTerm total = NumericTerm.GatheredUnderItsKey.of(forecasts.element(),
+                new ElementKey.At(AT_THE_CURRENCY), THE_AMOUNT, Type.Prim.INT,
+                NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, null);
+        assertEquals(THOSE_UNDER_IT,
+                AStatementAtARow.readOf(total, forecasts, currency, Optional.of(ds)));
+        assertEquals(AStatementAtARow.TurnsOn.OTHER_ELEMENTS,
+                AStatementAtARow.readOf(total, forecasts, currency, Optional.empty()).turnsOn());
+        NumericTerm often = NumericTerm.Multiplicity.of(forecasts, place);
+        assertEquals(THOSE_UNDER_IT,
+                AStatementAtARow.readOf(often, forecasts, currency, Optional.empty()));
+        assertEquals(AStatementAtARow.TurnsOn.OTHER_ELEMENTS,
+                AStatementAtARow.readOf(often, forecasts, currency, Optional.of(ds)).turnsOn());
     }
 
     /** A number of one place is the element's, and reads the value where it is that place. */

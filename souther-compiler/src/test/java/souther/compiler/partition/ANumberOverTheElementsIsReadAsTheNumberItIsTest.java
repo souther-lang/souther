@@ -225,7 +225,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     void howManyADistinctListHoldsIsHowManyDifferentValuesTheListHolds() {
         Quantity read = theOnlyNumber("varied");
         assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(CODES),
-                new DecisionSubject.AnInput(CODES.element())), read);
+                new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(CODES.element()))),
+                read);
     }
 
     /**
@@ -309,7 +310,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     @Test
     void howManyDifferentValuesAMappedListHoldsIsHowManyDifferentValuesOfWhatIsTakenOfEach() {
         assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(ITEMS),
-                new DecisionSubject.AnInput(ITEMS.element().then("code"))),
+                new Quantity.TheValue.AtAPlace(
+                        new DecisionSubject.AnInput(ITEMS.element().then("code")))),
                 theOnlyNumber("variedItems"));
     }
 
@@ -346,7 +348,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
         assertFalse(Quantity.HowManyDifferent.oneOfEach(items,
                 new DecisionSubject.AnInput(ITEMS.element().then("bins").element())));
         assertThrows(IllegalArgumentException.class, () -> new Quantity.HowManyDifferent(tags,
-                new DecisionSubject.AnInput(TAGS.element().element())));
+                new Quantity.TheValue.AtAPlace(
+                        new DecisionSubject.AnInput(TAGS.element().element()))));
     }
 
     /**

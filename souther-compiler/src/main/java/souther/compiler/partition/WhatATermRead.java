@@ -521,7 +521,7 @@ sealed interface WhatATermRead {
      * <p>Each container the place stands in, the outer one first, is read under each element of
      * the one outside it, so the elements are every occurrence's whichever a reading chose.
      */
-    private static WalkResult<List<BorderQuantity.Observation>> everyElementAbove(
+    static WalkResult<List<BorderQuantity.Observation>> everyElementAbove(
             BorderQuantity.Observation row, TermPath place) {
         List<BorderQuantity.Observation> elements = List.of(row);
         for (TermPath container : place.containersHoldingIt()) {

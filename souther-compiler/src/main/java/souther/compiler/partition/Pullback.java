@@ -1871,8 +1871,13 @@ final class Pullback {
          * a dependency answered: the list's own element, under the key {@code key} makes of it.
          * Of two elements of one key the later is the entry, so what a statement is about is the
          * last element of its key.
+         *
+         * @param keysMayRepeat whether two elements of the list may come to one key. Not where
+         *                      the rules of the list keep its elements apart at the fields the key
+         *                      reads, and then every element is an entry
          */
-        record AFiledElement(DecisionSubject list, Core.Block key) implements ElementAt {
+        record AFiledElement(DecisionSubject list, Core.Block key, boolean keysMayRepeat)
+                implements ElementAt {
 
             public AFiledElement {
                 Objects.requireNonNull(list, "an entry is an element of some list");
@@ -2465,6 +2470,16 @@ final class Pullback {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
                     ? differentOverAWalk(walk, reads, step, applied, adds) : null;
         }
+        // A fold filing each element under the key its case chooses, from nothing held, ends with
+        // one entry for each different key it was handed.
+        if (seed.equals(LinearForm.constant(ExactRatio.ZERO))
+                && keyChosenByCase(new Denotation(e, reads)) instanceof ChosenKey chosen) {
+            Quantity different = chosen.keptBy().isEmpty()
+                    ? new Quantity.HowManyDifferent(
+                            new DecisionSubject.AnInput(chosen.container()), chosen.value())
+                    : differentAmongTheKept(chosen.container(), chosen.value(), chosen.keptBy());
+            return different == null ? null : new Sized.AsAForm(LinearForm.atom(different));
+        }
         if (!(walkedContainer(walk.container(), reads) instanceof DecisionSubject.AnInput held)) {
             return null;
         }
@@ -2577,12 +2592,22 @@ final class Pullback {
         }
         DecisionSubject.AnInput at = new DecisionSubject.AnInput(place);
         // Of the elements a statement kept, the values of those alone, where they are one value
-        // of each element of one container.
+        // of each element of one container or of the lists inside the elements of one.
         if (!every.keptBy().isEmpty()) {
-            Quantity kept = adds instanceof AddsWhatItDoesNotHold.OneValue
-                    && every instanceof InputReads.Occurrences.OfOneContainer(
-                            TermPath container, var _, var _)
-                    ? differentAmongTheKept(container, at, every.keptBy()) : null;
+            Quantity kept = !(adds instanceof AddsWhatItDoesNotHold.OneValue) ? null
+                    : switch (every) {
+                        case InputReads.Occurrences.OfOneContainer(
+                                TermPath container, var _, var _) ->
+                                differentAmongTheKept(container,
+                                        new Quantity.TheValue.AtAPlace(at), every.keptBy());
+                        // Of the elements of the lists inside the elements of a container, put
+                        // end to end, where that container stands inside no other.
+                        case InputReads.Occurrences.AcrossContainers(TermPath outer, var _, var _) ->
+                                outer.insideAContainer() ? null
+                                        : differentAmongTheKept(outer,
+                                                new Quantity.TheValue.AtAPlace(at),
+                                                every.keptBy());
+                    };
             return kept == null ? null : new Sized.AsAForm(LinearForm.atom(kept));
         }
         Quantity different = switch (adds) {
@@ -2591,7 +2616,8 @@ final class Pullback {
                         Quantity.HowManyDifferent.oneOfEach(
                                 new DecisionSubject.AnInput(container), at)
                                 ? new Quantity.HowManyDifferent(
-                                        new DecisionSubject.AnInput(container), at)
+                                        new DecisionSubject.AnInput(container),
+                                        new Quantity.TheValue.AtAPlace(at))
                                 : null;
                 // Every occurrence of the place, which stands in the lists inside the elements of
                 // the container they were put end to end from: the values inside those elements,
@@ -3136,7 +3162,8 @@ final class Pullback {
                                     observe(value, aspect, in);
                             case ElementAt.AtASubject(DecisionSubject container) ->
                                     observedAt(container.element(), aspect);
-                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _) ->
+                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _,
+                                                         boolean _) ->
                                     observedAt(list.element(), aspect);
                             // Of an element known only by the side every element of an answer
                             // comes out on, that side is known and no other.
@@ -3204,7 +3231,7 @@ final class Pullback {
                 case ElementAt.AtASubject(DecisionSubject map) -> map.key();
                 // The entry under a key is an element of the list, so the key it stands under is
                 // what the closure makes of that element.
-                case ElementAt.AFiledElement(DecisionSubject list, Core.Block key) ->
+                case ElementAt.AFiledElement(DecisionSubject list, Core.Block key, boolean _) ->
                         keyOfTheFiledElement(list, key);
                 case ElementAt.AnEntry(DecisionSubject key) -> key;
                 case ElementAt.AValue _, ElementAt.APiece _,
@@ -3252,7 +3279,8 @@ final class Pullback {
                         switch (elements.get(at)) {
                             case ElementAt.AtASubject(DecisionSubject container) ->
                                     container.element();
-                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _) ->
+                            case ElementAt.AFiledElement(DecisionSubject list, Core.Block _,
+                                                         boolean _) ->
                                     list.element();
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     in.pathOf(value, read.rules().newtypes())
@@ -3357,9 +3385,13 @@ final class Pullback {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
             }
             // The entry a map holds under a key is the last element the key was made of, so what
-            // is stated of an entry is stated of the last element of its key.
+            // is stated of an entry is stated of the last element of its key. Where no two
+            // elements share a key, every element is the last of its own and there is nothing to
+            // say.
             if (located.each() instanceof ElementAt.AFiledElement(DecisionSubject list,
-                                                                   Core.Block key)) {
+                                                                   Core.Block key,
+                                                                   boolean keysMayRepeat)
+                    && keysMayRepeat) {
                 DecisionSubject filedUnder = keyOfTheFiledElement(list, key);
                 if (filedUnder == null) {
                     return unread(e, reads, new WhyUnread.AtNoPosition(
@@ -3766,10 +3798,21 @@ final class Pullback {
          */
         private Located inTheListsOf(Denotation container, List<Kept> pending,
                                      List<Kept> located) {
+            List<Denotation> keptInside = new ArrayList<>();
             TermPath inner = container.at().containerFlattenedInto(container.value(),
+                    Pullback.this::theListAKeepingCallKeepsSomeOf, keptInside,
                     read.rules().symbols(), read.rules().newtypes());
             if (inner == null) {
                 return null;
+            }
+            // What a call inside the closure kept the elements by is said of them too: they are
+            // the elements of the lists it answered.
+            for (Denotation each : keptInside) {
+                Kept law = keptByALaw(each);
+                if (law == null) {
+                    return null;
+                }
+                pending.add(law);
             }
             DecisionSubject heldAt = new DecisionSubject.AnInput(inner);
             ElementAt each = new ElementAt.AtASubject(heldAt);
@@ -3910,7 +3953,9 @@ final class Pullback {
             if (heldAt == null) {
                 return null;
             }
-            ElementAt each = new ElementAt.AFiledElement(heldAt, indexed.key());
+            ElementAt each = new ElementAt.AFiledElement(heldAt, indexed.key(),
+                    ElementsKeptApart.keysMayRepeat(walked.value(), indexed.key(),
+                            read.ruleReading()));
             settle(pending, each, null, located);
             return outerEach == null ? new Located(heldAt, null, each, null, located, null)
                     : new Located(heldAt, null, outerEach, outerHanded, located, null);
@@ -4372,7 +4417,7 @@ final class Pullback {
                                         case ElementAt.AtASubject(DecisionSubject container) ->
                                                 sizedAt(container.element());
                                         case ElementAt.AFiledElement(DecisionSubject list,
-                                                                     Core.Block _) ->
+                                                                     Core.Block _, boolean _) ->
                                                 sizedAt(list.element());
                                         case ElementAt.APiece _, ElementAt.AnEntry _,
                                              ElementAt.OfAnAnswerEveryElementOfWhichIs _ ->
@@ -4585,7 +4630,8 @@ final class Pullback {
             }
             Located located = elementsOf(at, false);
             if (located == null) {
-                return new Sized.NotSized(
+                Sized across = ofEachElementAcross(at, ofTheElement);
+                return across != null ? across : new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             // How many different values the elements come to is a number of the input's own
@@ -4600,8 +4646,9 @@ final class Pullback {
                             container.element();
                     case ElementAt.AtASubject(DecisionSubject.AnAnswer _) -> null;
                     case ElementAt.AFiledElement(DecisionSubject.AnInput(TermPath list),
-                                                 Core.Block _) -> list.element();
-                    case ElementAt.AFiledElement(DecisionSubject.AnAnswer _, Core.Block _) -> null;
+                                                 Core.Block _, boolean _) -> list.element();
+                    case ElementAt.AFiledElement(DecisionSubject.AnAnswer _, Core.Block _,
+                                                 boolean _) -> null;
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
                                     instanceof PathResolution.At(TermPath inside)
@@ -4631,9 +4678,50 @@ final class Pullback {
             }
             return located.kept().isEmpty()
                     ? new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(
-                            new DecisionSubject.AnInput(held), new DecisionSubject.AnInput(each))))
+                            new DecisionSubject.AnInput(held), new Quantity.TheValue.AtAPlace(
+                                    new DecisionSubject.AnInput(each)))))
                     : differentAmongTheKept(new DecisionSubject.AnInput(held),
                             new DecisionSubject.AnInput(each), located);
+        }
+
+        /**
+         * How many different values the elements of the container at {@code at} hold, where it is
+         * the lists inside the elements of a container of the input put end to end, each element
+         * of it standing at a place inside one of theirs — or null where it is not.
+         *
+         * <p>Read down the list as a walk folding the same list reads its values
+         * ({@link InputReads#occurrencesOf}), so a map above the flattening and a filter
+         * anywhere on the way are one way to the same places: every value of them
+         * ({@link Quantity.HowManyDifferentAcross}), or the values of the elements a filter kept
+         * ({@link Quantity.HowManyDifferentMeet#across}). Where the container holding the lists
+         * stands inside another, a row holds as many of them as of that one, and the number is
+         * none of the row's.
+         */
+        private Sized ofEachElementAcross(DeclaredArgument at,
+                                          LawSubject<DeclaredArgument> ofTheElement) {
+            if (!(ofTheElement instanceof LawSubject.ElementOf<DeclaredArgument>)
+                    || !(reads.occurrencesOf(applied.argument(at),
+                            List.of(OnePerElement.ReadOff.ITSELF),
+                            Pullback.this::theListAKeepingCallKeepsSomeOf, read.rules().symbols(),
+                            read.rules().newtypes())
+                            instanceof InputReads.Occurrences.AcrossContainers(TermPath outer,
+                                    List<InputReads.Occurrences.Read> placed,
+                                    List<Denotation> keptBy))
+                    || outer.insideAContainer()
+                    || !(placed.getFirst() instanceof InputReads.Occurrences.Read.At(
+                            TermPath place, boolean _))) {
+                return null;
+            }
+            DecisionSubject.AnInput container = new DecisionSubject.AnInput(outer);
+            DecisionSubject.AnInput each = new DecisionSubject.AnInput(place);
+            if (!Quantity.HowManyDifferentAcross.ofAContainerInside(container, each)) {
+                return null;
+            }
+            Quantity different = keptBy.isEmpty()
+                    ? new Quantity.HowManyDifferentAcross(container, each)
+                    : Pullback.this.differentAmongTheKept(outer,
+                            new Quantity.TheValue.AtAPlace(each), keptBy);
+            return different == null ? null : new Sized.AsAForm(LinearForm.atom(different));
         }
 
         /**
@@ -4652,7 +4740,8 @@ final class Pullback {
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             List<Derivation> by = whatKept(located.kept());
-            return differentMeeting(held, each, by.size() == 1 ? by.getFirst()
+            return differentMeeting(held, new Quantity.TheValue.AtAPlace(each),
+                    by.size() == 1 ? by.getFirst()
                     : new Derivation.OfWhatWasKept(by.getFirst(), by.subList(1, by.size())),
                     false);
         }
@@ -5124,21 +5213,93 @@ final class Pullback {
          * among the elements whose key's entry meets it ({@link
          * Quantity.HowManyDifferentMeet.Selection.OfEachValue}). Not how many elements meet it —
          * two elements of one key are one entry.
+         *
+         * <p>Where some of the elements were kept by a statement before they were filed, an entry
+         * is there for a key some kept element holds, and holds what the kept ones under it come
+         * to. So a key is counted where some element holding it was kept and what was filed under
+         * it meets the statement: asked of each element, as the two together, since the second
+         * answers alike for every element under the key and the first need not.
          */
         private Sized entriesMeeting(LawNumber.HowManyMeet<DeclaredArgument> counted,
                                      Denotation container) {
             Located entries = entriesOf(container, new ArrayList<>(), new ArrayList<>(), null,
                     null);
-            if (entries == null || !entries.kept().isEmpty()
-                    || !(entries.held() instanceof DecisionSubject.AnInput held)
-                    || !(entries.each() instanceof ElementAt.AnEntry(
-                            DecisionSubject.AnInput key))) {
+            if (entries == null) {
+                return entriesMeetingAcross(counted, container);
+            }
+            // The key of an entry is a place of each element, or the place its case chooses.
+            Quantity.TheValue value = entries.each() instanceof ElementAt.AnEntry(
+                    DecisionSubject.AnInput key) ? new Quantity.TheValue.AtAPlace(key)
+                    : keyChosenByCase(container) instanceof ChosenKey chosen
+                            && entries.each() instanceof ElementAt.AnEntry
+                            && chosen.container().equals(entries.held().inputPosition())
+                            ? chosen.value() : null;
+            if (!(entries.held() instanceof DecisionSubject.AnInput held) || value == null) {
                 return null;
             }
             Derivation answered = aboutAnElement(counted.container(), held, entries.each(),
                     counted.ofTheElement());
-            return answered == null ? new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer())
-                    : differentMeeting(held, key, answered, true);
+            if (answered == null) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
+            if (entries.kept().isEmpty()) {
+                return differentMeeting(held, value, answered, true);
+            }
+            return differentMeeting(held, value,
+                    new Derivation.OfWhatWasKept(answered, whatKept(entries.kept())), false);
+        }
+
+        /**
+         * The same, where the list the map is filed from is the lists inside the elements of a
+         * container of the input put end to end ({@link InputReads.Occurrences.AcrossContainers})
+         * — or null where it is not.
+         *
+         * <p>An entry is there for each different key among the elements of all of those lists,
+         * and what it holds is what every element under its key comes to, whichever list holds
+         * it; so it is the number of keys asked of each value across them
+         * ({@link Quantity.HowManyDifferentMeet#across}). Where some of the elements were kept by
+         * a statement, it is asked of each element together with what kept it, as
+         * {@link #entriesMeeting} has it.
+         */
+        private Sized entriesMeetingAcross(LawNumber.HowManyMeet<DeclaredArgument> counted,
+                                           Denotation container) {
+            KeyedAccumulation filed = KeyedAccumulation.of(container.value(), container.at(),
+                    sides(), blockIn(container));
+            OnePerElement.ReadOff key = filed == null ? null : readOff(container, filed,
+                    filed.key());
+            if (key == null || !(occurrencesOf(container, filed, List.of(key))
+                    instanceof InputReads.Occurrences.AcrossContainers(TermPath outer,
+                            List<InputReads.Occurrences.Read> placed, List<Denotation> keptBy))
+                    || outer.insideAContainer()
+                    || !(placed.getFirst() instanceof InputReads.Occurrences.Read.At(
+                            TermPath keyAt, boolean _))
+                    || !Quantity.HowManyDifferentAcross.ofAContainerInside(
+                            new DecisionSubject.AnInput(outer), new DecisionSubject.AnInput(keyAt))) {
+                return null;
+            }
+            DecisionSubject.AnInput each = new DecisionSubject.AnInput(keyAt);
+            DecisionSubject.AnInput inner = new DecisionSubject.AnInput(
+                    keyAt.containersHoldingIt().getLast());
+            List<Kept> kept = new ArrayList<>();
+            for (Denotation call : keptBy) {
+                Kept law = keptByALaw(call);
+                if (law == null) {
+                    return null;
+                }
+                kept.add(law);
+            }
+            List<Kept> located = new ArrayList<>();
+            settle(kept, new ElementAt.AtASubject(inner), null, located);
+            Derivation answered = aboutAnElement(counted.container(), inner,
+                    new ElementAt.AnEntry(each), counted.ofTheElement());
+            if (answered == null) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
+            DecisionSubject.AnInput across = new DecisionSubject.AnInput(outer);
+            Quantity.TheValue value = new Quantity.TheValue.AtAPlace(each);
+            return located.isEmpty() ? differentMeeting(across, value, answered, true)
+                    : differentMeeting(across, value,
+                            new Derivation.OfWhatWasKept(answered, whatKept(located)), false);
         }
 
         /**
@@ -5150,7 +5311,7 @@ final class Pullback {
          * <p>Where it comes out the same for every element, the values are those of all of them
          * or of none.
          */
-        private Sized differentMeeting(DecisionSubject.AnInput held, DecisionSubject.AnInput at,
+        private Sized differentMeeting(DecisionSubject.AnInput held, Quantity.TheValue at,
                                        Derivation meeting, boolean ofEachValue) {
             Proposition stated = trying.of(meeting);
             WhyUnread stopped = Proposition.firstStopIn(stated);
@@ -5161,9 +5322,17 @@ final class Pullback {
                 return new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
             }
             if (stated instanceof Proposition.Always(boolean holds)) {
-                return new Sized.AsAForm(holds
-                        ? LinearForm.atom(new Quantity.HowManyDifferent(held, at))
-                        : LinearForm.constant(ExactRatio.ZERO));
+                if (!holds) {
+                    return new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO));
+                }
+                if (Quantity.HowManyDifferent.oneOfEach(held, at)) {
+                    return new Sized.AsAForm(LinearForm.atom(
+                            new Quantity.HowManyDifferent(held, at)));
+                }
+                return at instanceof Quantity.TheValue.AtAPlace(DecisionSubject place)
+                        ? new Sized.AsAForm(LinearForm.atom(
+                                new Quantity.HowManyDifferentAcross(held, place)))
+                        : new Sized.NotSized(new WhyUnread.NotArithmetic());
             }
             if (Proposition.Some.quantifiesOver(held, stated)) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
@@ -6139,6 +6308,34 @@ final class Pullback {
     }
 
     /**
+     * The elements a fold files under a key, where {@code whole} is a fold filing each element
+     * under the key its case chooses ({@link ElementKey.ByCase}): the container they are the
+     * elements of, the value the key is, and what kept some of them on the way — or null where
+     * {@code whole} is no such fold, the key is one place of every element, or the elements are
+     * no container's own.
+     */
+    private ChosenKey keyChosenByCase(Denotation whole) {
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
+                blocksAt(whole));
+        InputReads.WalkedElement walked = filed == null ? null : walkedElementOf(whole, filed);
+        if (walked == null || !(whole.at().keyOf(filed.key(), walked, read.rules().symbols(),
+                read.rules().newtypes()) instanceof ElementKey.ByCase key)) {
+            return null;
+        }
+        List<TermPath> holding = walked.elements().containersHoldingIt();
+        if (holding.isEmpty() || !holding.getLast().element().equals(walked.elements())) {
+            return null;
+        }
+        return new ChosenKey(holding.getLast(),
+                new Quantity.TheValue.ChosenByCase(walked.elements(), key), walked.keptBy());
+    }
+
+    /** What {@link #keyChosenByCase} found: where the elements are, the value they are filed
+     *  under, and the calls that kept some of them. */
+    private record ChosenKey(TermPath container, Quantity.TheValue.ChosenByCase value,
+                             List<Denotation> keptBy) {}
+
+    /**
      * What each element the fold {@code filed} walks is made of: the value standing at a place of
      * the input, where the walk's answer about the element itself is that place ({@link
      * OnePerElement.ReadOff#ITSELF}, read down {@link InputReads#occurrencesOf}); and otherwise
@@ -6498,7 +6695,18 @@ final class Pullback {
     /** What {@code call}, which keeps some of the elements of a list, keeps them by, as the
      *  statement about an element its size counts — or null where that was not read. */
     private KeptOccurrences keptByTheStatementOf(Core call, InputReads at) {
-        Quantity.HowManyMeet meeting = countKept(call, at);
+        // Said of each element on its own and held in a number of the whole run, so it is read
+        // apart from whichever element a reading around it stands at: that element is not one
+        // of these, and a container quantified there is not quantified again here.
+        Set<DecisionSubject> around = new HashSet<>(quantifying);
+        quantifying.clear();
+        Quantity.HowManyMeet meeting;
+        try {
+            meeting = countKept(call, at);
+        } finally {
+            quantifying.clear();
+            quantifying.addAll(around);
+        }
         if (meeting == null) {
             return null;
         }
@@ -6524,44 +6732,56 @@ final class Pullback {
 
     /**
      * How many different values stand at {@code at} over the elements of the container at
-     * {@code container} that {@code keptBy}, the one call that kept some of them, keeps — or null
-     * where it is more calls than one, what it keeps by is not read as a count of the elements of
-     * that container, or the comparison read keeps no table of counts.
+     * {@code container} that {@code keptBy}, the calls that kept some of them, keep — or null
+     * where what one of them keeps by is not read as a count of the elements of that container,
+     * or the comparison read keeps no table of counts.
      *
      * <p>The statement is asked of each element, which a filter does: a value is counted where some
-     * element holding it was kept. How it was read is held as the count of what was kept is, once
-     * for each value instead of each element ({@link Derivation.AComparisonRead.Counted}). A count
-     * of the kept elements read only on the way here is no number of the comparison, so it is read
-     * with a table of its own.
+     * element holding it was kept by every call. How it was read is held as the counts of what was
+     * kept are, together, once for each value instead of each element
+     * ({@link Derivation.AComparisonRead.Counted}). A count of the kept elements read only on the
+     * way here is no number of the comparison, so it is read with a table of its own.
+     *
+     * <p>Where {@code at} is a place of the elements of a container inside each element of
+     * {@code container}, what was kept are the elements of those, put end to end, and each call
+     * keeps one of them by what it says of it ({@link Quantity.HowManyDifferentMeet#across}).
      */
-    private Quantity differentAmongTheKept(TermPath container, DecisionSubject.AnInput at,
+    private Quantity differentAmongTheKept(TermPath container, Quantity.TheValue at,
                                            List<Denotation> keptBy) {
-        if (counting == null || keptBy.size() != 1) {
+        if (counting == null || keptBy.isEmpty()) {
             return null;
         }
         // Read with a table of its own, so a count of the kept elements, which is no number of
         // the comparison, is in none of the comparison's.
         Map<Quantity, Derivation.AComparisonRead.Counted> outer = counting;
         counting = new LinkedHashMap<>();
-        Quantity.HowManyMeet meeting;
-        Derivation.AComparisonRead.Counted kept;
+        DecisionSubject heldAt = null;
+        List<Derivation> each = new ArrayList<>();
         try {
-            meeting = countKept(keptBy.getFirst().value(), keptBy.getFirst().at());
-            kept = meeting == null ? null : counting.get(meeting);
+            for (Denotation call : keptBy) {
+                Quantity.HowManyMeet meeting = countKept(call.value(), call.at());
+                Derivation.AComparisonRead.Counted kept =
+                        meeting == null ? null : counting.get(meeting);
+                if (kept == null || (heldAt != null && !heldAt.equals(meeting.container()))) {
+                    return null;
+                }
+                heldAt = meeting.container();
+                each.add(kept.ofTheElement());
+            }
         } finally {
             counting = outer;
         }
-        if (kept == null || !meeting.container().equals(new DecisionSubject.AnInput(container))) {
-            return null;
-        }
-        Quantity.HowManyDifferentMeet different = Quantity.HowManyDifferentMeet.of(
-                meeting.container(), at,
-                new Quantity.HowManyDifferentMeet.Selection.OfEachElement(meeting.ofTheElement()));
-        if (different == null) {
+        Derivation keeping = each.size() == 1 ? each.getFirst()
+                : new Derivation.OfWhatWasKept(each.getFirst(), each.subList(1, each.size()));
+        DecisionSubject.AnInput counted = new DecisionSubject.AnInput(container);
+        Quantity.HowManyDifferentMeet different = Quantity.HowManyDifferentMeet.of(counted, at,
+                new Quantity.HowManyDifferentMeet.Selection.OfEachElement(
+                        Proposition.whereItHolds(trying.of(keeping))));
+        if (different == null || !heldAt.equals(different.occurrences())) {
             return null;
         }
         counting.putIfAbsent(different, new Derivation.AComparisonRead.Counted(
-                kept.container(), kept.ofTheElement(), Optional.of(
+                counted, keeping, Optional.of(
                         new Derivation.AComparisonRead.Counted.Different(at, false))));
         return different;
     }

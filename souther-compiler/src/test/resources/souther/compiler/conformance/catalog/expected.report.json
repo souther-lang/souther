@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "question_unanswered", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
+  "weakening" : [ "rule_unread", "question_unanswered", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -8818,7 +8818,7 @@
   }, {
     "module" : "conformance.searching",
     "status" : "partial",
-    "weakening" : [ "reachable_node_cases_unmeasured", "rewrite_undecided" ],
+    "weakening" : [ "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -10128,7 +10128,7 @@
     }, {
       "name" : "restockAnyZone",
       "implementation" : "implemented",
-      "rows" : 3,
+      "rows" : 4,
       "pending" : 0,
       "rowObligations" : [ {
         "obligationId" : {
@@ -10175,10 +10175,24 @@
           }
         },
         "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockAnyZone",
+          "source" : "4",
+          "name" : "a zone at the floor with nothing inside it is fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 75,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "reachable_node_cases_unmeasured" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10280,8 +10294,7 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "partial",
-          "weakening" : [ "reachable_node_cases_unmeasured" ]
+          "status" : "complete"
         },
         "obligations" : [ {
           "obligationId" : {
@@ -10345,28 +10358,13 @@
     }, {
       "name" : "everyZoneStocked",
       "implementation" : "implemented",
-      "rows" : 3,
+      "rows" : 4,
       "pending" : 0,
       "rowObligations" : [ {
         "obligationId" : {
           "behavior" : "everyZoneStocked",
           "source" : "4",
           "name" : "zones at the floor everywhere are fine"
-        },
-        "at" : {
-          "sourceId" : "4",
-          "line" : 84,
-          "column" : 7,
-          "writtenAt" : {
-            "kind" : "here"
-          }
-        },
-        "disposition" : "met"
-      }, {
-        "obligationId" : {
-          "behavior" : "everyZoneStocked",
-          "source" : "4",
-          "name" : "a zone inside one below the floor is restocked"
         },
         "at" : {
           "sourceId" : "4",
@@ -10381,7 +10379,7 @@
         "obligationId" : {
           "behavior" : "everyZoneStocked",
           "source" : "4",
-          "name" : "a zone below the floor is restocked"
+          "name" : "a zone at the floor with nothing inside it is fine"
         },
         "at" : {
           "sourceId" : "4",
@@ -10392,10 +10390,39 @@
           }
         },
         "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "everyZoneStocked",
+          "source" : "4",
+          "name" : "a zone inside one below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 90,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "everyZoneStocked",
+          "source" : "4",
+          "name" : "a zone below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 92,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "reachable_node_cases_unmeasured" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10464,7 +10491,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "4",
-            "line" : 81,
+            "line" : 83,
             "column" : 31,
             "writtenAt" : {
               "kind" : "here"
@@ -10485,7 +10512,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "4",
-            "line" : 81,
+            "line" : 83,
             "column" : 31,
             "writtenAt" : {
               "kind" : "here"
@@ -10497,8 +10524,7 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "partial",
-          "weakening" : [ "reachable_node_cases_unmeasured" ]
+          "status" : "complete"
         },
         "obligations" : [ {
           "obligationId" : {

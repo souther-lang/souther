@@ -224,8 +224,10 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     private record QuotientShape(BigInteger denominator, BigInteger twos, BigInteger fives) {}
 
     private QuotientShape quotientShape(ExactRatio other) {
-        BigInteger acrossOne = numeratorWithoutUnits.gcd(other.numeratorWithoutUnits);
-        BigInteger acrossTwo = denominatorWithoutUnits.gcd(other.denominatorWithoutUnits);
+        BigInteger acrossOne = ExactArithmetic.commonFactor(
+                numeratorWithoutUnits, other.numeratorWithoutUnits);
+        BigInteger acrossTwo = ExactArithmetic.commonFactor(
+                denominatorWithoutUnits, other.denominatorWithoutUnits);
         return new QuotientShape(
                 denominatorWithoutUnits.divide(acrossTwo)
                         .multiply(other.numeratorWithoutUnits.abs().divide(acrossOne)),
@@ -516,8 +518,10 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         if (b.isZero()) {
             return a.abs();
         }
-        BigInteger tops = a.numeratorWithoutUnits.abs().gcd(b.numeratorWithoutUnits.abs());
-        BigInteger common = a.denominatorWithoutUnits.gcd(b.denominatorWithoutUnits);
+        BigInteger tops = ExactArithmetic.commonFactor(
+                a.numeratorWithoutUnits.abs(), b.numeratorWithoutUnits.abs());
+        BigInteger common = ExactArithmetic.commonFactor(
+                a.denominatorWithoutUnits, b.denominatorWithoutUnits);
         BigInteger bottoms = a.denominatorWithoutUnits.divide(common)
                 .multiply(b.denominatorWithoutUnits);
         return new ExactRatio(tops, bottoms, Math.min(a.twos, b.twos), Math.min(a.fives, b.fives));

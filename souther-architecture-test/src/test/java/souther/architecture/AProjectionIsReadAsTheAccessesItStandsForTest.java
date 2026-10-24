@@ -291,8 +291,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/ElementsApart", "readOffABinding", "(" + core + "L" + c
-                + "check/DeclarationNewtypes;)Ljava/util/List;",
+        row(out, c + "check/ElementsApart", "readOff", "(" + core + "L" + c
+                + "check/DeclarationNewtypes;)L" + c + "check/ElementsApart$ReadOff;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/ElementsApart", "bindingUnder",
                 "(" + core + ")L" + c + "types/BindingId;", Reading.STRUCTURE,

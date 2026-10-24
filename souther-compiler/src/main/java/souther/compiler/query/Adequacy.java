@@ -24,6 +24,7 @@ import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.ShownBy;
@@ -1756,9 +1757,15 @@ public final class Adequacy {
                 WhereNothingIsAnswered unanswered = db.ask(new Unanswered(name, behavior)).value();
                 souther.compiler.partition.MeasuredInput subject =
                         unanswered.regions().isEmpty() ? null : subjectOf(db, name, behavior);
+                RunPlacement against = placementOf(db, readInputs, source, placed, behavior);
+                RowReading observed = RowReadings.readingFor(byTarget, behavior);
+                InputDomain domain = readInputs.get(behavior);
+                CasesTheRowsTook cases = against == null || domain == null
+                        ? CasesTheRowsTook.none()
+                        : CasesTheRowsTook.of(rules, against.inputs(),
+                                readingOf(db, domain, source).quantities());
                 out.put(behavior, new DecisionEvidence(rules,
-                        whatTheRowsTook(behavior, rules, placementOf(db, readInputs, source, placed, behavior),
-                                RowReadings.readingFor(byTarget, behavior), numbering),
+                        whatTheRowsTook(behavior, rules, against, observed, numbering, cases),
                         subject == null ? Map.of()
                                 : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes())));
             });
@@ -1782,7 +1789,8 @@ public final class Adequacy {
         private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String behavior,
                 souther.compiler.partition.DecisionReading rules,
                 RunPlacement against,
-                RowReading observed, Optional<SiteNumbering> numbering) {
+                RowReading observed, Optional<SiteNumbering> numbering,
+                CasesTheRowsTook cases) {
             if (!observed.recordedArms()) {
                 return new Measurement.NotMeasured<>(DecisionEvidence.NotAsked.NOT_ASKED);
             }
@@ -1822,7 +1830,7 @@ public final class Adequacy {
                 watched.add(WitnessedRow.of(row, numbering));
             }
             return DecisionEvidence.of(rules.behavior(), against, watched,
-                    observed.measured().weakening());
+                    observed.measured().weakening(), cases);
         }
     }
 
@@ -9767,7 +9775,7 @@ public final class Adequacy {
                     specified.add(row.expectedArm());
                 }
             } else if (!declaredOut.isEmpty()) {
-                unreadableOut++;   // an expectation whose case the text does not say
+                unreadableOut++;   // an expectation neither the text nor its value says a case of
             }
             if (row.answered()) {
                 answered++;

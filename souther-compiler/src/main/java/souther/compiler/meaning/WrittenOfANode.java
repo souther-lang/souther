@@ -110,6 +110,15 @@ public final class WrittenOfANode {
         return subject instanceof DecisionSubject.AnInput(TermPath at) && reads(at);
     }
 
+    /** Whether every place a value counted once each is read at is the node's or stays put. */
+    private boolean reads(Quantity.TheValue value) {
+        return switch (value) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject at) -> reads(at);
+            case Quantity.TheValue.ChosenByCase chosen ->
+                    chosen.places().stream().allMatch(this::reads);
+        };
+    }
+
     private boolean reads(TermPath at) {
         return at.isAtOrUnder(node) || staying.stream().anyMatch(at::isAtOrUnder);
     }
