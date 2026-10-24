@@ -319,6 +319,36 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     }
 
     /**
+     * More ways that hold together in one group than are looked along: every alternative of
+     * every choice is still in a way handed on. The ways the walk finds first differ only in the
+     * choices it comes to last, so a way past the second alternative of the first choice, which
+     * only the ways after those take, is the one a row at a border may need.
+     */
+    @Test
+    void moreWaysInOneGroupThanAreLookedAlongStillTakeEachAlternativeOnce() {
+        List<Entry> entries = new ArrayList<>();
+        entries.add(oneOf(ask(X, 1), ask(X, 2)));
+        for (int each = 0; each < 5; each++) {
+            entries.add(oneOf(ask(X, 1, 2), ask(X, 1, 2, 10 + each)));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, walked.stoppedBy());
+        List<List<Entry>> ways = chosen(walked);
+        assertTrue(ways.size() <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(),
+                () -> "no more than the figure: " + ways.size());
+        assertTrue(ways.stream().anyMatch(way -> way.getFirst().equals(ask(X, 1))),
+                () -> "the first alternative of the first choice: " + ways);
+        assertTrue(ways.stream().anyMatch(way -> way.getFirst().equals(ask(X, 2))),
+                () -> "the second alternative of the first choice: " + ways);
+        for (int each = 0; each < 5; each++) {
+            Entry second = ask(X, 1, 2, 10 + each);
+            assertTrue(ways.stream().anyMatch(way -> way.contains(second)),
+                    () -> "the second alternative of a later choice, " + second + ": " + ways);
+        }
+    }
+
+    /**
      * A walk the figure stopped before a group was looked at to its end proves nothing, however
      * many of its ways closed.
      */

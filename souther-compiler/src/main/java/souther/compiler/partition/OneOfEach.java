@@ -4,7 +4,9 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -242,6 +244,9 @@ final class OneOfEach {
         for (List<E> group : groups(choices, vocabulary)) {
             Group<E, S, R> walked = new Group<>(vocabulary, looking, handing, left);
             walked.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
+            if (walked.stoppedBy == handing && !walked.open.isEmpty()) {
+                walked.eachAlternativeOnce(group, base);
+            }
             if (walked.open.isEmpty() && walked.stoppedBy == null) {
                 return new Walked.Closed<>(rebuilt(entries, vocabulary, walked.firstClosed, null),
                         walked.firstWhy);
@@ -554,7 +559,12 @@ final class OneOfEach {
         private final CompositionBudget looking;
         private final CompositionBudget handing;
         private final int[] left;
+        /** The alternatives this walk is held to, where it looks for the way that takes one. */
+        private final Map<E, Integer> pinned;
         private final List<Map<E, Integer>> open = new ArrayList<>();
+        /** Every choice the walk came to, in the order it came to them. */
+        private final List<E> met = new ArrayList<>();
+        private final Set<E> metSet = Collections.newSetFromMap(new IdentityHashMap<>());
         /** The first way that closed, and what closed it. */
         private Map<E, Integer> firstClosed;
         private R firstWhy;
@@ -563,10 +573,69 @@ final class OneOfEach {
 
         Group(Vocabulary<E, S, R> vocabulary, CompositionBudget looking,
               CompositionBudget handing, int[] left) {
+            this(vocabulary, looking, handing, left, Map.of());
+        }
+
+        private Group(Vocabulary<E, S, R> vocabulary, CompositionBudget looking,
+                      CompositionBudget handing, int[] left, Map<E, Integer> pinned) {
             this.vocabulary = vocabulary;
             this.looking = looking;
             this.handing = handing;
             this.left = left;
+            this.pinned = pinned;
+        }
+
+        /**
+         * The ways this walk found, put so that every alternative of every choice it came to
+         * comes first in a way of its own, where one is open, and the rest after them.
+         *
+         * <p>A walk that stopped at the figure has only the ways its first choices lead to
+         * first: the choices it came to last turn, and an alternative of an early one, which the
+         * ways held to it would all follow, is never in any of them. Each alternative that no way
+         * found takes is looked for with the walk held to it, and the first way open past it is
+         * the way for it.
+         */
+        void eachAlternativeOnce(List<E> group, S base) {
+            Map<E, Set<Integer>> covered = new IdentityHashMap<>();
+            List<Map<E, Integer>> covering = new ArrayList<>();
+            covering.add(open.getFirst());
+            noteCovered(covered, open.getFirst());
+            List<E> turning = new ArrayList<>(met);
+            for (int at = 0; at < turning.size(); at++) {
+                E choice = turning.get(at);
+                int alternatives = vocabulary.alternatives(choice).size();
+                for (int which = 0; which < alternatives; which++) {
+                    if (covered.getOrDefault(choice, Set.of()).contains(which)) {
+                        continue;
+                    }
+                    Map<E, Integer> held = new IdentityHashMap<>();
+                    held.put(choice, which);
+                    Group<E, S, R> past = new Group<>(vocabulary, looking, handing, left, held);
+                    past.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
+                    if (past.open.isEmpty()) {
+                        continue;
+                    }
+                    covering.add(past.open.getFirst());
+                    noteCovered(covered, past.open.getFirst());
+                    for (E each : past.met) {
+                        if (metSet.add(each)) {
+                            turning.add(each);
+                        }
+                    }
+                }
+            }
+            for (Map<E, Integer> each : open) {
+                if (!covering.contains(each)) {
+                    covering.add(each);
+                }
+            }
+            open.clear();
+            open.addAll(covering);
+        }
+
+        private static <E> void noteCovered(Map<E, Set<Integer>> covered, Map<E, Integer> way) {
+            way.forEach((choice, which) ->
+                    covered.computeIfAbsent(choice, _ -> new HashSet<>()).add(which));
         }
 
         /** @return whether the walk may go on */
@@ -581,10 +650,17 @@ final class OneOfEach {
                     return false;
                 }
                 open.add(new IdentityHashMap<>(chosen));
-                return true;
+                // The way held to an alternative is the first open past it, and no more.
+                return pinned.isEmpty();
+            }
+            if (metSet.add(next)) {
+                met.add(next);
             }
             List<List<E>> alternatives = vocabulary.alternatives(next);
             for (int which = 0; which < alternatives.size(); which++) {
+                if (pinned.containsKey(next) && pinned.get(next) != which) {
+                    continue;
+                }
                 if (left[0] == 0) {
                     stoppedBy = looking;
                     return false;
