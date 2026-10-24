@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * Containers whose elements meet statements that read, beside the element's own whole number, the
@@ -81,7 +80,7 @@ final class CoupledCardinalityComposer {
 
     private static final int MOST_SHARES = CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT.maximum();
 
-    private static final int MOST_TOTALS = CompositionBudget.TOTALS_A_SHARING_IS_TRIED_AT.maximum();
+    private static final int MOST_TOTALS = CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT.maximum();
 
     private CoupledCardinalityComposer() {}
 
@@ -154,10 +153,7 @@ final class CoupledCardinalityComposer {
                             && over.source() instanceof RunSource.ProjectedOccurrences
                             && (total == null || total.equals(over))) {
                         total = over;
-                    } else if (!term.subjectPath().insideAContainer()) {
-                        // Beside the elements, at the one value the row was fixed at.
-                        continue;
-                    } else {
+                    } else if (term.subjectPath().insideAContainer()) {
                         return null;
                     }
                 }
@@ -166,6 +162,15 @@ final class CoupledCardinalityComposer {
                     || (kept != null && (kept.equals(own.position())
                             || !kept.isAtOrUnder(container.element())))) {
                 return null;
+            }
+            // The number and the place counted are chosen here, apart from what the statements
+            // read; a statement that asks either of its own value is chosen for as it was.
+            for (CardinalityComposer.Asked.SoManyMeeting many : counts) {
+                for (TermPath read : many.perElement().positionsAsked()) {
+                    if (overlap(read, own.position()) || (kept != null && overlap(read, kept))) {
+                        return null;
+                    }
+                }
             }
             List<List<AStatementAtARow.AffineRelation>> relations = new ArrayList<>();
             int all = 0;
@@ -190,6 +195,10 @@ final class CoupledCardinalityComposer {
             return new Coupled(List.copyOf(counts), own, total, List.copyOf(relations), carrier,
                     kept, keptCount);
         }
+    }
+
+    private static boolean overlap(TermPath one, TermPath other) {
+        return one.isAtOrUnder(other) || other.isAtOrUnder(one);
     }
 
     /**
@@ -341,7 +350,6 @@ final class CoupledCardinalityComposer {
         private ElementValues anyListing;
 
         private final List<FixtureTemplate> built = new ArrayList<>();
-        private int shares;
         private boolean stoppedEarly;
 
         Composition(Coupled coupled, List<List<Weighed>> relations,
@@ -585,54 +593,12 @@ final class CoupledCardinalityComposer {
 
         /** The whole numbers a total is tried at in the interval, the nearest nought first. */
         private List<BigInteger> totalsIn(TotalsASharingCanComeTo.Interval span) {
-            BigInteger low = null;
-            BigInteger high = null;
-            if (span.low() != null) {
-                if (!(span.low().ceiling() instanceof ExactAnswer.Held<BigInteger>(var up))) {
-                    return List.of();
-                }
-                low = up;
+            TotalsASharingCanComeTo.WholeNumbers found =
+                    TotalsASharingCanComeTo.wholeNumbersIn(span, MOST_TOTALS);
+            if (!found.all()) {
+                refused.add(CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT);
             }
-            if (span.high() != null) {
-                if (!(span.high().floor() instanceof ExactAnswer.Held<BigInteger>(var down))) {
-                    return List.of();
-                }
-                high = down;
-            }
-            if (low != null && high != null && low.compareTo(high) > 0) {
-                return List.of();
-            }
-            BigInteger nearest = BigInteger.ZERO;
-            if (low != null && nearest.compareTo(low) < 0) {
-                nearest = low;
-            }
-            if (high != null && nearest.compareTo(high) > 0) {
-                nearest = high;
-            }
-            Set<BigInteger> out = new LinkedHashSet<>();
-            BigInteger[] bases = {nearest, low, high};
-            for (int away = 0; away <= MOST_TOTALS && out.size() < MOST_TOTALS; away++) {
-                for (BigInteger base : bases) {
-                    if (base == null) {
-                        continue;
-                    }
-                    for (int sign = 1; sign >= -1; sign -= 2) {
-                        BigInteger at = base.add(BigInteger.valueOf((long) sign * away));
-                        if ((low == null || at.compareTo(low) >= 0)
-                                && (high == null || at.compareTo(high) <= 0)
-                                && out.size() < MOST_TOTALS) {
-                            out.add(at);
-                        }
-                    }
-                }
-            }
-            boolean every = low != null && high != null
-                    && high.subtract(low).add(BigInteger.ONE).compareTo(
-                            BigInteger.valueOf(MOST_TOTALS)) <= 0;
-            if (!every) {
-                refused.add(CompositionBudget.TOTALS_A_SHARING_IS_TRIED_AT);
-            }
-            return List.copyOf(out);
+            return found.tried();
         }
 
         /**
@@ -713,30 +679,25 @@ final class CoupledCardinalityComposer {
         // ---- the sharings
 
         private void walk(List<Kind> kinds) {
+            boolean[][] meets = new boolean[kinds.size()][];
+            for (int kind = 0; kind < meets.length; kind++) {
+                meets[kind] = kinds.get(kind).meets();
+            }
+            // Every sharing looked at, whole or part, is counted against the figure, and one that
+            // cannot give a count asked for is dropped before the kinds after it are given any.
+            SharingsAmongKinds sharings =
+                    new SharingsAmongKinds(meets, asked, coupled.keptCount(), MOST_SHARES);
             for (int held = 0; held <= MOST_ELEMENTS && !stoppedEarly; held++) {
                 if (size != null && !size.holds(Count.of(held), Carrier.WHOLE)) {
                     continue;
                 }
-                if (!sharings(kinds, 0, held, new int[kinds.size()],
-                        shared -> tried(kinds, shared))) {
+                if (!sharings.ofSize(held, shared -> tried(kinds, shared))) {
                     stoppedEarly = true;
                 }
             }
-        }
-
-        private static boolean sharings(List<?> kinds, int kind, int left, int[] counts,
-                                        Predicate<int[]> each) {
-            if (kind == kinds.size() - 1) {
-                counts[kind] = left;
-                return each.test(counts);
+            if (sharings.spent()) {
+                refused.add(CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT);
             }
-            for (int count = 0; count <= left; count++) {
-                counts[kind] = count;
-                if (!sharings(kinds, kind + 1, left - count, counts, each)) {
-                    return false;
-                }
-            }
-            return true;
         }
 
         /** How many elements of this sharing meet each statement. */
@@ -785,10 +746,6 @@ final class CoupledCardinalityComposer {
             List<int[]> counted = counted(meeting(kinds, sharing));
             if (counted.isEmpty()) {
                 return true;
-            }
-            if (shares++ == MOST_SHARES) {
-                refused.add(CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT);
-                return false;
             }
             List<Integer> active = new ArrayList<>();
             int held = 0;

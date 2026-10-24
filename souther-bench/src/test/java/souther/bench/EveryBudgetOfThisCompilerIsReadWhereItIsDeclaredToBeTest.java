@@ -181,9 +181,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the totals tried for a sharing, and puts that figure in what it"
                             + " comes back with"),
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
+                            + "#walk(Ljava/util/List;)V",
+                    "stops at the ways of sharing out looked at, every one that was not dropped,"
+                            + " whole or part, and puts the figure in what it comes back with"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
                             + "#tried(Ljava/util/List;[I)Z",
-                    "stops at the ways of sharing out looked at or at the containers offered, and"
-                            + " puts the figure in what it comes back with"),
+                    "stops at the containers offered, and puts the figure in what it comes back"
+                            + " with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
                             + "Lsouther/compiler/inputs/TermPath;"

@@ -341,6 +341,24 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     }
 
     /**
+     * A statement that asks of its own value the place whose different values are counted is
+     * chosen for as it was, and said to be so: the values that place is offered are chosen apart
+     * from what the statement reads, which here it reads.
+     */
+    @Test
+    void aStatementThatReadsThePlaceCountedIsChosenForAsItWas() {
+        String source = source("data Forecast = { currency: String, amount: Int, active: Bool }\n",
+                "fs: List<Forecast>", "if Set.size(Set.fromList(List.map(.active, "
+                        + "List.filter(f -> f.active && " + HALF + ", fs)))) == 1 then 1 else 0");
+        Compilation compilation = measured(source);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        String said = "this compiler writes some of the elements chosen for how many of them"
+                + " meet a statement rather than all of them";
+        assertTrue(report.contains(said), report);
+    }
+
+    /**
      * A count more elements than a container is composed with is not shown to have no row: the
      * point is said to be one a figure stopped, and never one no value can stand at.
      */

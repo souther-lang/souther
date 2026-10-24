@@ -455,13 +455,64 @@ final class AStatementAtARow {
     record AffineRelation(LinearForm<NumericTerm> form, Rel rel) {}
 
     /**
+     * Whether what {@code stated} says of an element is settled by which way each form of numbers
+     * stands against nought and by what the row holds at positions — and by nothing else.
+     *
+     * <p>So the same ways of standing, with the positions the same, give the same answer, which
+     * is what a reader that works out ways of standing and asks the statement itself for what it
+     * answers in each needs to rely on. Anything that turns on other elements (their order, a
+     * count of them, whether one exists), on a number that is no form, or that no row is asked,
+     * makes it false.
+     *
+     * <p>Every kind of statement is answered here, and none by a default: a kind added to
+     * {@link Proposition} is a kind this has to be told about.
+     */
+    static boolean madeOfFormsAndPositions(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
+                 Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
+                                     String _) ->
+                    cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
+            case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
+                                       boolean _, String _) -> true;
+            case Proposition.All all -> all.parts().stream()
+                    .allMatch(AStatementAtARow::madeOfFormsAndPositions);
+            case Proposition.Any any -> any.parts().stream()
+                    .allMatch(AStatementAtARow::madeOfFormsAndPositions);
+            case Proposition.WhereItAnswers where -> madeOfFormsAndPositions(where.answers())
+                    && madeOfFormsAndPositions(where.states());
+            case Proposition.Compared(Relation.Affine affine, boolean _, String _) ->
+                    countIn(affine) == null && productIn(affine) == null
+                            && remainderByAnInputIn(affine) == null
+                            && remainderOfADividendIn(affine) == null
+                            && WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null;
+            case Proposition.Compared _ -> false;
+            // Which of the elements holding a value is the last depends on the others.
+            case Proposition.LastToHold _ -> false;
+            case Proposition.Some _, Proposition.SoManyHold _ -> false;
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
+        };
+    }
+
+    /** The positions the statement asks of their own value: whether one is true, holds a value,
+     *  is in some cases, or is the same as another. */
+    Set<TermPath> positionsAsked() {
+        return positions;
+    }
+
+    /**
      * The relations the statement is made of, each a form of numbers against nought — or empty
      * where some part of it is anything else, a product, a remainder, or a statement about the
      * elements of a container. Which of them holds is all the statement asks of the numbers it
      * reads; what else it asks, of positions that are no numbers, is asked of a row.
      */
     Optional<List<AffineRelation>> affineRelations() {
-        if (!elements.isEmpty()) {
+        if (!madeOfFormsAndPositions(stated)) {
             return Optional.empty();
         }
         List<AffineRelation> out = new ArrayList<>();

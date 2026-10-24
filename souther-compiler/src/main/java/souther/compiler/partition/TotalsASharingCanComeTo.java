@@ -3,7 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -51,6 +53,71 @@ final class TotalsASharingCanComeTo {
 
     /** The totals, either end missing where they run on without end. */
     record Interval(ExactRatio low, ExactRatio high) {}
+
+    /**
+     * The whole numbers of an interval that were taken to be tried.
+     *
+     * @param tried the nearest nought first, then about each end
+     * @param all   whether they are every whole number the interval holds
+     */
+    record WholeNumbers(List<BigInteger> tried, boolean all) {
+
+        WholeNumbers {
+            tried = List.copyOf(tried);
+        }
+    }
+
+    /**
+     * At most {@code limit} whole numbers of {@code span}: the one nearest nought, and the ones
+     * about it and about each end the interval has, the nearest first. Where the interval holds
+     * no whole number, none are tried and that is all of them.
+     */
+    static WholeNumbers wholeNumbersIn(Interval span, int limit) {
+        BigInteger low = null;
+        BigInteger high = null;
+        if (span.low() != null) {
+            if (!(span.low().ceiling() instanceof ExactAnswer.Held<BigInteger>(var up))) {
+                return new WholeNumbers(List.of(), false);
+            }
+            low = up;
+        }
+        if (span.high() != null) {
+            if (!(span.high().floor() instanceof ExactAnswer.Held<BigInteger>(var down))) {
+                return new WholeNumbers(List.of(), false);
+            }
+            high = down;
+        }
+        if (low != null && high != null && low.compareTo(high) > 0) {
+            return new WholeNumbers(List.of(), true);
+        }
+        BigInteger nearest = BigInteger.ZERO;
+        if (low != null && nearest.compareTo(low) < 0) {
+            nearest = low;
+        }
+        if (high != null && nearest.compareTo(high) > 0) {
+            nearest = high;
+        }
+        Set<BigInteger> out = new LinkedHashSet<>();
+        BigInteger[] bases = {nearest, low, high};
+        for (int away = 0; away <= limit && out.size() < limit; away++) {
+            for (BigInteger base : bases) {
+                if (base == null) {
+                    continue;
+                }
+                for (int sign = 1; sign >= -1; sign -= 2) {
+                    BigInteger at = base.add(BigInteger.valueOf((long) sign * away));
+                    if ((low == null || at.compareTo(low) >= 0)
+                            && (high == null || at.compareTo(high) <= 0)
+                            && out.size() < limit) {
+                        out.add(at);
+                    }
+                }
+            }
+        }
+        boolean every = low != null && high != null
+                && high.subtract(low).add(BigInteger.ONE).compareTo(BigInteger.valueOf(limit)) <= 0;
+        return new WholeNumbers(new ArrayList<>(out), every);
+    }
 
     private final Set<CompositionCapacity> unheld;
     private boolean unholdable;
