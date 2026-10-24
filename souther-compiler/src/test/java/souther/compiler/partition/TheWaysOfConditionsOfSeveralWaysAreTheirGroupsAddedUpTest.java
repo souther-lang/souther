@@ -7,6 +7,7 @@ import souther.compiler.partition.OneOfEach.Step;
 import souther.compiler.partition.OneOfEach.Walked;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -146,8 +147,8 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
 
     /**
      * Two conditions on two positions whose combinations are more than the figure: each
-     * alternative once, beside the other's first — and the figure, since a row may be along a
-     * combination left out.
+     * alternative once, beside the other's first, the second alternatives of both before the
+     * third of either — and the figure, since a row may be along a combination left out.
      */
     @Test
     void conditionsOnPositionsApartPastTheFigureAreEachAlternativeOnceAndTheFigure() {
@@ -164,11 +165,9 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, walked.stoppedBy());
         List<List<Entry>> each = new ArrayList<>();
         each.add(List.of(ask(X, 1), ask(Y, 1)));
-        for (int x = 2; x <= 5; x++) {
-            each.add(List.of(ask(X, x), ask(Y, 1)));
-        }
-        for (int y = 2; y <= 5; y++) {
-            each.add(List.of(ask(X, 1), ask(Y, y)));
+        for (int number = 2; number <= 5; number++) {
+            each.add(List.of(ask(X, number), ask(Y, 1)));
+            each.add(List.of(ask(X, 1), ask(Y, number)));
         }
         assertEquals(each, chosen(walked));
     }
@@ -396,6 +395,52 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     }
 
     /**
+     * A choice nested in the third alternative of another is not met until that alternative is
+     * looked for, which is after the second alternative of every choice met before it: its own
+     * second alternative is still owed a way.
+     */
+    @Test
+    void aNestedChoiceMetAtTheThirdAlternativeGetsBothOfItsAlternatives() {
+        Choice inner = oneOf(ask(X, 1), ask(X, 2));
+        Choice outer = new Choice(List.of(List.of(ask(X, 1, 2)), List.of(ask(X, 1, 2)),
+                List.of(ask(X, 1, 2), inner)));
+        List<Entry> entries = new ArrayList<>();
+        entries.add(outer);
+        for (int each = 0; each < 4; each++) {
+            entries.add(oneOf(ask(X, 1, 2), ask(X, 1, 2, 10 + each)));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        List<List<Entry>> ways = chosen(walked);
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(X, 1))),
+                () -> "the inner choice's first alternative: " + ways);
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(X, 2))),
+                () -> "the inner choice's second alternative: " + ways);
+    }
+
+    /**
+     * Independent groups whose ways are more than the figure let through together: the second
+     * alternative of the small group is not passed over for the later alternatives of the large
+     * one, as it is not within a group.
+     */
+    @Test
+    void anAlternativeOfASmallGroupIsNotPassedOverForTheLaterOnesOfALargeGroup() {
+        int limit = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        List<Entry> alternatives = new ArrayList<>();
+        for (int each = 0; each <= limit; each++) {
+            alternatives.add(ask(X, each));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(
+                oneOf(alternatives.toArray(Entry[]::new)), oneOf(ask(Y, 1), ask(Y, 2))));
+
+        List<List<Entry>> ways = chosen(walked);
+        assertEquals(limit, ways.size());
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(Y, 1))), () -> "y 1: " + ways);
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(Y, 2))), () -> "y 2: " + ways);
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(X, 1))), () -> "x 1: " + ways);
+    }
+
+    /**
      * Choices turning on one position whose ways are far more than the figure: the first way,
      * then the second alternative of each choice beside the first of every other, the choices in
      * the order the walk came to them and no more than the figure.
@@ -441,6 +486,74 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
             assertInstanceOf(OneOfEach.Way.Chosen.class, way,
                     () -> "the choice on y is chosen in every way: " + way);
         }
+    }
+
+    /**
+     * Whatever the shape of the groups and the choices, the ways handed on are no more than the
+     * figure and none twice, the first way is the one that takes every first alternative, and the
+     * alternatives are not passed over for one another: for every number up to which the
+     * alternatives of all the choices, one way each beside the firsts, fit in the figure, every
+     * alternative up to that number has a way.
+     *
+     * <p>Over every shape of three choices with up to nine alternatives each, on one position and
+     * on two, so that the shapes where the ways are more than the figure and the ones where they
+     * are fewer are both there.
+     */
+    @Test
+    void whateverTheShapeTheWaysAreWithinTheFigureOnceAndFairToTheAlternatives() {
+        int limit = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        for (int onTwo = 0; onTwo < 2; onTwo++) {
+            for (int a = 1; a <= 9; a++) {
+                for (int b = 1; b <= 9; b++) {
+                    for (int c = 1; c <= 9; c++) {
+                        int[] sizes = {a, b, c};
+                        TermPath[] ats = {X, onTwo == 1 ? Y : X, X};
+                        int[] froms = {10, 110, 210};
+                        List<Entry> entries = new ArrayList<>();
+                        for (int each = 0; each < 3; each++) {
+                            entries.add(alternativesOn(ats[each], froms[each], sizes[each]));
+                        }
+                        String shape = Arrays.toString(sizes) + (onTwo == 1 ? " on two" : " on one");
+                        List<List<Entry>> ways = chosen(open(walked(entries.toArray(Entry[]::new))));
+
+                        assertTrue(ways.size() <= limit, shape + ": no more than the figure");
+                        assertEquals(ways.size(), new HashSet<>(ways).size(),
+                                shape + ": no way twice");
+                        assertEquals(List.of(ask(ats[0], 1, 2, froms[0]),
+                                        ask(ats[1], 1, 2, froms[1]), ask(ats[2], 1, 2, froms[2])),
+                                ways.getFirst(), shape + ": the first way takes every first");
+                        for (int number = 1; number < 9; number++) {
+                            int owed = 1;
+                            for (int size : sizes) {
+                                owed += Math.min(size - 1, number);
+                            }
+                            if (owed > limit) {
+                                break;
+                            }
+                            for (int each = 0; each < 3; each++) {
+                                for (int alternative = 1;
+                                        alternative <= Math.min(sizes[each] - 1, number);
+                                        alternative++) {
+                                    Entry wanted = ask(ats[each], 1, 2, froms[each] + alternative);
+                                    assertTrue(ways.stream().anyMatch(way -> way.contains(wanted)),
+                                            shape + ": " + wanted + " has a way");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** A choice of {@code count} alternatives, each asking {@code at} to be 1 or 2 or a value of
+     *  its own, from {@code from} up. Any alternatives of choices on one position hold together. */
+    private static Choice alternativesOn(TermPath at, int from, int count) {
+        List<Entry> out = new ArrayList<>();
+        for (int each = 0; each < count; each++) {
+            out.add(ask(at, 1, 2, from + each));
+        }
+        return oneOf(out.toArray(Entry[]::new));
     }
 
     /**

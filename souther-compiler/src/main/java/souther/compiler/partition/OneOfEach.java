@@ -30,9 +30,10 @@ import java.util.Set;
  * the choices is along one open way of each group at once, so the ways a row takes are every
  * combination of them. Those are handed on where the figure lets them all be, and then a row past
  * the choices is along one of them — which is what a reader concluding something of every row
- * from what holds along each of them needs. Where they are more, each open way of each group is
- * handed on once, beside the first open way of every other group: enough for each alternative to
- * be composed along, and never said to be every way a row takes ({@link Walked.Open#stoppedBy}).
+ * from what holds along each of them needs. Where they are more, a way is handed on for each
+ * alternative of each choice, beside the first open way of every other group, in the order of
+ * {@link AlternativeOrder}: enough for each alternative to be composed along as far as the figure
+ * lets, and never said to be every way a row takes ({@link Walked.Open#stoppedBy}).
  *
  * <p><b>A proof only from a group walked to the end.</b> Where every way of one group closes, no
  * row is past the choices, whatever the others hold — and the way that closed first, with what
@@ -252,15 +253,6 @@ final class OneOfEach {
             }
             walkedGroups.add(walked);
         }
-        // What is left of the looking, once every group has been looked at as far as it was going
-        // to be, is what is spent on giving the alternatives of a group the figure stopped a way
-        // each: a group is never denied its own looking for another's alternatives.
-        for (int at = 0; at < groups.size(); at++) {
-            Group<E, S, R> walked = walkedGroups.get(at);
-            if (walked.stoppedBy == handing && !walked.open.isEmpty()) {
-                walked.eachAlternativeOnce(groups.get(at), base, handing.maximum());
-            }
-        }
         for (Group<E, S, R> walked : walkedGroups) {
             if (walked.stoppedBy != null && stoppedBy == null) {
                 stoppedBy = walked.stoppedBy;
@@ -279,7 +271,7 @@ final class OneOfEach {
         if (stoppedBy == null && noMoreThan(handing.maximum(), open)) {
             handedOn = everyCombination(open);
         } else {
-            handedOn = eachOnce(open);
+            handedOn = fairly(vocabulary, groups, walkedGroups, base, left, handing.maximum());
             stoppedBy = stoppedBy == null ? handing : stoppedBy;
         }
         List<Way<E>> ways = new ArrayList<>();
@@ -338,17 +330,16 @@ final class OneOfEach {
         List<T> firsts = parts.stream().map(List::getFirst).toList();
         List<List<T>> out = new ArrayList<>();
         out.add(firsts);
-        int longest = parts.stream().mapToInt(List::size).max().orElse(1);
-        for (int way = 1; way < longest; way++) {
-            for (int part = 0; part < parts.size(); part++) {
-                if (out.size() == most) {
-                    return new Taken<>(out, false);
-                }
-                if (way < parts.get(part).size()) {
-                    List<T> one = new ArrayList<>(firsts);
-                    one.set(part, parts.get(part).get(way));
-                    out.add(one);
-                }
+        AlternativeOrder<Integer> order = new AlternativeOrder<>();
+        for (int part = 0; part < parts.size(); part++) {
+            order.met(part, parts.get(part).size());
+        }
+        for (AlternativeOrder.Target<Integer> target = order.next();
+                target != null && out.size() < most; target = order.next()) {
+            if (target.alternative() > 0) {
+                List<T> one = new ArrayList<>(firsts);
+                one.set(target.choice(), parts.get(target.choice()).get(target.alternative()));
+                out.add(one);
             }
         }
         return new Taken<>(out, false);
@@ -386,29 +377,95 @@ final class OneOfEach {
         return out;
     }
 
+    /** A choice and the group of the walk that came to it. */
+    private record Looked<E>(int group, E choice) {}
+
     /**
-     * Every open way of each group once, beside the first open way of every other group, the
-     * first of all of them first.
+     * The ways handed on where those of the groups together are more than {@code most}, or any
+     * group stopped at a figure: the first way of every group, then a way for each alternative of
+     * each choice the groups came to that no way before takes, in the order of
+     * {@link AlternativeOrder}, each beside the first way of every other group — and, once every
+     * alternative has its way, the ways the groups found after their first, a way of each group
+     * at a time.
+     *
+     * <p>A group that did not go to its end is looked in for the way of an alternative it has
+     * none for ({@code Group.wayTaking}), with what the walks of all the groups left of the
+     * looking. Every group has been walked as far as it was going to be before any of them is
+     * asked for another way, so that the alternatives of one are never bought with the looking of
+     * another.
      */
-    private static <E> List<Map<E, Integer>> eachOnce(List<List<Map<E, Integer>>> open) {
+    private static <E, S, R> List<Map<E, Integer>> fairly(
+            Vocabulary<E, S, R> vocabulary, List<List<E>> groups, List<Group<E, S, R>> walked,
+            S base, int[] left, int most) {
+        List<Integer> live = new ArrayList<>();
+        for (int at = 0; at < walked.size(); at++) {
+            if (!walked.get(at).open.isEmpty()) {
+                live.add(at);
+            }
+        }
         List<Map<E, Integer>> out = new ArrayList<>();
-        out.add(together(open, -1, 0));
-        for (int group = 0; group < open.size(); group++) {
-            for (int way = 1; way < open.get(group).size(); way++) {
-                out.add(together(open, group, way));
+        Map<E, Integer> firsts = together(walked, live, -1, null);
+        out.add(firsts);
+        Map<E, Set<Integer>> covered = new IdentityHashMap<>();
+        noteCovered(covered, firsts);
+        AlternativeOrder<Looked<E>> order = new AlternativeOrder<>();
+        for (int at : live) {
+            for (E choice : walked.get(at).met) {
+                order.met(new Looked<>(at, choice), vocabulary.alternatives(choice).size());
+            }
+        }
+        for (AlternativeOrder.Target<Looked<E>> target = order.next();
+                target != null && out.size() < most; target = order.next()) {
+            E choice = target.choice().choice();
+            if (covered.getOrDefault(choice, Set.of()).contains(target.alternative())) {
+                continue;
+            }
+            int at = target.choice().group();
+            List<E> newlyMet = new ArrayList<>();
+            Map<E, Integer> way = walked.get(at).wayTaking(choice, target.alternative(),
+                    groups.get(at), base, newlyMet);
+            for (E each : newlyMet) {
+                order.met(new Looked<>(at, each), vocabulary.alternatives(each).size());
+            }
+            if (way == null) {
+                continue;
+            }
+            noteCovered(covered, way);
+            out.add(together(walked, live, at, way));
+        }
+        for (int number = 1; out.size() < most; number++) {
+            boolean more = false;
+            for (int at : live) {
+                List<Map<E, Integer>> found = walked.get(at).open;
+                if (number < found.size()) {
+                    more = true;
+                    Map<E, Integer> one = together(walked, live, at, found.get(number));
+                    if (out.size() < most && !out.contains(one)) {
+                        out.add(one);
+                    }
+                }
+            }
+            if (!more) {
+                break;
             }
         }
         return out;
     }
 
-    /** The first open way of every group, but the {@code way}-th of {@code group}. */
-    private static <E> Map<E, Integer> together(List<List<Map<E, Integer>>> open, int group,
-                                                int way) {
+    /** The first way of every group in {@code live}, but {@code way} for {@code group}. */
+    private static <E, S, R> Map<E, Integer> together(List<Group<E, S, R>> walked,
+                                                      List<Integer> live, int group,
+                                                      Map<E, Integer> way) {
         Map<E, Integer> out = new IdentityHashMap<>();
-        for (int each = 0; each < open.size(); each++) {
-            out.putAll(open.get(each).get(each == group ? way : 0));
+        for (int at : live) {
+            out.putAll(at == group ? way : walked.get(at).open.getFirst());
         }
         return out;
+    }
+
+    private static <E> void noteCovered(Map<E, Set<Integer>> covered, Map<E, Integer> way) {
+        way.forEach((choice, which) ->
+                covered.computeIfAbsent(choice, _ -> new HashSet<>()).add(which));
     }
 
     /**
@@ -603,63 +660,39 @@ final class OneOfEach {
         }
 
         /**
-         * The ways this walk found, put in the order a figure of {@code most} ways is to keep
-         * them: the first, then for each alternative number in turn the way that takes it of each
-         * choice the walk came to that no way before takes, and the ways it found after those.
-         * No alternative is passed over for a later one of another choice, and a way is kept once.
+         * A way of this group that takes alternative {@code alternative} of {@code choice}, or null
+         * where there is none to be had.
          *
-         * <p>A walk that stopped at the figure has only the ways its first choices lead to
-         * first: the choices it came to last turn, and an alternative of an early one, which the
-         * ways held to it would all follow, is never in any of them. Each alternative that no way
-         * found takes is looked for with the walk held to it, and to the alternatives of the
-         * choices holding it, and the first way open past it is the way for it. What this looks
-         * with is what the walks of the other groups left.
+         * <p>One this walk already found, if any does. Otherwise, where the walk stopped at a
+         * figure and so did not find every way, the way is looked for with the walk held to the
+         * alternative and to those of the choices holding it, and the first way open past them is
+         * the way. A walk that went to its end has found every way, so what it did not find does
+         * not exist; one that ran out of looking has nothing to look with.
          *
-         * <p>Where the choices have more alternatives than {@code most} ways can take, the later
-         * ones are the ones left, and the figure the walk stopped at says they were.
+         * @param newlyMet the choices the search came to that this walk had not, added to
          */
-        void eachAlternativeOnce(List<E> group, S base, int most) {
-            Map<E, Set<Integer>> covered = new IdentityHashMap<>();
-            List<Map<E, Integer>> kept = new ArrayList<>();
-            kept.add(open.getFirst());
-            noteCovered(covered, open.getFirst());
-            List<E> turning = new ArrayList<>(met);
-            boolean more = true;
-            for (int which = 1; more && kept.size() < most && left[0] > 0; which++) {
-                more = false;
-                for (int at = 0; at < turning.size() && kept.size() < most && left[0] > 0; at++) {
-                    E choice = turning.get(at);
-                    if (which >= vocabulary.alternatives(choice).size()) {
-                        continue;
-                    }
-                    more = true;
-                    if (covered.getOrDefault(choice, Set.of()).contains(which)) {
-                        continue;
-                    }
-                    Group<E, S, R> past = new Group<>(vocabulary, looking, handing, left,
-                            holdingIt(choice, which));
-                    past.holding.putAll(holding);
-                    past.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
-                    if (past.open.isEmpty()) {
-                        continue;
-                    }
-                    kept.add(past.open.getFirst());
-                    noteCovered(covered, past.open.getFirst());
-                    past.holding.forEach(holding::putIfAbsent);
-                    for (E each : past.met) {
-                        if (metSet.add(each)) {
-                            turning.add(each);
-                        }
-                    }
-                }
-            }
+        Map<E, Integer> wayTaking(E choice, int alternative, List<E> group, S base,
+                                  List<E> newlyMet) {
             for (Map<E, Integer> each : open) {
-                if (kept.size() < most && !kept.contains(each)) {
-                    kept.add(each);
+                if (Integer.valueOf(alternative).equals(each.get(choice))) {
+                    return each;
                 }
             }
-            open.clear();
-            open.addAll(kept);
+            if (stoppedBy == null || left[0] == 0) {
+                return null;
+            }
+            Group<E, S, R> past = new Group<>(vocabulary, looking, handing, left,
+                    holdingIt(choice, alternative));
+            past.holding.putAll(holding);
+            past.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
+            past.holding.forEach(holding::putIfAbsent);
+            for (E each : past.met) {
+                if (metSet.add(each)) {
+                    met.add(each);
+                    newlyMet.add(each);
+                }
+            }
+            return past.open.isEmpty() ? null : past.open.getFirst();
         }
 
         /** The alternative {@code which} of {@code choice}, with the alternatives of the choices
@@ -681,11 +714,6 @@ final class OneOfEach {
                 }
             }
             return true;
-        }
-
-        private static <E> void noteCovered(Map<E, Set<Integer>> covered, Map<E, Integer> way) {
-            way.forEach((choice, which) ->
-                    covered.computeIfAbsent(choice, _ -> new HashSet<>()).add(which));
         }
 
         /** @return whether the walk may go on */

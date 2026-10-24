@@ -11,6 +11,7 @@ import souther.compiler.partition.ReachabilityGap;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -224,6 +225,11 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
         for (ItemAssessment.Owed item : owed) {
             assertTrue(item.searches().rowToOffer().isPresent(),
                     () -> "a row along the last alternative is offered: " + item.searches());
+            // The last alternative is the one that holds a at nought, and the row is the one that
+            // goes along it.
+            assertEquals("N(0)",
+                    item.searches().rowToOffer().orElseThrow().row().inputs().getFirst().text(),
+                    () -> "and it is a row with a at nought: " + item.searches());
             assertTrue(lookedAlongWhole(item).isEmpty(),
                     () -> "and nothing was left to be looked along whole: " + item.searches());
         }
