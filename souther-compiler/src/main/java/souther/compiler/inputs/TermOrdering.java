@@ -63,7 +63,8 @@ final class TermOrdering {
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                 NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
         };
@@ -125,6 +126,8 @@ final class TermOrdering {
             case NumericTerm.CodePointClassCount _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // What the code points come to is the whole number the list of them adds up to.
             case NumericTerm.CodePointValueSum _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // A code point is the whole number `String.codePoints` lists it as.
+            case NumericTerm.CodePointAt _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // How often a value occurs is a whole number whatever the value is.
             case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
                  NumericTerm.OccurrencesOfAKey _ -> Carrier.ofValue(Type.Prim.INT, declarations);

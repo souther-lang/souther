@@ -25,10 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What a decision rule is, is the search as a whole: whether some node at any depth meets the
  * statement. Which rule a row takes is what the row comes to when it is run, so a row that only a
- * grandchild settles takes the rule a row settled at the top does. And what the measures over the
- * input's positions read is as deep as a row is written and no deeper: no row is written toward the
- * nodes under the top, said as a weakening of the decision's measure and not as a position nobody
- * read, so a search read whole is never what makes a behavior's measurement complete.
+ * grandchild settles takes the rule a row settled at the top does. Inside the rule the search has
+ * cases of its own — the top meeting the statement, a node below doing so where the top does not,
+ * and none doing so — and until rows have been seen in each case the decision can come out in, the
+ * measure says so as a weakening of the decision and not as a position nobody read.
  */
 class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
 
@@ -128,6 +128,104 @@ class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
                 """)) {
             assertWentWithoutWhatIsBelow(behavior(source), "t.below[*]");
         }
+    }
+
+    private static final String THE_TOP = """
+                | "the top" : (Node { v = 9, below = [] }) -> %s
+            """;
+
+    private static final String A_GRANDCHILD = """
+                | "a grandchild" :
+                    (Node { v = 0, below = [ Node { v = 0, below = [ Node { v = 9, below = [] } ] } ] })
+                    -> %s
+            """;
+
+    private static final String A_LEAF = """
+                | "a leaf" : (Node { v = 0, below = [] }) -> %s
+            """;
+
+    private static final String NOWHERE_THROUGH_THE_CHILDREN = """
+                | "nowhere through its children" :
+                    (Node { v = 0, below = [ Node { v = 1, below = [] } ] }) -> %s
+            """;
+
+    /**
+     * The cases of the search, in the rows that write them: the top meeting it, a node below doing
+     * so where the top does not, a node that fails with nothing below it, and one that fails after
+     * its children were searched and failed too. The two failures are two steps of the recursion,
+     * the base and the continuation, and the same outcome.
+     */
+    private static JsonNode behaviorWith(String model, String top, String grandchild, String leaf,
+                                         String children, String... outcomes) {
+        StringBuilder rows = new StringBuilder("example f\n");
+        String[] each = {top, grandchild, leaf, children};
+        int at = 0;
+        for (String row : each) {
+            if (row != null) {
+                rows.append(row.formatted(outcomes[at++]));
+            }
+        }
+        return behavior(model + rows);
+    }
+
+    /**
+     * Rows in every case of the search leave none of its cases unmeasured. The same for a search
+     * stated the other way round, every node meeting the denial.
+     */
+    @Test
+    void rowsInEveryCaseOfTheSearchMeasureIt() {
+        JsonNode some = behaviorWith(SOME, THE_TOP, A_GRANDCHILD, A_LEAF,
+                NOWHERE_THROUGH_THE_CHILDREN, "Yes", "Yes", "No", "No");
+        JsonNode every = behaviorWith(EVERY, THE_TOP, A_GRANDCHILD, A_LEAF,
+                NOWHERE_THROUGH_THE_CHILDREN, "No", "No", "Yes", "Yes");
+
+        assertFalse(weakening(some).contains("reachable_node_cases_unmeasured"),
+                () -> "weakened by " + weakening(some));
+        assertFalse(weakening(every).contains("reachable_node_cases_unmeasured"),
+                () -> "weakened by " + weakening(every));
+    }
+
+    /**
+     * A search that failed only where there was nothing below the node is not measured where it
+     * fails after searching what is below: no row went through the step of the recursion that
+     * comes back empty.
+     */
+    @Test
+    void aSearchThatFailedOnlyAtALeafIsNotMeasuredWhereItFailsThroughItsChildren() {
+        JsonNode some = behaviorWith(SOME, THE_TOP, A_GRANDCHILD, A_LEAF, null, "Yes", "Yes", "No");
+        JsonNode every = behaviorWith(EVERY, THE_TOP, A_GRANDCHILD, A_LEAF, null,
+                "No", "No", "Yes");
+
+        assertWentWithoutWhatIsBelow(some, "t.below[*]");
+        assertWentWithoutWhatIsBelow(every, "t.below[*]");
+    }
+
+    /** And the other way round: failing only through its children leaves the base unmeasured. */
+    @Test
+    void aSearchThatFailedOnlyThroughItsChildrenIsNotMeasuredWhereItFailsAtALeaf() {
+        JsonNode some = behaviorWith(SOME, THE_TOP, A_GRANDCHILD, null,
+                NOWHERE_THROUGH_THE_CHILDREN, "Yes", "Yes", "No");
+        JsonNode every = behaviorWith(EVERY, THE_TOP, A_GRANDCHILD, null,
+                NOWHERE_THROUGH_THE_CHILDREN, "No", "No", "Yes");
+
+        assertWentWithoutWhatIsBelow(some, "t.below[*]");
+        assertWentWithoutWhatIsBelow(every, "t.below[*]");
+    }
+
+    /**
+     * The control: the same rows with the one found only below left out take every rule and leave
+     * that case unmeasured.
+     */
+    @Test
+    void rowsTakingEveryRuleWithNoneFoundBelowLeaveThatCaseUnmeasured() {
+        JsonNode f = behavior(SOME + """
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> Yes
+                    | "nowhere below" : (Node { v = 0, below = [ Node { v = 1, below = [] } ] }) -> No
+                """);
+
+        assertEquals(Map.of("held", true, "denied", true), takenByOutcome(f));
+        assertWentWithoutWhatIsBelow(f, "t.below[*]");
     }
 
     /**

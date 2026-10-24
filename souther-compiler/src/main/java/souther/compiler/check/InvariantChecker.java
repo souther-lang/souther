@@ -1189,10 +1189,11 @@ public final class InvariantChecker {
                         NumericMeasures.isMeasure(taken.operation())
                                 ? atomOf(held.get(where.position())) : null;
                 // Nothing a clause is written about either: no declaration says how many of a
-                // string's code points are in a class, what they come to, or what the elements of
-                // a key come to.
+                // string's code points are in a class, what they come to, which one stands at an
+                // index, or what the elements of a key come to.
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                      NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
+                     NumberAt.OfWhatNumber.OfTheCodePointAt _,
                      NumberAt.OfWhatNumber.OfItsMultiplicity _,
                      NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                      NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,

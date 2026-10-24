@@ -1340,6 +1340,26 @@
               "type": "string"
             }
           }
+        },
+        {
+          "description": "The code point the string a position holds has at `index` of its code points, counted from nought.",
+          "required": [
+            "position",
+            "index"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "code_point_at"
+            },
+            "position": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       ]
     },

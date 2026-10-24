@@ -129,6 +129,9 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
                 // How many elements meet a statement, which leaves any number it reads free: an
                 // element is chosen to meet it or not against whatever the others stand at.
                 case RowDemand.SoMany _ -> ANYTHING;
+                // What a division leaves of a form, which leaves each number of it free: the
+                // others are placed to bring the form into the class whatever this one stands at.
+                case RowDemand.OnARemainder _ -> ANYTHING;
             });
         }
         return asked;

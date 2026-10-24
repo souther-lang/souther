@@ -98,6 +98,11 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfWhatItsCodePointsComeTo());
     }
 
+    /** The code point of the string at {@code position} at {@code index} of its code points. */
+    public static <P> NumberAt<P> codePointAt(P position, int index) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheCodePointAt(index));
+    }
+
     /** How many elements of the container {@code position} stands inside hold there what the
      *  element under consideration holds. */
     public static <P> NumberAt<P> multiplicityOf(P position) {
@@ -204,6 +209,13 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         record OfWhatItsCodePointsComeTo() implements OfWhatNumber {}
 
         /**
+         * The code point of the string standing there at {@code index} of its code points,
+         * counted from nought: one of the numbers its code points come to, and another number of
+         * the place at each index.
+         */
+        record OfTheCodePointAt(int index) implements OfWhatNumber {}
+
+        /**
          * How many elements of the container the place stands inside hold at it what the element
          * under consideration holds there.
          *
@@ -298,6 +310,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                             position.toString()) + ")";
             case OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     "List.sum(String.codePoints(" + position + "))";
+            case OfWhatNumber.OfTheCodePointAt at ->
+                    "List.get(" + at.index() + ", String.codePoints(" + position + "))";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
             case OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> kept.keptBy() == null
                     ? "occurrences(" + position + ")"

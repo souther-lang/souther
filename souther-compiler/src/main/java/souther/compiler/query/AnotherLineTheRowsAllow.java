@@ -1489,6 +1489,22 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
+                    // What a division leaves of a form, worked out of the form where the input holds
+                    // its numbers: still one of the remainders asked for, or the row turns away.
+                    case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder) -> {
+                        if (Collections.disjoint(remainder.terms(), moved)) {
+                            continue;
+                        }
+                        if (!(OrderedAffineBoundary.at(remainder.remainder().dividend(), at)
+                                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio comes))
+                                || !comes.isWhole()
+                                || !(comes.floor() instanceof ExactAnswer.Held<BigInteger>(
+                                        BigInteger whole))
+                                || !remainder.leaves().holds(
+                                        whole.mod(remainder.remainder().divisor()))) {
+                            return false;
+                        }
+                    }
                     // Which of two values stands at a position, and a step moves numbers: what
                     // stands there is what the row had.
                     case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {

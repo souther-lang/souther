@@ -32,6 +32,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -42,6 +43,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
@@ -55,6 +57,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -330,6 +333,28 @@ public final class Generator {
             public ForADecisionRule {
                 if (rule == null) {
                     throw new IllegalArgumentException("a row for a rule is for some rule");
+                }
+            }
+
+            @Override
+            public List<String> labels() {
+                return List.of();
+            }
+        }
+
+        /**
+         * One case a statement of the decision draws inside itself: the row a step of a search, or
+         * a way round the order of a repeated key, no row was seen in is owed.
+         *
+         * <p>The case and not the rule the row was placed at. A rule every row takes may still
+         * have a case none of them is in, and what the row is for is the case. No words, for the
+         * reason a rule has none: what a case is called is the report's question.
+         */
+        record ForACaseOfAStatement(CaseOfAStatement which) implements Purpose {
+
+            public ForACaseOfAStatement {
+                if (which == null) {
+                    throw new IllegalArgumentException("a row for a case is for some case");
                 }
             }
 
@@ -5264,6 +5289,26 @@ public final class Generator {
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
                                               StandInAttempt stood, Trial trial) {
+        return probeFixing(subject, label, fixing, asking, reaching, check, stood, trial,
+                Optional.empty());
+    }
+
+    /**
+     * The same, holding each row composed to {@code judge} as well, where there is one.
+     *
+     * <p>For what the way cannot say. A way states what a row has to be at the places it names, and
+     * a case a search draws inside itself turns on what every node below the start comes to, which
+     * no way states: whether a row is in it is for its run to say. Held to that inside the walk, a
+     * row whose run was not in the case is passed over and the walk goes on to the next
+     * assignment, within the figure the walk hands rows the choice at. Asked of the rows once the
+     * walk had taken one, there was no next assignment to go on to.
+     */
+    public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
+                                              Map<RealizationTarget, Place> fixing,
+                                              NumbersAskedFor asking,
+                                              Reachability.Reaching reaching, CandidateCheck check,
+                                              StandInAttempt stood, Trial trial,
+                                              Optional<RowJudge> judge) {
         // Where an element may meet something several ways, a row writing its elements alike is
         // composed along each way of choosing one for every element first. A row along one is a
         // row of the way; one of them coming to nothing says nothing of the rest, or of elements
@@ -5285,7 +5330,7 @@ public final class Generator {
         List<BoundaryAttempt> builtShort = new ArrayList<>();
         if (apartFirst) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, trial, true, null);
+                    check, stood, trial, true, null, judge);
             if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
@@ -5293,13 +5338,13 @@ public final class Generator {
         ElementsWrittenAlike.Choices alike = ElementsWrittenAlike.of(reaching);
         for (ElementsWrittenAlike.Alike one : alike.ways()) {
             BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
-                    one.reaching(), check, stood, trial, false, one.leftBy());
+                    one.reaching(), check, stood, trial, false, one.leftBy(), judge);
             if (builtLeavingNothingOut(along, builtShort)) {
                 return along;
             }
         }
         BoundaryAttempt whole = probeFixingAlong(subject, label, fixing, asking, reaching, check,
-                stood, trial, false, alike.stoppedBy());
+                stood, trial, false, alike.stoppedBy(), judge);
         if (builtLeavingNothingOut(whole, builtShort)) {
             return whole;
         }
@@ -5308,7 +5353,7 @@ public final class Generator {
         // nothing as well.
         if (!apartFirst && counts) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, trial, true, null);
+                    check, stood, trial, true, null, judge);
             if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
@@ -5406,6 +5451,7 @@ public final class Generator {
      *                       with ({@link ElementsWrittenAlike.Alike}), or the one the ways of
      *                       writing the elements alike were looked along to
      *                       ({@link ElementsWrittenAlike.Choices})
+     * @param judge what each row composed is held to besides the way, where something is
      */
     private static BoundaryAttempt probeFixingAlong(MeasuredInput subject, String label,
                                                     Map<RealizationTarget, Place> fixing,
@@ -5413,7 +5459,8 @@ public final class Generator {
                                                     Reachability.Reaching reaching,
                                                     CandidateCheck check, StandInAttempt stood,
                                                     Trial trial, boolean byCounts,
-                                                    CompositionBudget alikeStoppedBy) {
+                                                    CompositionBudget alikeStoppedBy,
+                                                    Optional<RowJudge> judge) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -5547,9 +5594,11 @@ public final class Generator {
         // Every row composed here stands at the point, so each one meets what it is composed for.
         // Only where a row can be run: one nothing stands the dependencies in for is no row
         // anything applies.
-        TellingArmsApart preferring =
+        RowPreference preferring =
                 stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
-                        ? new TellingArmsApart(trial, answers) : null;
+                        ? judge.<RowPreference>map(each -> new ReachingWhatIsJudged(each, answers))
+                                .orElseGet(() -> new TellingArmsApart(trial, answers))
+                : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
         boolean[] noRowAnswered = {false};
@@ -6526,6 +6575,36 @@ public final class Generator {
                         CountsAsked::and);
                 continue;
             }
+            // What a division leaves of a form, placed at a value of the form that leaves one of
+            // the remainders asked for.
+            if (cut.demand() instanceof RowDemand.OnARemainder remainder) {
+                // On what each number of the form counts, which is what the form adds up: what the
+                // code points of a string come to is a whole number, and not the string.
+                Function<NumericTerm, Carrier> on = term -> {
+                    TermOrders orders = subject.quantities().ordersOf(term);
+                    return orders == null ? null : orders.answered();
+                };
+                switch (standingOnARemainder(here, remainder, on, looking)) {
+                    case NumericWitness.Standing.Found standing -> {
+                        for (NumericWitness.Standing.Found.Placed placed
+                                : standing.inFixingOrder()) {
+                            RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                            if (out.putIfAbsent(at, placed.place()) == null) {
+                                routed.put(placed.term(), at);
+                                chosen.add(at);
+                                here = here.given(placed.term(), placed.place());
+                            }
+                        }
+                    }
+                    case NumericWitness.Standing.ProvedImpossible _ -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                    case NumericWitness.Standing.NotFound(CompositionShortfall met) -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
+                }
+                continue;
+            }
             // What an element meets one of several ways, with none chosen: a row whose elements
             // are written alike writes one of them into every element, and which one is chosen
             // before the row is composed ({@link ElementsWrittenAlike}). Composed with none chosen,
@@ -6749,6 +6828,11 @@ public final class Generator {
                         writtenBesides.add(RealizationTarget.of(term).writeRoot());
                     }
                 }
+                case RowDemand.OnARemainder remainder -> {
+                    for (NumericTerm term : remainder.terms()) {
+                        writtenBesides.add(RealizationTarget.of(term).writeRoot());
+                    }
+                }
                 case RowDemand.SoMany many -> writtenBesides.add(new RealizationTarget.ACount(
                         CountedElements.of(subject.behavior(), many.count(), subject.quantities(),
                                 many.anElementMeeting())).writeRoot());
@@ -6945,6 +7029,68 @@ public final class Generator {
     }
 
     /**
+     * Where the numbers of the form {@code remainder} is of stand inside {@code here} so that it
+     * leaves one of the remainders asked for, or what this found out about there being none.
+     *
+     * <p>Each remainder in turn, as a congruence the walk holds its numbers to: every number but
+     * the last is walked as any number of the region is, from where it usually is, and the last
+     * over the class the others leave it ({@link NumericWitness.Congruent}). The form is never put
+     * at a value first — a value chosen before its numbers is one their own runs may not reach
+     * together — and as many remainders are tried as one position on the way is tried at.
+     *
+     * <p>Proof that none stands only where the region leaves the numbers nothing, or no value of
+     * the form leaves any of the remainders: a walk that found no assignment proves nothing, since
+     * it walked some values of each number.
+     */
+    private static NumericWitness.Standing standingOnARemainder(SearchRegion here,
+            RowDemand.OnARemainder remainder, Function<NumericTerm, Carrier> on,
+            WitnessSearch looking) {
+        LinearForm<NumericTerm> dividend = remainder.remainder().dividend();
+        BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
+        BigInteger divisor = remainder.remainder().divisor();
+        BigInteger step = BigInteger.ZERO;
+        for (ExactRatio each : dividend.coefs().values()) {
+            if (!(each.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                    || !each.isWhole()) {
+                return new NumericWitness.Standing.NotFound(CompositionShortfall.NONE);
+            }
+            step = step.gcd(whole);
+        }
+        // What the form's coefficients reach, every multiple of the step they generate: a
+        // remainder whose class holds none of those is one no value of the form leaves.
+        Congruences reached = new Congruences(BigInteger.ZERO,
+                step.signum() == 0 ? BigInteger.ONE : step);
+        List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
+        for (NumericTerm term : NumericTerms.inOrder(dividend.coefs().keySet())) {
+            terms.add(term.atOnePosition());
+        }
+        int left = CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
+        List<NumericWitness.Congruent> tried = new ArrayList<>();
+        boolean cut = false;
+        for (WholeNumberRuns.Run run : remainder.leaves().runs()) {
+            for (BigInteger r = run.from(); !cut && r.compareTo(run.to()) <= 0;
+                 r = r.add(BigInteger.ONE)) {
+                if (new Congruences(r.subtract(moved), divisor).meet(reached) == null) {
+                    continue;
+                }
+                if (left-- <= 0) {
+                    cut = true;
+                } else {
+                    tried.add(new NumericWitness.Congruent(dividend, divisor, r));
+                }
+            }
+        }
+        NumericWitness.Standing standing = NumericWitness.of(here, terms, on, looking, tried);
+        if (!cut || standing instanceof NumericWitness.Standing.Found) {
+            return standing;
+        }
+        CompositionShortfall met = standing instanceof NumericWitness.Standing.NotFound(
+                CompositionShortfall shortOf) ? shortOf : CompositionShortfall.NONE;
+        return new NumericWitness.Standing.NotFound(met.and(CompositionShortfall.of(
+                Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
+    }
+
+    /**
      * What one cut of the way comes to, arrived at whole.
      *
      * <p><b>A value and not a sequence of changes to the row.</b> A cut is placed at every position
@@ -7007,6 +7153,9 @@ public final class Generator {
             // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
+            // Placed beside the counts, at a value of its form ({@link #alsoOnTheWay}).
+            case RowDemand.OnARemainder remainder -> throw new IllegalArgumentException(
+                    "a remainder is placed at a value of its form and not here: " + remainder);
             // Passed over before it is asked, with what the way is owed about it.
             case RowDemand.ForTheRun run -> throw new IllegalArgumentException(
                     "a statement no composer writes toward is placed nowhere: " + run);
@@ -7038,7 +7187,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.counted();
             case RowDemand.ForAll every -> every.counted();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> Optional.empty();
+                 RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                    Optional.empty();
         };
     }
 
@@ -7048,7 +7198,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.container();
             case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> null;
+                 RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                    null;
         };
     }
 
@@ -7077,6 +7228,8 @@ public final class Generator {
             case RowDemand.OneValueAtBoth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
+            // The numbers of the form a remainder is of.
+            case RowDemand.OnARemainder _ -> false;
             // A statement no composer writes toward, which places nothing.
             case RowDemand.ForTheRun _ -> true;
         };
@@ -9459,7 +9612,7 @@ public final class Generator {
      * <p>A run that comes back with nothing to read, or a rewrite whose run cannot be told from the
      * body's, tells nothing apart.
      */
-    static final class TellingArmsApart {
+    static final class TellingArmsApart implements RowPreference {
 
         /** What bounds the rows a walk hands the choice, whatever they come to. */
         private static final CompositionBudget HANDED_THE_CHOICE =
@@ -9503,7 +9656,8 @@ public final class Generator {
          * assignment of every parameter multiplies, and the rows it hands on that are no
          * candidates cost composing each time even though they cost no run.
          */
-        RowTaking over(RowTaking meets) {
+        @Override
+        public RowTaking over(RowTaking meets) {
             return inputs -> {
                 if (++handed > MOST_ROWS_HANDED) {
                     stoppedAtItsFigure = true;
@@ -9520,12 +9674,14 @@ public final class Generator {
         }
 
         /** The row taken, or null where nothing offered met the requirement. */
-        List<FixtureTemplate> taken() {
+        @Override
+        public List<FixtureTemplate> taken() {
             return best;
         }
 
         /** Whether a run of a row that met the requirement went past what a run may spend. */
-        boolean aRunRanOut() {
+        @Override
+        public boolean aRunRanOut() {
             return aRunRanOut;
         }
 
@@ -9538,7 +9694,8 @@ public final class Generator {
         }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
-        SearchShortfall untried() {
+        @Override
+        public SearchShortfall untried() {
             return stoppedAtItsFigure
                     ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
                     : SearchShortfall.NONE;
@@ -9602,6 +9759,111 @@ public final class Generator {
         private Acceptance onward() {
             return answering < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
                     : Acceptance.STOPPED;
+        }
+    }
+
+    /**
+     * What a row is held to besides the way it was composed for, decided by running it.
+     *
+     * <p>A function of the row alone, so the walk that composes can ask it of every row it hands
+     * on. What the answer rests on — which rule the run was placed at, which case it was evidence
+     * of — is the caller's: the way states what a row has to be at the places it names, and this
+     * is for what only a run says.
+     */
+    @FunctionalInterface
+    public interface RowJudge {
+
+        /** Whether the run of {@code row} is what was looked for. */
+        boolean accepts(RowToRun row);
+    }
+
+    /**
+     * Which of the rows a walk composes for one way is taken, kept across the rows the walk hands
+     * on, and what it left untried.
+     */
+    interface RowPreference {
+
+        /** What the walk makes of each whole row, {@code meets} being what a row has to meet at
+         *  all. */
+        RowTaking over(RowTaking meets);
+
+        /** The row taken, or null where nothing offered was. */
+        List<FixtureTemplate> taken();
+
+        /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
+        SearchShortfall untried();
+
+        /** Whether a run of a row went past what a run may spend. */
+        boolean aRunRanOut();
+    }
+
+    /**
+     * The first row a walk composes that {@link RowJudge} accepts.
+     *
+     * <p>Each row once, and a row passed over sends the walk on to its next assignment, so the
+     * rows tried are the rows the walk reaches, nearest first, within the figure it may hand rows
+     * the choice at ({@link CompositionBudget#ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW}). A row the
+     * walk is stopped before is untried and is said so ({@link #untried}): not finding one within
+     * that is this compiler having looked, and says nothing of whether a row can be.
+     */
+    static final class ReachingWhatIsJudged implements RowPreference {
+
+        private static final CompositionBudget HANDED_THE_CHOICE =
+                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
+        private static final int MOST_ROWS_HANDED = HANDED_THE_CHOICE.maximum();
+
+        private final RowJudge judge;
+        private final List<StoodInAnswer> answers;
+        /** Every row judged so far, as it is written, so a row composed again is not run again. */
+        private final Set<List<String>> judged = new HashSet<>();
+        private List<FixtureTemplate> taken;
+        private boolean stoppedAtItsFigure;
+        /** How many rows the walk has handed here, judged or not. */
+        private int handed;
+
+        ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers) {
+            this.judge = judge;
+            this.answers = List.copyOf(answers);
+        }
+
+        @Override
+        public RowTaking over(RowTaking meets) {
+            return inputs -> {
+                if (++handed > MOST_ROWS_HANDED) {
+                    stoppedAtItsFigure = true;
+                    return Acceptance.STOPPED;
+                }
+                RowToRun row = new RowToRun(inputs, answers);
+                if (!judged.add(RunOnce.writtenAs(row))) {
+                    return Acceptance.PASSED;
+                }
+                Acceptance met = meets.take(inputs);
+                if (met != Acceptance.TAKEN) {
+                    return met;
+                }
+                if (judge.accepts(row)) {
+                    taken = List.copyOf(inputs);
+                    return Acceptance.TAKEN;
+                }
+                return Acceptance.PASSED;
+            };
+        }
+
+        @Override
+        public List<FixtureTemplate> taken() {
+            return taken;
+        }
+
+        @Override
+        public SearchShortfall untried() {
+            return stoppedAtItsFigure
+                    ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
+                    : SearchShortfall.NONE;
+        }
+
+        @Override
+        public boolean aRunRanOut() {
+            return false;
         }
     }
 
@@ -13209,7 +13471,8 @@ public final class Generator {
                 // come to, or how often a value occurs among the elements beside it, or the end of
                 // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                     NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
                      NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;

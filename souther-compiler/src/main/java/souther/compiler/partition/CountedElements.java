@@ -6,6 +6,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
@@ -43,25 +44,40 @@ import java.util.Set;
  * @param handedOn         what another container is asked about an element meeting
  *                         {@code meeting}, where that is all it is: the one demand an element
  *                         meets by what that container holds ({@link ACountHandedOn})
- * @param differentAt      where the value each element holds stands, where what is counted is
- *                         how many different values the elements meeting {@code meeting} hold
- *                         there rather than how many of them there are
- *                         ({@link Quantity.HowManyDifferentMeet})
+ * @param differentAt      where the value each element holds stands — one place, or the place its
+ *                         case chooses — where what is counted is how many different values the
+ *                         elements meeting {@code meeting} hold there rather than how many of
+ *                         them there are ({@link Quantity.HowManyDifferentMeet})
+ * @param across           the container inside each element of which a container at
+ *                         {@code container} stands, where the values counted are those of every
+ *                         element of all of them put end to end and not of the one a reading
+ *                         chose ({@link Quantity.HowManyDifferentMeet#across})
  */
 record CountedElements(String behavior, TermPath container, Proposition meeting,
                        AStatementAtARow perElement, Map<NumericTerm, Carrier> on,
                        Optional<List<TakenConstraint>> anElementMeeting,
-                       Optional<RowDemand.WithinIt> handedOn, Optional<TermPath> differentAt) {
+                       Optional<RowDemand.WithinIt> handedOn,
+                       Optional<Quantity.TheValue> differentAt, Optional<TermPath> across) {
 
     CountedElements {
         if (behavior == null || container == null || meeting == null || perElement == null
-                || anElementMeeting == null || handedOn == null || differentAt == null) {
+                || anElementMeeting == null || handedOn == null || differentAt == null
+                || across == null) {
             throw new IllegalArgumentException("a count is a behavior's count of the elements of"
                     + " some container meeting something");
         }
-        if (differentAt.isPresent() && !differentAt.get().isAtOrUnder(container.element())) {
+        if (differentAt.isPresent() && !(differentAt.get().where()
+                instanceof DecisionSubject.AnInput(TermPath where)
+                && where.isAtOrUnder(container.element()))) {
             throw new IllegalArgumentException("the values counted are of the elements of "
                     + container + ", and " + differentAt.get() + " is none of theirs");
+        }
+        if (across.isPresent() && (differentAt.isEmpty()
+                || !container.isAtOrUnder(across.get().element())
+                || container.containersHoldingIt().size()
+                        != across.get().containersHoldingIt().size() + 1)) {
+            throw new IllegalArgumentException("the values of every element of the containers at "
+                    + container + " are counted, one inside each element of " + across.get());
         }
         on = Map.copyOf(on);
         anElementMeeting = anElementMeeting.map(List::copyOf);
@@ -94,7 +110,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         }
         return new CountedElements(identity.behavior(), identity.container(), identity.meeting(),
                 perElement, on, anElementMeeting.heldTo(), anElementMeeting.handedOn(),
-                identity.differentAt());
+                identity.differentAt(), identity.across());
     }
 
     /**
@@ -104,7 +120,17 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * @return null where the walk could not reach the container
      */
     AStatementAtARow.HowManyAtARow at(BorderQuantity.Observation row) {
-        return perElement.howManyIn(container, differentAt, row);
+        return perElement.howManyIn(container, differentAt, across, row);
+    }
+
+    /** Asks {@code row} for the containers this counts the elements of, as the walk finding
+     *  which containers a row chooses an element of asks. */
+    void lookAt(BorderQuantity.Observation row) {
+        AStatementAtARow.lookAtTheElementsIn(row, container, across);
+        Set<TermPath> together = new LinkedHashSet<>();
+        together.add(container);
+        across.ifPresent(together::add);
+        perElement.lookAt(row, together);
     }
 
     /** Every number of a row the statement reads, the element's own among them. */
@@ -125,11 +151,11 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * row is asked of a count is gathered by this, and never by what a reading made of it.
      */
     record Identity(String behavior, TermPath container, Proposition meeting,
-                    Optional<TermPath> differentAt) {}
+                    Optional<Quantity.TheValue> differentAt, Optional<TermPath> across) {}
 
     /** Which count this is ({@link Identity}). */
     Identity identity() {
-        return new Identity(behavior, container, meeting, differentAt);
+        return new Identity(behavior, container, meeting, differentAt, across);
     }
 
     /**
@@ -145,7 +171,8 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
     static Identity identityOf(String behavior, Quantity count) {
         Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
         return new Identity(behavior, elements.container().inputPosition(),
-                elements.ofTheElement(), AStatementAtARow.differentAt(count));
+                elements.ofTheElement(), AStatementAtARow.differentAt(count),
+                AStatementAtARow.acrossOf(count));
     }
 
     /**
@@ -173,7 +200,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         // One statement handed on is one demand however it was read; a reading that found it is
         // the one kept.
         return new CountedElements(behavior, container, meeting, perElement, on, both,
-                handedOn.isPresent() ? handedOn : other.handedOn, differentAt);
+                handedOn.isPresent() ? handedOn : other.handedOn, differentAt, across);
     }
 
     /**
@@ -268,15 +295,19 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
     /**
      * A count as it is written: {@code #container [statement]}, and, where it is how many
      * different values stand at {@code differentAt} over the elements meeting the statement,
-     * {@code #different container [place] where [statement]}.
+     * {@code #different container [place] where [statement]} — the container being the one whose
+     * elements hold the containers, where the values are of every element of those
+     * ({@code across}), as the quantity is written.
      */
-    static String spelled(TermPath container, Optional<TermPath> differentAt, String statement) {
-        return differentAt.map(at -> "#different " + container + " [" + at + "] where ")
+    static String spelled(TermPath container, Optional<Quantity.TheValue> differentAt,
+                          Optional<TermPath> across, String statement) {
+        return differentAt.map(at -> "#different " + across.orElse(container) + " ["
+                        + at.spelled() + "] where ")
                 .orElse("#" + container + " ") + "[" + statement + "]";
     }
 
     @Override
     public String toString() {
-        return spelled(container, differentAt, meeting.key());
+        return spelled(container, differentAt, across, meeting.key());
     }
 }

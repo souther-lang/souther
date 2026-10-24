@@ -969,7 +969,11 @@ final class InputPath {
         ElementProjection answered = ElementProjection.read(closure.body(),
                 closure.params().getFirst().binding(), names.heldByTheBody(), newtypes);
         if (answered == null) {
-            return null;
+            // A list the closure made of some of the elements of one inside the element, or of
+            // them in another order, holds elements standing where those do, as far as this
+            // walk's question crosses the operation that made it.
+            PathResolution inside = heldAt(closure.body(), wanted, names);
+            return inside instanceof PathResolution.NotAPosition ? null : inside;
         }
         PathResolution within = heldAt(args.get(at), wanted, names);
         return within instanceof PathResolution.NotAPosition ? null

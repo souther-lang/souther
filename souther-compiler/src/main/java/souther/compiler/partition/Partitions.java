@@ -321,6 +321,10 @@ public final class Partitions {
                 // to: none for nought, and for any larger number code points that are no
                 // surrogates, chosen to add up to it.
                 case NumericTerm.CodePointValueSum _ -> true;
+                // Not every number up to the last code point is one: a surrogate is half of a pair
+                // and no code point a string holds, so an edge at one is no edge any value stands
+                // at, and nothing here tells the two apart before a row is written.
+                case NumericTerm.CodePointAt _ -> false;
                 // A number of an element read off the elements beside it is written by a container
                 // holding elements beside it, and which containers there are is the type's and its
                 // rules': a set never holds one value twice, and rules may keep elements apart or

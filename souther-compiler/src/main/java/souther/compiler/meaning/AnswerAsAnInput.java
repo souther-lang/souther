@@ -496,6 +496,18 @@ public final class AnswerAsAnInput {
         return new DecisionSubject.AnInput(new TermPath(head, answer.steps()));
     }
 
+    /** {@code of} at the input standing for the answer, or null where it is no place of an
+     *  answer: a value a case chooses the place of is read off the input's own elements. */
+    private Quantity.TheValue value(Quantity.TheValue of) {
+        return switch (of) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject at) -> {
+                DecisionSubject standing = subject(at);
+                yield standing == null ? null : new Quantity.TheValue.AtAPlace(standing);
+            }
+            case Quantity.TheValue.ChosenByCase _ -> null;
+        };
+    }
+
     /**
      * {@code form} over the input standing for the answer, with each number of the behavior's own
      * input put at the value it was fixed at.
@@ -603,14 +615,14 @@ public final class AnswerAsAnInput {
             }
             case Quantity.HowManyDifferent different -> {
                 DecisionSubject container = subject(different.container());
-                DecisionSubject each = subject(different.ofTheElement());
+                Quantity.TheValue each = value(different.ofTheElement());
                 yield container == null || each == null
                         || !Quantity.HowManyDifferent.oneOfEach(container, each) ? null
                         : new Quantity.HowManyDifferent(container, each);
             }
             case Quantity.HowManyDifferentMeet different -> {
                 DecisionSubject container = subject(different.container());
-                DecisionSubject each = subject(different.ofTheElement());
+                Quantity.TheValue each = value(different.ofTheElement());
                 Proposition stated = proposition(different.meeting().statement());
                 yield container == null || each == null || stated == null
                         ? null : Quantity.HowManyDifferentMeet.of(container, each,

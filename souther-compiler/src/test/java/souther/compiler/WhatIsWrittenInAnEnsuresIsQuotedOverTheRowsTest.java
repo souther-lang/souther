@@ -305,6 +305,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                                 List.of(), List.of(), List.of())),
                 souther.compiler.partition.Generator.GenerationResult.NONE,
                 Adequacy.Generated.RowsForRules.NOTHING,
+                Adequacy.Generated.RowsForCases.NOTHING,
                                 List.of());
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
@@ -56,17 +57,26 @@ import java.util.Objects;
  * @param replacements the rewrites of the body no row was seen to tell from it and none was seen
  *                 to answer differently from it, where a row the rewrite answers differently on is
  *                 what settles whether a row is owed at all
+ * @param cases    the cases a statement of the decision draws inside itself that no row was seen
+ *                 in, in the order the reading met them. Read off the measure of the decision and
+ *                 not off a finding, since a case is what the decision is short of and not a gap
+ *                 something raised; the search that composes a row for one is handed this list and
+ *                 reads nothing of the decision again, so the offer and the block cannot disagree
+ *                 about which cases are owed. Some of them no search can compose a row for: the
+ *                 offer promises that nothing worth writing goes unoffered and not that everything
+ *                 offered can be written
  */
 public record RowWork(List<ClassOfAPosition> classes, List<RowWork.Arm> arms,
                       List<ObligationIdentity.OfAFallbackPairCell> pairs,
                       List<ObligationIdentity.OfACombinationOfDecisions> meetings,
                       List<DecisionRule> rules,
                       List<BorderObligationPointAssessment> points,
-                      List<ReplacementOwed> replacements) {
+                      List<ReplacementOwed> replacements,
+                      List<CaseOfAStatement> cases) {
 
     /** Nothing at all, which is what a behavior no row is owed for comes to. */
     public static final RowWork NONE = new RowWork(List.of(), List.of(), List.of(),
-            List.of(), List.of(), List.of(), List.of());
+            List.of(), List.of(), List.of(), List.of(), List.of());
 
     public RowWork {
         classes = List.copyOf(classes);
@@ -76,6 +86,7 @@ public record RowWork(List<ClassOfAPosition> classes, List<RowWork.Arm> arms,
         rules = List.copyOf(rules);
         points = List.copyOf(points);
         replacements = List.copyOf(replacements);
+        cases = List.copyOf(cases);
     }
 
     /**
@@ -107,6 +118,7 @@ public record RowWork(List<ClassOfAPosition> classes, List<RowWork.Arm> arms,
      */
     public boolean isEmpty() {
         return classes.isEmpty() && arms.isEmpty() && pairs.isEmpty() && meetings.isEmpty()
-                && rules.isEmpty() && points.isEmpty() && replacements.isEmpty();
+                && rules.isEmpty() && points.isEmpty() && replacements.isEmpty()
+                && cases.isEmpty();
     }
 }

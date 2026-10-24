@@ -1280,8 +1280,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Quantity.HowManyMeet count
                         when valuesItRelates(count.ofTheElement()) instanceof List<FilingCoordinate>
                         values -> related.addAll(values);
-                case Quantity.HowManyDifferent different ->
-                        related.add(FilingCoordinate.at(different.ofTheElement().inputPosition()));
+                case Quantity.HowManyDifferent different -> different.ofTheElement().heldAt()
+                        .forEach(at -> related.add(FilingCoordinate.at(at)));
                 case Quantity.HowManyDifferentAcross across -> related.add(
                         FilingCoordinate.at(across.ofTheOccurrence().inputPosition()));
                 // The values the nodes reached collect are the ones relating: the position of
@@ -1561,9 +1561,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             for (Quantity each : affine.form().coefs().keySet()) {
                 switch (each) {
                     case Quantity.HowManyMeet count -> relations.add(oneValue(count.ofTheElement()));
-                    case Quantity.HowManyDifferent different -> relations.add(
-                            UndividedByARelation.amongTheValuesAt(
-                                    different.ofTheElement().inputPosition()));
+                    case Quantity.HowManyDifferent different -> different.ofTheElement().heldAt()
+                            .forEach(at -> relations.add(UndividedByARelation.amongTheValuesAt(at)));
                     case Quantity.HowManyDifferentAcross across -> relations.add(
                             UndividedByARelation.amongTheValuesAt(
                                     across.ofTheOccurrence().inputPosition()));

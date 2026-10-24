@@ -1869,6 +1869,8 @@ public final class InputDomain {
                             type, source.inners());
             case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     NumericTerm.CodePointValueSum.of(path, type, source.inners());
+            case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                    NumericTerm.CodePointAt.of(path, point.index(), type, source.inners());
             // No clause of a declaration states how often a value occurs among the elements
             // beside it, so none is read at a position here.
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> throw new IllegalStateException(
@@ -1905,7 +1907,8 @@ public final class InputDomain {
         NarrowedBounds projected = switch (term) {
             case NumericTerm.ValueOf _ -> placed.at(path);
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.CodePointValueSum _ -> NarrowedBounds.NOTHING;
+                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _ ->
+                    NarrowedBounds.NOTHING;
         };
         return new PositionBounds(term,
                 // Two questions of one pair of readings, and they do not have one answer. What the
@@ -1954,6 +1957,7 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
+                 NumberAt.OfWhatNumber.OfTheCodePointAt _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
@@ -2052,6 +2056,15 @@ public final class InputDomain {
                             + "` come to was asked for, and what stands there is no string");
                 }
                 yield summed;
+            }
+            case NumberAt.OfWhatNumber.OfTheCodePointAt point -> {
+                NumericTerm.CodePointAt one = NumericTerm.CodePointAt.of(path, point.index(),
+                        type, source.inners());
+                if (one == null) {
+                    throw new IllegalStateException("a code point of `" + path + "` was asked"
+                            + " for, and what stands there is no string");
+                }
+                yield one;
             }
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> {
                 List<TermPath> holding = path.containersHoldingIt();

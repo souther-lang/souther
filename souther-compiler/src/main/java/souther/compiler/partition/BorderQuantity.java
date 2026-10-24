@@ -71,12 +71,16 @@ public sealed interface BorderQuantity
      * <p>The only quantity whose levels a carrier can write, because they are the carrier's own
      * values. A line here divides the position into classes, which is why this one has an axis and
      * the others do not.
+     *
+     * <p>The behavior may be no name, as it may for every other quantity: what keeps the elements
+     * a number of the input is of is put to rows under none ({@link KeptOccurrences}), since the
+     * number is one whichever behavior reads it, and a row read at a position turns on no name.
      */
     record OfACoordinate(String behavior, NumericTerm.FromOnePosition term, TermOrders of)
             implements LinearQuantity {
 
         public OfACoordinate {
-            if (behavior == null || behavior.isEmpty() || term == null || of == null) {
+            if (behavior == null || term == null || of == null) {
                 throw new IllegalArgumentException("a coordinate quantity is a behavior's number "
                         + "on an order: " + behavior + " " + term + " " + of);
             }
@@ -975,8 +979,7 @@ public sealed interface BorderQuantity
          */
         @Override
         public void lookAt(Observation row) {
-            row.eachElementOf(container);
-            perElement.lookAt(row, Set.of(container));
+            counted.lookAt(row);
             OverAForm added = addedForm();
             if (added != null) {
                 added.lookAt(row);
@@ -1001,7 +1004,7 @@ public sealed interface BorderQuantity
         @Override
         public String left() {
             String count = CountedElements.spelled(container, counted.differentAt(),
-                    said(meeting));
+                    counted.across(), said(meeting));
             if (against.coefs().isEmpty()) {
                 return count;
             }
@@ -1033,6 +1036,7 @@ public sealed interface BorderQuantity
                             Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
                             yield CountedElements.spelled(elements.container().inputPosition(),
                                     AStatementAtARow.differentAt(count),
+                                    AStatementAtARow.acrossOf(count),
                                     said(elements.ofTheElement())) + " " + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
@@ -1312,7 +1316,8 @@ public sealed interface BorderQuantity
                     ? new Standing.OfARemainder(wholeDividend(),
                             LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where)
                     : new Standing.OfARemainderAndAForm(wholeDividend(),
-                            LinearQuantity.answeredOn(dividend.on()), divisor, added,
+                            LinearQuantity.answeredOn(dividend.on()), divisor,
+                            Standing.OfARemainderAndAForm.every(divisor), added,
                             LinearQuantity.answeredOn(addedOn), levels(), where);
         }
 
@@ -1727,7 +1732,8 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> !remainder.added().coefs().isEmpty()
                     && at instanceof Level.OfTheQuantity(ExactRatio level)
                     ? UndividedByARelation.ofARemainderOfAForm(remainder.dividend().form(),
-                            remainder.divisor(), remainder.added(), level, relation)
+                            remainder.shift(), remainder.divisor(), remainder.added(), level,
+                            relation)
                     : UndividedByARelation.SHOWING_NOTHING;
             // The count and the form beside it held against the level, the count a term of no
             // position: what it takes beside how many its container holds is the relation's to

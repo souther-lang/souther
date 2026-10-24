@@ -120,6 +120,7 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                         NewtypeInners.NONE),
                 NumericTerm.CodePointValueSum.of(TermPath.of("s"), Type.STRING,
                         NewtypeInners.NONE),
+                NumericTerm.CodePointAt.of(TermPath.of("s"), 3, Type.STRING, NewtypeInners.NONE),
                 NumericTerm.Multiplicity.of(XS, ELEMENT.then("k")),
                 NumericTerm.ExtremeOfItsKey.of(XS, ELEMENT.then("k"), ELEMENT.then("n"),
                         Extreme.LEAST),

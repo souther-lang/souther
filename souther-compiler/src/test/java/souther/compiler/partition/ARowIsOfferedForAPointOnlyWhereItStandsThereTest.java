@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row is offered for a point only where the value that was built stands there.
@@ -187,6 +188,14 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                                                          souther.compiler.numeric.Place at,
                                                          Generator.CandidateCheck check,
                                                          Generator.Trial trial) {
+        return attemptOver(source, behavior, at, check, trial, java.util.Optional.empty());
+    }
+
+    private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
+                                                         souther.compiler.numeric.Place at,
+                                                         Generator.CandidateCheck check,
+                                                         Generator.Trial trial,
+                                                         java.util.Optional<Generator.RowJudge> judge) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
@@ -211,7 +220,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain.quantities(rules).ordersOf(axis.term()).answered(), at))),
                 Reachability.untouched(domain.quantities(rules).region()), check,
-                StandInAttempt.REQUIRING_NOTHING, trial);
+                StandInAttempt.REQUIRING_NOTHING, trial, judge);
     }
 
     /** A trial whose run of the {@code n}-th row it is handed (from 1) is {@code answered}. */
@@ -301,6 +310,49 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 built.row().inputs().stream().map(FixtureTemplate::text).toList(),
                 "and it is the row offered, not the first");
         assertNotEquals(handed.get(0), handed.get(1));
+    }
+
+    /**
+     * A row the judge refuses is passed over inside the walk, and the walk goes on to the next
+     * assignment, which the judge accepts.
+     *
+     * <p>Asked of the rows after the walk had taken one, there was no next row to go on to: the
+     * first candidate decided. What a way cannot say — a case turning on what every node below the
+     * start comes to — is for a run to say, and a run saying no has to send the search on.
+     */
+    @Test
+    void aRowTheJudgeRefusesIsPassedOverForTheNextTheJudgeAccepts() {
+        // A function of the row alone, as a judge is: the walk asks it again of a row it reaches
+        // along another way, and the answer is the same.
+        List<List<String>> asked = new ArrayList<>();
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                Generator.Trial.NOTHING_RUNS, java.util.Optional.of(row -> {
+                    asked.add(row.inputs().stream().map(FixtureTemplate::text).toList());
+                    return !row.inputs().getLast().text().equals("Other { n = 0 }");
+                }));
+
+        Generator.BoundaryAttempt.Built built = assertInstanceOf(
+                Generator.BoundaryAttempt.Built.class, attempt,
+                "a row past the one the judge refused is accepted");
+        assertEquals(List.of("Req { cost = Amount(100), note = Note(\"0\") }", "Other { n = 1 }"),
+                built.row().inputs().stream().map(FixtureTemplate::text).toList(),
+                "and it is the row offered, not the first");
+        assertTrue(asked.stream().anyMatch(row -> row.getLast().equals("Other { n = 0 }")),
+                () -> "the first row was asked about and refused: " + asked);
+    }
+
+    /** Where the judge refuses every row, nothing was found, which is not that no row can be. */
+    @Test
+    void aJudgeThatRefusesEveryRowLeavesNoWitnessAndNotAnUnreachablePoint() {
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                Generator.Trial.NOTHING_RUNS, java.util.Optional.of(_ -> false));
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, attempt);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                no.why().reason());
     }
 
     /** Where every row composed aborts, the point is one this compiler composed no answering row

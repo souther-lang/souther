@@ -155,17 +155,19 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/Shape$Sequence;Ljava/util/List;"
-                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/meaning/Quantity$TheValue;"
                             + "Lsouther/compiler/inputs/Quantities;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;"
+                            + "Lsouther/compiler/partition/CardinalityComposer$Standing;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
-                            + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/meaning/Quantity$TheValue;"
                             + "Ljava/util/List;ZZLjava/util/Set;)"
                             + "Lsouther/compiler/partition/CardinalityComposer$UnderEachValue;",
                     "stops listing the groups of elements under one value at the values an element"
@@ -223,6 +225,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;",
                     "says the figures a way it is shown nothing of was looked along whole past,"
                             + " or read again up to, as what the relation stopped at"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leftByTheFormat("
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/List;"
+                            + "Ljava/util/Set;)Ljava/util/Set;",
+                    "shares the work out among the walks of a format's strings, and says the"
+                            + " figure as what the relation stopped at where a divisor is past it"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leavesEveryRemainder("
+                            + "Lsouther/compiler/partition/UndividedByARelation$CodePointsOfTheForm;"
+                            + "Ljava/lang/Integer;ILjava/util/Set;)Z",
+                    "says the figure as what the relation stopped at where a walk of the strings"
+                            + " would move more remainders than its share"),
             Map.entry("souther.compiler.partition.WayToTheBorder#walked("
                             + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;)"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
@@ -282,11 +294,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/check/RuleReadingContext;I)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "has no room for a grouping of the leaves past as many elements as a row"
-                            + " carries, and hands the figure over in the shortfall it comes"
-                            + " back with"),
+                            + " carries, nor for more rows than it is given room for, and hands"
+                            + " the figures over in the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.NestedContainersAddingUp#holdingThe("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;I)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "has no room for a grouping of the elements past as many elements as a row"
+                            + " carries, nor for more rows than it is given room for, and hands"
+                            + " the figures over in the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
@@ -450,6 +471,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Standing$OfARemainder;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, the levels it was offered and the"
@@ -521,6 +543,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/function/Function;"
                             + "Lsouther/compiler/partition/WitnessSearch;"
                             + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Lsouther/compiler/partition/NumericWitness$Congruent;"
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
@@ -535,6 +558,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // The rows a walk hands the choice among rows. The budget is held here as the figure
             // the walk is stopped at, and handed over from here as what it left untried.
             Map.entry("souther.compiler.partition.Generator$TellingArmsApart#<clinit>()V",
+                    "how many rows a walk composing a row for a point hands the choice of a row,"
+                            + " and the figure it names where it stopped there"),
+            // The same figure, for the walk that holds each row to a run: held as the figure the
+            // walk is stopped at, and handed over from here as what it left untried.
+            Map.entry("souther.compiler.partition.Generator$ReachingWhatIsJudged#<clinit>()V",
                     "how many rows a walk composing a row for a point hands the choice of a row,"
                             + " and the figure it names where it stopped there"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
@@ -870,6 +898,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " written to come to a sum may hold, and how many steps the search"
                             + " may take: each is handed over as what stopped it where nothing was"
                             + " found"),
+            Map.entry("souther.compiler.partition.Generator#standingOnARemainder("
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/RowDemand$OnARemainder;"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;)"
+                            + "Lsouther/compiler/partition/NumericWitness$Standing;",
+                    "how many values of a form are tried for the remainders a condition leaves,"
+                            + " handed over as what stopped it where nothing was found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/numeric/Today;)"

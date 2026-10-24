@@ -117,7 +117,7 @@ class SeveralAttemptsThatBuiltNothingAreToldByAllTheyMetTest {
         List<List<NumericSet>> wanted = List.of(List.of(new NumericSet.At(Count.of(1))));
         CardinalityComposer.ValuesCountedFor search = new CardinalityComposer.ValuesCountedFor(
                 values, wanted, NumericDomain.Bounds.OPEN,
-                List.of(Count.of(100), Count.of(101)), (counted, others) ->
+                List.of(Count.of(100), Count.of(101)), (counted, others, room) ->
                         calls.getAndIncrement() == 0 ? stopped() : nothing());
 
         search.counting(0, new ArrayList<>(), 0);

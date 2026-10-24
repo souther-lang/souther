@@ -6,6 +6,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.Towards;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -425,7 +427,8 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
      * the remainder is one at most, and against eleven less the remainder past it — is read
      * through to the end: the line on the digit and the remainder added to it are drawn, no
      * comparison of it is left as unread or as several lines held together, and a row at a line is
-     * what its label says.
+     * what its label says. Past the branch the remainder is two at least, so the digit is nine at
+     * most there and the line beyond it is at ten.
      */
     @Test
     void aCheckDigitAgainstABranchOnTheRemainderIsReadThroughToTheEnd() {
@@ -433,8 +436,11 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 "let r = Int.floorMod(a + b, 11)",
                 "guard c == (if r <= 1 then 0 else 11 - r) else No", "Ok"), "");
 
-        assertTrue(bordersOf(linesOf(compilation)).containsAll(List.of("0", "11", "12")),
+        assertTrue(bordersOf(linesOf(compilation)).containsAll(List.of("0", "10", "11")),
                 bordersOf(linesOf(compilation)).toString());
+        assertFalse(bordersOf(linesOf(compilation)).contains("12"),
+                () -> "no digit past the branch is eleven or ten: "
+                        + bordersOf(linesOf(compilation)));
         List<UndividedPosition.Reason> unread = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("f").notRead().stream()
                 .map(PartitionEvidence.NotRead::reason).toList();
@@ -517,6 +523,73 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     @Test
     void aRemainderAddedToANumberOfItsOwnFormIsNotRead() {
         assertEquals(List.of(), bordersOf("a: Int, b: Int", "a == Int.floorMod(a + b, 11)"));
+    }
+
+    /**
+     * A rule of the decision a remainder of a form decides is composed a row on each side: a pair
+     * whose form leaves a remainder that meets it, and one whose form leaves one that does not,
+     * each worked out here of the pair the row holds. Weighed and moved forms alike, and a
+     * remainder met by several values.
+     */
+    @Test
+    void eachRuleOfADecisionOnARemainderIsComposedARowThatTakesIt() {
+        record Case(String condition, BiPredicate<Long, Long> holds) {}
+        for (Case each : List.of(
+                new Case("Int.floorMod(3 * a - d + 2, 10) == 0",
+                        (a, d) -> Math.floorMod(3 * a - d + 2, 10L) == 0),
+                new Case("Int.floorMod(a - d, 7) >= 5",
+                        (a, d) -> Math.floorMod(a - d, 7L) >= 5),
+                new Case("2 * Int.floorMod(a + 4 * d, 9) < 3",
+                        (a, d) -> 2 * Math.floorMod(a + 4 * d, 9L) < 3))) {
+            Compilation compilation = compiled("a: Int, d: Int", each.condition());
+            List<Boolean> sides = new ArrayList<>();
+            Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("f")
+                    .generation().stream()
+                    .filter(found -> found.finding().about() instanceof About.ARuleNoRowTakes)
+                    .forEach(found -> {
+                        if (found.outcome() instanceof GenerationOutcome.Generated made) {
+                            made.candidates().forEach(row -> sides.add(each.holds().test(
+                                    Long.parseLong(row.inputs().get(0).text()),
+                                    Long.parseLong(row.inputs().get(1).text()))));
+                        }
+                    });
+            assertTrue(sides.contains(true) && sides.contains(false),
+                    () -> each.condition() + ": a row on each side, and not " + sides);
+        }
+    }
+
+    /**
+     * A remainder of what the code points of a formatted string come to less as many of one
+     * number as the string is long — a digit's value, summed — is written a row at each point of
+     * its line: thirteen digits whose values leave the remainder the point is for, worked out here
+     * of the string the row holds. The length is walked from the format's own, and what the code
+     * points come to is what the remainder leaves to be chosen.
+     */
+    @Test
+    void aRemainderOfADigitSumIsWrittenADigitStringAtEachPoint() {
+        Compilation compilation = compiled("data Code = String\n"
+                        + "    invariant String.matches(\"[0-9]{13}\", value)", "c: Code",
+                "Int.floorMod(List.sum(List.map((x) -> x - 48, String.codePoints(c.value))), 10)"
+                        + " == 0");
+        List<String> labels = new ArrayList<>();
+        for (Row row : certifiedRows(linesOf(compilation))) {
+            String text = row.inputs().get(0);
+            String digits = text.substring(text.indexOf('"') + 1, text.lastIndexOf('"'));
+            assertTrue(digits.matches("[0-9]{13}"), text);
+            long remainder = Math.floorMod(digits.chars().map(c -> c - '0').sum(), 10);
+            for (String label : row.labels()) {
+                if (label.contains(" = ")) {
+                    assertEquals(Long.parseLong(label.substring(label.lastIndexOf(' ') + 1)),
+                            remainder, label + " at " + text);
+                    labels.add(label.substring(label.lastIndexOf(' ') + 1));
+                } else if (label.contains(" < ")) {
+                    assertTrue(remainder > 1, label + " at " + text);
+                    labels.add("above");
+                }
+            }
+        }
+        assertEquals(List.of("0", "1", "above"), labels.stream().sorted().toList(),
+                "a row at the line, beside it and past it");
     }
 
     /** One row of a measurement: what each input was written as and what each point is for. */

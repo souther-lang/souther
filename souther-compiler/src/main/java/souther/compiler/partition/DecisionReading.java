@@ -8,7 +8,6 @@ import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -111,6 +110,20 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
                     .flatMap(each -> each.states().stream()).toList());
         }
 
+        /** What a row has to be, beside the way, for each case the statements on this path draw
+         *  inside themselves that the reading can say it of. */
+        public List<CaseWay> caseWays() {
+            return steps.stream().flatMap(each -> each.cases().stream()).toList();
+        }
+
+        /** The way to this rule with what {@code toACase} asks of the row put on it: what a row
+         *  composed for the case has to satisfy of the input. */
+        public WayToTheBorder statesToACase(CaseWay toACase) {
+            List<OnTheWay> entries = new ArrayList<>(states().onTheWay());
+            entries.addAll(toACase.puts());
+            return new WayToTheBorder(entries);
+        }
+
         /**
          * What the same conditions ask of the answers a row stands the dependencies in with, which
          * is the other half of what such a row has to be.
@@ -208,39 +221,6 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         public Ruled display() {
             return occurrences.getFirst();
         }
-    }
-
-    /**
-     * Whether some rule of the decision consults a distinction that rests on which of several
-     * elements of one key a map filed from a list holds.
-     *
-     * <p>Read off the distinctions the rules consult, which is where such a condition is a column:
-     * a statement saying some element is the last of those holding a value.
-     */
-    public boolean consultsWhichElementOfAKeyIsLast() {
-        return consultsAStatement(Proposition::saysTheLastToHold);
-    }
-
-    /**
-     * Whether some rule of the decision consults a distinction that rests on a search from a node
-     * for some node below it: what such a statement asks of the node it starts at is a column, and
-     * what a node further down settles is not one a row is written toward.
-     */
-    public boolean consultsASearchBelowTheNodesARowWrites() {
-        return consultsAStatement(Proposition::saysASearchReachesBelow);
-    }
-
-    /** Whether some rule of the decision consults a statement that {@code says}. */
-    private boolean consultsAStatement(java.util.function.Predicate<Proposition> says) {
-        for (Ruled each : found) {
-            for (DecisionCondition condition : each.rule().consulted().keySet()) {
-                if (condition instanceof DecisionCondition.AStatement(var statement)
-                        && says.test(statement)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /**

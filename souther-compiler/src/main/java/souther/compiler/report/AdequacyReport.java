@@ -5948,6 +5948,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
+            // The behavior and the case, spelled whole: no finding of a document is about one, and
+            // a key written here is what tells two cases of one statement apart if one ever is.
+            case ObligationIdentity.OfACaseOfAStatement(var behavior, var which) -> {
+                into.put("behavior", behavior);
+                into.put("case", which.spelled());
+            }
             case ObligationIdentity.OfACombinationOfDecisions(var behavior, var settled) ->
                     combinationId(into, behavior, settled);
             // The behavior and the two classes, which is what a combination of two positions is
@@ -6456,6 +6462,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.CodePointValueSum it -> {
                 into.put("kind", "code_point_sum");
                 into.put("position", it.position().discriminated());
+            }
+            // The code point the string at the place holds at an index of its code points.
+            case NumericTerm.CodePointAt it -> {
+                into.put("kind", "code_point_at");
+                into.put("position", it.position().discriminated());
+                into.put("index", it.index());
             }
             // How often the value at the place occurs among the elements of its container.
             case NumericTerm.Multiplicity it -> {

@@ -3,7 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
@@ -207,6 +210,50 @@ public final class StandingAtAPoint {
                           List<ObservedInputs> observed, Criterion criterion,
                           List<ConditionOutcomeSite> watched) {
         return putToRows(line, watched).met(observed, criterion);
+    }
+
+    /** What a statement comes to at one row, read over the whole row. */
+    enum AtTheRow { HOLDS, FAILS, COULD_NOT_TELL }
+
+    /**
+     * The order of the elements of one container that a map filed from them is read in: which of
+     * the elements holding one value at {@code position} is the entry under it.
+     *
+     * <p>What a statement of the last to hold rests on, and the unit a row may be read the other
+     * way round in ({@link #atTheRow}): one container's order and no other's.
+     */
+    record OrderOfAKey(TermPath container, TermPath position) {
+
+        /** The order {@code last} rests on, or null where it is about a place no row writes. */
+        static OrderOfAKey of(Proposition.LastToHold last) {
+            return last.container() instanceof DecisionSubject.AnInput(TermPath container)
+                    && last.position() instanceof DecisionSubject.AnInput(TermPath position)
+                    ? new OrderOfAKey(container, position) : null;
+        }
+    }
+
+    /**
+     * What {@code stated} comes to at the row {@code observed} wrote, read over the whole row with
+     * no element of any container chosen — a statement about elements asks them itself.
+     *
+     * @param readTheOtherWay the orders read with the first element of a key as its entry rather
+     *                        than the last: what the statement would come to were those, and no
+     *                        others, the other way round
+     */
+    static AtTheRow atTheRow(Proposition stated, String behavior, Quantities quantities,
+                             BehaviorInputs where, ObservedInputs observed,
+                             Set<OrderOfAKey> readTheOtherWay) {
+        if (!AStatementAtARow.askable(stated)) {
+            return AtTheRow.COULD_NOT_TELL;
+        }
+        AStatementAtARow asked = AStatementAtARow.of(stated, behavior, quantities);
+        DiscoveringRow row = new DiscoveringRow(new RowWalk(where, observed, readTheOtherWay));
+        asked.lookAt(row);
+        return switch (asked.at(row)) {
+            case AStatementAtARow.Answer.Holds _ -> AtTheRow.HOLDS;
+            case AStatementAtARow.Answer.Fails _ -> AtTheRow.FAILS;
+            case AStatementAtARow.Answer.CouldNotTell _ -> AtTheRow.COULD_NOT_TELL;
+        };
     }
 
     /**
@@ -670,7 +717,7 @@ public final class StandingAtAPoint {
             if (mine == null) {
                 return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
             }
-            Map<Integer, Lastness> each = walk.kept(new LastOfItsValue(container, position), this,
+            Map<Integer, Lastness> each = walk.kept(new OrderOfAKey(container, position), this,
                     () -> lastnessOfEach(container, position));
             Lastness answer = each.get(mine);
             return answer != null ? answer : new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
@@ -682,7 +729,8 @@ public final class StandingAtAPoint {
          * that holds nothing there, or for every element where the walk could not be made.
          *
          * <p>From the last element to the first, carrying what the elements after each hold: the
-         * values read whole, and the first in order that was not.
+         * values read whole, and the first in order that was not. Where the walk reads this order
+         * the other way, from the first to the last, so "after" is "before".
          */
         private Map<Integer, Lastness> lastnessOfEach(TermPath container, TermPath position) {
             Written written = walk.at(position);
@@ -700,7 +748,8 @@ public final class StandingAtAPoint {
             Set<ObservedValue> readAfter = new HashSet<>();
             ReadingGap firstNotReadAfter = null;
             for (Map.Entry<Integer, List<ObservedValue>> element
-                    : byElement.descendingMap().entrySet()) {
+                    : (walk.readsTheOtherWay(new OrderOfAKey(container, position)) ? byElement
+                            : byElement.descendingMap()).entrySet()) {
                 ObservedValue held = element.getValue().getLast();
                 ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
                 // One after it that was read and is equal settles it, whatever else was not.
@@ -723,9 +772,6 @@ public final class StandingAtAPoint {
             }
             return out;
         }
-
-        /** Whether each element of an occurrence is the last to hold its value at a position. */
-        private record LastOfItsValue(TermPath container, TermPath position) {}
 
         /**
          * The occurrence of {@code container} this reading is in — what it chose of every other
@@ -966,9 +1012,25 @@ public final class StandingAtAPoint {
         /** How many answers were read rather than taken from those kept. */
         private long read;
 
+        /**
+         * The orders read with the first element of a key as its entry rather than the last: the
+         * row as a map filed the other way round would hold it. None for a row read as it is.
+         */
+        private final Set<OrderOfAKey> readTheOtherWay;
+
         RowWalk(BehaviorInputs where, ObservedInputs observed) {
+            this(where, observed, Set.of());
+        }
+
+        RowWalk(BehaviorInputs where, ObservedInputs observed, Set<OrderOfAKey> readTheOtherWay) {
             this.where = where;
             this.observed = observed;
+            this.readTheOtherWay = Set.copyOf(readTheOtherWay);
+        }
+
+        /** Whether this walk reads {@code order} the other way round. */
+        boolean readsTheOtherWay(OrderOfAKey order) {
+            return readTheOtherWay.contains(order);
         }
 
         /** What the row wrote at {@code path}. */
