@@ -3145,27 +3145,32 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * The entries beside the one a rule reads are free only under other keys, and a type with one
-     * code has none. The entry under that code is the one the rule holds to one, so no number but
-     * one reaches the values of the map, while those values do reach each number.
+     * What a rule leaves the keys it leaves nothing of the values: the entry under the key the
+     * rule names is held to what it says, and an entry under another key takes a value only if
+     * the type has a second key. With one code the only entry is the one held to one, so no number
+     * but one reaches the values of the map, while those values do reach each number; with many,
+     * the values are still not read as every value.
      */
     @Test
-    void aRuleLookingUpOneKeyLeavesTheValuesOfTheMapAloneOnlyWhereThereIsASecondKey() {
-        String model = """
-                module w1
-                data Code = String invariant String.matches("JPY", value)
-                data Rate = Int invariant value > 0
-                data Table = { base: Code, rates: Map<Code, Rate> }
-                    invariant baseIsOne(base, rates)
-                let baseIsOne (base: Code, rates: Map<Code, Rate>): Bool =
-                    Map.get(base, rates)
-                        |> Option.map(r -> r.value == 1)
-                        |> Option.withDefault(false)
-                behavior m : (n: Int, t: Table) -> Bool
-                let m (n, t) = List.any(r -> r.value == n, Map.values(t.rates))
-                """;
-        assertEquals(Map.of("t.rates[*]", RELATES, "n", NOT_SHOWN),
-                leftIn(model, whereWritten(model, "== n")));
+    void aRuleLookingUpOneKeyLeavesTheValuesOfTheMapNoRunToReach() {
+        for (String code : List.of("String.matches(\"JPY\", value)",
+                "String.length(value) >= 1 && String.length(value) <= 3")) {
+            String model = """
+                    module w1
+                    data Code = String invariant %s
+                    data Rate = Int invariant value > 0
+                    data Table = { base: Code, rates: Map<Code, Rate> }
+                        invariant baseIsOne(base, rates)
+                    let baseIsOne (base: Code, rates: Map<Code, Rate>): Bool =
+                        Map.get(base, rates)
+                            |> Option.map(r -> r.value == 1)
+                            |> Option.withDefault(false)
+                    behavior m : (n: Int, t: Table) -> Bool
+                    let m (n, t) = List.any(r -> r.value == n, Map.values(t.rates))
+                    """.formatted(code);
+            assertEquals(Map.of("t.rates[*]", RELATES, "n", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "== n")), code);
+        }
     }
 
     /** The places some comparison at {@code at} of a model written out whole is not read about. */

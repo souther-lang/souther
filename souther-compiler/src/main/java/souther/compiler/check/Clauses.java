@@ -460,7 +460,7 @@ final class Clauses {
         }
 
         /** A lookup in a container that is a place of the value: the lookup, and the container. */
-        private record Lookup(Core lookup, Location map) {}
+        private record Lookup(Core lookup, Location container) {}
 
         /**
          * Every place of {@code clause} it reads. The containers it looks members up in are read
@@ -470,7 +470,7 @@ final class Clauses {
         void readsOf(Core clause) {
             walk(clause);
             for (Lookup each : lookups) {
-                read(each.map(), LookupsAClauseNeeds.needs(clause, each.lookup())
+                read(each.container(), LookupsAClauseNeeds.needs(clause, each.lookup())
                         ? ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS
                         : ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
             }

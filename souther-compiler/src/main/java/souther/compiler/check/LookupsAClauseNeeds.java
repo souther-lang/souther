@@ -40,7 +40,7 @@ final class LookupsAClauseNeeds {
         this.lookup = Core.withoutStanding(lookup);
     }
 
-    /** Whether {@code clause} is false wherever {@code lookup}, a part of it, finds no entry. */
+    /** Whether {@code clause} is false wherever {@code lookup}, a part of it, finds no member. */
     static boolean needs(Core clause, Core lookup) {
         return new LookupsAClauseNeeds(lookup).work(clause) == Worked.FALSE;
     }
@@ -48,7 +48,7 @@ final class LookupsAClauseNeeds {
     private Worked work(Core e) {
         Core here = Core.withoutStanding(e);
         if (here == lookup) {
-            return answerOfNoEntry(here);
+            return answerOfNoMember(here);
         }
         return switch (here) {
             case Core.Bool literal -> literal.value() ? Worked.UNKNOWN : Worked.FALSE;
@@ -72,7 +72,7 @@ final class LookupsAClauseNeeds {
     }
 
     /** What the lookup answers where it finds no member. */
-    private static Worked answerOfNoEntry(Core lookup) {
+    private static Worked answerOfNoMember(Core lookup) {
         if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied(var operation, var _))) {
             return Worked.UNKNOWN;
         }
