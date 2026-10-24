@@ -25,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * What each operation of a library may end a run without a value for, over every call of it and
@@ -60,40 +61,56 @@ final class LibraryEndings {
 
     private final Map<ValueName.Stdlib.Operation, Endings> ending;
 
-    private final Map<ValueName.Stdlib.Operation, Endings> ofItsOwn;
+    private final Stdlib library;
 
-    private final Map<ValueName.Stdlib.Operation, GetsPast> completions;
+    private final Supplier<BoundOperationFacts> facts;
 
-    private LibraryEndings(Map<ValueName.Stdlib.Operation, Endings> ending,
-                           Map<ValueName.Stdlib.Operation, Endings> ofItsOwn,
-                           Map<ValueName.Stdlib.Operation, GetsPast> completions) {
+    /** What each operation ends a run for apart from the functions it is handed, and where it
+     *  answers apart from them — read on the first asking, since it is read with what is proved of
+     *  the library, and proving that is most of the cost of reading a library. */
+    private Apart apart;
+
+    private LibraryEndings(Map<ValueName.Stdlib.Operation, Endings> ending, Stdlib library,
+                           Supplier<BoundOperationFacts> facts) {
         this.ending = Map.copyOf(ending);
-        this.ofItsOwn = Map.copyOf(ofItsOwn);
-        this.completions = Map.copyOf(completions);
+        this.library = library;
+        this.facts = facts;
     }
 
     /** What every operation of {@code library}, and every sugar for one, ends a run for. */
     static LibraryEndings of(Stdlib library) {
-        return of(library, OperationFactBinder.bindAll(library));
+        return of(library, () -> OperationFactBinder.bindAll(library));
     }
 
     /**
      * The same, and what each ends a run for apart from the functions it is handed, read with
-     * {@code facts}, what is proved of the library's operations.
+     * {@code facts}, what is proved of the library's operations, where that is asked.
      */
-    static LibraryEndings of(Stdlib library, BoundOperationFacts facts) {
+    static LibraryEndings of(Stdlib library, Supplier<BoundOperationFacts> facts) {
         Reading whole = new Reading(library, null);
         library.entries().keySet().forEach(whole::of);
         library.rewrites().keySet().forEach(whole::of);
-        Reading apart = new Reading(library, facts);
-        library.entries().keySet().forEach(apart::of);
-        library.rewrites().keySet().forEach(apart::of);
-        Map<ValueName.Stdlib.Operation, GetsPast> completions = new HashMap<>();
-        Map<ValueName.Stdlib.Operation, Endings> own = new HashMap<>(apart.settled);
-        own.forEach((operation, ends) -> completions.put(operation,
-                apart.walksNoFurtherThanItsList(operation) ? new GetsPast.Always()
-                        : completionOf(library, facts, operation, ends, apart)));
-        return new LibraryEndings(whole.settled, apart.settled, completions);
+        return new LibraryEndings(whole.settled, library, facts);
+    }
+
+    /** What the library's operations end a run for apart from what they are handed, and where
+     *  they answer apart from it. */
+    private record Apart(Map<ValueName.Stdlib.Operation, Endings> ofItsOwn,
+                         Map<ValueName.Stdlib.Operation, GetsPast> completions) {}
+
+    private synchronized Apart apart() {
+        if (apart == null) {
+            BoundOperationFacts proved = facts.get();
+            Reading reading = new Reading(library, proved);
+            library.entries().keySet().forEach(reading::of);
+            library.rewrites().keySet().forEach(reading::of);
+            Map<ValueName.Stdlib.Operation, GetsPast> completions = new HashMap<>();
+            reading.settled.forEach((operation, ends) -> completions.put(operation,
+                    reading.walksNoFurtherThanItsList(operation) ? new GetsPast.Always()
+                            : completionOf(library, proved, operation, ends, reading)));
+            apart = new Apart(Map.copyOf(reading.settled), Map.copyOf(completions));
+        }
+        return apart;
     }
 
     /**
@@ -157,7 +174,7 @@ final class LibraryEndings {
      * @throws IllegalArgumentException where the library has no such operation
      */
     GetsPast completionApartFromWhatItIsHanded(ValueName.Stdlib.Operation operation) {
-        GetsPast found = completions.get(operation);
+        GetsPast found = apart().completions().get(operation);
         if (found == null) {
             throw new IllegalArgumentException(
                     "`" + operation.qualified() + "` is no operation of the library read");
@@ -172,7 +189,7 @@ final class LibraryEndings {
 
     private static final class Shipped {
         private static final LibraryEndings ENDINGS =
-                of(DefaultStdlib.get(), DefaultBoundOperationFacts.get());
+                of(DefaultStdlib.get(), DefaultBoundOperationFacts::get);
     }
 
     /**
@@ -200,7 +217,7 @@ final class LibraryEndings {
      * @throws IllegalArgumentException where the library has no such operation
      */
     Endings apartFromWhatItIsHanded(ValueName.Stdlib.Operation operation) {
-        Endings found = ofItsOwn.get(operation);
+        Endings found = apart().ofItsOwn().get(operation);
         if (found == null) {
             throw new IllegalArgumentException(
                     "`" + operation.qualified() + "` is no operation of the library read");

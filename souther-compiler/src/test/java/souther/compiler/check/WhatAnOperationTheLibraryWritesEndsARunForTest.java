@@ -43,7 +43,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     /** Control: as shipped, {@code List.isEmpty} is a comparison of a length, which ends no run. */
     @Test
     void anOperationWhoseBodyEndsNoRunEndsNone() {
-        assertEquals(NONE, LibraryEndings.of(DefaultStdlib.get()).of(IS_EMPTY));
+        assertEquals(NONE, LibraryEndings.shipped().of(IS_EMPTY));
     }
 
     /** The same name and signature over a body joining two lists ends a run where the join does. */
@@ -141,7 +141,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     /** As shipped, an operation derived from the fold applies the function it is handed. */
     @Test
     void anOperationThroughTheFoldIsNotKnown() {
-        assertEquals(new Endings.NotKnown(), LibraryEndings.of(DefaultStdlib.get()).of(ANY));
+        assertEquals(new Endings.NotKnown(), LibraryEndings.shipped().of(ANY));
     }
 
     /**
@@ -164,7 +164,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
      */
     @Test
     void apartFromWhatItIsHandedAWalkEndsWhatItsPiecesDo() {
-        LibraryEndings endings = LibraryEndings.of(DefaultStdlib.get());
+        LibraryEndings endings = LibraryEndings.shipped();
         for (String each : new String[] {"foldFrom", "map", "filter"}) {
             ValueName.Stdlib.Operation operation = ValueName.Stdlib.operation("List", each);
             assertEquals(NONE, endings.apartFromWhatItIsHanded(operation), each);
@@ -185,7 +185,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     void anOperationThatIsAJoinOfItsParametersAnswersWhereTheyFitTogether() {
         assertEquals(new GetsPast.WhereTheAnswerFits(
                         new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0)),
-                LibraryEndings.of(DefaultStdlib.get()).completionApartFromWhatItIsHanded(APPEND));
+                LibraryEndings.shipped().completionApartFromWhatItIsHanded(APPEND));
         assertEquals(new GetsPast.WhereTheAnswerFits(
                         new GetsPast.AnswerSize.SumOf(List.of(1, 0), 0)),
                 LibraryEndings.of(rewritten(APPEND_BODY, "= b ++ a"))
@@ -216,7 +216,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
      */
     @Test
     void aWalkThatPutsInOneForEachElementAnswersAlways() {
-        LibraryEndings endings = LibraryEndings.of(DefaultStdlib.get());
+        LibraryEndings endings = LibraryEndings.shipped();
         for (String each : new String[] {"take", "drop", "indexBy"}) {
             assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
                     ValueName.Stdlib.operation("List", each)), each);
@@ -241,7 +241,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     /** An operation the library does not have is refused, and not answered as not known. */
     @Test
     void anOperationTheLibraryDoesNotHaveIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> LibraryEndings.of(DefaultStdlib.get())
+        assertThrows(IllegalArgumentException.class, () -> LibraryEndings.shipped()
                 .of(ValueName.Stdlib.operation("List", "noSuchOperation")));
     }
 
