@@ -1381,7 +1381,8 @@ final class CardinalityComposer {
                 TermRealizations.Realization one = nested.alike(sourceType, keptApart,
                         List.of(new NestedContainersAddingUp.Counted(candidates.getFirst(),
                                 often)),
-                        beside.subList(0, extra), carrier, within, reading);
+                        beside.subList(0, extra), carrier, within, reading,
+                        MOST_OFFERED - built.size());
                 if (one instanceof TermRealizations.Realization.Built made) {
                     built.addAll(made.values());
                     rest = rest.and(made.rest());
@@ -1480,8 +1481,8 @@ final class CardinalityComposer {
         }
         NestedContainersAddingUp nested = new NestedContainersAddingUp(place);
         ValuesCountedFor search = new ValuesCountedFor(values, wanted, run, beside,
-                (counted, others) -> nested.alike(sourceType, keptApart, counted, others, carrier,
-                        within, reading));
+                (counted, others, room) -> nested.alike(sourceType, keptApart, counted, others,
+                        carrier, within, reading, room));
         search.counting(0, new ArrayList<>(), 0);
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         if (search.cutShort) {
@@ -1510,11 +1511,12 @@ final class CardinalityComposer {
      */
     static final class ValuesCountedFor {
 
-        /** How a container is composed with the values counted and the others beside them. */
+        /** How a container is composed with the values counted and the others beside them, in at
+         *  most {@code room} rows. */
         interface Composes {
 
             TermRealizations.Realization compose(List<NestedContainersAddingUp.Counted> counted,
-                                                 List<Place> others);
+                                                 List<Place> others, int room);
         }
 
         private final List<Place> values;
@@ -1584,8 +1586,8 @@ final class CardinalityComposer {
                     spent = true;
                     return;
                 }
-                TermRealizations.Realization one =
-                        composes.compose(List.copyOf(counted), beside.subList(0, extra));
+                TermRealizations.Realization one = composes.compose(List.copyOf(counted),
+                        beside.subList(0, extra), MOST_OFFERED - built.size());
                 if (one instanceof TermRealizations.Realization.Built made) {
                     built.addAll(made.values());
                     rest = rest.and(made.rest());

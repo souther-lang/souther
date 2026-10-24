@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -22,6 +23,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
@@ -123,6 +125,30 @@ class AnAcrossCompositionIsOfferedOnlyForWhatDoesNotTurnOnTheListTest {
 
         TermRealizations.Realization tight = nesting.holdingThe(read.desks(), List.of(),
                 elements, read.measuring().region(), read.reading(), 1);
+        assertEquals(1, assertInstanceOf(TermRealizations.Realization.Built.class, tight)
+                .values().size());
+        assertTrue(tight.shortfall().figures()
+                .contains(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED));
+    }
+
+    /** And a value occurring as often as asked, spread over the desks, within the room too. */
+    @Test
+    void spreadingAValueOverTheDesksOffersNoMoreRowsThanItHasRoomFor() {
+        Read read = read();
+        TermPath amount = FORECASTS.element().then("amount");
+        Carrier carrier = read.measuring().ordersOf(new NumericTerm.ValueOf(amount)).observed();
+        NestedContainersAddingUp nesting = new NestedContainersAddingUp(amount);
+        List<NestedContainersAddingUp.Counted> counted =
+                List.of(new NestedContainersAddingUp.Counted(Count.of(7), 1));
+        List<Place> others = List.of(Count.of(8), Count.of(9));
+
+        TermRealizations.Realization roomy = nesting.alike(read.desks(), List.of(), counted,
+                others, carrier, read.measuring().region(), read.reading(), 8);
+        assertTrue(assertInstanceOf(TermRealizations.Realization.Built.class, roomy)
+                .values().size() > 1, "the leaves are spread over the desks in more than one way");
+
+        TermRealizations.Realization tight = nesting.alike(read.desks(), List.of(), counted,
+                others, carrier, read.measuring().region(), read.reading(), 1);
         assertEquals(1, assertInstanceOf(TermRealizations.Realization.Built.class, tight)
                 .values().size());
         assertTrue(tight.shortfall().figures()

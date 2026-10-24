@@ -6,6 +6,7 @@ import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -84,5 +85,13 @@ class WhatAnElementAnswersIsTheSameHoweverTheElementsAreSharedOutTest {
                         ElementProjection.ofFields(List.of("amount")))),
                 Type.Prim.INT, NumericTerm.GatheredUnderItsKey.Gathering.TOTAL, null);
         assertTrue(sameWhereverTheyAreWritten(total));
+    }
+
+    /** How often a value occurs among the elements of every list is the elements', wherever they
+     *  are written. */
+    @Test
+    void howOftenAValueOccursAmongTheElementsOfEveryListIsTheSameWhereverTheyAreWritten() {
+        assertTrue(sameWhereverTheyAreWritten(NumericTerm.OccurrencesOfItsValue.of(
+                new RunSource.FlattenedOccurrences(CURRENCY), null)));
     }
 }
