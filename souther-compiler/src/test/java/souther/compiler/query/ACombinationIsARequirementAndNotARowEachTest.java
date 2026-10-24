@@ -116,6 +116,9 @@ class ACombinationIsARequirementAndNotARowEachTest {
         assertEquals(
                 List.of("OfALine", "OfABorder", "OfAnArm", "OfARow", "OfAnOutputCase",
                         "OfADecisionRule",
+                        // A case inside a statement a rule consults: asked where the rows leave
+                        // one unseen, and raised by no finding.
+                        "OfACaseOfAStatement",
                         "OfACombinationOfDecisions", "OfAFallbackPairCell",
                         // A rewrite of the body no row tells apart. Not a combination: it is the
                         // body answering otherwise, whatever the positions do together.

@@ -32,7 +32,7 @@ import java.util.Set;
 public sealed interface ObligationIdentity
         permits ObligationIdentity.OfALine, ObligationIdentity.OfABorder, ObligationIdentity.OfAnArm,
                 ObligationIdentity.OfARow, ObligationIdentity.OfAnOutputCase,
-                ObligationIdentity.OfADecisionRule,
+                ObligationIdentity.OfADecisionRule, ObligationIdentity.OfACaseOfAStatement,
                 ObligationIdentity.OfACombinationOfDecisions,
                 ObligationIdentity.OfAFallbackPairCell, ObligationIdentity.OfAReplacement,
                 WhereACaseOfAnInputIsOwed {
@@ -196,6 +196,23 @@ public sealed interface ObligationIdentity
         public OfADecisionRule {
             Objects.requireNonNull(behavior, "a rule of a decision is some body's");
             Objects.requireNonNull(rule, "an obligation is told apart by something");
+        }
+    }
+
+    /**
+     * One case a statement of the decision draws inside itself, which the decision's measure is
+     * short of until some row is seen in it.
+     *
+     * <p>The behavior beside the case for the reason a rule of a decision has one: a statement is
+     * written in the terms of one body's positions, and a row written for another behavior is no
+     * evidence of a case of this one.
+     */
+    record OfACaseOfAStatement(String behavior, CaseOfAStatement which)
+            implements ObligationIdentity {
+
+        public OfACaseOfAStatement {
+            Objects.requireNonNull(behavior, "a case of a statement is some body's");
+            Objects.requireNonNull(which, "an obligation is told apart by something");
         }
     }
 

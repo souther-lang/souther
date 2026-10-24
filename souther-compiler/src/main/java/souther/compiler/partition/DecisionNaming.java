@@ -208,7 +208,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         DecisionPath path = DecisionPath.NOWHERE;
         for (DecisionMeanings.Read each : decided) {
             path = path.and(each.answer(), shownBy(each.answer(), condition, held),
-                    each.onTheWay(), each.said());
+                    each.onTheWay(), each.said(), each.cases());
             if (path == null) {
                 return null;
             }
@@ -463,7 +463,8 @@ final class DecisionNaming implements Naming<DecisionPath> {
         ModelOccurrence stated = ModelOccurrence.statedAt(fork).orElse(null);
         return DecisionPath.NOWHERE.and(read.answer(), stated == null
                 ? new ShownBy.NothingIsRecorded(read.answer().condition())
-                : new ShownBy.AtAnArm(stated, part), read.onTheWay(), read.said());
+                : new ShownBy.AtAnArm(stated, part), read.onTheWay(), read.said(),
+                read.cases());
     }
 
     @Override

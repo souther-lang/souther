@@ -913,12 +913,28 @@ final class Coverages {
          *                 read. Held by the probe, a search would compose its row under whatever
          *                 the behavior answers generally and be run under what it actually needs
          */
+        default java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> attempt(
+                String label,
+                Map<souther.compiler.partition.RealizationTarget, Place> fixing,
+                souther.compiler.partition.NumbersAskedFor asking,
+                souther.compiler.partition.Reachability.Reaching reaching,
+                souther.compiler.partition.AnswersDemanded demands) {
+            return attempt(label, fixing, asking, reaching, demands, java.util.Optional.empty());
+        }
+
+        /**
+         * The same, with each row composed held to {@code judge} besides the way, inside the walk
+         * that composes it. For what a way cannot say and only a run does, such as a case a search
+         * draws inside itself: a row the judge refuses is passed over and the walk goes on to the
+         * next, so what comes back is a row the judge accepted or none.
+         */
         java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> attempt(
                 String label,
                 Map<souther.compiler.partition.RealizationTarget, Place> fixing,
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
-                souther.compiler.partition.AnswersDemanded demands);
+                souther.compiler.partition.AnswersDemanded demands,
+                java.util.Optional<souther.compiler.partition.Generator.RowJudge> judge);
 
         /**
          * A composed row built and run, so that what it turned out to be can be asked.

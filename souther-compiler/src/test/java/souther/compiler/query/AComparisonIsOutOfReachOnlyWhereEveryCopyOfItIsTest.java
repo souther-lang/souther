@@ -388,6 +388,6 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
     private static DecisionReading.Ruled seenAt(ShownBy... places) {
         return new DecisionReading.Ruled(new DecisionRule(Map.of()),
                 List.of(new RuleStep(List.of(places), List.of(), AnswersDemanded.NOTHING,
-                        SaidOnTheWay.NONE)), true);
+                        SaidOnTheWay.NONE, List.of())), true);
     }
 }

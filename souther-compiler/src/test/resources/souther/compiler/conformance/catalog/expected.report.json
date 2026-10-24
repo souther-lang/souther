@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "question_unanswered", "rewrite_undecided" ],
+  "weakening" : [ "rule_unread", "question_unanswered", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -8818,7 +8818,7 @@
   }, {
     "module" : "conformance.searching",
     "status" : "partial",
-    "weakening" : [ "rewrite_undecided" ],
+    "weakening" : [ "reachable_node_cases_unmeasured", "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -10568,6 +10568,223 @@
             "rewrite" : "arm_as_sibling",
             "module" : "conformance.searching",
             "definition" : "everyZoneStocked",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "zone.count"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "zone.zones"
+      } ]
+    }, {
+      "name" : "restockAnyZoneWithoutALeafRow",
+      "implementation" : "implemented",
+      "rows" : 3,
+      "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "restockAnyZoneWithoutALeafRow",
+          "source" : "4",
+          "name" : "a zone below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 102,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockAnyZoneWithoutALeafRow",
+          "source" : "4",
+          "name" : "a zone inside one below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 104,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockAnyZoneWithoutALeafRow",
+          "source" : "4",
+          "name" : "zones at the floor everywhere are fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 106,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
+      "rowsThatDoNotHold" : [ ],
+      "status" : "partial",
+      "weakening" : [ "reachable_node_cases_unmeasured" ],
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "Fine", "Restock" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "restockAnyZoneWithoutALeafRow",
+              "case" : "Fine"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "restockAnyZoneWithoutALeafRow",
+              "case" : "Restock"
+            }
+          } ],
+          "status" : "complete",
+          "specified" : [ "Fine", "Restock" ],
+          "observed" : [ "Fine", "Restock" ],
+          "verified" : [ "Fine", "Restock" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "nothing_is_divided"
+        },
+        "boundariesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "no_rule_draws_a_line"
+        },
+        "axes" : [ ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ ],
+        "obligations" : [ ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ "zone.count", "zone.zones" ],
+        "notRead" : [ ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockAnyZoneWithoutALeafRow",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 99,
+            "column" : 44,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockAnyZoneWithoutALeafRow",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 99,
+            "column" : 44,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        } ],
+        "denominatorSettled" : true
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "partial",
+          "weakening" : [ "reachable_node_cases_unmeasured" ]
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "restockAnyZoneWithoutALeafRow",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
+              "outcome" : "held"
+            } ]
+          },
+          "taken" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "restockAnyZoneWithoutALeafRow",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : true
+        } ]
+      },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "restockAnyZoneWithoutALeafRow",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockAnyZoneWithoutALeafRow",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockAnyZoneWithoutALeafRow",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockAnyZoneWithoutALeafRow",
             "construct" : 0,
             "lowered" : 0,
             "part" : 1,
