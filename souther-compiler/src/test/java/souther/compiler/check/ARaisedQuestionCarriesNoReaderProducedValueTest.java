@@ -112,6 +112,11 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * dates the move is defined at, which are whole numbers the author's own calls wrote and
      * nothing a reading produced.
      *
+     * <p>{@code OfTheCodePointAt} belongs to one code point of a string, which carries a whole
+     * number and nothing else: which of the string's code points it is, counted as
+     * {@code String.codePoints} lists them. A place in the string and no reading's account of how
+     * it was reached — two walks that hand a closure the same code point name the same number.
+     *
      * <p>{@code OfItsMultiplicity} belongs to how often an element's value occurs among the
      * elements beside it, which carries nothing: the place says which value, and the container it
      * stands inside says which elements are counted.
@@ -135,6 +140,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatAnOperationAnswers",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatItsCodePointsComeTo",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfTheCodePointAt",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsMultiplicity",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOccurrencesInEveryContainer",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfTheOccurrencesOfAKey",
