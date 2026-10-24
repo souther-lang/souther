@@ -629,8 +629,9 @@ public enum CompositionBudget {
 
     /**
      * How many pieces a string is put together of when a body parts it and builds a newtype of the
-     * pieces: how many it is seen in that a piece of it is changed at, and how many it is made of
-     * for the pieces to be ones the newtype admits.
+     * pieces: how many it is seen in that a piece of it is changed at, how many it is made of for
+     * the pieces to be ones the newtype admits, and how many of the strings the row holds elsewhere
+     * a piece is taken from.
      *
      * <p>The strings past it were never offered, so what a search came to is about the strings it
      * tried — a string seen in more pieces than this is changed at none of them. The runs those
@@ -757,7 +758,8 @@ public enum CompositionBudget {
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
                     "how many rows a walk composing a row for a point hands the choice of a row";
             case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
-                    "how many pieces a string parted by a body is put together of";
+                    "how many pieces a string parted by a body is put together of, and how many"
+                            + " strings of the row a piece is taken from";
         };
     }
 

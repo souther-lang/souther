@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.ReplacementDisposition;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -144,6 +145,50 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
     }
 
     /**
+     * The string stands inside one case of a sum, as an address does inside a contact point. The
+     * body reaches it by the case it is, and the value a run had is that case: the two are the same
+     * place.
+     */
+    private static final String IN_A_CASE = """
+            module example.crm
+
+            data EmailAddress = String
+                invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+            data PhoneNumber = String
+                invariant String.matches("[0-9]+", value)
+            data DomainName = String
+                invariant String.matches("[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?(\\\\.[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?)+", value)
+            data ByEmail = { email: EmailAddress }
+            data ByPhone = { phone: PhoneNumber }
+            data Reach = ByEmail | ByPhone
+
+            behavior domainsOf : (reach: Reach) -> List<DomainName>
+                constructs DomainName
+
+            let emailsOf (reach: Reach): List<EmailAddress> =
+                match reach with
+                    | ByEmail { email = own } -> [ own ]
+                    | ByPhone                 -> []
+
+            let domainsOf (reach) =
+                List.flatMap(e -> List.flatMap(d -> if DomainName(d) as name then [ name ] else [],
+                                               List.drop(1, String.split("@", e.value))),
+                             emailsOf(reach))
+
+            example domainsOf
+                | "an address" : (ByEmail { email = EmailAddress("cto@acme.example.com") })
+                    -> [DomainName("acme.example.com")]
+            """;
+
+    @Test
+    void aStringInsideOneCaseOfASumIsTheOneTheBodyParts() {
+        Replacements.Searched came = searched(IN_A_CASE, "example.crm", "domainsOf");
+
+        assertInstanceOf(ReplacementDisposition.Witnessed.class, came.disposition(),
+                () -> "the address inside `ByEmail` is the string parted: " + came);
+    }
+
+    /**
      * A string with no separator is one piece. Dropped, it leaves nothing; kept, it is the piece the
      * construction goes on with, so a string of that one piece tells the rewrite apart.
      */
@@ -164,7 +209,7 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
      */
     @Test
     void aStringOfManyPiecesIsNotMadeOutInFull() {
-        String many = String.join(";", java.util.Collections.nCopies(12, "x"));
+        String many = String.join(";", Collections.nCopies(12, "x"));
         Collection<Replacements.Searched> came = searchedAll(
                 tags("[^;]+(;[^;]+)*", "(TagList(\"" + many + "\")) -> []"),
                 "example.catalog", "tagsOf");
@@ -180,7 +225,7 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
      */
     @Test
     void aStringPastTheBoundSaysTheFigureItStoppedAt() {
-        String many = "x" + String.join("", java.util.Collections.nCopies(11, ";AB1"));
+        String many = "x" + String.join("", Collections.nCopies(11, ";AB1"));
         Replacements.Searched came = searched(
                 tags("x(;[A-Z]{2}[0-9])*", "(TagList(\"" + many + "\")) -> [Tag(\"AB1\")]"),
                 "example.catalog", "tagsOf");

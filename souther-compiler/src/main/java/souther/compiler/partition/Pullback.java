@@ -2095,13 +2095,15 @@ final class Pullback {
                 made = beneath.at();
                 continue;
             }
-            if (!(Core.withoutStanding(made.value()) instanceof Core.PreservedCall call)
-                    || DefaultBoundOperationFacts.get()
-                            .holdsTheElementsByIndex(call.declared().operation()) == null) {
+            if (!(Core.withoutStanding(made.value()) instanceof Core.PreservedCall call)) {
                 break;
             }
-            made = made.at().standing(call.args().get(DefaultBoundOperationFacts.get()
-                    .holdsTheElementsByIndex(call.declared().operation()).list().position()),
+            BoundOperationFacts.KeptByIndex kept = DefaultBoundOperationFacts.get()
+                    .holdsTheElementsByIndex(call.declared().operation());
+            if (kept == null) {
+                break;
+            }
+            made = made.at().standing(call.args().get(kept.list().position()),
                     read.rules().symbols(), read.rules().newtypes());
         }
         return made == null ? null : piecesOf(made);
