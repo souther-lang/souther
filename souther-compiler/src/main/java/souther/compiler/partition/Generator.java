@@ -2290,24 +2290,28 @@ public final class Generator {
                                        List<Purpose> purposes, ReplacementWitness looking,
                                        CandidateCheck check, List<StoodInAnswer> answers) {
         MeasuredInput subject = axes.subject();
+        // As the run had them, written once: a candidate moves one position and leaves the others
+        // as they were.
+        List<FixtureTemplate> kept = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate value))) {
+                return null;
+            }
+            kept.add(value);
+        }
         for (int moved = 0; moved < seen.size(); moved++) {
             for (ObservedValue near : NearbyValues.of(seen.get(moved))) {
-                List<FixtureTemplate> inputs = new ArrayList<>();
-                boolean written = true;
-                for (int p = 0; p < seen.size() && written; p++) {
-                    if (ObservedFixtures.of(p == moved ? near : seen.get(p),
-                            subject.types().get(p), subject.ruleReading())
-                            instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                    FixtureTemplate value)
-                            && check.refuse(p, value).isEmpty()) {
-                        inputs.add(value);
-                    } else {
-                        written = false;
-                    }
-                }
-                if (!written) {
+                if (!(ObservedFixtures.of(near, subject.types().get(moved),
+                        subject.ruleReading())
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate value))
+                        || check.refuse(moved, value).isPresent()) {
                     continue;
                 }
+                List<FixtureTemplate> inputs = new ArrayList<>(kept);
+                inputs.set(moved, value);
                 GeneratedRow row = new GeneratedRow(purposes, inputs, answers);
                 switch (looking.of(row, null)) {
                     case TAKEN -> {
