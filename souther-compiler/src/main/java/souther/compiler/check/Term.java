@@ -748,8 +748,24 @@ final class Term {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof Term term && same(this, term, new IdentityHashMap<>());
+        if (!(other instanceof Term term)) {
+            return false;
+        }
+        // Answered before the table of pairs is made: most questions end at the same term or at a
+        // difference the term carries on its face, and a table made for each of them is most of
+        // what this costs.
+        if (term == this) {
+            return true;
+        }
+        if (term.hash != hash || term.shape != shape || !java.util.Objects.equals(term.of, of)
+                || term.parts.size() != parts.size()) {
+            return false;
+        }
+        return same(this, term, new IdentityHashMap<>(MOST_PAIRS_OF_A_SMALL_QUESTION));
     }
+
+    /** The pairs a question about two terms of ordinary size meets, which the table starts at. */
+    private static final int MOST_PAIRS_OF_A_SMALL_QUESTION = 4;
 
     private static boolean same(Term one, Term other, Map<Term, Map<Term, Boolean>> met) {
         if (one == other) {
