@@ -5,11 +5,13 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
+import java.util.List;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,7 +43,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     /** Control: as shipped, {@code List.isEmpty} is a comparison of a length, which ends no run. */
     @Test
     void anOperationWhoseBodyEndsNoRunEndsNone() {
-        assertEquals(NONE, LibraryEndings.of(DefaultStdlib.get()).of(IS_EMPTY));
+        assertEquals(NONE, LibraryEndings.shipped().of(IS_EMPTY));
     }
 
     /** The same name and signature over a body joining two lists ends a run where the join does. */
@@ -139,7 +141,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     /** As shipped, an operation derived from the fold applies the function it is handed. */
     @Test
     void anOperationThroughTheFoldIsNotKnown() {
-        assertEquals(new Endings.NotKnown(), LibraryEndings.of(DefaultStdlib.get()).of(ANY));
+        assertEquals(new Endings.NotKnown(), LibraryEndings.shipped().of(ANY));
     }
 
     /**
@@ -153,10 +155,110 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         assertEquals(new Endings.NotKnown(), LibraryEndings.of(rewritten).of(IS_EMPTY));
     }
 
+    /**
+     * Apart from the functions it is handed, the walk ends nothing of its own, and nor does an
+     * operation putting together at most one element for each element of a list: what it holds on
+     * the way is no longer than the part walked. One putting any number together for each holds
+     * as many as the pieces do, and answers where they fit. Read whole, each is the function it
+     * applies, which nothing here says.
+     */
+    @Test
+    void apartFromWhatItIsHandedAWalkEndsWhatItsPiecesDo() {
+        LibraryEndings endings = LibraryEndings.shipped();
+        for (String each : new String[] {"foldFrom", "map", "filter"}) {
+            ValueName.Stdlib.Operation operation = ValueName.Stdlib.operation("List", each);
+            assertEquals(NONE, endings.apartFromWhatItIsHanded(operation), each);
+            assertEquals(new GetsPast.Always(),
+                    endings.completionApartFromWhatItIsHanded(operation), each);
+            assertEquals(new Endings.NotKnown(), endings.of(operation), each);
+        }
+        ValueName.Stdlib.Operation flatMap = ValueName.Stdlib.operation("List", "flatMap");
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endings.apartFromWhatItIsHanded(flatMap));
+        assertEquals(new GetsPast.WhereTheAnswerFits(new GetsPast.AnswerSize.PiecesOf(1, 0)),
+                endings.completionApartFromWhatItIsHanded(flatMap));
+    }
+
+    /** A join of two lists answers where the two fit together, and so does an operation whose
+     *  body is that join of two of its parameters, in the order the body names them. */
+    @Test
+    void anOperationThatIsAJoinOfItsParametersAnswersWhereTheyFitTogether() {
+        assertEquals(new GetsPast.WhereTheAnswerFits(
+                        new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0)),
+                LibraryEndings.shipped().completionApartFromWhatItIsHanded(APPEND));
+        assertEquals(new GetsPast.WhereTheAnswerFits(
+                        new GetsPast.AnswerSize.SumOf(List.of(1, 0), 0)),
+                LibraryEndings.of(rewritten(APPEND_BODY, "= b ++ a"))
+                        .completionApartFromWhatItIsHanded(APPEND));
+    }
+
+    /**
+     * A filter whose step joins what it carried to itself is no longer one putting together at
+     * most one element for each: that is proved of the body, and the body here does not prove it,
+     * so what it holds on the way is not bounded by the list and its join is not known to fit.
+     */
+    @Test
+    void aFilterThatDoublesWhatItCarriedIsNotKnownToFit() {
+        LibraryEndings endings = LibraryEndings.of(rewritten(
+                "if keep(x) then acc ++ [x] else acc", "if keep(x) then acc ++ acc ++ [x] else acc"));
+        ValueName.Stdlib.Operation filter = ValueName.Stdlib.operation("List", "filter");
+
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endings.apartFromWhatItIsHanded(filter));
+        assertEquals(new GetsPast.NotKnown(), endings.completionApartFromWhatItIsHanded(filter));
+    }
+
+    /**
+     * A walk of a list that puts at most one element into what it carries for each element, and
+     * adds a number written out to what it counts, holds no more than the list and counts no
+     * further than an {@code Int} holds: taking, dropping and filing by a key answer always,
+     * apart from the key they are handed.
+     */
+    @Test
+    void aWalkThatPutsInOneForEachElementAnswersAlways() {
+        LibraryEndings endings = LibraryEndings.shipped();
+        for (String each : new String[] {"take", "drop", "indexBy"}) {
+            assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
+                    ValueName.Stdlib.operation("List", each)), each);
+        }
+    }
+
+    /**
+     * What a walk counts starts where it is written: one counting by one from as far below the
+     * greatest {@code Int} as a list holds elements stays an {@code Int} however many it walks,
+     * and one counting from a step nearer, or from the greatest itself, passes it on a list long
+     * enough, so nothing is said of where it answers.
+     */
+    @Test
+    void aWalkCountingFromWhereItStartsAnswersOnlyWhereItCannotPassAnInt() {
+        ValueName.Stdlib.Operation take = ValueName.Stdlib.operation("List", "take");
+        assertEquals(new GetsPast.Always(), LibraryEndings.of(rewritten("(0, [])",
+                "(9223372034707292160, [])")).completionApartFromWhatItIsHanded(take));
+        for (String seed : new String[] {"9223372034707292161", "9223372036854775807"}) {
+            assertEquals(new GetsPast.NotKnown(), LibraryEndings.of(rewritten("(0, [])",
+                    "(" + seed + ", [])")).completionApartFromWhatItIsHanded(take), seed);
+        }
+    }
+
+    /** One putting two in for an element, or joining what it carries to itself, may hold more
+     *  than the list, and nothing is said of where it answers. */
+    @Test
+    void aWalkThatPutsInMoreThanOneIsNotKnownToAnswer() {
+        LibraryEndings twice = LibraryEndings.of(rewritten("Map.insert(key(x), x, acc)",
+                "Map.insert(key(x), x, Map.insert(key(x), x, acc))"));
+        assertEquals(new GetsPast.NotKnown(), twice.completionApartFromWhatItIsHanded(
+                ValueName.Stdlib.operation("List", "indexBy")));
+        LibraryEndings doubled = LibraryEndings.of(rewritten(
+                "if i < n then (next, ys ++ [x]) else (next, ys)",
+                "if i < n then (next, ys ++ ys) else (next, ys)"));
+        assertEquals(new GetsPast.NotKnown(), doubled.completionApartFromWhatItIsHanded(
+                ValueName.Stdlib.operation("List", "take")));
+    }
+
     /** An operation the library does not have is refused, and not answered as not known. */
     @Test
     void anOperationTheLibraryDoesNotHaveIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> LibraryEndings.of(DefaultStdlib.get())
+        assertThrows(IllegalArgumentException.class, () -> LibraryEndings.shipped()
                 .of(ValueName.Stdlib.operation("List", "noSuchOperation")));
     }
 

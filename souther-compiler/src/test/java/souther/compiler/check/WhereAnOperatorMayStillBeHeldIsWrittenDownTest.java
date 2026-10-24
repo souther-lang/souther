@@ -140,6 +140,26 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.LibraryEndings.Reading.operator",
                     "hands the operator a library operation's body writes to AbortSites, which"
                             + " answers what it ends a run for"),
+            new Held("souther.compiler.abort.AbortSites.completionOfAnOperator",
+                    "which operator answers where the collection it answers fits, and of which"
+                            + " operands: the join of two lists"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.answerOfTheBody",
+                    "hands the operator a way of a library operation's body ends in to"
+                            + " AbortSites, which answers where it answers"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.counted",
+                    "names the addition a walk of the library counts by"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.putInOne",
+                    "names the join a walk of the library puts one element in by"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.everyNumberStaysAnInt",
+                    "asks WhereAnOperatorAnswers where the addition a walk of the library counts"
+                            + " by answers"),
+            new Held("souther.compiler.check.ContainerSizesUnderAWitness.anIntSumAnswersAt",
+                    "asks WhereAnOperatorAnswers where the addition a total of Ints is worked"
+                            + " out by answers"),
+            new Held("souther.compiler.check.WhatARunMayEndFor"
+                    + ".completionApartFromTheClosuresWrittenAtIt",
+                    "hands an operator the analysis reads to AbortSites, which answers where it"
+                            + " answers"),
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),

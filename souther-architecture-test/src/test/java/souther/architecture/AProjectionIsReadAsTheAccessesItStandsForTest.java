@@ -542,6 +542,17 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "which comparisons of the model are written in a condition, which no name read is");
         row(out, c + "partition/ComparisonReadings", "holds", "(" + core + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "standsIn", "(" + core + core + ")Z",
+                Reading.STRUCTURE, "finds one node under another by identity, which a"
+                        + " projection's base is on");
+        row(out, c + "partition/ComparisonReadings", "bindingsIn",
+                "(" + core + "Ljava/util/Map;)V", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "partition/ComparisonReadings", "boundTo",
+                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/ContainerSizesUnderAWitness", "names", "(" + core + ")V",
+                Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/ContainerSizesUnderAWitness", "mentions",
+                "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/GuardThresholds", "throughEachValue", "(" + core + reads + "L"

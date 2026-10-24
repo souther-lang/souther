@@ -295,6 +295,7 @@ public sealed interface BlockReason {
                 case RelationNotShownToReachEveryValue _ -> 23;
                 case WhereALineDecidesNotWorkedOut _ -> 24;
                 case RelationNotShownWhereTheSearchStopped _ -> 25;
+                case RelationNotShownReachedAtEveryValue _ -> 26;
             };
         }
 
@@ -326,7 +327,8 @@ public sealed interface BlockReason {
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _ -> 0;
+                     RelationNotShownToReachEveryValue _,
+                     RelationNotShownReachedAtEveryValue _ -> 0;
             };
         }
 
@@ -374,7 +376,8 @@ public sealed interface BlockReason {
                      CasePairingNotDetermined _,
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownWhereTheSearchStopped _ -> true;
+                     RelationNotShownWhereTheSearchStopped _,
+                     RelationNotShownReachedAtEveryValue _ -> true;
             };
         }
 
@@ -414,7 +417,7 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _ ->
+                     RelationNotShownToReachEveryValue _, RelationNotShownReachedAtEveryValue _ ->
                         RunSensitivity.UNAFFECTED;
             };
         }
@@ -446,7 +449,8 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _ -> List.of();
+                     RelationNotShownToReachEveryValue _,
+                     RelationNotShownReachedAtEveryValue _ -> List.of();
             };
         }
     }
@@ -1258,6 +1262,22 @@ public sealed interface BlockReason {
             stoppedAt = metAtSome(stoppedAt, "a search that stopped stopped at some figure");
         }
     }
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value, but
+     * a run may stop on the way to it on what nothing here says: an operator the run works out
+     * before it on a value the relation reads, or one whose operands are no place's.
+     *
+     * <p>That the relation divides none of the values here is a statement about every value here
+     * getting to it, and only a value that gets there is shown either side of it. Under
+     * {@code let total = x * x}, an {@code x} whose square passes the end of {@code Int} stops
+     * before {@code x == y}, and where that is nobody worked out.
+     *
+     * <p>Apart from {@link RelationNotShownToReachEveryValue}: there every value here gets to the
+     * relation and the other side is what is not shown to reach it. A comparison that comes out one
+     * way wherever a row gets to it is not this, since that is said whichever values get there.
+     */
+    record RelationNotShownReachedAtEveryValue() implements RuleReadingStopped {}
 
     /**
      * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:
