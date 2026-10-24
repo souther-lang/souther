@@ -48,41 +48,86 @@ class TheTotalsASharingCanComeToAreExactlyWhereItsElementsCanSumToThemTest {
         return line.slope().times(total).flatMap(line.intercept()::plus).orNull();
     }
 
-    /** The sum, over the elements, of the greatest or least of the lines at the total — or null
-     *  where a kind has no line to bound it. */
-    private static ExactRatio sum(List<TotalsASharingCanComeTo.Reach> reaches, int[] counts,
-                                  ExactRatio total, boolean lower) {
-        ExactRatio sum = ExactRatio.ZERO;
-        for (int kind = 0; kind < reaches.size(); kind++) {
-            List<TotalsASharingCanComeTo.Line> lines =
-                    lower ? reaches.get(kind).lower() : reaches.get(kind).upper();
-            if (lines.isEmpty()) {
-                return null;
+    /** The greatest of the lines at the total, or the least — null where there is no line. */
+    private static ExactRatio extreme(List<TotalsASharingCanComeTo.Line> lines, ExactRatio total,
+                                      boolean greatest) {
+        ExactRatio out = null;
+        for (TotalsASharingCanComeTo.Line each : lines) {
+            ExactRatio here = at(each, total);
+            if (out == null || (here.compareTo(out) > 0) == greatest) {
+                out = here;
             }
-            ExactRatio extreme = null;
-            for (TotalsASharingCanComeTo.Line each : lines) {
-                ExactRatio here = at(each, total);
-                if (extreme == null || (here.compareTo(extreme) > 0) == lower) {
-                    extreme = here;
-                }
-            }
-            sum = sum.plus(extreme.times(ExactRatio.of(counts[kind])).orNull()).orNull();
         }
-        return sum;
+        return out;
     }
 
+    /**
+     * Whether elements of the kinds, so many of each, can be given numbers that come to the total,
+     * worked out by giving them: each starts at the number nearest nought that its kind leaves it,
+     * and the difference to the total is made up by moving them, one after another, as far as
+     * their kinds leave them. Nothing is compared of what they sum to, so this is no reading of
+     * the interval the code finds.
+     */
     private static boolean canSumTo(List<TotalsASharingCanComeTo.Reach> reaches, int[] counts,
                                     ExactRatio total) {
-        for (TotalsASharingCanComeTo.Reach each : reaches) {
-            if ((each.totalLow() != null && total.compareTo(each.totalLow()) < 0)
-                    || (each.totalHigh() != null && total.compareTo(each.totalHigh()) > 0)) {
+        List<ExactRatio[]> bounds = new ArrayList<>();
+        ExactRatio sum = ExactRatio.ZERO;
+        List<ExactRatio> at = new ArrayList<>();
+        for (int kind = 0; kind < reaches.size(); kind++) {
+            TotalsASharingCanComeTo.Reach reach = reaches.get(kind);
+            if ((reach.totalLow() != null && total.compareTo(reach.totalLow()) < 0)
+                    || (reach.totalHigh() != null && total.compareTo(reach.totalHigh()) > 0)) {
                 return false;
             }
+            ExactRatio least = extreme(reach.lower(), total, true);
+            ExactRatio most = extreme(reach.upper(), total, false);
+            if (least != null && most != null && least.compareTo(most) > 0) {
+                return false;
+            }
+            ExactRatio start = ExactRatio.ZERO;
+            if (least != null && start.compareTo(least) < 0) {
+                start = least;
+            }
+            if (most != null && start.compareTo(most) > 0) {
+                start = most;
+            }
+            for (int each = 0; each < counts[kind]; each++) {
+                bounds.add(new ExactRatio[] {least, most});
+                at.add(start);
+                sum = sum.plus(start).orNull();
+            }
         }
-        ExactRatio least = sum(reaches, counts, total, true);
-        ExactRatio most = sum(reaches, counts, total, false);
-        return (least == null || least.compareTo(total) <= 0)
-                && (most == null || most.compareTo(total) >= 0);
+        ExactRatio left = total.minus(sum).orNull();
+        for (int each = 0; each < at.size() && left.signum() != 0; each++) {
+            ExactRatio edge = bounds.get(each)[left.signum() > 0 ? 1 : 0];
+            ExactRatio reach = edge == null ? left : edge.minus(at.get(each)).orNull();
+            ExactRatio step = left.signum() > 0 ? (left.compareTo(reach) < 0 ? left : reach)
+                    : (left.compareTo(reach) > 0 ? left : reach);
+            left = left.minus(step).orNull();
+        }
+        return left.signum() == 0;
+    }
+
+    /**
+     * A kind that leaves its element no number at a total is no kind at it, whatever the sums of
+     * the others come to. One kind needs a number at least the total and a thousand and one and at
+     * most nought, which it has only at a total of a thousand and one below nought or less; the
+     * other has no least and a most of the total and a thousand and one, or nought.
+     */
+    @Test
+    void aKindThatLeavesItsElementNoNumberAtATotalAllowsNoSharingThere() {
+        TotalsASharingCanComeTo.Reach needsALotBelowNought = new TotalsASharingCanComeTo.Reach(
+                List.of(new TotalsASharingCanComeTo.Line(ExactRatio.ONE, ratio(1001, 1))),
+                List.of(new TotalsASharingCanComeTo.Line(ExactRatio.ZERO, ExactRatio.ZERO)),
+                null, null);
+        TotalsASharingCanComeTo.Reach noLeast = new TotalsASharingCanComeTo.Reach(List.of(),
+                List.of(new TotalsASharingCanComeTo.Line(ExactRatio.ONE, ratio(1001, 1)),
+                        new TotalsASharingCanComeTo.Line(ExactRatio.ZERO, ExactRatio.ZERO)),
+                null, null);
+        TotalsASharingCanComeTo.Interval found = TotalsASharingCanComeTo.of(
+                List.of(needsALotBelowNought, noLeast), new int[] {1, 1}, new HashSet<>());
+        assertEquals(null, found.low());
+        assertEquals(ratio(-1001, 1), found.high());
     }
 
     @Test

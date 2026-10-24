@@ -168,12 +168,9 @@ final class CoupledCardinalityComposer {
                             || !kept.isAtOrUnder(container.element())))) {
                 return null;
             }
-            // The number and the place counted are chosen here, apart from what the statements
-            // read; a statement that asks either of its own value is left to the composition that
-            // does not read the total.
             for (CardinalityComposer.Asked.SoManyMeeting many : counts) {
                 for (TermPath read : many.perElement().positionsAsked()) {
-                    if (overlap(read, own.position()) || (kept != null && overlap(read, kept))) {
+                    if (!canBeReadAt(read, container, own.position(), kept)) {
                         return null;
                     }
                 }
@@ -200,6 +197,19 @@ final class CoupledCardinalityComposer {
             return new Coupled(List.copyOf(counts), own, total, List.copyOf(relations), carrier,
                     kept, keptCount);
         }
+    }
+
+    /**
+     * Whether a statement can ask of its own value the position {@code read}. The elements are
+     * read in a row that holds the container, listed at every position but two, and the numbers
+     * fixed beside it: a position inside an element is read off the listing, unless it is the
+     * number, which is chosen here, or the place counted, which is offered values apart from what
+     * the statements read. Nothing else is held for it to be read from.
+     */
+    private static boolean canBeReadAt(TermPath read, TermPath container, TermPath number,
+                                       TermPath kept) {
+        return read.isAtOrUnder(container.element()) && !overlap(read, number)
+                && (kept == null || !overlap(read, kept));
     }
 
     private static boolean overlap(TermPath one, TermPath other) {

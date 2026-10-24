@@ -16,10 +16,12 @@ import java.util.TreeSet;
  *
  * <p>With the total fixed, a kind leaves an element the numbers between the greatest of some
  * lower bounds and the least of some upper bounds, each a line in the total ({@link Line}). A
- * container of so many elements of each kind comes to the total where the total is between the
- * least and the greatest those intervals sum to. The least the elements can sum to is a sum of
- * greatests of lines, which is convex in the total, and the greatest a sum of leasts, which is
- * concave; so the totals that are between them are one interval over the rationals.
+ * container of so many elements of each kind comes to the total where every kind leaves its
+ * elements some number there ({@link #whereAnElementCanBe}) and the total is between the least and
+ * the greatest those intervals sum to. The least the elements can sum to is a sum of greatests of
+ * lines, which is convex in the total, and the greatest a sum of leasts, which is concave; so the
+ * totals that are between them are one interval over the rationals, and so is the set of totals
+ * a kind leaves some number at, and the two meet in one.
  *
  * <p>Exactly that interval, found by looking at the totals where one line of a kind passes
  * another: between two of them every sum is a line, and a line meets nought at one place. This
@@ -191,8 +193,18 @@ final class TotalsASharingCanComeTo {
         ExactRatio high = null;
         TreeSet<ExactRatio> places = new TreeSet<>();
         for (Reach each : reaches) {
-            low = tighter(low, each.totalLow(), true);
-            high = tighter(high, each.totalHigh(), false);
+            // A kind has an element only at the totals where its least is no more than its
+            // greatest; at any other the sums of the kinds say nothing, since a kind with none
+            // adds none.
+            // A kind has an element only at the totals where its least is no more than its
+            // greatest; at any other the sums of the kinds say nothing, since a kind with none
+            // adds none.
+            Interval inhabited = whereAnElementCanBe(each, unheld);
+            if (inhabited == null) {
+                return null;
+            }
+            low = tighter(low, inhabited.low(), true);
+            high = tighter(high, inhabited.high(), false);
             crossings(each.lower(), places);
             crossings(each.upper(), places);
         }

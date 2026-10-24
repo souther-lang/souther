@@ -364,9 +364,31 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
         Compilation compilation = measured(source);
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
-        String said = "this compiler writes some of the elements chosen for how many of them"
-                + " meet a statement rather than all of them";
-        assertTrue(report.contains(said), report);
+        assertLeftToTheCompositionThatDoesNotReadTheTotal(report);
+    }
+
+    /**
+     * A statement that asks of its own value a position outside the container is left to the
+     * composition that does not read the total, and said to be: the observation the elements are
+     * read in holds the container and the numbers beside it, and there is nothing in it to read
+     * that position from.
+     */
+    @Test
+    void aStatementThatReadsAPositionOutsideTheContainerIsLeftToTheCompositionThatDoesNotReadTheTotal() {
+        String source = source(PLAIN, new Parameters("enabled: Bool, fs: List<Forecast>",
+                "enabled, fs"), "if " + listCount("enabled && " + HALF) + " == 1 then 1 else 0");
+        Compilation compilation = measured(source);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertLeftToTheCompositionThatDoesNotReadTheTotal(report);
+    }
+
+    /** What the other composition says of an element it cannot choose the values of, and what this
+     *  one says where it stops: the first is the one a statement it does not take is left to. */
+    private static void assertLeftToTheCompositionThatDoesNotReadTheTotal(String report) {
+        assertTrue(report.contains("has a part whose values are neither one of so many nor"
+                + " numbers the statements part"), report);
+        assertFalse(report.contains("answers turns on the total of"), report);
     }
 
     /**
