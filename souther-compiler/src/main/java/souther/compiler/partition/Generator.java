@@ -2166,16 +2166,6 @@ public final class Generator {
                     // answering one value is told apart by any row it answers differently, and a
                     // behavior whose positions nothing divides has no class to look in.
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
-                    // Beside the rows it answered, first: the values the classes offer may be ones
-                    // the body gives no answer on, and these are known to come back.
-                    GeneratedRow beside = null;
-                    for (int at = 0; beside == null && at < one.answeredOn().size(); at++) {
-                        beside = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
-                                answers);
-                    }
-                    if (beside != null) {
-                        yield beside;
-                    }
                     List<FixtureTemplate> composedFirst = looking.tookFromComposing(() -> composed(
                             axes, composes(axes.axes()), HeldTogether.Asked.NOTHING, check,
                             Map.of(), witnessedBy(looking, purposes, answers)));
@@ -2192,6 +2182,15 @@ public final class Generator {
                                 break;
                             }
                         }
+                    }
+                    // And beside the rows it answered, which is where a run is known to come back
+                    // where the values the classes offer are ones the body gives no answer on. Last,
+                    // because the runs are one budget: asked first, these could spend what a row the
+                    // classes reach would have been found with, and a rewrite told apart before
+                    // would be left undecided.
+                    for (int at = 0; seen == null && at < one.answeredOn().size(); at++) {
+                        seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
+                                answers);
                     }
                     yield seen;
                 }
@@ -2302,7 +2301,10 @@ public final class Generator {
             kept.add(value);
         }
         for (int moved = 0; moved < seen.size(); moved++) {
-            for (ObservedValue near : NearbyValues.of(seen.get(moved))) {
+            Iterator<ObservedValue> nearer = NearbyValues.of(seen.get(moved),
+                    subject.types().get(moved), subject.ruleReading());
+            while (nearer.hasNext()) {
+                ObservedValue near = nearer.next();
                 if (!(ObservedFixtures.of(near, subject.types().get(moved),
                         subject.ruleReading())
                         instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(

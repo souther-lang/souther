@@ -50,6 +50,29 @@ class ARewriteIsLookedForBesideTheRowsTheBodyAnsweredTest {
                 """.formatted(incomeInvariant);
     }
 
+    /**
+     * Many whole numbers that change nothing, and one position the answer turns on. The row's list
+     * is all the neighbours the first position offers, and none of them tells the rewrite apart;
+     * the invariant of {@code Trigger} gives the classes values that do. A body with no fork is the
+     * one a rewrite to a single answer is asked of.
+     */
+    private static final String NOISE = """
+            module example.hr
+
+            data Out = Int
+            data Trigger = Int
+                invariant value >= 0 && value <= 9
+
+            behavior f : (noise: List<Int>, trigger: Trigger) -> Out
+                constructs Out
+
+            let f (noise, trigger) = Out(trigger.value)
+
+            example f
+                | "quiet" : ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], Trigger(5))
+                    -> Out(5)
+            """;
+
     private static ReplacementDisposition searched(String model, String behavior) {
         Compilation c = Compilation.ofSource(model, "Main");
         c.measure(Adequacy.Asked.fullReport());
@@ -67,6 +90,22 @@ class ARewriteIsLookedForBesideTheRowsTheBodyAnsweredTest {
 
         assertInstanceOf(ReplacementDisposition.Witnessed.class, came,
                 () -> "one step from the salary that answered, the income is another: " + came);
+    }
+
+    /**
+     * What the classes found, the neighbours do not take away.
+     *
+     * <p>Both searches spend the one run budget, so the one that goes first can leave nothing for
+     * the other. The classes divide `trigger` at ten and find a row the rewrite answers differently
+     * on; the neighbours of the row's list are a run of candidates that all answer alike.
+     */
+    @Test
+    void whatTheClassesFoundIsNotLostToTheNeighboursSpendingTheRuns() {
+        ReplacementDisposition came = searched(NOISE, "f");
+
+        assertInstanceOf(ReplacementDisposition.Witnessed.class, came,
+                () -> "the classes reach `trigger >= 10` and the neighbours of the list do not: "
+                        + came);
     }
 
     /** The control: with nothing refusing the small values the classes still find a row. */
