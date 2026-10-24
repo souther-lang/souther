@@ -349,6 +349,101 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     }
 
     /**
+     * An alternative of a choice nested inside another is looked for through the alternative of
+     * the outer choice that holds it. The ways the walk finds first all take the outer choice's
+     * first alternative, which does not hold the inner choice, so a way taking the inner choice's
+     * second alternative is one the outer choice's second alternative leads to.
+     */
+    @Test
+    void anAlternativeOfANestedChoiceIsLookedForThroughTheAlternativeThatHoldsIt() {
+        Choice inner = oneOf(ask(X, 1), ask(X, 2));
+        Choice outer = new Choice(List.of(List.of(ask(X, 1, 2)), List.of(ask(X, 1, 2), inner)));
+        List<Entry> entries = new ArrayList<>();
+        entries.add(outer);
+        for (int each = 0; each < 5; each++) {
+            entries.add(oneOf(ask(X, 1, 2), ask(X, 1, 2, 10 + each)));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        List<List<Entry>> ways = chosen(walked);
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(X, 1))),
+                () -> "the inner choice's first alternative: " + ways);
+        assertTrue(ways.stream().anyMatch(way -> way.contains(ask(X, 2))),
+                () -> "the inner choice's second alternative: " + ways);
+        assertEquals(ways.size(), new HashSet<>(ways).size(), () -> "no way twice: " + ways);
+    }
+
+    /**
+     * Where a choice's alternatives are more than the figure lets through, the later ones are
+     * the ones left: no choice's alternative is passed over for another's, and the figure says
+     * that the rest was not looked at.
+     */
+    @Test
+    void pastTheFigureNoAlternativeIsPassedOverForALaterOne() {
+        int limit = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        List<Entry> alternatives = new ArrayList<>();
+        for (int each = 0; each <= limit; each++) {
+            alternatives.add(ask(X, each));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(oneOf(
+                alternatives.toArray(Entry[]::new))));
+
+        List<List<Entry>> ways = chosen(walked);
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, walked.stoppedBy());
+        assertEquals(limit, ways.size());
+        assertEquals(alternatives.subList(0, limit),
+                ways.stream().map(List::getFirst).toList());
+    }
+
+    /**
+     * Choices turning on one position whose ways are far more than the figure: the first way,
+     * then the second alternative of each choice beside the first of every other, the choices in
+     * the order the walk came to them and no more than the figure.
+     */
+    @Test
+    void manyChoicesGetTheirSecondAlternativeOneBesideTheFirstsInTheOrderTheyAreMet() {
+        int limit = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        List<Entry> entries = new ArrayList<>();
+        for (int each = 0; each < limit + 4; each++) {
+            entries.add(oneOf(ask(X, 1, 2), ask(X, 1, 2, 10 + each)));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        List<List<Entry>> ways = chosen(walked);
+        assertEquals(limit, ways.size());
+        for (int way = 0; way < limit; way++) {
+            List<Entry> expected = new ArrayList<>();
+            for (int each = 0; each < entries.size(); each++) {
+                expected.add(way > 0 && each == way - 1 ? ask(X, 1, 2, 10 + each) : ask(X, 1, 2));
+            }
+            assertEquals(expected, ways.get(way), "way " + way);
+        }
+    }
+
+    /**
+     * What is done to give every alternative a way does not take the looking a later group is
+     * owed: the group on another position is looked at whole, however much the first group's
+     * alternatives were looked for.
+     */
+    @Test
+    void lookingForTheAlternativesOfOneGroupLeavesTheLookingOfTheNextGroup() {
+        List<Entry> entries = new ArrayList<>();
+        int choices = CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum() / 8;
+        for (int each = 0; each < choices; each++) {
+            entries.add(oneOf(ask(X, 1, 2), ask(X, 1, 2, 10 + each)));
+        }
+        Choice onY = oneOf(ask(Y, 1), ask(Y, 2));
+        entries.add(onY);
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        assertFalse(walked.ways().isEmpty());
+        for (OneOfEach.Way<Entry> way : walked.ways()) {
+            assertInstanceOf(OneOfEach.Way.Chosen.class, way,
+                    () -> "the choice on y is chosen in every way: " + way);
+        }
+    }
+
+    /**
      * A walk the figure stopped before a group was looked at to its end proves nothing, however
      * many of its ways closed.
      */
