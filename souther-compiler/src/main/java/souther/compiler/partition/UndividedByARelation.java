@@ -234,10 +234,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   nothing of any row, and a way put beside it is what the two come to
      * @param stoppedAt  the figures a search for what would have shown more stopped at: a place
      *                   nothing is shown of here may be one a run allowed more shows undivided
-     * @param mayStopBefore the places some way leaves no value shown undivided at because a run
-     *                   may stop before the relation on what nothing here says: every value there
-     *                   getting to it is what undivided would claim, and none of them is among
-     *                   {@code undivided}
+     * @param mayStopBefore those of {@code undivided} some way to which a run may stop on before
+     *                   the relation, on what nothing here says: what the relation leaves them is
+     *                   shown, and that every value there gets to it is not, which a reader
+     *                   claiming the place undivided over every value needs as well
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
@@ -249,9 +249,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
             mayStopBefore = Set.copyOf(mayStopBefore);
-            if (!Collections.disjoint(undivided, mayStopBefore)) {
-                throw new IllegalArgumentException("a place a run may stop before the relation on"
-                        + " the way to is not shown undivided by it");
+            if (!undivided.containsAll(mayStopBefore)) {
+                throw new IllegalArgumentException("a run stopping before the relation is said of"
+                        + " a place the relation is shown to leave undivided");
             }
         }
 
@@ -274,19 +274,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /**
          * This, along a way whose run may stop before the relation on {@code places}: those of
-         * them shown undivided are not, and each is said to be for that. A place not shown
-         * undivided keeps what it was not shown for, which is no claim about every value getting
-         * there. What the relation settles stays as it is, since a value settling it settles it
-         * wherever a row gets there.
+         * them shown undivided are still, and are said not to be shown getting there at every
+         * value. A place not shown undivided keeps what it was not shown for, which is no claim
+         * about every value getting there. What the relation settles stays as it is, since a value
+         * settling it settles it wherever a row gets there.
          */
         WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
-            Set<FilingCoordinate> held = new LinkedHashSet<>(undivided);
-            held.retainAll(places);
-            Set<FilingCoordinate> shown = new LinkedHashSet<>(undivided);
-            shown.removeAll(held);
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
-            stops.addAll(held);
-            return new WhatItLeaves(shown, settled, rowsArrive, stoppedAt, stops);
+            places.stream().filter(undivided::contains).forEach(stops::add);
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -312,6 +308,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             stopped.addAll(other.stoppedAt);
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.addAll(other.mayStopBefore);
+            stops.retainAll(both);
             return new WhatItLeaves(both, alike, true, stopped, stops);
         }
     }
@@ -1242,8 +1239,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * {@code shown}, which says what every value of each place does where it gets to this
      * relation, along a run that works out {@code past} on the way to it: as it is where every
-     * value there is shown to get there, and with none of its places shown undivided where the run
-     * may stop on what nothing here says on a value this relation reads.
+     * value there is shown to get there, and with the places it shows undivided said not to be
+     * shown getting there at every value where the run may stop on what nothing here says on a
+     * value this relation reads. What it shows of them is kept, since a value that gets there is
+     * left as it says.
      *
      * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
      * none of its places whichever values get there. And no line is drawn where a run may stop:

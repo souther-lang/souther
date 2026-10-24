@@ -4,6 +4,7 @@ import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
@@ -105,6 +106,27 @@ public final class WhatARunMayEndFor {
                  Core.LetIn _, Core.Block _, Core.ListLit _, Core.OptionSome _, Core.Tuple _,
                  Core.TupleGet _, Core.Match _, Core.Widen _ -> NONE;
         };
+    }
+
+    /**
+     * What {@code e} itself may end a run for, as {@link #itself} says, but for a call of an
+     * operation of the library every function it is handed at which is a closure written at the
+     * call: what the operation ends a run for apart from those
+     * ({@link LibraryEndings#apartFromWhatItIsHanded}). For a reader that asks the body of each
+     * such closure itself, as part of the call. A function handed some other way — a name, a
+     * value worked out elsewhere — has a body in no tree that reader walks, and the call is
+     * answered whole.
+     */
+    public static Endings itselfApartFromTheClosuresWrittenAtIt(Core e) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)
+                || !kept.args().stream().allMatch(arg -> !(arg.type() instanceof Type.FnOf)
+                        || Core.withoutStanding(arg) instanceof Core.Block)) {
+            return itself(e);
+        }
+        AnOperationApplied applied = AnOperationApplied.of(kept);
+        return applied != null && applied.operation() instanceof ValueName.Stdlib.Operation operation
+                ? LibraryEndings.shipped().apartFromWhatItIsHanded(operation)
+                : new Endings.NotKnown();
     }
 
     /** What an operation of the library a call keeps ends a run for, over every call of it

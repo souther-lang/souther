@@ -7,6 +7,7 @@ import souther.compiler.abort.AbortSites;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -51,16 +52,31 @@ final class LibraryEndings {
 
     private final Map<ValueName.Stdlib.Operation, Endings> ending;
 
-    private LibraryEndings(Map<ValueName.Stdlib.Operation, Endings> ending) {
+    private final Map<ValueName.Stdlib.Operation, Endings> ofItsOwn;
+
+    private LibraryEndings(Map<ValueName.Stdlib.Operation, Endings> ending,
+                           Map<ValueName.Stdlib.Operation, Endings> ofItsOwn) {
         this.ending = Map.copyOf(ending);
+        this.ofItsOwn = Map.copyOf(ofItsOwn);
     }
 
     /** What every operation of {@code library}, and every sugar for one, ends a run for. */
     static LibraryEndings of(Stdlib library) {
-        Reading reading = new Reading(library);
-        library.entries().keySet().forEach(reading::of);
-        library.rewrites().keySet().forEach(reading::of);
-        return new LibraryEndings(reading.settled);
+        return of(library, OperationFactBinder.bindAll(library));
+    }
+
+    /**
+     * The same, and what each ends a run for apart from the functions it is handed, read with
+     * {@code facts}, what is proved of the library's operations.
+     */
+    static LibraryEndings of(Stdlib library, BoundOperationFacts facts) {
+        Reading whole = new Reading(library, null);
+        library.entries().keySet().forEach(whole::of);
+        library.rewrites().keySet().forEach(whole::of);
+        Reading apart = new Reading(library, facts);
+        library.entries().keySet().forEach(apart::of);
+        library.rewrites().keySet().forEach(apart::of);
+        return new LibraryEndings(whole.settled, apart.settled);
     }
 
     /** The shipped library's, which is the same for every compilation. */
@@ -69,7 +85,8 @@ final class LibraryEndings {
     }
 
     private static final class Shipped {
-        private static final LibraryEndings ENDINGS = of(DefaultStdlib.get());
+        private static final LibraryEndings ENDINGS =
+                of(DefaultStdlib.get(), DefaultBoundOperationFacts.get());
     }
 
     /**
@@ -87,14 +104,69 @@ final class LibraryEndings {
         return found;
     }
 
-    /** One reading of a library, each operation settled once. */
+    /**
+     * What {@code operation} ends a run for apart from what the functions it is handed do, for a
+     * caller that asks the body of each of those itself: the kernel's own contract, or what its
+     * body does where none of them is applied. A closure its body builds is read as run, wherever
+     * the body applies it. Asked without reading the functions handed, it says less than the run
+     * does — what {@link #of(ValueName.Stdlib.Operation)} answers is that.
+     *
+     * @throws IllegalArgumentException where the library has no such operation
+     */
+    Endings apartFromWhatItIsHanded(ValueName.Stdlib.Operation operation) {
+        Endings found = ofItsOwn.get(operation);
+        if (found == null) {
+            throw new IllegalArgumentException(
+                    "`" + operation.qualified() + "` is no operation of the library read");
+        }
+        return found;
+    }
+
+    /**
+     * One reading of a library, each operation settled once.
+     *
+     * <p>With {@code facts}, apart from the functions each operation is handed: a function the
+     * body applies that is no operation of the library ends nothing here, since one handed is its
+     * caller's to read and one the body built is read where it is built. And two operations end
+     * nothing of their own by what is proved of them rather than by a reading of their bodies,
+     * which a body cannot say: the walk, and one that assembles its answer of at most one element
+     * for each element of a list ({@link #endsNothingOfItsOwn}).
+     */
     private static final class Reading {
         private final Stdlib library;
+        private final BoundOperationFacts facts;
         private final Map<ValueName.Stdlib.Operation, Endings> settled = new HashMap<>();
         private final Set<ValueName.Stdlib.Operation> reading = new HashSet<>();
 
-        private Reading(Stdlib library) {
+        private Reading(Stdlib library, BoundOperationFacts facts) {
             this.library = library;
+            this.facts = facts;
+        }
+
+        /**
+         * Whether {@code operation}, apart from the functions it is handed, ends no run by what is
+         * proved of it.
+         *
+         * <p>The walk: it reads the element at its index and goes on from the next only where
+         * there is one, and there the index is below the list's length, which an {@code Int}
+         * holds, so the next index has a place; and it ends ({@code TheWalkEnds}, from the same
+         * law of reading an element). What is left is the step, which it is handed.
+         *
+         * <p>An operation whose answer is a piece of at most one element for each element of a
+         * list, put end to end along the walk ({@link BoundOperationFacts#assembles}): what it has
+         * put together after an element is no longer than the part of the list walked to there,
+         * which is no longer than a list that has a place, so each joining has a place too. What
+         * is left is the closure that makes a piece, which it is handed. A piece of any number of
+         * elements is not this — what the closure answers on one element can be as long as a list
+         * holds — and is read off the body.
+         */
+        private boolean endsNothingOfItsOwn(ValueName.Stdlib.Operation operation) {
+            if (operation.equals(library.walk().operation())) {
+                return true;
+            }
+            BoundOperationFacts.Assembled assembled = facts.assembles(operation);
+            return assembled != null
+                    && assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS;
         }
 
         /**
@@ -116,9 +188,12 @@ final class LibraryEndings {
         }
 
         private Endings worked(ValueName.Stdlib.Operation operation) {
+            if (facts != null && endsNothingOfItsOwn(operation)) {
+                return NONE;
+            }
             Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
             if (intrinsic != null) {
-                return handedAFunction(operation) ? NOT_KNOWN
+                return handedAFunction(operation) && facts == null ? NOT_KNOWN
                         : new Endings.Known(KernelContracts.abortsOf(intrinsic.kernel()));
             }
             Hir.FnDef declaration = library.helpers().get(operation);
@@ -143,10 +218,11 @@ final class LibraryEndings {
             return entry.signature().params().stream().anyMatch(Type.FnOf.class::isInstance);
         }
 
-        /** What working {@code e} out, and everything under it it works out, ends a run for. */
+        /** What working {@code e} out, and everything under it it works out, ends a run for — and,
+         *  apart from the functions handed, a closure built under it as well, as run. */
         private Endings of(Hir.Expr e) {
             Endings[] out = {itself(e)};
-            if (e instanceof Hir.Block) {
+            if (e instanceof Hir.Block && facts == null) {
                 return out[0];
             }
             Hir.forEachChild(e, child -> {
@@ -190,11 +266,13 @@ final class LibraryEndings {
         }
 
         /** An application of an operation of the library is what that operation ends a run for;
-         *  of anything else, a function this body is handed or binds, it is not known. */
+         *  of anything else, a function this body is handed or binds, it is not known — and apart
+         *  from the functions handed, nothing: one handed is the caller's, and one built is read
+         *  where it is built. */
         private Endings applied(Hir.Apply apply) {
             return apply.function() instanceof Hir.Var.Denoting callee
                     && callee.reachedAs() instanceof ReachName.OfLibrary library
-                    ? of(library.denotes()) : NOT_KNOWN;
+                    ? of(library.denotes()) : facts == null ? NOT_KNOWN : NONE;
         }
 
         /**

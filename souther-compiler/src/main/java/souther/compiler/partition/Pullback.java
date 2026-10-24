@@ -1080,11 +1080,15 @@ final class Pullback {
      * always run: a part worked out on some runs ends those runs, and the rows that arrive are the
      * rows of the others — which is no narrowing, since it is not known which, and is a place the
      * run may stop on.
+     *
+     * <p>A call of an operation of the library handed closures written at it is asked apart from
+     * them ({@link WhatARunMayEndFor#itselfApartFromTheClosuresWrittenAtIt}): each is a child of
+     * the call, and its body is asked here below, under the places its names stand for.
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
-                && !WhatARunMayEndFor.itself(e).endsNone()) {
+                && !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
             operated.beginGroup();
             boolean[] hasOperands = {false};
             // A quotient stops where its divisor is nought, and what it divides is no part of it.
