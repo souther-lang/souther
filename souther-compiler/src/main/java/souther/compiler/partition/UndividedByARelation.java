@@ -826,17 +826,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the classes each is in are worked out once a position, and let go with the reading.
      */
     private static AWayReadForARelation.Declarations declarationsOf(InputReading read) {
-        Map<TermPath, Set<Object>> tied = new HashMap<>();
         return new AWayReadForARelation.Declarations() {
             @Override
             public boolean tie(TermPath one, TermPath other) {
-                // No declaration relates one parameter to another, so only places under one are
-                // tied by a rule.
-                return overlap(one, other) || (one.head().equals(other.head())
-                        && !Collections.disjoint(
-                                tied.computeIfAbsent(one, at -> tiedByTheDeclarations(at, read)),
-                                tied.computeIfAbsent(other,
-                                        at -> tiedByTheDeclarations(at, read))));
+                return overlap(one, other) || tiedByARule(one, other, read);
             }
 
             @Override
@@ -1280,7 +1273,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * relation reads: an operator on what no place holds, after which no number is known to take
      * every value it did, or one tying a place a side reads to others
      * ({@link DemandReading.Answered#tied}), which the region the relation is read over does not
-     * hold — or an operator owed a proof that some run gets past it, reading such a place, that the
+     * hold — or an operator owed a proof that some run gets past it, whatever it reads, that the
      * witness is not shown to get past ({@link Witness}). A side whose places are not known is
      * taken to read any.
      *
@@ -1336,12 +1329,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return true;
             }
         }
-        // An owed operator reading no place stops a run, where it does, whatever the input is, so
-        // it is asked of every relation; one reading places only of those it reads.
+        // An owed operator is asked of the witness whatever it reads: one reading no place the
+        // relation reads still stops a run on the witness where what it builds there does not
+        // fit, and a run stopped there reaches the relation at no value.
         for (Pullback.StopObligation owed : past.owed()) {
-            if ((owed.onWhatNoPlaceHolds() || owed.places().isEmpty()
-                    || touchesAny(owed.places(), reads))
-                    && !witness.answers(owed)) {
+            if (!witness.answers(owed)) {
                 return true;
             }
         }
@@ -1407,8 +1399,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the region the relation is read over took in. And each side keeps its value cut down: an
      * element's own value, and an end, kept by copies of the element holding it; a total only
      * where one element is left, since the relation reads a total on the run of one element's
-     * value ({@link UndividedByARelation#summedAs}); nothing else made of the collection. Where
-     * any of these is not
+     * value ({@link UndividedByARelation#summedAs}); nothing else made of the collection. And
+     * every collection cut on the run is cut alone: no rule relates how many it holds to another
+     * collection cut, or to a place the relation reads outside it, so the fewest each is left on
+     * its own are left together, and beside the relation's values. Where any of these is not
      * shown, nothing is.
      */
     private final class Witness {
@@ -1420,6 +1414,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         private final Optional<Set<String>> declined;
         private final Set<TermPath> heldToOne;
         private final Map<TermPath, Optional<BigInteger>> sizes = new HashMap<>();
+        private final Set<TermPath> asked = new LinkedHashSet<>();
 
         /**
          * @param reads     the places the relation reads
@@ -1463,6 +1458,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (declined.isEmpty() || declined.get().contains(collection.head())) {
                 return Optional.empty();
             }
+            // How many it holds is cut alone only where no rule relates it to another value the
+            // run stands on here — another collection cut on this run, or a place the relation
+            // reads outside it. A place inside it is the side's to keep (keptCutDown).
+            for (TermPath other : reads) {
+                if (!overlap(other, collection) && tiedByARule(collection, other, read)) {
+                    return Optional.empty();
+                }
+            }
+            for (TermPath other : asked) {
+                if (!overlap(other, collection) && tiedByARule(collection, other, read)) {
+                    return Optional.empty();
+                }
+            }
+            asked.add(collection);
             BigInteger asked = ofOne ? BigInteger.ONE : BigInteger.ZERO;
             for (OnAWay each : conditions) {
                 // A statement turning on no position the way names may turn on anything,
@@ -3075,9 +3084,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (FilingCoordinate each : first) {
             for (FilingCoordinate that : second) {
-                if (overlap(each, that) || !Collections.disjoint(
-                        tiedByTheDeclarations(each.path(), read),
-                        tiedByTheDeclarations(that.path(), read))) {
+                if (overlap(each, that) || tiedByARule(each.path(), that.path(), read)) {
                     return false;
                 }
             }
@@ -4135,6 +4142,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Nodes nodes = new Nodes();
         return new Reached(namedDownTo(path, path.steps().size() - 1, read, nodes), nodes);
+    }
+
+    /**
+     * Whether a rule of a value around both {@code one} and {@code other} relates them: their
+     * classes of the rules around each meet ({@link Nodes#ties}), and only then. Places under two
+     * parameters never do, since no declaration relates one parameter to another.
+     */
+    private static boolean tiedByARule(TermPath one, TermPath other, InputReading read) {
+        return one.head().equals(other.head())
+                && !Collections.disjoint(tiedByTheDeclarations(one, read),
+                        tiedByTheDeclarations(other, read));
     }
 
     /**

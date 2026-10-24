@@ -525,6 +525,36 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A join of collections the relation does not read is asked of the witness as well: a run
+     * stopped there reaches the relation at no value. Two lists a rule holds long enough together
+     * that the join doubling both never fits are not cut down apart from each other, so the
+     * relation in the walk of a third is not shown reached. Without the rule they hold nothing on
+     * the witness, the join fits, and it relates; and a join of the two lists the walk reads
+     * itself, held past what a list holds together, is not reached either.
+     */
+    @Test
+    void collectionsARuleHoldsTogetherAreNotCutDownApart() {
+        String model = """
+                module w1
+                data Bundles = { xs: List<Int>, ys: List<Int>, zs: List<Int> }
+                %s
+                behavior m : (b: Bundles, n: Int) -> Bool
+                let m (b, n) = {
+                    let joined = List.append(%s)
+                    List.any(z -> z == n, %s)
+                }
+                """;
+        String doubled = "List.append(b.xs, b.xs), List.append(b.ys, b.ys)";
+        String together = "    invariant List.length(xs) + List.length(ys) >= %s";
+        assertEquals(Map.of("b.zs[*]", NOT_REACHED, "n", NOT_REACHED), leftIn(model.formatted(
+                together.formatted("2147483647"), doubled, "b.zs"), "7:21"));
+        assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES),
+                leftIn(model.formatted("", doubled, "b.zs"), "7:21"));
+        assertEquals(NOT_REACHED, leftIn(model.formatted(together.formatted("2147483648"),
+                "b.xs, b.ys", "b.xs"), "7:21").get("b.xs[*]"));
+    }
+
+    /**
      * A witness of one element meets what the way states of that element, and nothing it states
      * of some other element: an element of the list with {@code q} at nought and one with it at
      * one are two, so the walk applies its closure before the one the relation is reached in, and

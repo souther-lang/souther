@@ -211,43 +211,37 @@ public final class ContainerSizesUnderAWitness {
     }
 
     private Optional<BigInteger> mostOf(Core node) {
-        switch (Core.withoutStanding(node)) {
-            case Core.ListLit written -> {
-                return Optional.of(BigInteger.valueOf(written.elements().size()));
-            }
+        return switch (Core.withoutStanding(node)) {
+            case Core.ListLit written -> Optional.of(BigInteger.valueOf(written.elements().size()));
             case Core.Read name -> {
                 Core walk = carriedBy.get(name.binding());
                 if (walk != null) {
-                    return carried(WalkAt.of(walk), true);
+                    yield carried(WalkAt.of(walk), true);
                 }
                 Core value = boundTo.get(name.binding());
-                return value == null ? Optional.empty() : most(value);
+                yield value == null ? Optional.empty() : most(value);
             }
-            case Core.LetIn li -> {
-                return most(li.body());
-            }
-            case Core.If fork -> {
-                return larger(most(fork.then()), most(fork.els()));
-            }
+            case Core.LetIn li -> most(li.body());
+            case Core.If fork -> larger(most(fork.then()), most(fork.els()));
             case Core.Match match -> {
                 Optional<BigInteger> out = Optional.of(BigInteger.ZERO);
                 for (Core.Case arm : match.cases()) {
                     out = larger(out, most(arm.body()));
                 }
-                return out;
+                yield out;
             }
             default -> {
                 WalkAt walk = WalkAt.of(node);
                 if (walk != null) {
-                    return carried(walk, false);
+                    yield carried(walk, false);
                 }
                 if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
                         instanceof GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize size)) {
-                    return answer(node, size);
+                    yield answer(node, size);
                 }
-                return assembledOrStated(node);
+                yield assembledOrStated(node);
             }
-        }
+        };
     }
 
     /**
@@ -337,69 +331,70 @@ public final class ContainerSizesUnderAWitness {
      * it answers anything else.
      */
     private Optional<BigInteger> putIn(Core body, BindingId carried) {
-        Core node = Core.withoutStanding(body);
-        switch (node) {
-            case Core.Read name when name.binding().equals(carried) -> {
-                return Optional.of(BigInteger.ZERO);
-            }
-            case Core.If fork -> {
-                return mentions(fork.cond(), carried) ? Optional.empty()
-                        : larger(putIn(fork.then(), carried), putIn(fork.els(), carried));
-            }
+        return switch (Core.withoutStanding(body)) {
+            case Core.Read name when name.binding().equals(carried) ->
+                    Optional.of(BigInteger.ZERO);
+            case Core.If fork -> mentions(fork.cond(), carried) ? Optional.empty()
+                    : larger(putIn(fork.then(), carried), putIn(fork.els(), carried));
             case Core.Match match -> {
                 if (mentions(match.scrutinee(), carried)) {
-                    return Optional.empty();
+                    yield Optional.empty();
                 }
                 Optional<BigInteger> out = Optional.of(BigInteger.ZERO);
                 for (Core.Case arm : match.cases()) {
                     out = larger(out, putIn(arm.body(), carried));
                 }
-                return out;
+                yield out;
             }
-            case Core.LetIn li -> {
-                return mentions(li.value(), carried) ? Optional.empty()
-                        : putIn(li.body(), carried);
+            case Core.LetIn li -> mentions(li.value(), carried) ? Optional.empty()
+                    : putIn(li.body(), carried);
+            case Core node -> putInByAnOperator(node, carried);
+        };
+    }
+
+    /**
+     * The most an operator answering where the collection fits, {@code node}, puts in beside
+     * what is carried under {@code carried} where it is handed that as one of the operands it
+     * counts, of the others ({@link #putIn}).
+     */
+    private Optional<BigInteger> putInByAnOperator(Core node, BindingId carried) {
+        if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
+                instanceof GetsPast.WhereTheAnswerFits(
+                        GetsPast.AnswerSize.SumOf(List<Integer> at, int more)))) {
+            return Optional.empty();
+        }
+        AnOperationApplied applied = AnOperationApplied.of(node);
+        if (applied == null) {
+            return Optional.empty();
+        }
+        List<Core> operands = applied.args();
+        int carriedAt = -1;
+        BigInteger total = BigInteger.valueOf(more);
+        for (int each : at) {
+            if (each >= operands.size()) {
+                return Optional.empty();
             }
-            default -> {
-                if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof GetsPast.WhereTheAnswerFits(
-                                GetsPast.AnswerSize.SumOf(List<Integer> at, int more)))) {
-                    return Optional.empty();
-                }
-                AnOperationApplied applied = AnOperationApplied.of(node);
-                if (applied == null) {
-                    return Optional.empty();
-                }
-                List<Core> operands = applied.args();
-                int carriedAt = -1;
-                BigInteger total = BigInteger.valueOf(more);
-                for (int each : at) {
-                    if (each >= operands.size()) {
-                        return Optional.empty();
-                    }
-                    Core operand = Core.withoutStanding(operands.get(each));
-                    if (operand instanceof Core.Read name && name.binding().equals(carried)
-                            && carriedAt < 0) {
-                        carriedAt = each;
-                        continue;
-                    }
-                    if (mentions(operand, carried)) {
-                        return Optional.empty();
-                    }
-                    Optional<BigInteger> one = most(operand);
-                    if (one.isEmpty()) {
-                        return Optional.empty();
-                    }
-                    total = total.add(one.get());
-                }
-                for (int other = 0; other < operands.size(); other++) {
-                    if (!at.contains(other) && mentions(operands.get(other), carried)) {
-                        return Optional.empty();
-                    }
-                }
-                return carriedAt < 0 ? Optional.empty() : Optional.of(total);
+            Core operand = Core.withoutStanding(operands.get(each));
+            if (operand instanceof Core.Read name && name.binding().equals(carried)
+                    && carriedAt < 0) {
+                carriedAt = each;
+                continue;
+            }
+            if (mentions(operand, carried)) {
+                return Optional.empty();
+            }
+            Optional<BigInteger> one = most(operand);
+            if (one.isEmpty()) {
+                return Optional.empty();
+            }
+            total = total.add(one.get());
+        }
+        for (int other = 0; other < operands.size(); other++) {
+            if (!at.contains(other) && mentions(operands.get(other), carried)) {
+                return Optional.empty();
             }
         }
+        return carriedAt < 0 ? Optional.empty() : Optional.of(total);
     }
 
     /** Whether {@code e} reads {@code name} anywhere. */
