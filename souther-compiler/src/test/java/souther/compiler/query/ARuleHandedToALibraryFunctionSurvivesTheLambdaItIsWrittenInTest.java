@@ -13,10 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *
  * <p>The call to {@code List.filter} is expanded where it is written, and the lambda it stands in
  * is then copied into the expansion of {@code List.flatMap}. Every owner in the copy is moved under
- * the owner the copy has, so the fork of {@code filter} the copy carries stands in an owner the
- * record of what {@code filter} was handed was never filed under. Nothing then said which rule the
- * fork decides by, and the arms of every {@code filter} written that way were put out of the count
- * as arms nothing tells apart.
+ * the owner the copy has, and the record of what {@code filter} was handed moves with it. Left
+ * under the owner it had, the fork the copy carries stands in an owner nothing is filed under, so
+ * nothing says which rule it decides by and its arms are put out of the count as arms nothing tells
+ * apart.
  */
 class ARuleHandedToALibraryFunctionSurvivesTheLambdaItIsWrittenInTest {
 

@@ -39,6 +39,10 @@ class NearbyValuesTest {
                 invariant value >= 0
 
             data Priced = { code: Code, price: Decimal }
+
+            data Dot
+            data Bar = { length: Int }
+            data Mark = Dot | Bar
             """;
 
     private static final RuleReadingContext READING = reading();
@@ -115,6 +119,27 @@ class NearbyValuesTest {
             assertEquals(whole(10), ((ObservedValue.Constructed) each).field("price"));
         }
         assertEquals(List.of(), all(whole(10), Type.DECIMAL));
+    }
+
+    /** A sum is read as the case the value is, and a case with no number has no neighbour. */
+    @Test
+    void aSumIsMovedInsideTheCaseItIs() {
+        ObservedValue bar = new ObservedValue.Constructed(declared("Bar"),
+                Map.of("length", whole(4)));
+
+        assertEquals(List.of(
+                        new ObservedValue.Constructed(declared("Bar"), Map.of("length", whole(5))),
+                        new ObservedValue.Constructed(declared("Bar"), Map.of("length", whole(3)))),
+                all(bar, Type.ref(declared("Mark"))));
+        assertEquals(List.of(),
+                all(new ObservedValue.Unit(declared("Dot")), Type.ref(declared("Mark"))));
+    }
+
+    /** A present optional is the value it holds, and an absent one holds none. */
+    @Test
+    void anOptionalIsMovedWhereItHoldsANumber() {
+        assertEquals(List.of(whole(8), whole(6)), all(whole(7), Type.option(Type.INT)));
+        assertEquals(List.of(), all(new ObservedValue.Absent(), Type.option(Type.INT)));
     }
 
     @Test

@@ -2186,9 +2186,11 @@ public final class Generator {
                     // And beside the rows it answered, which is where a run is known to come back
                     // where the values the classes offer are ones the body gives no answer on. Last,
                     // because the runs are one budget: asked first, these could spend what a row the
-                    // classes reach would have been found with, and a rewrite told apart before
-                    // would be left undecided.
-                    for (int at = 0; seen == null && at < one.answeredOn().size(); at++) {
+                    // classes reach is found with, and a rewrite the classes tell apart would be
+                    // left undecided. Not once the runs are spent, which every row would find out
+                    // again.
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
                         seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
                                 answers);
                     }
@@ -9476,6 +9478,11 @@ public final class Generator {
         /** The body run on {@code row}, once per line, or null where no run is left. */
         private ObservedRun run(GeneratedRow row) {
             return trial.run(row.toRun(), this::spend);
+        }
+
+        /** Whether this search has no run left to make. */
+        boolean spent() {
+            return runs >= mostRuns;
         }
 
         /** One more run of this search's own, where one is left. */

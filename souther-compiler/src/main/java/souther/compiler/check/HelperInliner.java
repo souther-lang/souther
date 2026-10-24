@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.core.TheWalk;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.ast.DefinitionName;
@@ -3385,8 +3386,7 @@ public final class HelperInliner {
          *                expansion has already written its arguments from it, and the body's direct
          *                bindings are numbered after those rather than over them
          */
-        private Copy(Hir.Expr body, Hir.Binders binders,
-                      souther.compiler.coverage.SuppliedRules.Builder supplied) {
+        private Copy(Hir.Expr body, Hir.Binders binders, SuppliedRules.Builder supplied) {
             this.supplied = supplied;
             this.root = binders.owner();
             minters.put(root, binders);
@@ -3399,7 +3399,7 @@ public final class HelperInliner {
         private final BindingOwner root;
 
         /** Which rules each expansion was handed, which an expansion moved here carries with it. */
-        private final souther.compiler.coverage.SuppliedRules.Builder supplied;
+        private final SuppliedRules.Builder supplied;
 
         /**
          * This copy's owner for one the body has.

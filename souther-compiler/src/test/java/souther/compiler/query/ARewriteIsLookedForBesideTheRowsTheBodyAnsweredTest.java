@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  *
  * <p>A result that must hold an invariant leaves most of what the classes of an input offer without
  * an answer: the smallest values of a salary make an income below nothing, and the body does not
- * come back on them. The search then held nothing to compare the rewrite against and ended, though a
+ * come back on them. A search over those values has nothing to compare the rewrite against, but a
  * row the body answered on says where a run comes back, and one step from it the answer changes.
  */
 class ARewriteIsLookedForBesideTheRowsTheBodyAnsweredTest {
