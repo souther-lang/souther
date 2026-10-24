@@ -4095,7 +4095,10 @@ public final class Adequacy {
         // of the fillings above. Asked whenever rows are, because what a declaration's line is owed
         // is an obligation of the same account as the rest.
         BorderAccount account = accountFor(db, request.module(), request.scope());
-        Composition composed = Composition.composed(request, generated, account);
+        Composition composed = Composition.composed(request,
+                Composition.within(generated, account,
+                        db.ask(new Front.Adequacy()).value().generation().rowLimit()),
+                account);
         // And then only the rows whose going would cost the offering something. A candidate is
         // composed for one thing and the positions that thing does not name hold whatever the row
         // has to hold, so a row composed for one item can stand where another item asks — and the
@@ -5311,13 +5314,11 @@ public final class Adequacy {
             generation = List.copyOf(generation);
         }
 
-        /** A filling whose measure is short of no case a statement draws inside itself. */
-        public Filling(souther.compiler.partition.FillResult composed,
-                       Generator.GenerationResult boundaries,
-                       Generated.RowsForRules rules,
-                       List<GenerationDisposition> generation) {
-            this(composed, boundaries, rules, Generated.RowsForCases.NOTHING, generation);
+        /** This filling holding {@code cases} for the cases a statement draws inside itself. */
+        Filling holding(Generated.RowsForCases cases) {
+            return new Filling(composed, boundaries, rules, cases, generation);
         }
+
 
         /**
          * The rows composed for lines the rows do not tell from the lines beside them.
@@ -5658,9 +5659,16 @@ public final class Adequacy {
             // rows: counted once for each row the block will hold, by the function that joins them.
             List<Generator.GeneratedRow> lines = Composition.atTheLines(
                     account == null ? null : account.rowsByCarrier().get(behavior));
+            // The rows that tell a line from the line beside it are in the block before the rules'
+            // are, and they depend on nothing a rule is: asked of those findings alone, so the room
+            // the rules are told they have is the block's.
+            List<Generator.GeneratedRow> apart = Filling.tellingLinesApart(dispositions(
+                    owed.stream().filter(each ->
+                            each.about() instanceof About.ALineTheRowsDoNotTellFromAnother).toList(),
+                    RowsForRules.NOTHING, here.edges(), account, composed));
             RowsForRules rules = rowsForRules(db, name, behavior, work.rules(), here.observed(),
                     db.ask(new Front.Adequacy()).value().generation(),
-                    Composition.rowsBetween(behavior, composed.offers(), List.of(lines)));
+                    Composition.stimuliBetween(behavior, composed.offers(), List.of(lines, apart)));
             List<GenerationDisposition> generation =
                     dispositions(owed, rules, here.edges(), account, composed);
             // And the rows for the cases a statement of the decision draws inside itself that the
@@ -5668,11 +5676,7 @@ public final class Adequacy {
             // a case inside one still be short.
             Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
             RowsForCases cases = rowsForCases(db, name, behavior,
-                    decisions == null ? null : decisions.get(behavior), here.observed(),
-                    db.ask(new Front.Adequacy()).value().generation(),
-                    Composition.rowsBetween(behavior, composed.offers(),
-                            List.of(lines, Filling.tellingLinesApart(generation),
-                                    rules.byRule().values())));
+                    decisions == null ? null : decisions.get(behavior), here.observed());
             return Answer.of(new Filling(composed,
                     offeredHere(behavior, here.edges(),
                             RowsOwed.restingOnAPremise(db, name, behavior)),
@@ -6011,10 +6015,11 @@ public final class Adequacy {
                 Db db, String module, String behavior, List<DecisionRule> asked,
                 RowReading observed,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget,
-                int alreadyOffered) {
+                Set<RowKey> alreadyInTheBlock) {
             if (asked.isEmpty()) {
                 return new RowsForRules(asked, Map.of(), null);
             }
+            Set<RowKey> holds = new HashSet<>(alreadyInTheBlock);
             // Rows exist that nothing read, so what is left uncovered is unknown and a row handed
             // to a person may already be sitting in the file that could not be evaluated. The same
             // answer the fill gives, for the same reason: a row for a rule is a row.
@@ -6043,14 +6048,17 @@ public final class Adequacy {
                 // independent decisions states as many rules as their ways multiply to, and a
                 // block with a row apiece is the list nobody reads that the limit stands between
                 // an author and. Where it stops, the rules left over say so rather than going
-                // quiet.
-                if (alreadyOffered + out.size() >= budget.rowLimit()) {
+                // quiet. A row the block holds already takes no room: it is one row for both.
+                Generator.GeneratedRow row = new Generator.GeneratedRow(
+                        List.of(new Generator.Purpose.ForADecisionRule(each.getKey())),
+                        stoodBy.inputs(), stoodBy.answers());
+                RowKey key = RowKey.of(behavior, row);
+                if (!holds.contains(key) && holds.size() >= budget.rowLimit()) {
                     stopped = true;
                     break;
                 }
-                out.put(each.getKey(), new Generator.GeneratedRow(
-                        List.of(new Generator.Purpose.ForADecisionRule(each.getKey())),
-                        stoodBy.inputs(), stoodBy.answers()));
+                holds.add(key);
+                out.put(each.getKey(), row);
             }
             return new RowsForRules(asked, out, stopped
                     ? Generator.UnresolvedCombination.Reason.THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE
@@ -6133,18 +6141,16 @@ public final class Adequacy {
         }
 
         /**
-         * The rows the case search composed, one for each unseen case it found a row for, as many
-         * as the block has room for.
+         * The rows the case search composed, one for each unseen case it found a row for. How many
+         * of them the block has room for is the block's to say ({@link Composition#within}), where
+         * every row that goes into it is known.
          *
          * <p>Left to the rows already read: where some row of the module was not read, a case
          * unseen may be one a row already sitting in that source is in, and handing a person a row
          * for it is telling them to write what is there.
          */
         private static RowsForCases rowsForCases(Db db, String name, String behavior,
-                                                 DecisionEvidence evidence, RowReading observed,
-                                                 souther.compiler.partition.AdequacyPolicy
-                                                         .OfTheGeneration budget,
-                                                 int alreadyOffered) {
+                                                 DecisionEvidence evidence, RowReading observed) {
             if (evidence == null || evidence.took().made().isEmpty() || observed.someRowsUnseen()) {
                 return RowsForCases.NOTHING;
             }
@@ -6158,9 +6164,6 @@ public final class Adequacy {
                 RowToRun row = found.get(each);
                 if (row == null) {
                     continue;
-                }
-                if (alreadyOffered + out.size() >= budget.rowLimit()) {
-                    break;
                 }
                 out.put(each, new Generator.GeneratedRow(
                         List.of(new Generator.Purpose.ForACaseOfAStatement(each)), row.inputs(),

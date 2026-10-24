@@ -463,7 +463,8 @@ final class DecisionNaming implements Naming<DecisionPath> {
         ModelOccurrence stated = ModelOccurrence.statedAt(fork).orElse(null);
         return DecisionPath.NOWHERE.and(read.answer(), stated == null
                 ? new ShownBy.NothingIsRecorded(read.answer().condition())
-                : new ShownBy.AtAnArm(stated, part), read.onTheWay(), read.said());
+                : new ShownBy.AtAnArm(stated, part), read.onTheWay(), read.said(),
+                read.cases());
     }
 
     @Override

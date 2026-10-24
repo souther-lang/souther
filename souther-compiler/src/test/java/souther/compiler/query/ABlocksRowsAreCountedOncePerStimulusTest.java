@@ -25,8 +25,8 @@ class ABlocksRowsAreCountedOncePerStimulusTest {
         Generator.GeneratedRow one = row(1);
         Generator.GeneratedRow another = row(2);
 
-        assertEquals(2, Composition.rowsBetween("f", List.of(),
-                List.of(List.of(one), List.of(one, another))),
+        assertEquals(2, Composition.stimuliBetween("f", List.of(),
+                List.of(List.of(one), List.of(one, another))).size(),
                 "the row a line and a case both composed is one row of the block");
     }
 
@@ -35,18 +35,18 @@ class ABlocksRowsAreCountedOncePerStimulusTest {
         Generator.GeneratedRow one = row(1);
         Generator.GeneratedRow another = row(2);
 
-        assertEquals(2, Composition.rowsBetween("f",
-                List.of(new FillResult.Offer(one, null)), List.of(List.of(another, one))),
+        assertEquals(2, Composition.stimuliBetween("f",
+                List.of(new FillResult.Offer(one, null)), List.of(List.of(another, one))).size(),
                 "a row the fill composed and a line also did is one row");
-        assertEquals(3, Composition.rowsBetween("f",
+        assertEquals(3, Composition.stimuliBetween("f",
                 List.of(new FillResult.Offer(one, null)),
-                List.of(List.of(another), List.of(row(3)))),
+                List.of(List.of(another), List.of(row(3)))).size(),
                 "and rows apart are rows apart");
     }
 
     @Test
     void nothingComposedIsNoRoomTaken() {
-        assertEquals(0, Composition.rowsBetween("f", List.of(), List.of(List.of())),
+        assertEquals(0, Composition.stimuliBetween("f", List.of(), List.of(List.of())).size(),
                 "no row is no room taken");
     }
 

@@ -9703,6 +9703,7 @@ public final class Generator {
 
         private static final CompositionBudget HANDED_THE_CHOICE =
                 CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
+        private static final int MOST_ROWS_HANDED = HANDED_THE_CHOICE.maximum();
 
         private final RowJudge judge;
         private final List<StoodInAnswer> answers;
@@ -9721,7 +9722,7 @@ public final class Generator {
         @Override
         public RowTaking over(RowTaking meets) {
             return inputs -> {
-                if (++handed > HANDED_THE_CHOICE.maximum()) {
+                if (++handed > MOST_ROWS_HANDED) {
                     stoppedAtItsFigure = true;
                     return Acceptance.STOPPED;
                 }

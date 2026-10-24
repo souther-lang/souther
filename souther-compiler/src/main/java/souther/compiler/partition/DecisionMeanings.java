@@ -57,14 +57,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             cases = List.copyOf(cases);
         }
 
-        /** {@code answer}, asking {@code onTheWay}, with no case drawn inside it. */
-        Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said) {
-            this(answer, onTheWay, said, List.of());
-        }
-
-        /** {@code answer}, asking what {@code stated} put on the way. */
+        /**
+         * {@code answer}, asking what {@code stated} put on the way, for an arm entered. The
+         * statement an arm states is what a run entered it by and not a search a case is drawn
+         * inside of, so it draws none.
+         */
         Read(DecidedCondition answer, ReachingCuts.Stating stated) {
-            this(answer, stated.entries(), stated.by());
+            this(answer, stated.entries(), stated.by(), List.of());
         }
     }
 

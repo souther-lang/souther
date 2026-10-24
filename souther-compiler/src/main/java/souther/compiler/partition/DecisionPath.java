@@ -98,12 +98,6 @@ final class DecisionPath {
     record Consulted(DecidedCondition answer, List<ShownBy> seen, List<OnTheWay> states,
                      SaidOnTheWay said, List<CaseWay> cases) {
 
-        /** A condition that draws no case inside itself. */
-        Consulted(DecidedCondition answer, List<ShownBy> seen, List<OnTheWay> states,
-                  SaidOnTheWay said) {
-            this(answer, seen, states, said, List.of());
-        }
-
         Consulted {
             cases = List.copyOf(cases);
             if (answer == null || seen == null || seen.isEmpty() || states == null
@@ -113,12 +107,6 @@ final class DecisionPath {
             }
             seen = List.copyOf(seen);
             states = List.copyOf(states);
-        }
-
-        /** The condition consulted once, seen at {@code shown}. */
-        Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
-                  SaidOnTheWay said) {
-            this(answer, List.of(shown), states, said, List.of());
         }
 
         /** The condition consulted once, seen at {@code shown}, drawing the cases {@code cases}. */
@@ -164,12 +152,6 @@ final class DecisionPath {
     DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
                      SaidOnTheWay said, List<CaseWay> cases) {
         return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said, cases))));
-    }
-
-    /** The same, for a condition that draws no case inside itself. */
-    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
-                     SaidOnTheWay said) {
-        return and(answer, shown, states, said, List.of());
     }
 
     /**

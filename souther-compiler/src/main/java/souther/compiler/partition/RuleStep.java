@@ -29,12 +29,6 @@ import java.util.Objects;
 public record RuleStep(List<ShownBy> seen, List<OnTheWay> states, AnswersDemanded demands,
                        SaidOnTheWay said, List<CaseWay> cases) {
 
-    /** A step that draws no case inside itself a row is looked for in. */
-    public RuleStep(List<ShownBy> seen, List<OnTheWay> states, AnswersDemanded demands,
-                    SaidOnTheWay said) {
-        this(seen, states, demands, said, List.of());
-    }
-
     public RuleStep {
         cases = List.copyOf(cases);
         if (seen == null || seen.isEmpty()) {
@@ -49,8 +43,8 @@ public record RuleStep(List<ShownBy> seen, List<OnTheWay> states, AnswersDemande
 
     /** The step consulted once, seen at {@code shown}. */
     public RuleStep(ShownBy shown, List<OnTheWay> states, AnswersDemanded demands,
-                    SaidOnTheWay said) {
-        this(List.of(shown), states, demands, said);
+                    SaidOnTheWay said, List<CaseWay> cases) {
+        this(List.of(shown), states, demands, said, cases);
     }
 
     /** Where the condition is witnessed: the first place the way met it, which a run that took
