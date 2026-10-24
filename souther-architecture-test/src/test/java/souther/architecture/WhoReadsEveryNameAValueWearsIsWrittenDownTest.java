@@ -194,8 +194,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + ")Z",
                     THE_POSITION),
             row(PARTITION + "NearbyValues", "of",
-                    "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT
-                            + ")Ljava/util/Iterator;",
+                    "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + "L" + PARTITION
+                            + "NearbyValues$Leaves;)Ljava/util/Iterator;",
                     THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "levelsOf",
                     "(" + TYPE + "Ljava/util/List;L" + INPUTS + "SearchRegion;" + CONTEXT + "L"

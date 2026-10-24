@@ -31,8 +31,39 @@ import java.util.function.Function;
  */
 final class NearbyValues {
 
+    /** What one step from a scalar leaf is. */
+    @FunctionalInterface
+    private interface Leaves {
+
+        Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf);
+    }
+
+    private static final Leaves WHOLE_NUMBERS = (prim, leaf) ->
+            prim == Type.Prim.INT && leaf instanceof ObservedValue.Integer whole
+                    ? stepsOf(whole) : none();
+
     /** The values one step from {@code value}, standing at a position of {@code type}. */
     static Iterator<ObservedValue> of(ObservedValue value, Type type, RuleReadingContext reading) {
+        return of(value, type, reading, WHOLE_NUMBERS);
+    }
+
+    /**
+     * The values {@code value} becomes where one string it holds is put as the pieces a body
+     * splits it into meeting what the body goes on to demand of each ({@link StringDemands}), and
+     * everything else stays as it was — wherever the string sits, as for {@link #of}.
+     */
+    static Iterator<ObservedValue> demanded(ObservedValue value, Type type,
+                                            RuleReadingContext reading, StringDemands demands,
+                                            Function<Type, List<String>> standingFor) {
+        return of(value, type, reading, (prim, leaf) ->
+                prim == Type.Prim.STRING && leaf instanceof ObservedValue.Text text
+                        ? mapped(demands.besides(text.value(), standingFor).iterator(),
+                                ObservedValue.Text::new)
+                        : none());
+    }
+
+    private static Iterator<ObservedValue> of(ObservedValue value, Type type,
+                                              RuleReadingContext reading, Leaves leaves) {
         if (value.unread() != null) {
             return none();
         }
@@ -43,26 +74,25 @@ final class NearbyValues {
         if (inside == null || inside.unread() != null) {
             return none();
         }
-        return mapped(within(inside, view.shape(), reading),
+        return mapped(within(inside, view.shape(), reading, leaves),
                 near -> ObservedValue.wrapped(view.wrappers(), near));
     }
 
     private static Iterator<ObservedValue> within(ObservedValue value, Shape shape,
-                                                  RuleReadingContext reading) {
+                                                  RuleReadingContext reading, Leaves leaves) {
         return switch (shape) {
-            case Shape.Scalar scalar -> scalar.prim() == Type.Prim.INT
-                    && value instanceof ObservedValue.Integer whole ? stepsOf(whole) : none();
+            case Shape.Scalar scalar -> leaves.beside(scalar.prim(), value);
             case Shape.Product product -> value instanceof ObservedValue.Constructed made
-                    && made.type().equals(product.name()) ? fieldsOf(made, product, reading)
-                    : none();
+                    && made.type().equals(product.name())
+                    ? fieldsOf(made, product, reading, leaves) : none();
             case Shape.Sequence sequence -> value instanceof ObservedValue.Sequence held
-                    ? elementsOf(held, sequence, reading) : none();
+                    ? elementsOf(held, sequence, reading, leaves) : none();
             // The case the value is, as a fixture writes a sum.
             case Shape.Sum sum -> value instanceof ObservedValue.Constructed made
                     && sum.reaches().cases().contains(made.type())
-                    ? of(value, Type.ref(made.type()), reading) : none();
+                    ? of(value, Type.ref(made.type()), reading, leaves) : none();
             case Shape.Optional optional -> value instanceof ObservedValue.Absent ? none()
-                    : of(value, optional.element(), reading);
+                    : of(value, optional.element(), reading, leaves);
             // Nothing is beside these: a map's keys and a unit case are not a number, and a
             // position nothing writes a value at has no neighbour to write.
             case Shape.Mapping _, Shape.Unit _, Shape.Unresolved _, Shape.Cases _, Shape.Tuple _,
@@ -85,13 +115,13 @@ final class NearbyValues {
     /** Field by field in the order the declaration writes them. */
     private static Iterator<ObservedValue> fieldsOf(ObservedValue.Constructed made,
                                                     Shape.Product product,
-                                                    RuleReadingContext reading) {
+                                                    RuleReadingContext reading, Leaves leaves) {
         return flat(List.copyOf(product.fields().entrySet()).iterator(), field -> {
             ObservedValue held = made.field(field.getKey());
             if (held == null) {
                 return none();
             }
-            return mapped(of(held, field.getValue(), reading), near -> {
+            return mapped(of(held, field.getValue(), reading, leaves), near -> {
                 Map<String, ObservedValue> fields = new LinkedHashMap<>(made.fields());
                 fields.put(field.getKey(), near);
                 return new ObservedValue.Constructed(made.type(), fields);
@@ -101,9 +131,9 @@ final class NearbyValues {
 
     private static Iterator<ObservedValue> elementsOf(ObservedValue.Sequence held,
                                                       Shape.Sequence sequence,
-                                                      RuleReadingContext reading) {
+                                                      RuleReadingContext reading, Leaves leaves) {
         return flat(indexes(held.elements().size()), at ->
-                mapped(of(held.elements().get(at), sequence.element(), reading), near -> {
+                mapped(of(held.elements().get(at), sequence.element(), reading, leaves), near -> {
                     List<ObservedValue> elements = new ArrayList<>(held.elements());
                     elements.set(at, near);
                     return new ObservedValue.Sequence(elements);

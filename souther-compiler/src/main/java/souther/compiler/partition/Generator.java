@@ -2159,6 +2159,14 @@ public final class Generator {
                         seen = movedFrom(arm.seenThrough().get(at), axes, purposes, looking,
                                 check, answers);
                     }
+                    // And at the pieces of the strings those rows held, where the bodies part a
+                    // string and go on to attempt a construction of each piece. Last, as the
+                    // neighbours below are: the runs are one budget.
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < arm.seenThrough().size(); at++) {
+                        seen = demandedFrom(arm.seenThrough().get(at), axes, purposes, looking,
+                                check, answers, plan.rewrites().demands());
+                    }
                     yield seen;
                 }
                 case ReplacementOwed.ByOneAnswer one -> {
@@ -2193,6 +2201,11 @@ public final class Generator {
                             && at < one.answeredOn().size(); at++) {
                         seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
                                 answers);
+                    }
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
+                        seen = demandedFrom(one.answeredOn().get(at), axes, purposes, looking,
+                                check, answers, plan.rewrites().demands());
                     }
                     yield seen;
                 }
@@ -2290,6 +2303,58 @@ public final class Generator {
     private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
                                        List<Purpose> purposes, ReplacementWitness looking,
                                        CandidateCheck check, List<StoodInAnswer> answers) {
+        return beside(seen, axes, purposes, looking, check, answers, NearbyValues::of);
+    }
+
+    /** The values a candidate puts at one position, given the value the run had there. */
+    @FunctionalInterface
+    private interface Beside {
+
+        Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading);
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found beside the inputs
+     * of a row a run was seen going through, at the pieces of the strings it held: each is put as
+     * the pieces the bodies part it into, every one of them in a language the bodies go on to
+     * attempt a construction of ({@link StringDemands}). Where a rewrite changes which pieces are
+     * kept, a string whose first piece is dropped by the body is told apart from one whose first
+     * piece is not only by a string whose dropped piece is one the body would have gone on with.
+     * Which candidate answers, and whether it answers differently, is what running it says.
+     */
+    private static GeneratedRow demandedFrom(List<ObservedValue> seen,
+                                             MeasuredInput.MeasuredAxes axes,
+                                             List<Purpose> purposes, ReplacementWitness looking,
+                                             CandidateCheck check, List<StoodInAnswer> answers,
+                                             StringDemands demands) {
+        MeasuredInput subject = axes.subject();
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading) -> NearbyValues.demanded(value, type, reading, demands,
+                        standing -> stringsStandingFor(subject, standing)));
+    }
+
+    /** The strings the values that stand for {@code type} are written round, for a type that
+     *  wears a string. */
+    private static List<String> stringsStandingFor(MeasuredInput subject, Type type) {
+        List<String> out = new ArrayList<>();
+        for (FixtureTemplate each : subject.representativesHolding(type,
+                FieldDomains.ConstructionLimits.NONE).values()) {
+            Hir.Expr written = each.value();
+            // Under the names it wears, each of which is written round the value it wraps.
+            while (written instanceof Hir.Apply applied && applied.args().size() == 1) {
+                written = applied.args().getFirst();
+            }
+            if (written instanceof Hir.StringLit(String text, var _, var _)) {
+                out.add(text);
+            }
+        }
+        return out;
+    }
+
+    private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
+                                       List<Purpose> purposes, ReplacementWitness looking,
+                                       CandidateCheck check, List<StoodInAnswer> answers,
+                                       Beside how) {
         MeasuredInput subject = axes.subject();
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
@@ -2303,7 +2368,7 @@ public final class Generator {
             kept.add(value);
         }
         for (int moved = 0; moved < seen.size(); moved++) {
-            Iterator<ObservedValue> nearer = NearbyValues.of(seen.get(moved),
+            Iterator<ObservedValue> nearer = how.of(seen.get(moved),
                     subject.types().get(moved), subject.ruleReading());
             while (nearer.hasNext()) {
                 ObservedValue near = nearer.next();
