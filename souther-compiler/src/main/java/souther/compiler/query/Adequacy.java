@@ -5299,10 +5299,19 @@ public final class Adequacy {
     public record Filling(souther.compiler.partition.FillResult composed,
                           Generator.GenerationResult boundaries,
                           Generated.RowsForRules rules,
+                          Generated.RowsForCases cases,
                           List<GenerationDisposition> generation) {
 
         public Filling {
             generation = List.copyOf(generation);
+        }
+
+        /** A filling whose measure is short of no case a statement draws inside itself. */
+        public Filling(souther.compiler.partition.FillResult composed,
+                       Generator.GenerationResult boundaries,
+                       Generated.RowsForRules rules,
+                       List<GenerationDisposition> generation) {
+            this(composed, boundaries, rules, Generated.RowsForCases.NOTHING, generation);
         }
 
         /**
@@ -5630,10 +5639,19 @@ public final class Adequacy {
             // came back certified is a row an author can be handed.
             RowsForRules rules = rowsForRules(db, name, behavior, work.rules(), here.observed(),
                     db.ask(new Front.Adequacy()).value().generation(), composed.rows().size());
+            // And the rows for the cases a statement of the decision draws inside itself that the
+            // rows leave unseen. Beside the rules and not among them: every rule may be taken and
+            // a case inside one still be short.
+            Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
+            RowsForCases cases = rowsForCases(db, name, behavior,
+                    decisions == null ? null : decisions.get(behavior), here.observed(),
+                    db.ask(new Front.Adequacy()).value().generation(),
+                    composed.rows().size() + rules.byRule().size());
             return Answer.of(new Filling(composed,
                     offeredHere(behavior, here.edges(),
                             RowsOwed.restingOnAPremise(db, name, behavior)),
                     rules,
+                    cases,
                     dispositions(owed, rules, here.edges(),
                             // This behavior's readings and no others. What a finding of this
                             // behavior is about is a line its own rules drew, and such a line is
@@ -6067,6 +6085,71 @@ public final class Adequacy {
                             "a row was composed for a rule this run was not asked about");
                 }
             }
+        }
+
+        /**
+         * A row for each case a statement of the decision draws inside itself that no row was seen
+         * in, where the search for one composed a row that was seen in it.
+         *
+         * <p>Asked for and composed are two sets, as a rule's are: what this run was set is every
+         * case the rows leave unseen, and what it composed is as many of those as the block has
+         * room for and a search found. A case with no row here was not found, which is not the
+         * case being out of reach.
+         *
+         * @param asked  every case the rows leave unseen, in the order the reading met them
+         * @param byCase the row a person is handed for each case that has one
+         */
+        public record RowsForCases(List<CaseOfAStatement> asked,
+                                   Map<CaseOfAStatement, Generator.GeneratedRow> byCase) {
+
+            /** A run that was asked for no case's row. */
+            public static final RowsForCases NOTHING = new RowsForCases(List.of(), Map.of());
+
+            public RowsForCases {
+                asked = List.copyOf(asked);
+                byCase = Ordered.map(byCase);
+                if (!asked.containsAll(byCase.keySet())) {
+                    throw new IllegalArgumentException(
+                            "a row was composed for a case this run was not asked about");
+                }
+            }
+        }
+
+        /**
+         * The rows the case search composed, one for each unseen case it found a row for, as many
+         * as the block has room for.
+         *
+         * <p>Left to the rows already read: where some row of the module was not read, a case
+         * unseen may be one a row already sitting in that source is in, and handing a person a row
+         * for it is telling them to write what is there.
+         */
+        private static RowsForCases rowsForCases(Db db, String name, String behavior,
+                                                 DecisionEvidence evidence, RowReading observed,
+                                                 souther.compiler.partition.AdequacyPolicy
+                                                         .OfTheGeneration budget,
+                                                 int alreadyOffered) {
+            if (evidence == null || evidence.took().made().isEmpty() || observed.someRowsUnseen()) {
+                return RowsForCases.NOTHING;
+            }
+            List<CaseOfAStatement> unseen = evidence.took().made().orElseThrow().unseenCases();
+            Map<CaseOfAStatement, RowToRun> found = db.ask(new CaseSearch(name, behavior)).value();
+            if (unseen.isEmpty() || found == null) {
+                return RowsForCases.NOTHING;
+            }
+            Map<CaseOfAStatement, Generator.GeneratedRow> out = new LinkedHashMap<>();
+            for (CaseOfAStatement each : unseen) {
+                RowToRun row = found.get(each);
+                if (row == null) {
+                    continue;
+                }
+                if (alreadyOffered + out.size() >= budget.rowLimit()) {
+                    break;
+                }
+                out.put(each, new Generator.GeneratedRow(
+                        List.of(new Generator.Purpose.ForACaseOfAStatement(each)), row.inputs(),
+                        row.answers()));
+            }
+            return new RowsForCases(unseen, out);
         }
 
         /**

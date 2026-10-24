@@ -22,6 +22,12 @@ public sealed interface CaseOfAStatement {
     Proposition statement();
 
     /**
+     * What tells the case from every other, written whole: the statement by its key, and which
+     * case of it. A key within a document, and no sentence.
+     */
+    String spelled();
+
+    /**
      * The steps of a search from a node, which are the steps of the recursion it is and not depths.
      */
     enum Step {
@@ -51,6 +57,11 @@ public sealed interface CaseOfAStatement {
         public Search {
             Objects.requireNonNull(statement, "a step is of some search");
             Objects.requireNonNull(step, "a case is one of the steps");
+        }
+
+        @Override
+        public String spelled() {
+            return step + " of " + statement.key();
         }
 
         /**
@@ -88,6 +99,12 @@ public sealed interface CaseOfAStatement {
             Objects.requireNonNull(statement, "an order is read in some statement");
             Objects.requireNonNull(order, "a case is of one order");
             Objects.requireNonNull(way, "a case is one way round");
+        }
+
+        @Override
+        public String spelled() {
+            return way + " of " + order.position() + " in " + order.container() + " in "
+                    + statement.key();
         }
     }
 }

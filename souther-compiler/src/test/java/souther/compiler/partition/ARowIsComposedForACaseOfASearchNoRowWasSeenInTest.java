@@ -2,9 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.OfferingRequest;
+import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
 import java.util.Map;
@@ -67,6 +70,37 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
                 """);
         assertEquals(Set.of(CaseOfAStatement.Step.NOWHERE_BELOW), stepsOf(found),
                 () -> "only the step no row was in: " + found.keySet());
+    }
+
+    @Test
+    void theBlockOffersARowForEachStepNoRowWasSeenIn() {
+        String block = blockOf(SOME + ROWS_THAT_FIND);
+        assertTrue(block.contains("a search that finds nothing at a node with nothing below it"),
+                () -> "a row for the leaf: " + block);
+        assertTrue(block.contains("a search that finds nothing through the nodes below its start"),
+                () -> "a row for the children: " + block);
+    }
+
+    @Test
+    void theBlockOffersNoRowForAStepARowWasSeenIn() {
+        String block = blockOf(SOME + ROWS_THAT_FIND + """
+                    | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
+                """);
+        assertTrue(!block.contains("a search that finds nothing at a node with nothing below it"),
+                () -> "the leaf is already written: " + block);
+        assertTrue(block.contains("a search that finds nothing through the nodes below its start"),
+                () -> "the children are not: " + block);
+    }
+
+    private static String blockOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        return GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module)),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
     }
 
     private static Set<CaseOfAStatement.Step> stepsOf(Map<CaseOfAStatement, RowToRun> found) {

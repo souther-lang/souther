@@ -92,7 +92,8 @@ public record Composition(OfferingRequest request,
                     filling == null ? List.of() : filling.composed().offers(),
                     atTheLines(owed.get(behavior)),
                     filling == null ? List.of() : filling.tellingLinesApart(),
-                    filling == null ? List.of() : filling.rules().byRule().values());
+                    filling == null ? List.of() : filling.rules().byRule().values(),
+                    filling == null ? List.of() : filling.cases().byCase().values());
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, here) -> {
@@ -108,7 +109,8 @@ public record Composition(OfferingRequest request,
                              String behavior, List<FillResult.Offer> cells,
                              List<Generator.GeneratedRow> lines,
                              List<Generator.GeneratedRow> apart,
-                             Collection<Generator.GeneratedRow> rules) {
+                             Collection<Generator.GeneratedRow> rules,
+                             Collection<Generator.GeneratedRow> cases) {
         // One block per behavior, however many kinds of row it holds. Rows of one behavior written
         // under two headings are legal and read as two lists of something, which they are not.
         Map<RowKey, OfferedRow> here =
@@ -151,6 +153,12 @@ public record Composition(OfferingRequest request,
         // rule arrive at alike is one row for both, and a row that kept only what it was reached
         // by first would be work a person is handed under half of what it does.
         for (Generator.GeneratedRow row : rules) {
+            RowKey key = RowKey.of(behavior, row);
+            here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, row)).and(row, null));
+        }
+        // And the cases a statement of a decision draws inside itself, last, and joined the same
+        // way: a row a rule is offered for may also be in a case, and is one row for both.
+        for (Generator.GeneratedRow row : cases) {
             RowKey key = RowKey.of(behavior, row);
             here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, row)).and(row, null));
         }

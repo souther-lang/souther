@@ -340,6 +340,28 @@ public final class Generator {
         }
 
         /**
+         * One case a statement of the decision draws inside itself: the row a step of a search, or
+         * a way round the order of a repeated key, no row was seen in is owed.
+         *
+         * <p>The case and not the rule the row was placed at. A rule every row takes may still
+         * have a case none of them is in, and what the row is for is the case. No words, for the
+         * reason a rule has none: what a case is called is the report's question.
+         */
+        record ForACaseOfAStatement(CaseOfAStatement which) implements Purpose {
+
+            public ForACaseOfAStatement {
+                if (which == null) {
+                    throw new IllegalArgumentException("a row for a case is for some case");
+                }
+            }
+
+            @Override
+            public List<String> labels() {
+                return List.of();
+            }
+        }
+
+        /**
          * One point of one border: the row an edge nothing sits on is owed.
          *
          * <p>What it was composed for, which is not the same as what a reader may be shown. A
