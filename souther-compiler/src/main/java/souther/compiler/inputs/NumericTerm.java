@@ -110,7 +110,7 @@ public sealed interface NumericTerm
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
     sealed interface FromOnePosition extends NumericTerm
-            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum {
+            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum, CodePointAt {
 
         /**
          * The single input position this term is read from.
@@ -528,6 +528,86 @@ public sealed interface NumericTerm
         @Override
         public String toString() {
             return "List.sum(String.codePoints(" + position + "))";
+        }
+    }
+
+    /**
+     * The code point of the string at {@code position} standing at {@code index} of the list
+     * {@code String.codePoints} answers of it, counted from nought.
+     *
+     * <p>A number of one string, as what its code points come to is, and never a number of its own:
+     * two of these at one string are two places of one value, so a row holding both writes one
+     * string with each of them where it stands, and not a string for each. Read only where the
+     * string is proved to hold the index — how long it is is settled by its rules — so a string
+     * too short to hold it is one no row of the reading that made this has.
+     *
+     * <p>Counted by what the run time counts by: scalar values, of the string as it is held.
+     */
+    final class CodePointAt implements FromOnePosition {
+
+        private final TermPath position;
+        private final int index;
+
+        private CodePointAt(TermPath position, int index) {
+            this.position = Objects.requireNonNull(position, "a code point of somewhere");
+            if (index < 0) {
+                throw new IllegalArgumentException("a code point stands at an index from nought on: "
+                        + index);
+            }
+            this.index = index;
+        }
+
+        /**
+         * The code point at {@code index} of the string at {@code position}, or null where what
+         * stands there is no string.
+         */
+        public static CodePointAt of(TermPath position, int index, Type at, NewtypeInners inners) {
+            return at != null && TypeOps.base(at, inners) == Type.STRING
+                    ? new CodePointAt(position, index) : null;
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        /** Where in the string's code points this stands, counted from nought. */
+        public int index() {
+            return index;
+        }
+
+        @Override
+        public CodePointAt movedTo(PlacesMoved moved) {
+            return new CodePointAt(moved.put(position), index);
+        }
+
+        /**
+         * Read off the string and, of it, the one index: a code point at another index of the
+         * string is read off another place of it, and one read off the whole string — its length,
+         * what its code points come to — is read off this one too. Which values the two places
+         * take together is still the string's format's to say, and a row holding both is the one
+         * string written with each where it stands.
+         */
+        @Override
+        public boolean sharesAPlaceWith(NumericTerm other) {
+            return (other instanceof CodePointAt at && position.equals(at.position))
+                    ? index == at.index : FromOnePosition.super.sharesAPlaceWith(other);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof CodePointAt at && position.equals(at.position)
+                    && index == at.index;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(CodePointAt.class, position, index);
+        }
+
+        @Override
+        public String toString() {
+            return "List.get(" + index + ", String.codePoints(" + position + "))";
         }
     }
 
@@ -1466,6 +1546,15 @@ public sealed interface NumericTerm
             return at == null ? null : new TakenOver(operation, at);
         }
 
+        /**
+         * The same taking over the values at {@code other}, which are values of the type this one's
+         * run holds: the account the operation declares was put to that type when this one was
+         * made, so it is not asked again.
+         */
+        TakenOver over(RunSource other) {
+            return new TakenOver(operation, Objects.requireNonNull(other, "taken over a run"));
+        }
+
         /** What this operation takes of what it is given. Never null: one of these cannot be made
          *  for an operation that declares none. */
         public TakenAs takenAs() {
@@ -1634,6 +1723,7 @@ public sealed interface NumericTerm
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
                             count.through());
             case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
+            case CodePointAt at -> new NumberAt.OfWhatNumber.OfTheCodePointAt(at.index());
             case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
             case OccurrencesOfItsValue occurrences ->
                     new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
@@ -1688,6 +1778,7 @@ public sealed interface NumericTerm
             case CodePointClassCount count ->
                     CodePointClassCount.of(other, count.counted(), count.through(), at, inners);
             case CodePointValueSum _ -> CodePointValueSum.of(other, at, inners);
+            case CodePointAt point -> CodePointAt.of(other, point.index(), at, inners);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
@@ -1742,6 +1833,9 @@ public sealed interface NumericTerm
             // none comes to nought.
             case CodePointValueSum _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+            // A scalar value, which is from nought to the last there is.
+            case CodePointAt _ -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    Endpoint.inclusive(Count.of(Character.MAX_CODE_POINT)));
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);

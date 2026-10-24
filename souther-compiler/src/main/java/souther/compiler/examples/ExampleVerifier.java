@@ -1916,6 +1916,13 @@ public final class ExampleVerifier {
                             : new Expectation.TheValue(expected.asserted());
                     evidence = evidenceOf(fixtures, stated, expected, answer, sig);
                     statedValue = expected;
+                    // A value the text writes as no construction — a date, a number, a call — is
+                    // still a value of one case, and the expectation built above is that value.
+                    // Read off it as built, not off what the behavior answered: an answer standing
+                    // in for the expectation would count a wrong answer as the case expected.
+                    if (named == null && expected != null) {
+                        state.expectedArm = fixtures.caseOfValue(expected.live(), sig.outputType());
+                    }
                 } catch (FixtureException fe) {
                     out.add(Diagnostic.at(row.pos())
                             .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -2063,7 +2070,11 @@ public final class ExampleVerifier {
         result = projected(result, sig.outputType());
         // The case the run answered with is the one the value is. Its class names the module that
         // declares it, and what this module means by that class's spelling is a different question.
-        state.resultArm = fixtures.typeOf(result);
+        // A primitive case declares no class, so a date or a number is matched against the cases the
+        // output declares instead.
+        TypeSymbol declared = fixtures.typeOf(result);
+        state.resultArm = declared != null ? declared
+                : fixtures.caseOfValue(result, sig.outputType());
         // The answer is in hand, which is as far as a row gets before anything is done with it. A
         // measure reading what the behavior answered reads a row that got here, and the two things
         // done with an answer — holding it to the declaration, holding it to what the row states —
@@ -2071,8 +2082,8 @@ public final class ExampleVerifier {
         // so that a reader asking whether another run would have answered alike has the answer and
         // not only its case — kept as built, and read after the row (Reached#answer).
         state.answered(result);
-        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result, out,
-                state)) {
+        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result,
+                declared, out, state)) {
             return;
         }
         // Compared where the row states something to compare against. A row whose answer is owed
@@ -2260,8 +2271,8 @@ public final class ExampleVerifier {
      */
     private boolean keepsWhatIsDeclaredOfWhatItAnswered(FixtureReader fixtures, Hir.ExampleRow row,
                                                         ExampleTarget target, Sig sig, Object[] args,
-                                                        Object answered, List<Diagnostic> out,
-                                                        RowState state) {
+                                                        Object answered, TypeSymbol declared,
+                                                        List<Diagnostic> out, RowState state) {
         // Asked of what applied the row and not of how the behavior is written. The reason the
         // check runs here is that nothing else ran it: an implementation supplied from outside is
         // what answered, so the callee's own check is not what came back. A behavior written with a
@@ -2272,7 +2283,7 @@ public final class ExampleVerifier {
         }
         Object here;
         try {
-            here = inTheseClasses(fixtures, state.resultArm, sig, answered);
+            here = inTheseClasses(fixtures, declared, sig, answered);
         } catch (FixtureException | ImplementationNotReached e) {
             // The answer could not be brought into the classes the check reads, so nothing was
             // checked. Undecided rather than failed: the model may be right, and this saw nothing.

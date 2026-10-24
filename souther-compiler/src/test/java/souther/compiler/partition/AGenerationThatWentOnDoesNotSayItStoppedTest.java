@@ -97,6 +97,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                         Map.of("submit", new Adequacy.Filling(result,
                                 Generator.GenerationResult.NONE,
                                 Adequacy.Generated.RowsForRules.NOTHING,
+                                Adequacy.Generated.RowsForCases.NOTHING,
                                 List.of())), null)),
                 Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE), COMPILED.db()).text();
     }

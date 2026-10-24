@@ -50,11 +50,20 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      * @param said     which copies of the model's code each thing it asks was read off, told
      *                 where it was read
      */
-    record Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said) {
+    record Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said,
+                List<CaseWay> cases) {
 
-        /** {@code answer}, asking what {@code stated} put on the way. */
+        Read {
+            cases = List.copyOf(cases);
+        }
+
+        /**
+         * {@code answer}, asking what {@code stated} put on the way, for an arm entered. The
+         * statement an arm states is what a run entered it by and not a search a case is drawn
+         * inside of, so it draws none.
+         */
         Read(DecidedCondition answer, ReachingCuts.Stating stated) {
-            this(answer, stated.entries(), stated.by());
+            this(answer, stated.entries(), stated.by(), List.of());
         }
     }
 
@@ -97,10 +106,49 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         if (asked.isEmpty()) {
             return List.of();
         }
-        return List.of(new Read(oneRelation(asked) && (!(condition instanceof Condition.Truth)
+        DecidedCondition answer = oneRelation(asked)
+                && (!(condition instanceof Condition.Truth)
                 || oneRelation(asked(states.stating(condition, !held).entries())))
                 ? answerOf(condition, asked.getFirst(), held)
-                : asOneColumn(condition, held), stated, said.by()));
+                : asOneColumn(condition, held);
+        return List.of(new Read(answer, stated, said.by(), casesOf(condition, answer)));
+    }
+
+    /**
+     * What a row has to be to be evidence of each case the statement {@code answer} is about draws
+     * inside itself, for the cases a search draws that the reading can say what a row at the start
+     * of it has to be ({@link CaseOfAStatement.Search#askedOfTheNode}).
+     *
+     * <p>Only the cases the decision owes where the statement came out as it did
+     * ({@link CasesTheRowsTook#owedBy}): a search that came out finding one owes the node meeting
+     * it, and one that came out empty owes the two ways of coming back empty.
+     */
+    private List<CaseWay> casesOf(Condition condition, DecidedCondition answer) {
+        if (!(answer.condition() instanceof DecisionCondition.AStatement(
+                Proposition.SomeReachable search))
+                || !(answer instanceof DecidedCondition.Held(var _, boolean held))) {
+            return List.of();
+        }
+        List<CaseWay> out = new ArrayList<>();
+        for (CaseOfAStatement.Step step : CasesTheRowsTook.owedBy(search, held == search.holds())) {
+            CaseOfAStatement.Search which = new CaseOfAStatement.Search(search, step);
+            Optional<List<Proposition>> asked = which.askedOfTheNode(states::denied);
+            if (asked.isEmpty()) {
+                continue;
+            }
+            List<OnTheWay> puts = new ArrayList<>();
+            SaidOnTheWay said = SaidOnTheWay.NONE;
+            for (Proposition each : asked.get()) {
+                ReachingCuts.Stating put =
+                        ReachingCuts.whereItDecides(condition, each, states.read());
+                puts.addAll(put.entries());
+                said = said.and(put.by());
+            }
+            if (!puts.isEmpty()) {
+                out.add(new CaseWay(which, puts, said));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is
@@ -125,6 +173,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _),
                  OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _),
                  OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
                  OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
@@ -218,10 +267,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             // reading has no column for. Only a condition the body asks is read this way, so there
             // is one to ask.
             // And two values being one, whose column is the comparison the condition states:
-            // written either way round, it is read as one statement there.
+            // written either way round, it is read as one statement there. And a remainder of a
+            // form, whose values are a class and no column over the input's numbers.
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _),
                  OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _),
                  OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) ->
                     asOneColumn(condition, held);
             // Which of two values stands at a position: the truth of that position, whichever

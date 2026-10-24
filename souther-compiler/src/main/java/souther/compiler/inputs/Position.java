@@ -2,10 +2,14 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.regex.Language;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.ValueSet;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Set;
 
@@ -71,6 +75,37 @@ public sealed interface Position permits ReadPosition {
             }
         }
         return null;
+    }
+
+    /**
+     * How many code points the string here holds, where its rules settle one number: what they
+     * say of {@code length}, its length, met with the shortest and the longest string its format
+     * holds. Null where they leave it more than one, or no number at all.
+     */
+    default Integer codePointsHeld(NumericTerm.TakenOf length) {
+        long least = 0;
+        long most = Long.MAX_VALUE;
+        PositionBounds stated = boundsFor(length);
+        NumericDomain.Bounds held = stated == null ? null : stated.admissible();
+        if (held != null) {
+            if (held.min() != null && held.min().wholeAdmitted(true) instanceof BigInteger low) {
+                least = Math.max(least, low.longValueExact());
+            }
+            if (held.max() != null && held.max().wholeAdmitted(false) instanceof BigInteger high) {
+                most = Math.min(most, high.longValueExact());
+            }
+        }
+        if (admitted().approximation() instanceof ValueSet.Matching(var language)) {
+            Language.Ends lengths = language.lengths();
+            if (lengths == null) {
+                return null;
+            }
+            least = Math.max(least, lengths.least());
+            if (lengths.most() != null) {
+                most = Math.min(most, lengths.most());
+            }
+        }
+        return least == most && least <= Integer.MAX_VALUE ? (int) least : null;
     }
 
     /** Whether the rules of the value this position sits in contradict, so that no value of it

@@ -25,6 +25,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
@@ -33,6 +34,7 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -746,6 +748,162 @@ final class DemandReading {
         };
     }
 
+    /**
+     * What a run's working out every operator of a part asks of a row ({@code answers}, where
+     * {@link Pullback#whereItsOperatorsAnswer} says it), as far as the numbers of places outside
+     * a container say it.
+     *
+     * <p>Not the way's entries and not a condition: an operator answering is a fact about the run
+     * and no statement of a row's values, so it is kept apart from what a condition coming out a
+     * way asks, and no reader of that — a count, a composer — is handed it. What a region can
+     * carry of it narrows the region and what it cannot is left out, which is wider and never
+     * narrower than the rows that get through — and the places that is left tying together are
+     * told apart from it, for a reader asking whether a number is free of what the run works out.
+     */
+    static Answered regionAnswered(Proposition answers, InputReading read) {
+        List<TakenConstraint> narrowing = new ArrayList<>();
+        List<Set<TermPath>> tied = new ArrayList<>();
+        for (Read each : projected(answers, read)) {
+            if (!(each instanceof Read.Demands(RowDemand.Relational(
+                    TakenConstraint constraint)))) {
+                continue;
+            }
+            if (endsOfTheInts(constraint)) {
+                continue;
+            }
+            // What a region carries it is told, and the places a way ties by it are worked out
+            // against the region it narrows ({@link Reachability.Reaching#gettingPast}): a
+            // condition the declarations already hold ties nothing.
+            if (constraint.terms().stream().allMatch(term ->
+                    term instanceof NumericTerm.ValueOf value
+                            && !value.position().insideAContainer())) {
+                narrowing.add(constraint);
+            } else {
+                Set<TermPath> places = new LinkedHashSet<>();
+                constraint.terms().forEach(term -> places.add(term.subjectPath()));
+                tied.add(places);
+            }
+        }
+        return new Answered(narrowing, tied, false);
+    }
+
+    /**
+     * What a run's working out the operators of a part asks of a row.
+     *
+     * @param narrowing what the numbers of places outside a container say, which a region carries
+     * @param tied      the places each condition of more than one place names, or one a region
+     *                  cannot carry, and the places of the numbers an operator not said may stop
+     *                  the run on: places the run no longer leaves free of one another, which a
+     *                  reader that takes two places to take any pair of values asks
+     * @param unsaid    whether an operator not said may stop the run on something that is no
+     *                  number of a place: no two places are then known free of one another
+     */
+    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
+
+        static final Answered NOTHING = new Answered(List.of(), List.of(), false);
+
+        Answered {
+            narrowing = List.copyOf(narrowing);
+            tied = List.copyOf(tied);
+        }
+
+        /**
+         * {@code declarations}, the rows the declarations leave, with what the run got past taken
+         * in: the one region of the rows the run lets on, for every reader that goes back to the
+         * declarations because the way's own region holds what it states and the reader asks
+         * without. A reader that picks a region of its own and does not ask this one answers for
+         * rows the run stopped on.
+         *
+         * <p>Where the run leaves no row the declarations are returned as they are: that nothing
+         * arrives is the walk's to prove.
+         */
+        SearchRegion leaving(SearchRegion declarations) {
+            if (narrowing.isEmpty()) {
+                return declarations;
+            }
+            SearchRegion left = TakenConstraint.narrowedBy(narrowing, declarations);
+            return left.emptiness().isPresent() ? declarations : left;
+        }
+
+        /**
+         * What the arithmetic of the comparison itself asks of a row, as far as a region carries
+         * it without refusing the runs of the numbers it names.
+         *
+         * <p>A condition on several numbers makes each of them run as far as the others let it,
+         * which a region says by not answering for the whole run of any: a sum of two numbers
+         * that run to the ends of the type holds back only where the type ends, which the
+         * relation reads as the arithmetic's line, and carrying it would leave every such sum
+         * unread. So the numbers of the comparison alone are told when it binds inside the
+         * declarations — every number it names is held at both ends, and some row of them
+         * breaks it. The ties and the operators not said are the run's before the comparison,
+         * and the comparison's are its relation's.
+         */
+        Answered ofTheRelationItself(SearchRegion declarations) {
+            return new Answered(narrowing.stream()
+                    .filter(each -> each.terms().size() == 1
+                            || bindsInsideTheDeclaredRuns(each, declarations))
+                    .toList(), List.of(), false);
+        }
+
+        /**
+         * Whether {@code each} is bound by the declarations alone: every number it names is held
+         * at both ends, and some row of those runs breaks it.
+         */
+        private static boolean bindsInsideTheDeclaredRuns(TakenConstraint each,
+                                                          SearchRegion declarations) {
+            if (!(each instanceof TakenConstraint.Affine(var form, var rel))) {
+                return false;
+            }
+            boolean everyNumberIsHeld = form.coefs().keySet().stream().allMatch(term ->
+                    term instanceof NumericTerm.FromOnePosition one
+                            && declarations.wholeRunOf(one) != null
+                            && declarations.wholeRunOf(one).min() != null
+                            && declarations.wholeRunOf(one).max() != null);
+            return everyNumberIsHeld
+                    && !TakenConstraint.holdsOverTheRunsOf(form, rel, declarations);
+        }
+
+        /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */
+        static Answered leavingUnsaid(Pullback.OperatorsAnswer operators) {
+            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere() ? NOTHING
+                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere());
+        }
+
+        /** This and {@code other}, both. */
+        Answered and(Answered other) {
+            List<TakenConstraint> narrows = new ArrayList<>(narrowing);
+            narrows.addAll(other.narrowing);
+            List<Set<TermPath>> places = new ArrayList<>(tied);
+            places.addAll(other.tied);
+            return new Answered(narrows, places, unsaid || other.unsaid);
+        }
+    }
+
+    /** Whether {@code constraint} is an ordering of one number that holds at the least
+     *  {@code Int} and at the greatest, so at every one between them: what an operator over a
+     *  number answers where it cannot pass either end, which every {@code Int} meets and no row is
+     *  narrowed by. A form is worked out at the two ends and the relation asked of each, so that
+     *  the side of the number it is on, whether it is strict and the sign of its weight are not
+     *  told apart by hand. */
+    static boolean endsOfTheInts(TakenConstraint constraint) {
+        if (!(constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
+                || form.coefs().size() != 1
+                || !(rel == Rel.LE || rel == Rel.LT || rel == Rel.GE || rel == Rel.GT)) {
+            return false;
+        }
+        ExactRatio weight = form.coefs().values().iterator().next();
+        return holdsAt(weight, form.constant(), rel, Long.MIN_VALUE)
+                && holdsAt(weight, form.constant(), rel, Long.MAX_VALUE);
+    }
+
+    /** Whether {@code weight * x + constant} stands to nought as {@code rel} says at
+     *  {@code x}. */
+    private static boolean holdsAt(ExactRatio weight, ExactRatio constant, Rel rel, long x) {
+        ExactRatio at = weight.times(ExactRatio.of(x)).orNull();
+        ExactRatio value = at == null ? null : at.plus(constant).orNull();
+        return value != null && rel.holds(value.signum());
+    }
+
     private static List<Stated> both(List<Stated> left, List<Stated> right) {
         List<Stated> out = new ArrayList<>(left);
         out.addAll(right);
@@ -1428,6 +1586,13 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT))
                             : AnElementsWay.ofTheRow(each));
+            // A remainder, asked of the row where its numbers are none of the element's. Of the
+            // element's numbers it is no relation an element is written to meet here.
+            case Read.Demands(RowDemand.OnARemainder remainder) ->
+                    List.of(everyElement || anyInside(remainder.positions(), element)
+                            ? AnElementsWay.ofTheRow(forTheRun(whole,
+                                    RowDemand.NoComposer.A_REMAINDER_OF_A_FORM))
+                            : AnElementsWay.ofTheRow(each));
             // Two values being one, asked of the row where neither is inside the element. Inside
             // it, the element is written alike with every other and no value is written into it
             // from another position here.
@@ -1768,6 +1933,11 @@ final class DemandReading {
             // and not a count against a number that is not yet there.
             case Relation.Affine affine when countAndNumbers(affine, read) != null ->
                     soManyAgainstNumbers(compared, affine, met, read);
+            // What a division leaves of a form of numbers a row writes, alone against a number:
+            // the remainders that meet it, which a composer places a value of the form at.
+            case Relation.Affine affine
+                    when onARemainderAlone(affine, met, read) instanceof RowDemand.OnARemainder on ->
+                    new Read.Demands(on);
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
@@ -1859,6 +2029,43 @@ final class DemandReading {
                 scale.signum() < 0 ? met.turned() : met, scaled.constant().negated(),
                 new LinearForm<>(ExactRatio.ZERO, added),
                 anElementMeeting(AStatementAtARow.elementsOf(count), read)));
+    }
+
+    /**
+     * The remainders {@code affine} coming out {@code met} leaves, where it holds what a division
+     * leaves of a form against a number and nothing else — or null where it is no such relation,
+     * where a number of the form is none a row writes at one place and counts, or where no
+     * remainder meets it.
+     *
+     * <p>Read off the relation as {@code w·r + c met 0} over the remainders a division by the
+     * divisor leaves, which is a run of them, its bounds turned over where the weight is below
+     * nought.
+     */
+    private static RowDemand.OnARemainder onARemainderAlone(Relation.Affine affine, Rel met,
+                                                            InputReading read) {
+        if (affine.form().coefs().size() != 1
+                || !(affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.RemainderOfADividend remainder)
+                || !(remainder.dividend().constant().floor() instanceof ExactAnswer.Held<?>)) {
+            return null;
+        }
+        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (term.atOnePosition() == null || orders == null || orders.answered() == null
+                    || !orders.answered().counts()) {
+                return null;
+            }
+        }
+        ExactRatio weight = affine.form().coefs().get(remainder);
+        if (!(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+            return null;
+        }
+        WholeNumberRuns leaves = WholeNumberRuns.standing(
+                weight.signum() < 0 ? met.turned() : met, threshold)
+                .and(WholeNumberRuns.one(BigInteger.ZERO,
+                        remainder.divisor().subtract(BigInteger.ONE)));
+        return leaves.isNone() ? null : new RowDemand.OnARemainder(remainder, leaves);
     }
 
     /**

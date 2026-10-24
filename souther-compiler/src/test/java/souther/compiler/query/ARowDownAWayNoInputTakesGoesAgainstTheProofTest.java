@@ -8,6 +8,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.RecordedConditionOutcome;
 import souther.compiler.core.Core;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
@@ -196,7 +197,8 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
         /** What the rows took, where the one row is {@code run}. */
         Measure<DecisionEvidence.RowsPlaced> placing(ObservedInputs run) {
             return DecisionEvidence.of("f", placement,
-                    List.of(new WitnessedRow(run, RowWitnesses.ANOTHER_ROW)), WeakeningSet.none());
+                    List.of(new WitnessedRow(run, RowWitnesses.ANOTHER_ROW)), WeakeningSet.none(),
+                    CasesTheRowsTook.none());
         }
 
         /** A row recorded bringing out each condition of every one of {@code ruled} as it says, at

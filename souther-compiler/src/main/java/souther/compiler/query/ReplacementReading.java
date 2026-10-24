@@ -381,14 +381,15 @@ public final class ReplacementReading {
             return new Standing.CannotBeAsked(ReplacementEvidence.Undecided.Way.atNoAllowance(
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         }
+        ReplacementOwed.ByOneAnswer lookFor = new ReplacementOwed.ByOneAnswer(rewrite,
+                answered.stream().map(RowOutcome::inputs).toList());
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {
-                return new Standing.Unnoticed(RowRef.of(answered.get(i)),
-                        new ReplacementOwed.ByOneAnswer(rewrite));
+                return new Standing.Unnoticed(RowRef.of(answered.get(i)), lookFor);
             }
         }
-        return new Standing.Open(new ReplacementOwed.ByOneAnswer(rewrite));
+        return new Standing.Open(lookFor);
     }
 
     private ReplacementReading() {}

@@ -272,13 +272,15 @@ public final class GuardThresholds {
                             List<ComparisonArrival> arrivals = at.observations().stream()
                                     .map(one -> one.arrival()).toList();
                             WaysToACase wayToACase = new WaysToACase(decides ->
-                                    Reachability.of(new WayToTheBorder(
+                                    Reachability.gettingPast(Reachability.of(new WayToTheBorder(
                                             each.wayToACase(aCase.apply(decides))),
-                                            read.quantities().region()));
+                                            read.quantities().region()), each.getsPast()));
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
-                                            Reachability.of(new WayToTheBorder(each.assumed()),
+                                            Reachability.gettingPast(Reachability.of(
+                                                    new WayToTheBorder(each.assumed()),
                                                     read.quantities().region()),
+                                                    each.getsPast()),
                                             wayToACase, arrivals, false, read, each.witnesses());
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.

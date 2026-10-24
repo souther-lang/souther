@@ -11,6 +11,7 @@ import souther.compiler.partition.ReachabilityGap;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -113,7 +114,7 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
      * it: were the walk to read the declarations, these ways would need closing by something it
      * does not read.
      */
-    private static final String PAST_THE_FIGURE = """
+    private static final String ONE_PAST_THE_FIGURE = """
             module example.either
 
             data N = Int
@@ -125,21 +126,45 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
             behavior f : (a: N, n: N) -> Yes | No
 
             let f (a, n) = {
-                guard ALTERNATIVES else No
+                guard ALTERNATIVES_OF_A else No
                 if n > 5 then Yes else No
             }
-            """.replace("ALTERNATIVES", alternatives());
+            """.replace("ALTERNATIVES_OF_A", alternatives("a"));
+
+    /**
+     * Two such conditions, on two positions: the only way a row takes is the last of both, and
+     * the ways looked along hold each alternative of each beside the other's first, never the
+     * last of both together.
+     */
+    private static final String PAST_THE_FIGURE = """
+            module example.either
+
+            data N = Int
+                invariant value >= 0 && value <= 100
+
+            data Yes
+            data No
+
+            behavior f : (a: N, b: N, n: N) -> Yes | No
+
+            let f (a, b, n) = {
+                guard ALTERNATIVES_OF_A else No
+                guard ALTERNATIVES_OF_B else No
+                if n > 5 then Yes else No
+            }
+            """.replace("ALTERNATIVES_OF_A", alternatives("a"))
+            .replace("ALTERNATIVES_OF_B", alternatives("b"));
 
     private static final Count BEHIND_THE_FORK = Count.of(5);
 
-    /** {@code a} at as many levels past the top of {@code N} as ways are looked along, and then at
-     *  nought. */
-    private static String alternatives() {
+    /** {@code name} at as many levels past the top of {@code N} as ways are looked along, and then
+     *  at nought. */
+    private static String alternatives(String name) {
         List<String> out = new ArrayList<>();
         for (int each = 1; each <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(); each++) {
-            out.add("a == " + (100 + each));
+            out.add(name + " == " + (100 + each));
         }
-        out.add("a == 0");
+        out.add(name + " == 0");
         return String.join(" || ", out);
     }
 
@@ -189,9 +214,31 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
     }
 
     /**
-     * Where the ways of one condition are more than are looked along, the way is looked along
-     * whole past them, and the account of what that came to says which conditions it was not
-     * split at.
+     * Where the ways of one condition are more than are looked along, each alternative of it is
+     * still looked along once: the one a row can take, though it comes after the figure, is
+     * offered a row.
+     */
+    @Test
+    void anAlternativePastTheFigureOfOneConditionIsStillLookedAlong() {
+        List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(ONE_PAST_THE_FIGURE);
+        assertFalse(owed.isEmpty(), "the line behind the guard is owed rows");
+        for (ItemAssessment.Owed item : owed) {
+            assertTrue(item.searches().rowToOffer().isPresent(),
+                    () -> "a row along the last alternative is offered: " + item.searches());
+            // The last alternative is the one that holds a at nought, and the row is the one that
+            // goes along it.
+            assertEquals("N(0)",
+                    item.searches().rowToOffer().orElseThrow().row().inputs().getFirst().text(),
+                    () -> "and it is a row with a at nought: " + item.searches());
+            assertTrue(lookedAlongWhole(item).isEmpty(),
+                    () -> "and nothing was left to be looked along whole: " + item.searches());
+        }
+    }
+
+    /**
+     * Where the ways of conditions on two positions are more than are looked along, and the row
+     * is along the last alternative of both, the way is looked along whole past them, and the
+     * account of what that came to says which conditions it was not split at.
      */
     @Test
     void pastTheFigureTheAccountSaysWhichConditionsTheWayWasNotSplitAt() {

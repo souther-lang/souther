@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeNumberRuns;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -30,6 +31,15 @@ import java.util.Set;
  * beside what the model admits.
  */
 public sealed interface Standing {
+
+    /**
+     * This, where {@code way} asks of the numbers it is at what the search for a row chooses
+     * among: a row composed at what the way turns away is one no row along it is. Itself where
+     * the way asks nothing such of it.
+     */
+    default Standing alongTheWay(Reachability.Reaching way) {
+        return this;
+    }
 
     /**
      * What one whole number of a row leaves of another divided by it, at a remainder or in a run of
@@ -203,23 +213,25 @@ public sealed interface Standing {
      * alone. The two forms name no position in common, so the remainder is chosen and the added
      * numbers are met against what it leaves.
      *
-     * @param dividend the form the division is of, with the constant it is moved by
-     * @param on       the order each number of the dividend stands on
-     * @param divisor  the number it is divided by, above nought
-     * @param added    what is added to the remainder, with no constant
-     * @param addedOn  the order each number added stands on
-     * @param levels   the levels the sum takes
+     * @param dividend   the form the division is of, with the constant it is moved by
+     * @param on         the order each number of the dividend stands on
+     * @param divisor    the number it is divided by, above nought
+     * @param remainders the remainders a row is composed at: every one, or those a way to the
+     *                   item leaves ({@link #alongTheWay})
+     * @param added      what is added to the remainder, with no constant
+     * @param addedOn    the order each number added stands on
+     * @param levels     the levels the sum takes
      */
     record OfARemainderAndAForm(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
-                                BigInteger divisor, LinearForm<NumericTerm> added,
-                                Map<NumericTerm, Carrier> addedOn, LevelSpace levels,
-                                Criterion where) implements Standing {
+                                BigInteger divisor, WholeNumberRuns remainders,
+                                LinearForm<NumericTerm> added, Map<NumericTerm, Carrier> addedOn,
+                                LevelSpace levels, Criterion where) implements Standing {
 
         public OfARemainderAndAForm {
             on = Map.copyOf(on);
             addedOn = Map.copyOf(addedOn);
             if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
-                    || divisor.signum() <= 0 || added.coefs().isEmpty()
+                    || divisor.signum() <= 0 || remainders == null || added.coefs().isEmpty()
                     || !addedOn.keySet().equals(added.coefs().keySet())
                     || added.coefs().keySet().stream().anyMatch(number -> dividend.coefs()
                             .keySet().stream().anyMatch(number::sharesAPlaceWith))) {
@@ -227,6 +239,30 @@ public sealed interface Standing {
                         + " numbers than its own, each on one order, and divided by a divisor"
                         + " above nought: " + dividend + " by " + divisor + " plus " + added);
             }
+        }
+
+        /** Every remainder {@code divisor} leaves. */
+        static WholeNumberRuns every(BigInteger divisor) {
+            return WholeNumberRuns.one(BigInteger.ZERO, divisor.subtract(BigInteger.ONE));
+        }
+
+        /**
+         * At the remainders {@code way} leaves this remainder as well: a row composed at another
+         * is one the way turns away, so a remainder the item may be at and the way may not is one
+         * no row along it is at.
+         */
+        @Override
+        public Standing alongTheWay(Reachability.Reaching way) {
+            WholeNumberRuns left = remainders;
+            for (OnTheWay.TakenIn cut : way.boundedOnTheWay()) {
+                if (cut.demand() instanceof RowDemand.OnARemainder asked
+                        && asked.remainder().dividend().equals(dividend)
+                        && asked.remainder().divisor().equals(divisor)) {
+                    left = left.and(asked.leaves());
+                }
+            }
+            return left.equals(remainders) ? this : new OfARemainderAndAForm(dividend, on, divisor,
+                    left, added, addedOn, levels, where);
         }
     }
 

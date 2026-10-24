@@ -149,7 +149,8 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
-            case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
+            case Standing.OfARemainder remainder ->
+                    ofARemainder(remainder, within, runs, looking, tried);
             case Standing.OfARemainderAndAForm both ->
                     ofARemainderAndAForm(both, within, runs, tried);
             case Standing.OfAProduct product -> ofAProduct(product, within, runs, tried);
@@ -936,7 +937,7 @@ public final class LevelRealizer {
      */
     private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
                                      Map<NumericTerm, NumericDomain.Bounds> runs,
-                                     ValuesTried tried) {
+                                     WitnessSearch looking, ValuesTried tried) {
         // A remainder of a form over numbers of one position is what one value leaves, as a form
         // over them is what one value comes to.
         Realization named = amongTheValuesNamed(over.dividend().coefs().keySet(),
@@ -944,6 +945,10 @@ public final class LevelRealizer {
                         values), over.where(), within, tried);
         if (named != null) {
             return named;
+        }
+        Realization congruent = asACongruence(over, within, looking, tried);
+        if (congruent != null) {
+            return congruent;
         }
         LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
@@ -1012,6 +1017,59 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), unheld);
+    }
+
+    /**
+     * A row at a remainder the criterion offers, its numbers walked as the region leaves them and
+     * the last held to the class the others leave it ({@link NumericWitness.Congruent}) — or null
+     * where no remainder offered found one, which the class walk of the form's values is asked
+     * after.
+     *
+     * <p>Asked first because it puts no value of the form ahead of its numbers. A value chosen
+     * from the run the region leaves the form is one its numbers may come to only at places no
+     * row is written at — a string's length beside what its code points come to — while each
+     * number walked from where it usually is reaches one they come to together.
+     */
+    private Realization asACongruence(Standing.OfARemainder over, SearchRegion within,
+                                      WitnessSearch looking, ValuesTried tried) {
+        if (!over.dividend().constant().isWhole()
+                || !over.dividend().coefs().values().stream().allMatch(ExactRatio::isWhole)) {
+            return null;
+        }
+        List<NumericTerm> terms = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.dividend())) {
+            terms.add(each.getKey());
+        }
+        List<NumericWitness.Congruent> congruents = new ArrayList<>();
+        for (Level level : LevelCandidateSource.forItem(over.where(), over.levels()).levels()) {
+            ExactRatio asked = level.asAnExactNumber();
+            if (asked != null && asked.isWhole()
+                    && asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger r)
+                    && r.signum() >= 0 && r.compareTo(over.divisor()) < 0) {
+                congruents.add(new NumericWitness.Congruent(over.dividend(), over.divisor(), r));
+            }
+        }
+        // An assignment a row was already built from is stepped past inside the walk, which then
+        // tries the next value of the last number rather than handing the same one back.
+        NumericWitness.Composing notTried = standing -> found(fixingOf(standing), within, tried)
+                instanceof Realization.Found ? new NumericWitness.Composed.Built()
+                : new NumericWitness.Composed.NotBuilt(CompositionShortfall.NONE);
+        if (NumericWitness.of(within, terms, over.on()::get, looking, notTried, congruents)
+                instanceof NumericWitness.Standing.Found standing) {
+            Map<NumericTerm, Place> placed = new LinkedHashMap<>();
+            for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
+                placed.put(each.term(), each.place());
+            }
+            return found(fixingOf(placed), within, tried);
+        }
+        return null;
+    }
+
+    /** Each number standing at its place, as the target a row is composed for. */
+    private static Map<RealizationTarget, Place> fixingOf(Map<NumericTerm, Place> standing) {
+        Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+        standing.forEach((term, at) -> fixing.put(RealizationTarget.of(term), at));
+        return fixing;
     }
 
     /**
@@ -1093,9 +1151,15 @@ public final class LevelRealizer {
                 bounded = false;
                 continue;
             }
+            int triedAt = 0;
             for (BigInteger remainder = between[0]; remainder.compareTo(between[1]) <= 0;
                  remainder = remainder.add(BigInteger.ONE)) {
-                if (remainder.subtract(between[0]).compareTo(BigInteger.valueOf(most)) >= 0) {
+                // A remainder the way to the item turns away is one no row along it is at, and
+                // costs nothing to pass.
+                if (!over.remainders().holds(remainder)) {
+                    continue;
+                }
+                if (triedAt++ >= most) {
                     stoppedBy.add(CompositionBudget.REMAINDERS_A_SUM_IS_TRIED_AT);
                     bounded = false;
                     break;

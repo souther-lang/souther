@@ -152,6 +152,14 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "CardinalityComposer", "composeAcross",
+                    "(Ljava/util/List;Ljava/util/List;Ljava/util/SequencedMap;L" + INPUTS
+                            + "TermPath;L" + INPUTS + "TermPath;L" + PARTITION + "NumericSet;"
+                            + "Ljava/util/List;" + TYPE
+                            + "Ljava/util/List;Lsouther/compiler/meaning/Quantity$TheValue;L"
+                            + INPUTS + "Quantities;L" + INPUTS + "SearchRegion;"
+                            + CONTEXT + ")" + REALIZATION,
+                    THE_POSITION),
             row(PARTITION + "CardinalityComposer", "composeAlike",
                     "(" + TYPE + "Ljava/util/List;L" + PARTITION + "RealizationTarget$OfANumber;L"
                             + PARTITION
@@ -180,6 +188,14 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
                             + "ContainersAddingUp$HowManyIsAskedFor;Ljava/util/List;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
+                    THE_POSITION),
+            row(PARTITION + "ElementsKeptApart", "keysMayRepeat",
+                    "(Lsouther/compiler/core/Core;Lsouther/compiler/core/Core$Block;" + CONTEXT
+                            + ")Z",
+                    THE_POSITION),
+            row(PARTITION + "NearbyValues", "of",
+                    "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT
+                            + ")Ljava/util/Iterator;",
                     THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "levelsOf",
                     "(" + TYPE + "Ljava/util/List;L" + INPUTS + "SearchRegion;" + CONTEXT + "L"

@@ -160,9 +160,9 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         assertFalse(report.contains("not read: comparison"), report);
         assertFalse(report.contains("not read: fork"), report);
         assertFalse(report.contains("not accounted for"), report);
-        // The entry under a key is the last element of that key, and the cases of a key held twice
-        // are the ones no row measures.
-        assertTrue(report.contains("allocate — read what this measure went without"), report);
+        // The rules of the response keep its rows apart at the key, so no key is held twice and
+        // there is no case of one for a row to measure. Beside the next test, which drops the rule.
+        assertFalse(report.contains("allocate — read what this measure went without"), report);
     }
 
     @Test

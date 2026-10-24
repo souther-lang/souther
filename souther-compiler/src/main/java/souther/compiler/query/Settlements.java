@@ -491,6 +491,8 @@ public record Settlements(List<ObligationIdentity> requested,
                                RulesTaken rules,
                                souther.compiler.partition.InteractionRequirements combinations,
                                Adequacy.Generated.RowsForRules ruleRows,
+                               Adequacy.Generated.RowsForCases caseRows,
+                               souther.compiler.partition.CasesTheRowsTook cases,
                                Map<ObligationIdentity.OfALine, List<AtAPoint>> reads,
                                Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides) {
 
@@ -641,7 +643,28 @@ public record Settlements(List<ObligationIdentity> requested,
                     identityOfArm, targetOfArm, rulesOf(db, module, behavior),
                     combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
+                    filling == null ? Adequacy.Generated.RowsForCases.NOTHING : filling.cases(),
+                    casesOf(db, module, behavior, subject),
                     reads, besides);
+        }
+
+        /**
+         * What reads a row for the cases a statement of the decision draws inside itself, or
+         * nothing where the decision was not read.
+         *
+         * <p>Built the way the measure builds it, so a row weighed here is placed at a rule and
+         * read for its cases by the reading that counted the rows.
+         */
+        private static souther.compiler.partition.CasesTheRowsTook casesOf(
+                Db db, String module, String behavior,
+                souther.compiler.partition.MeasuredInput subject) {
+            Map<String, DecisionEvidence> decisions =
+                    db.ask(new Adequacy.Decides(module)).value();
+            DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
+            return evidence == null || subject == null
+                    ? souther.compiler.partition.CasesTheRowsTook.none()
+                    : souther.compiler.partition.CasesTheRowsTook.of(evidence.read(),
+                            subject.inputs(), subject.quantities());
         }
 
         /**
@@ -754,6 +777,9 @@ public record Settlements(List<ObligationIdentity> requested,
             filling.rules().byRule().forEach((rule, row) ->
                     out.put(new ObligationIdentity.OfADecisionRule(behavior, rule),
                             RowKey.of(behavior, row)));
+            filling.cases().byCase().forEach((which, row) ->
+                    out.put(new ObligationIdentity.OfACaseOfAStatement(behavior, which),
+                            RowKey.of(behavior, row)));
             // And the row composed at a line the rows do not tell from another, where one was. The
             // reading that composed it says which row it is, and the first of them is the row the
             // block offers — read off any reading that has one, a line searched twice would be
@@ -834,6 +860,10 @@ public record Settlements(List<ObligationIdentity> requested,
             // rule its own row already discharges.
             ruleRows.asked().forEach(rule ->
                     out.add(new ObligationIdentity.OfADecisionRule(behavior, rule)));
+            // And every case a statement of the decision draws inside itself that the rows leave
+            // unseen, for the same reason: a row composed for a rule may be in one of them.
+            caseRows.asked().forEach(which ->
+                    out.add(new ObligationIdentity.OfACaseOfAStatement(behavior, which)));
             // And every line the rows do not tell from a line beside it. The whole line and not a
             // point of it: what a row here shows is which of two lines the model draws, and a line
             // is what two lines are two of.
@@ -889,6 +919,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 case ObligationIdentity.OfAnArm owed -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
+                case ObligationIdentity.OfACaseOfAStatement owed -> inTheCase(asRead, owed);
                 case ObligationIdentity.OfACombinationOfDecisions owed ->
                         makingTheDecisions(asRead, owed);
                 case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(row, owed);
@@ -1012,6 +1043,33 @@ public record Settlements(List<ObligationIdentity> requested,
                                     ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                     // A run this reading could not place says nothing about where the row went,
                     // which is this compiler falling short rather than the row missing.
+                    case RulesTaken.WhichRule.CouldNotTell _ ->
+                            new Settlement.Undetermined(
+                                    Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+                };
+                case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            };
+        }
+
+        /**
+         * Whether running the row is evidence of the case.
+         *
+         * <p>The run and not the values: a row is evidence of a case only where its run went
+         * through the statement that draws it, which is the rule it was placed at consulting the
+         * statement ({@link souther.compiler.partition.CasesTheRowsTook}). A run this reading could
+         * not place says nothing about where the row went.
+         */
+        private Settlement inTheCase(RowAsRead asRead, ObligationIdentity.OfACaseOfAStatement owed) {
+            if (!behavior.equals(owed.behavior()) || rules == null) {
+                return new Settlement.DoesNotSettle();
+            }
+            return switch (asRead.watched()) {
+                case Generator.Watched.Ran _ -> switch (
+                        new RunPlacement(rules, subject.inputs()).takenBy(asRead.asRun())) {
+                    case RulesTaken.WhichRule.TookThis took ->
+                            cases.casesSeenBy(asRead.asRun(), took.rule()).contains(owed.which())
+                                    ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                     case RulesTaken.WhichRule.CouldNotTell _ ->
                             new Settlement.Undetermined(
                                     Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);

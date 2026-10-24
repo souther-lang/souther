@@ -1,11 +1,13 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,7 +94,8 @@ public record Composition(OfferingRequest request,
                     filling == null ? List.of() : filling.composed().offers(),
                     atTheLines(owed.get(behavior)),
                     filling == null ? List.of() : filling.tellingLinesApart(),
-                    filling == null ? List.of() : filling.rules().byRule().values());
+                    filling == null ? List.of() : filling.rules().byRule().values(),
+                    filling == null ? List.of() : filling.cases().byCase().values());
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, here) -> {
@@ -103,12 +106,80 @@ public record Composition(OfferingRequest request,
         return new Composition(request, out, new LinkedHashMap<>(generated), account);
     }
 
+    /**
+     * The stimuli these sources put in one behavior's block between them, whose number is what the
+     * generation's {@code rowLimit} is held against.
+     *
+     * <p>A row once, however many of the sources composed it: {@link #take} joins them on the
+     * stimulus, so a count of the rows each composed would count a row two searches arrived at
+     * twice, and the block would stop short of rows it has room for. And a row that is one of these
+     * already takes no room. The one function that says what the block holds, so that a search
+     * following others is told how much room they took by it and by nothing it guessed.
+     *
+     * @param cells   the fill's rows
+     * @param sources the rows of the lines, and whatever else is joined by the stimulus
+     */
+    static Set<RowKey> stimuliBetween(String behavior, List<FillResult.Offer> cells,
+                                      List<? extends Collection<Generator.GeneratedRow>> sources) {
+        Set<RowKey> keys = new HashSet<>();
+        for (FillResult.Offer offer : cells) {
+            keys.add(RowKey.of(behavior, offer.row()));
+        }
+        for (Collection<Generator.GeneratedRow> rows : sources) {
+            for (Generator.GeneratedRow row : rows) {
+                keys.add(RowKey.of(behavior, row));
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * {@code generated} with the rows for the cases a statement draws inside itself held to the
+     * room the block has.
+     *
+     * <p>Here, where every row that goes into a block is known: the fill's, the lines' of the
+     * account the request was asked about, the ones that tell a line from another and the rules'.
+     * A case search told how much room the others took by what each of them composed is told a
+     * guess, and the lines of one scope are not the lines of another. A case row that is a row the
+     * block holds already takes no room, and a case left out here is still asked about
+     * ({@link Adequacy.Generated.RowsForCases#asked}).
+     *
+     * @param rowLimit how many rows one call writes
+     */
+    static Map<String, Adequacy.Filling> within(Map<String, Adequacy.Filling> generated,
+                                                BorderAccount account, int rowLimit) {
+        Map<String, List<Generator.GeneratedRow>> owed = account == null
+                ? Map.of() : account.rowsByCarrier();
+        Map<String, Adequacy.Filling> out = new LinkedHashMap<>();
+        generated.forEach((behavior, filling) -> {
+            if (filling == null || filling.cases().byCase().isEmpty()) {
+                out.put(behavior, filling);
+                return;
+            }
+            Set<RowKey> holds = stimuliBetween(behavior, filling.composed().offers(),
+                    List.of(atTheLines(owed.get(behavior)), filling.tellingLinesApart(),
+                            filling.rules().byRule().values()));
+            Map<CaseOfAStatement, Generator.GeneratedRow> kept = new LinkedHashMap<>();
+            filling.cases().byCase().forEach((which, row) -> {
+                RowKey key = RowKey.of(behavior, row);
+                if (holds.contains(key) || holds.size() < rowLimit) {
+                    holds.add(key);
+                    kept.put(which, row);
+                }
+            });
+            out.put(behavior, filling.holding(
+                    new Adequacy.Generated.RowsForCases(filling.cases().asked(), kept)));
+        });
+        return out;
+    }
+
     /** One behavior's rows, joined onto whatever it already offers. */
     private static void take(SequencedMap<String, Map<RowKey, OfferedRow>> byBehavior,
                              String behavior, List<FillResult.Offer> cells,
                              List<Generator.GeneratedRow> lines,
                              List<Generator.GeneratedRow> apart,
-                             Collection<Generator.GeneratedRow> rules) {
+                             Collection<Generator.GeneratedRow> rules,
+                             Collection<Generator.GeneratedRow> cases) {
         // One block per behavior, however many kinds of row it holds. Rows of one behavior written
         // under two headings are legal and read as two lists of something, which they are not.
         Map<RowKey, OfferedRow> here =
@@ -151,6 +222,12 @@ public record Composition(OfferingRequest request,
         // rule arrive at alike is one row for both, and a row that kept only what it was reached
         // by first would be work a person is handed under half of what it does.
         for (Generator.GeneratedRow row : rules) {
+            RowKey key = RowKey.of(behavior, row);
+            here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, row)).and(row, null));
+        }
+        // And the cases a statement of a decision draws inside itself, last, and joined the same
+        // way: a row a rule is offered for may also be in a case, and is one row for both.
+        for (Generator.GeneratedRow row : cases) {
             RowKey key = RowKey.of(behavior, row);
             here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, row)).and(row, null));
         }

@@ -145,19 +145,24 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers the number at {@code value} rounded to a whole one, the way the rounding
-     * policy at {@code mode} says.
+     * The operation answers the number at {@code value} rounded to a whole multiple of ten to the
+     * minus {@code scale}, the way the rounding policy at {@code mode} says; with no scale, to a
+     * whole number.
      *
      * <p>A rounded number is a step of what was rounded, so the answer is no form of it. What a
-     * comparison of the answer with a whole number states is exact all the same: each policy puts
-     * the least number rounding to at least {@code k} at {@code k}, at {@code k - 1} or at
-     * {@code k - 1/2}, and says whether that number is itself one of them. Which of these a policy
-     * does is the compiler's to know, and this says only which argument is the policy and which the
-     * number.
+     * comparison of the answer with a step states is exact all the same: each policy puts the least
+     * number rounding to at least {@code k} steps at {@code k}, at {@code k - 1} or at
+     * {@code k - 1/2} of them, and says whether that number is itself one of them. Which of these a
+     * policy does is the compiler's to know, and this says only which argument is the scale, which
+     * the policy and which the number.
+     *
+     * @param scale the argument the scale is at, or null where the operation rounds to a whole
+     *              number and takes none
      */
-    record RoundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) implements OperationFact {
+    record RoundsToAStep(ArgumentRef scale, ArgumentRef mode, ArgumentRef value)
+            implements OperationFact {
 
-        public RoundsToAWholeNumber {
+        public RoundsToAStep {
             Objects.requireNonNull(mode, "a number is rounded some way");
             Objects.requireNonNull(value, "and a number is rounded");
         }

@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
@@ -64,7 +66,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         // And every rule read short, because the measure is of all the rules: a count of the rules
         // the rows took is short of whatever rule a run could not be placed at. Which rule that
         // was is each rule's own answer (readShortOf), and not this list's.
-        WeakeningSet unread = derivationOf(read).union(unmeasuredOf(read));
+        WeakeningSet unread = derivationOf(read);
         for (DecisionReading.Ruled ruled : read.found()) {
             unread = unread.union(readShortOf(read, ruled));
         }
@@ -128,12 +130,18 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      *                       than one proof. A proof a row went against is this compiler having
      *                       been wrong about the body, and the rules the count is made of are
      *                       short of whatever lies past it
+     * @param unseenCases    the cases a statement of the decision draws inside itself that no row
+     *                       placed was evidence of, in the order the reading met them. What a row
+     *                       is to be looked for is told by these, and the kinds no row can be asked
+     *                       about are not among them
      */
     public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
                              int rowsNotPlaced, int rowsNotWatched,
-                             Map<DecisionRule, RowWitnesses> wentAgainst) {
+                             Map<DecisionRule, RowWitnesses> wentAgainst,
+                             List<CaseOfAStatement> unseenCases) {
 
         public RowsPlaced {
+            unseenCases = List.copyOf(unseenCases);
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
@@ -252,23 +260,21 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
     }
 
     /**
-     * What the rules of the decision, read in full, leave unmeasured of the rows.
+     * What the rules of the decision, read in full, leave unmeasured of the rows: the kinds of case
+     * a statement draws inside itself that no row was seen in.
      *
-     * <p>A decision resting on which of several elements of one key a map holds is read as it is,
-     * and none of the rows written holds a key twice. The same holds of a search from a node: its
-     * statement is read, and no row is written toward a node further down settling it. Not part of
-     * {@link #derivation}: every rule is in hand, and what is short is the rows that would tell
-     * them apart.
+     * <p>Not part of {@link #derivation}: every rule is in hand, and what is short is the rows that
+     * would tell the cases apart. Counted where the rows are placed ({@link #of}), since a row is
+     * evidence of a case only through the rule it was placed at.
      */
-    private static WeakeningSet unmeasuredOf(DecisionReading read) {
+    private static WeakeningSet unmeasuredOf(String behavior, Set<CasesTheRowsTook.Kind> unseen) {
         WeakeningSet out = WeakeningSet.none();
-        if (read.consultsWhichElementOfAKeyIsLast()) {
-            out = out.union(WeakeningSet.of(
-                    new Weakening.KeyedOverwriteCasesUnmeasured(read.behavior())));
-        }
-        if (read.consultsASearchBelowTheNodesARowWrites()) {
-            out = out.union(WeakeningSet.of(
-                    new Weakening.ReachableNodeCasesUnmeasured(read.behavior())));
+        for (CasesTheRowsTook.Kind each : unseen) {
+            out = out.union(WeakeningSet.of(switch (each) {
+                case THE_ORDER_OF_A_REPEATED_KEY ->
+                        new Weakening.KeyedOverwriteCasesUnmeasured(behavior);
+                case A_NODE_A_SEARCH_REACHES -> new Weakening.ReachableNodeCasesUnmeasured(behavior);
+            }));
         }
         return out;
     }
@@ -418,10 +424,14 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * @param whatTheRowsWentWithout what the reading of the rows went without, which this reading
      *                               is short of as well: a rule nothing was seen taking may be
      *                               taken by a row that reading never saw
+     * @param cases the cases the statements of the decision draw inside themselves, which each row
+     *              placed at a rule is handed to as evidence of: what none was seen in is what the
+     *              rows leave unmeasured
      */
     public static Measure<RowsPlaced> of(String behavior, RunPlacement against,
                                          List<WitnessedRow> rows,
-                                         WeakeningSet whatTheRowsWentWithout) {
+                                         WeakeningSet whatTheRowsWentWithout,
+                                         CasesTheRowsTook cases) {
         Map<DecisionRule, RowWitnesses.Gathering> took = new LinkedHashMap<>();
         Map<DecisionRule, RowWitnesses.Gathering> wentAgainst = new LinkedHashMap<>();
         List<Weakening> whyShort = new ArrayList<>();
@@ -440,6 +450,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                         case RulesTaken.WhichRule.TookThis it -> {
                             took.computeIfAbsent(it.rule(), _ -> new RowWitnesses.Gathering())
                                     .add(witnessed.by());
+                            cases.see(row, it.rule());
                             placed++;
                         }
                         case RulesTaken.WhichRule.CouldNotTell it -> {
@@ -468,14 +479,16 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                 }
             }
         }
-        WeakeningSet went = WeakeningSet.ofAll(whyShort).union(whatTheRowsWentWithout);
+        WeakeningSet went = WeakeningSet.ofAll(whyShort).union(whatTheRowsWentWithout)
+                .union(unmeasuredOf(behavior, cases.unseen()));
         if (notWatched > 0) {
             went = went.union(
                     WeakeningSet.of(new Weakening.DecisionRunNotWatched(behavior)));
         }
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
-                        notWatched, RowWitnesses.Gathering.done(wentAgainst));
+                        notWatched, RowWitnesses.Gathering.done(wentAgainst),
+                        List.copyOf(cases.unseenCases()));
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Either leaves the placement partial; neither may arrive as a
         // complete reading of the rows.

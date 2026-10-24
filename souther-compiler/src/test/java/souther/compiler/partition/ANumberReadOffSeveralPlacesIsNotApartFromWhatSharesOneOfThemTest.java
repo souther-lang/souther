@@ -100,6 +100,7 @@ class ANumberReadOffSeveralPlacesIsNotApartFromWhatSharesOneOfThemTest {
         return new Standing.OfARemainderAndAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_KEY, ExactRatio.ONE)),
                 Map.of(THE_KEY, Carrier.WHOLE), BigInteger.valueOf(11),
+                Standing.OfARemainderAndAForm.every(BigInteger.valueOf(11)),
                 new LinearForm<>(ExactRatio.ZERO, Map.of(beside, ExactRatio.ONE)),
                 Map.of(beside, Carrier.WHOLE), LevelSpace.steppingBy(ExactRatio.ONE),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
@@ -111,14 +112,14 @@ class ANumberReadOffSeveralPlacesIsNotApartFromWhatSharesOneOfThemTest {
     void nothingIsShownUndividedOfANumberReadOffSeveralPlaces() {
         UndividedByARelation beside = UndividedByARelation.ofARemainderOfAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_KEY, ExactRatio.ONE)),
-                BigInteger.valueOf(11),
+                BigInteger.ZERO, BigInteger.valueOf(11),
                 new LinearForm<>(ExactRatio.ZERO, Map.of(occurrencesOf(KEY), ExactRatio.ONE)),
                 ExactRatio.ZERO, Rel.EQ);
         assertSame(UndividedByARelation.SHOWING_NOTHING, beside);
 
         UndividedByARelation apart = UndividedByARelation.ofARemainderOfAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_KEY, ExactRatio.ONE)),
-                BigInteger.valueOf(11),
+                BigInteger.ZERO, BigInteger.valueOf(11),
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_OTHER, ExactRatio.ONE)),
                 ExactRatio.ZERO, Rel.EQ);
         assertNotSame(UndividedByARelation.SHOWING_NOTHING, apart);

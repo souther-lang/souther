@@ -144,6 +144,8 @@ sealed interface InputAtom {
                         "#(" + count.counted() + ")(" + count.through().writtenAround(at) + ")";
                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                         "List.sum(String.codePoints(" + at + "))";
+                case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                        "List.get(" + point.index() + ", String.codePoints(" + at + "))";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + at + ")";

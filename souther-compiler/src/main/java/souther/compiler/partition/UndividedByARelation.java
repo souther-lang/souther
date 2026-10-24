@@ -22,6 +22,7 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -40,7 +41,10 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.StringsHeldAsWritten;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -49,10 +53,14 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
+import net.unit8.notation199x.pattern.CodePoints;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,6 +71,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -399,7 +408,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link RemainderSide}).
      */
     static UndividedByARelation ofARemainderOfAForm(LinearForm<NumericTerm> dividend,
-                                                    BigInteger divisor,
+                                                    BigInteger shift, BigInteger divisor,
                                                     LinearForm<NumericTerm> added,
                                                     ExactRatio level, Rel relation) {
         // Which numbers are apart is read off the places each side is made of, so a number read
@@ -414,7 +423,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ExactRatio.ONE, null, null));
         added.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
         return new UndividedByARelation(sides, level.negated(), relation, List.of(), Kind.AFFINE,
-                new RemainderSide(dividend, divisor));
+                new RemainderSide(dividend, shift, divisor));
     }
 
     /**
@@ -423,16 +432,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param dividend the form the division is of, with no constant: its numbers and what each is
      *                 weighed by
+     * @param shift    the whole number the form is moved by before it is divided
      * @param divisor  the number it is divided by, above nought
      */
-    record RemainderSide(LinearForm<NumericTerm> dividend, BigInteger divisor) {
+    record RemainderSide(LinearForm<NumericTerm> dividend, BigInteger shift, BigInteger divisor) {
 
         RemainderSide {
-            if (dividend == null || divisor == null || divisor.signum() <= 0
+            if (dividend == null || shift == null || divisor == null || divisor.signum() <= 0
                     || dividend.coefs().isEmpty()) {
                 throw new IllegalArgumentException("a remainder is of a form of numbers, by a"
-                        + " divisor above nought: " + dividend + " by " + divisor);
+                        + " divisor above nought: " + dividend + " + " + shift + " by " + divisor);
             }
+        }
+
+        /** Whether {@code on} is a condition on this remainder: of the same form, moved by the
+         *  same number and divided by the same divisor. */
+        boolean isAskedBy(RowDemand.OnARemainder on) {
+            Quantity.RemainderOfADividend asked = on.remainder();
+            return asked.divisor().equals(divisor)
+                    && asked.dividend().coefs().equals(dividend.coefs())
+                    && asked.dividend().constant().equals(ExactRatio.of(shift));
         }
     }
 
@@ -515,7 +534,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (ways.isEmpty()) {
             return leftAlong(read, sources, carriers, read.quantities().region(), List.of(),
-                    true, witnesses);
+                    null, true, Optional.of(Set.of()), DemandReading.Answered.NOTHING, witnesses);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         Set<CompositionBudget> stopped = new LinkedHashSet<>();
@@ -537,23 +556,74 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<Carrier> carried = carriers;
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
-            List<OnAWay> conditions = conditionsOf(each);
+            WholeNumberRuns remainders = remaindersLeftAlong(each);
+            if (remainders != null && remainders.isNone()) {
+                WhatItLeaves none = WhatItLeaves.ofAWayNoRowComesAlong(places());
+                out = out == null ? none : out.alongBoth(none);
+                continue;
+            }
+            List<OnAWay> conditions = conditionsOf(each, remainder);
             boolean heldWhole = nothingUnreadBearsOnIt(each);
+            Optional<Set<String>> declined = parametersDeclined(each);
+            DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
+                    each.unsaid());
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
-                            heldWhole), _ -> leftAlong(read, sources, carried, each.region(),
-                                    conditions, heldWhole, witnesses))
-                    : leftAlong(read, sources, carried, each.region(), conditions, heldWhole,
-                            witnesses);
+                            remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
+                                    carried, each.region(), conditions, remainders, heldWhole,
+                                    declined, past, witnesses))
+                    : leftAlong(read, sources, carried, each.region(), conditions, remainders,
+                            heldWhole, declined, past, witnesses);
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
     }
 
-    /** What a way is read by: what narrowed its region, what it states and whether nothing unread
-     *  bears on the relation. */
+    /**
+     * The remainders the conditions of {@code way} on this relation's remainder leave it, all of
+     * them met; null where the relation is over no remainder or the way states nothing of it.
+     *
+     * <p>A condition on the remainder says which remainders the form leaves along the way and
+     * nothing else of the form's numbers: whatever one of them stands at, the others still bring
+     * the form to each remainder it leaves. So it narrows where the remainder lies and is not a
+     * condition tying the numbers ({@link #conditionsOf}).
+     */
+    private WholeNumberRuns remaindersLeftAlong(Reachability.Reaching way) {
+        if (remainder == null) {
+            return null;
+        }
+        WholeNumberRuns out = null;
+        for (OnTheWay.TakenIn taken : way.boundedOnTheWay()) {
+            if (taken.demand() instanceof RowDemand.OnARemainder on && remainder.isAskedBy(on)) {
+                out = out == null ? on.leaves() : out.and(on.leaves());
+            }
+        }
+        return out;
+    }
+
+    /** What a way is read by: what narrowed its region, what it states, the remainders it leaves
+     *  this relation's remainder, whether nothing unread bears on the relation, which parameters
+     *  what it declined may name and what the run works out asks of a row. */
     private record Along(List<TakenConstraint> region, List<OnAWay> conditions,
-                         boolean heldWhole) {}
+                         WholeNumberRuns remainders, boolean heldWhole,
+                         Optional<Set<String>> declined, DemandReading.Answered past) {}
+
+    /**
+     * The parameters what {@code way} declined may name a position under — or empty where some of
+     * it may name any: a condition on no answer of a dependency, or one whose parts were not all
+     * read.
+     */
+    private static Optional<Set<String>> parametersDeclined(Reachability.Reaching way) {
+        Set<String> out = new HashSet<>();
+        for (OnTheWay.Declined each : way.declined()) {
+            Optional<Set<String>> named = each.parametersNamed();
+            if (named.isEmpty()) {
+                return Optional.empty();
+            }
+            out.addAll(named.get());
+        }
+        return Optional.of(out);
+    }
 
     /**
      * Whether the way left nothing unread that bears on this relation: it declined no condition,
@@ -593,32 +663,52 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private Optional<Set<String>> parametersRead() {
         Set<String> out = new HashSet<>();
-        places().forEach(place -> out.add(place.path().head()));
+        amongThemselves.forEach(place -> out.add(place.path().head()));
         for (Side each : sides) {
-            switch (each.along()) {
-                case null -> {
-                    if (each.madeOf().isEmpty() && each.number() == null) {
-                        return Optional.empty();
-                    }
+            Optional<List<TermPath>> read = placesRead(each);
+            if (read.isEmpty()) {
+                return Optional.empty();
+            }
+            read.get().forEach(place -> out.add(place.head()));
+        }
+        return Optional.of(out);
+    }
+
+    /**
+     * The places of the input what {@code side} comes to is worked out from — its own, and those
+     * of what a walk handing it its value walks or starts from — or empty where some of them are no
+     * place this names: what an operation answered of something unnamed, or how many elements meet
+     * a statement that reads what was not read.
+     *
+     * <p>Not where the relation is reported: a count of the elements meeting a statement is at no
+     * position, and is worked out from the container and from what the statement reads of each
+     * element.
+     */
+    private static Optional<List<TermPath>> placesRead(Side side) {
+        List<TermPath> out = new ArrayList<>();
+        side.madeOf().forEach(place -> out.add(place.path()));
+        switch (side.along()) {
+            case null -> {
+                if (side.madeOf().isEmpty() && side.number() == null) {
+                    return Optional.empty();
                 }
-                case Quantity.KeptSoFar kept -> {
-                    out.add(kept.container().head());
-                    if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
-                        out.add(from.subjectPath().head());
-                    }
+            }
+            case Quantity.KeptSoFar kept -> {
+                out.add(kept.container());
+                out.addAll(kept.ofEach().placesReadOff());
+                if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
+                    out.add(from.subjectPath());
                 }
-                case Quantity.PositionInTheWalk position -> out.add(position.container().head());
-                case Quantity.HowManyMeet counted -> {
-                    Optional<List<TermPath>> read =
-                            PositionsAStatementReads.of(counted.ofTheElement());
-                    if (read.isEmpty()
-                            || !(counted.container() instanceof DecisionSubject.AnInput(
-                                    TermPath container))) {
-                        return Optional.empty();
-                    }
-                    out.add(container.head());
-                    read.get().forEach(place -> out.add(place.head()));
+            }
+            case Quantity.PositionInTheWalk position -> out.add(position.container());
+            case Quantity.HowManyMeet counted -> {
+                Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
+                if (read.isEmpty() || !(counted.container() instanceof DecisionSubject.AnInput(
+                        TermPath container))) {
+                    return Optional.empty();
                 }
+                out.add(container);
+                out.addAll(read.get());
             }
         }
         return Optional.of(out);
@@ -801,9 +891,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What a way states, as what each statement turns on: what it took in, each as the demand it
      * is, and each case it requires.
      */
-    private static List<OnAWay> conditionsOf(Reachability.Reaching way) {
+    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
+            // Where the relation's remainder lies, which is read apart ({@link
+            // #remaindersLeftAlong}).
+            if (remainder != null && taken.demand() instanceof RowDemand.OnARemainder on
+                    && remainder.isAskedBy(on)) {
+                return;
+            }
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
             out.add(new OnAWay(taken.demand().positions(),
@@ -828,7 +924,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case RowDemand.Exists exists -> exists.container();
             case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.OneValueAtBoth _,
-                 RowDemand.SoMany _, RowDemand.ForTheRun _ -> null;
+                 RowDemand.SoMany _, RowDemand.OnARemainder _, RowDemand.ForTheRun _ -> null;
         };
     }
 
@@ -929,10 +1025,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                 order of the sides
      * @param carriers the order each side is counted on, or null where it has none
      * @param read     the reading of the input, whose rules say which places they may name
+     * @param remainders the remainders the way leaves this relation's remainder, or null where it
+     *                 states nothing of it ({@link #remaindersLeftAlong})
+     * @param declined the parameters what the way declined may name a position under, or empty
+     *                 where it may name any ({@link #parametersDeclined})
+     * @param past     what the run works out asks of a row: the numbers it narrows, which the
+     *                 region took in and the way does not state as a condition, and the places
+     *                 it ties together, which a region does not say
      */
     private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
                                    List<Carrier> carriers, SearchRegion region,
-                                   List<OnAWay> written, boolean heldWhole,
+                                   List<OnAWay> written, WholeNumberRuns remainders,
+                                   boolean heldWhole,
+                                   Optional<Set<String>> declined, DemandReading.Answered past,
                                    CountWitnesses.Lookup witnesses) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
@@ -944,13 +1049,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TakenConstraint.Affine asStated = remainder == null ? askedAsAStatement() : null;
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
-        List<OnAWay> stated = offItsLine ? List.of() : written;
-        SearchRegion along = offItsLine ? read.quantities().region() : region;
+        List<OnAWay> stated = offItsLine ? List.of()
+                : withoutWhatAFreeNumberMeets(written, declined, past, read);
+        // Without a statement taken away, the region is the one its rows were found in; with one,
+        // the one the rest of them leave, where the rest can be taken in again.
+        SearchRegion rest = stated.size() == written.size() ? null : narrowedBy(stated, read);
+        // And the run is what it got past working out as much without the statement: taking one
+        // off the way takes no operator off the run.
+        rest = rest == null ? null : TakenConstraint.narrowedBy(past.narrowing(), rest);
+        SearchRegion declared = past.leaving(read.quantities().region());
+        SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
-        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
-                termsAlong(read, sources, carriers, along, conditions, stating, heldWhole);
+        Set<Figure> stopped = new LinkedHashSet<>();
+        Set<FilingCoordinate> byTheFormat = heldWhole ? leftByTheFormat(read, conditions, stopped)
+                : null;        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
+                termsAlong(read, sources, carriers, along, declared, conditions, remainders,
+                        stating, heldWhole, past.narrowing(), byTheFormat != null);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -970,9 +1086,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i = 0; i < sides.size(); i++) {
             tiedTo.add(tiedTo(i, tied, conditions, sources, read));
         }
+        // A code point of the string the remainder's form is of stands apart from the form where
+        // the format shows the form leaves every remainder whatever that code point is, and the
+        // way states nothing of it that holds a string back: then all the way ties the two by is
+        // what every string of the format meets.
         WhatARelationLeavesUndivided.Independence independent =
-                (one, other) -> apartByTheDeclarations(one, other, sources, read)
-                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
+                (one, other) -> (byTheFormat != null && apartByTheFormat(one, other)
+                        && terms.get(one).realizes() != null && terms.get(other).realizes() != null)
+                        || (apartByTheDeclarations(one, other, sources, read)
+                                && Collections.disjoint(tiedTo.get(one), tiedTo.get(other)));
+        BiPredicate<FilingCoordinate, FilingCoordinate> overlapping = byTheFormat == null
+                ? UndividedByARelation::overlap
+                : (one, other) -> !apartByTheFormat(one, other) && overlap(one, other);
         if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
                 int other = 1 - at;
@@ -996,7 +1121,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
-        Set<Figure> stopped = new LinkedHashSet<>();
         Within lying = offItsLine || !heldWhole || remainder != null ? null
                 : Optional.ofNullable(positionWithinItsWalk(conditions))
                         .orElseGet(() -> countWithinItsContainer(conditions, witnesses, stopped));
@@ -1029,11 +1153,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
-                            UndividedByARelation::overlap, independent,
+                            overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
                             supports)
                     : WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
-                            UndividedByARelation::overlap, independent,
+                            overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
                             supports);
             leaves.add(each);
@@ -1045,15 +1169,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // The remainder is left undivided by every number of its form at once, and a
                 // number of the form is left undivided where the rest of the form takes it
                 // through every remainder whatever value that number is at.
-                out.addAll(remainder != null && at == 0
-                        ? placesOfTheFormLeftEveryRemainder(read, conditions, heldWhole)
-                        : sides.get(at).madeOf());
+                out.addAll(remainder == null || at != 0 ? sides.get(at).madeOf()
+                        : byTheFormat != null ? byTheFormat
+                        : placesOfTheFormLeftEveryRemainder(read, conditions, heldWhole));
             }
         }
         // How far apart two sides are is asked of the relation as it stands, line and all.
         if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    read.quantities().region()));
+                    declared));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
@@ -1244,6 +1368,252 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? each.leavingAlone(OnAWay.PartsLeftAlone.MONTHS_AND_DAYS) : each);
         }
         return new LeftToTheCalendar(out, years);
+    }
+
+    /**
+     * {@code conditions} without each statement holding a form unequal to nought where a number
+     * of the form is free to meet it ({@link #freeToMeet}).
+     *
+     * <p>Whatever the rest of the form comes to, it takes one value of that number away and leaves
+     * it another, so the statement takes no row away from anything else: a fixed wage held unequal
+     * to the one before it, the one before it read nowhere else, leaves the wage every value. What
+     * working the statement out asks of a row is a statement of its own on the way
+     * ({@link DemandReading#stated}), and stays there. Taken away one at a time, each against the
+     * statements still left: a number the next one is free in is chosen after every number in the
+     * statements left, which do not read it.
+     */
+    private List<OnAWay> withoutWhatAFreeNumberMeets(List<OnAWay> conditions,
+                                                     Optional<Set<String>> declined,
+                                                     DemandReading.Answered past,
+                                                     InputReading read) {
+        List<OnAWay> out = new ArrayList<>(conditions);
+        for (OnAWay each : conditions) {
+            TakenConstraint.Affine affine = each.affine();
+            if (affine != null && affine.rel() == Rel.NE && affine.form().coefs().keySet()
+                    .stream().anyMatch(term ->
+                            freeToMeet(term, each, out, declined, past, read))) {
+                out.remove(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether {@code term} is a number nothing the way says of the input but {@code statement} may
+     * name — no side of the relation reads it ({@link #placesRead}), no other statement of
+     * {@code conditions} does, nothing the way declined may ({@code declined}), no operator the
+     * source works out on the way ties it to another place ({@code tied}), and no rule of a value
+     * around it names it — and which is shown to take two values or more among those the
+     * declarations leave and the run narrows it to ({@code past}).
+     *
+     * <p>What the source works out and not what its form comes to: {@code a + M - M != p} is
+     * {@code a != p} as a form and stops at every {@code a} above nought as written, which the way
+     * holds as a statement of {@code a} and not of {@code p}.
+     */
+    private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
+                               Optional<Set<String>> declined, DemandReading.Answered past,
+                               InputReading read) {
+        if (!(term instanceof NumericTerm.FromOnePosition number) || past.unsaid()) {
+            return false;
+        }
+        for (Side side : sides) {
+            Optional<List<TermPath>> reads = placesRead(side);
+            if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
+                    number.placesReadOff().stream().anyMatch(at -> overlap(place, at)))) {
+                return false;
+            }
+        }
+        for (OnAWay other : conditions) {
+            if (!other.equals(statement) && touches(number, other.positions())) {
+                return false;
+            }
+        }
+        for (Set<TermPath> ties : past.tied()) {
+            if (touches(number, ties)) {
+                return false;
+            }
+        }
+        if (declined.isEmpty() || number.placesReadOff().stream()
+                .anyMatch(at -> declined.get().contains(at.head()))) {
+            return false;
+        }
+        Source source = sourceOf(number, read);
+        if (source == null || source.named()) {
+            return false;
+        }
+        // The values it takes are those the run leaves it: a number the run narrows is taken at
+        // the values the run lets a row hold, whatever the declarations leave it.
+        // Each narrowing is of one number alone, so only those naming this one move its values.
+        List<TakenConstraint> ofIt = past.narrowing().stream()
+                .filter(each -> each.terms().contains(number)).toList();
+        SearchRegion left = read.quantities().region();
+        if (!ofIt.isEmpty()) {
+            left = TakenConstraint.narrowedBy(ofIt, left);
+            if (left.emptiness().isPresent()) {
+                return false;
+            }
+        }
+        NumericDomain.Bounds takes = realized(number, source, left,
+                ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
+        return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
+    }
+
+    /**
+     * Whether {@code statement}'s form is worked out on every row the declarations leave with
+     * {@code free} at either of its two whole values nearest nought, of {@code takes}: every other
+     * term weighed at the end of its run furthest from nought, added up on each side of nought, and
+     * neither sum past the greatest value of the type the form is worked out in.
+     *
+     * <p>Taking the statement off leaves the rows a way where it may not be worked out, and nothing
+     * here says where it is. No sum the source works out of the form — whatever order it adds the
+     * terms in, and whichever side of the comparison it writes each on — is further from nought
+     * than those, so the statement is worked out wherever the rest stand and the number stands
+     * where a row needs it. Not where a term runs open, or the type is not one this knows the
+     * greatest value of: {@code a + Date.day(d) != 0} beside an amount up to the greatest
+     * {@code Int} is not worked out at the greatest, whichever day.
+     *
+     * <p>A value held against another value, or against a number, with nothing weighed is compared
+     * and not added, and there is nothing to work out.
+     */
+    private static boolean workedOutBeside(TakenConstraint.Affine statement,
+                                           NumericTerm.FromOnePosition free,
+                                           NumericDomain.Bounds takes, InputReading read) {
+        Collection<ExactRatio> weights = statement.form().coefs().values();
+        if (weights.stream().allMatch(each -> each.abs().compareTo(ExactRatio.ONE) == 0)
+                && (weights.size() == 1 || (weights.size() == 2
+                        && statement.form().constant().signum() == 0
+                        && weights.stream().mapToInt(ExactRatio::signum).sum() == 0))) {
+            return true;
+        }
+        Carrier workedOutIn = null;
+        for (NumericTerm each : statement.form().coefs().keySet()) {
+            TermOrders orders = read.quantities().ordersOf(each);
+            if (workedOutIn == null && orders != null) {
+                workedOutIn = orders.answered();
+            }
+        }
+        BigInteger greatest = greatestOf(workedOutIn);
+        if (greatest == null) {
+            return false;
+        }
+        ExactRatio constant = statement.form().constant();
+        ExactRatio up = constant.signum() > 0 ? constant : ExactRatio.ZERO;
+        ExactRatio down = constant.signum() < 0 ? constant.negated() : ExactRatio.ZERO;
+        for (Map.Entry<NumericTerm, ExactRatio> each : statement.form().coefs().entrySet()) {
+            if (each.getKey().equals(free)) {
+                continue;
+            }
+            if (!(read.quantities().region().projectionOf(each.getKey())
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds run))
+                    || !(run.min() != null && run.min().at() instanceof Count least)
+                    || !(run.max() != null && run.max().at() instanceof Count most)) {
+                return false;
+            }
+            ExactRatio low = least.exactly().times(each.getValue()).orNull();
+            ExactRatio high = most.exactly().times(each.getValue()).orNull();
+            if (low == null || high == null) {
+                return false;
+            }
+            ExactRatio furthestUp = low.compareTo(high) > 0 ? low : high;
+            ExactRatio furthestDown = low.compareTo(high) > 0 ? high : low;
+            up = furthestUp.signum() > 0 ? up.plus(furthestUp).orNull() : up;
+            down = furthestDown.signum() < 0 && up != null
+                    ? down.plus(furthestDown.negated()).orNull() : down;
+            if (up == null || down == null) {
+                return false;
+            }
+        }
+        List<BigInteger> standing = twoNearestNought(takes);
+        if (standing == null) {
+            return false;
+        }
+        ExactRatio most = ExactRatio.of(greatest);
+        for (BigInteger at : standing) {
+            ExactRatio weighed = ExactRatio.of(at).times(statement.form().coefs().get(free))
+                    .orNull();
+            ExactRatio upAt = weighed == null ? null
+                    : weighed.signum() > 0 ? up.plus(weighed).orNull() : up;
+            ExactRatio downAt = weighed == null ? null
+                    : weighed.signum() < 0 ? down.plus(weighed.negated()).orNull() : down;
+            if (upAt == null || downAt == null || upAt.compareTo(most) > 0
+                    || downAt.compareTo(most) > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The whole value of {@code run} nearest nought and the one next nearest beside it, or null
+     *  where it holds no two or an end is no number. */
+    private static List<BigInteger> twoNearestNought(NumericDomain.Bounds run) {
+        BigInteger low = null;
+        BigInteger high = null;
+        if (run.min() != null) {
+            if (!(run.min().at() instanceof Count least)) {
+                return null;
+            }
+            low = run.min().inclusive() ? least.exactly().ceiling().orNull()
+                    : least.exactly().floor().map(at -> at.add(BigInteger.ONE)).orNull();
+        }
+        if (run.max() != null) {
+            if (!(run.max().at() instanceof Count most)) {
+                return null;
+            }
+            high = run.max().inclusive() ? most.exactly().floor().orNull()
+                    : most.exactly().ceiling().map(at -> at.subtract(BigInteger.ONE)).orNull();
+        }
+        if ((run.min() != null && low == null) || (run.max() != null && high == null)) {
+            return null;
+        }
+        BigInteger first = low != null && low.signum() > 0 ? low
+                : high != null && high.signum() < 0 ? high : BigInteger.ZERO;
+        BigInteger up = first.add(BigInteger.ONE);
+        BigInteger second = first.signum() < 0 ? first.subtract(BigInteger.ONE)
+                : first.signum() > 0 || high == null || up.compareTo(high) <= 0 ? up
+                : first.subtract(BigInteger.ONE);
+        for (BigInteger at : List.of(first, second)) {
+            if ((low != null && at.compareTo(low) < 0) || (high != null && at.compareTo(high) > 0)) {
+                return null;
+            }
+        }
+        return List.of(first, second);
+    }
+
+    /**
+     * What the declarations leave, narrowed by {@code conditions} as a way's region is — or null
+     * where one of them narrowed it some way a statement does not carry: a case of a value taken
+     * out of its order, or a container held to an element.
+     *
+     * <p>A way's region is the declarations' with each relation on it taken in, the cases it
+     * leaves out and the containers it holds to an element ({@link WayToTheBorder#narrowing}).
+     * What else a way states — a statement of a value the body works out, of how many elements
+     * meet something, of every element — narrows nothing there, and nothing here.
+     */
+    private static SearchRegion narrowedBy(List<OnAWay> conditions, InputReading read) {
+        if (!narrowsByItsRelationsAlone(conditions)) {
+            return null;
+        }
+        List<TakenConstraint> relations = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            if (each.relation() != null) {
+                relations.add(each.relation());
+            }
+        }
+        return TakenConstraint.narrowedBy(relations, read.quantities().region());
+    }
+
+    /** Whether each of {@code conditions} narrows a way's region by its relation or not at all,
+     *  so that they say all the region is ({@link #narrowedBy}). */
+    private static boolean narrowsByItsRelationsAlone(List<OnAWay> conditions) {
+        return conditions.stream().allMatch(each -> each.relation() != null
+                || (!each.whatStands() && each.elementsOf() == null));
+    }
+
+    /** Whether {@code run} holds two values or more: some value, and its ends not one value. */
+    private static boolean takesTwoValues(NumericDomain.Bounds run) {
+        return run != null && run.holdsAValue() && run.holdsOneWholeNumber() == null
+                && (run.min() == null || run.max() == null
+                        || !run.min().at().equals(run.max().at()));
     }
 
     /** The relation as a statement is held, the sides weighed and added to the constant and held
@@ -1510,15 +1880,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param read       the reading of the input, whose declarations alone are what elements
      *                   other than the ones a way reads are left ({@link #keptAlong})
      * @param conditions what the way states
+     * @param narrowedByTheRun what the region took in of the operators the run works out: the
+     *                   way states none of it, and a number it names is read over the run the
+     *                   region leaves
      */
     private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> termsAlong(
             InputReading read, List<Source> sources, List<Carrier> carriers, SearchRegion region,
-            List<OnAWay> conditions, List<List<OnAWay>> stating, boolean heldWhole) {
+            SearchRegion declared, List<OnAWay> conditions, WholeNumberRuns remainders,
+            List<List<OnAWay>> stating, boolean heldWhole,
+            List<TakenConstraint> narrowedByTheRun, boolean everyRemainderByTheFormat) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
             if (remainder != null && i == 0) {
-                terms.add(remainderAlong(read, conditions, heldWhole));
+                terms.add(remainderAlong(read, conditions, remainders, heldWhole,
+                        everyRemainderByTheFormat));
                 continue;
             }
             if (each.kept() != null) {
@@ -1536,12 +1912,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? within : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.atOnePosition() == null || !heldWhole ? Way.TIES
                     : wayOf(each.atOnePosition(), stating.get(i));
+            if (way == Way.UNTOUCHED && narrowedByTheRun.stream().anyMatch(past ->
+                    past.terms().stream().anyMatch(term -> term.equals(each.atOnePosition())))) {
+                way = Way.NARROWED;
+            }
             Source source = way == Way.TIES ? null : sources.get(i);
             // A statement shown to leave a part alone is taken into the region, which then does not
             // answer for that part: it is answered by what the declarations leave it.
             SearchRegion answering = way == Way.UNTOUCHED && conditions.stream()
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
-                    ? read.quantities().region() : region;
+                    ? declared : region;
             NumericDomain.Bounds realizes = source != null
                     ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
                             carriers.get(i))
@@ -1551,6 +1931,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : each.number() instanceof NumericTerm.OccurrencesOfItsValue counted
                     ? asARelationReadsIt(occurrencesOfOneValue(counted, read, region, conditions,
                             heldWhole), carriers.get(i))
+                    : each.number() instanceof NumericTerm.CodePointAt at
+                    ? asARelationReadsIt(codePointsTakenAt(at, read, stating.get(i)),
+                            carriers.get(i))
                     : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
@@ -1562,18 +1945,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The remainder side as a term: it lies between nought and one below the divisor, and takes
-     * every remainder where its form is shown to reach one of each.
+     * The remainder side as a term: it lies between nought and one below the divisor, or among the
+     * remainders the way leaves it, and takes every one of those where its form is shown to reach
+     * one of each.
+     *
+     * <p>What it takes is said only where the remainders left are one run: a term takes the
+     * values between its ends, and two runs apart are values between that it does not take.
      */
     private WhatARelationLeavesUndivided.Term<FilingCoordinate> remainderAlong(
-            InputReading read, List<OnAWay> conditions, boolean heldWhole) {
-        NumericDomain.Bounds runs = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
-                Endpoint.inclusive(new Count(new BigDecimal(
-                        remainder.divisor().subtract(BigInteger.ONE)))));
+            InputReading read, List<OnAWay> conditions, WholeNumberRuns remainders,
+            boolean heldWhole, boolean everyRemainderByTheFormat) {
+        WholeNumberRuns left = WholeNumberRuns.one(BigInteger.ZERO,
+                remainder.divisor().subtract(BigInteger.ONE));
+        if (remainders != null) {
+            left = left.and(remainders);
+        }
+        List<WholeNumberRuns.Run> runsOf = left.runs();
+        NumericDomain.Bounds runs = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(new BigDecimal(runsOf.getFirst().from()))),
+                Endpoint.inclusive(new Count(new BigDecimal(runsOf.getLast().to()))));
         Side side = sides.getFirst();
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(), runs,
-                reachesEveryRemainder(null, read, conditions, heldWhole) ? runs : null, null,
-                false, Granularity.DISCRETE, null);
+                runsOf.size() == 1 && (everyRemainderByTheFormat
+                        || reachesEveryRemainder(null, read, conditions, heldWhole))
+                        ? runs : null, null, false, Granularity.DISCRETE, null);
     }
 
     /**
@@ -1666,6 +2061,276 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         BigInteger greatest = greatestOf(carrier);
         return (greatest == null || most.compareTo(greatest) <= 0)
                 && (least == null || most.negate().compareTo(least) >= 0);
+    }
+
+    /**
+     * The form the remainder is of, where it is made of code points of one string whose strings
+     * the rules leave as a format's of one length — or null.
+     *
+     * <p>Read so that what the form leaves is worked out over the strings themselves
+     * ({@link Language#remaindersLeft}), and nothing takes the indices apart: a format whose code
+     * points go together — {@code (00|11)} — leaves what its strings leave and no more. Only where
+     * the format is the whole of what the rules leave the string, no rule of a value around it
+     * reads it, and nothing on the way states anything of a code point of the form beside the
+     * remainder: each of those is something else holding the strings back.
+     *
+     * @param strings what the rules leave the string
+     * @param weights what the form weighs the code point at each index by, taken by the divisor
+     * @param beside  the indices of the code points of the string another side is
+     */
+    private record CodePointsOfTheForm(Quantities.StringsOfOneLength strings,
+                                       Map<Integer, Long> weights, List<Integer> beside) {
+
+        private CodePointsOfTheForm {
+            weights = Map.copyOf(weights);
+            beside = List.copyOf(beside);
+        }
+    }
+
+    /** The form the remainder is of read as code points of {@code string}
+     *  ({@link CodePointsOfTheForm}) — or null. */
+    private CodePointsOfTheForm codePointsOfTheForm(TermPath string, InputReading read,
+                                                    List<OnAWay> conditions) {
+        Quantities.StringsOfOneLength strings = theStringsOf(string, read);
+        if (strings == null) {
+            return null;
+        }
+        // A way past which every string of the format still stands holds none of them back.
+        List<OnAWay> holdingBack = conditions.stream()
+                .filter(each -> !heldByEveryStringOf(each, string, strings.length())).toList();
+        Map<Integer, Long> weights = new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : remainder.dividend().coefs().entrySet()) {
+            if (!(each.getKey() instanceof NumericTerm.CodePointAt at)
+                    || !string.equals(at.position())
+                    || !(each.getValue().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger weight))
+                    || wayOf(at, statingAnythingOf(at, holdingBack)) != Way.UNTOUCHED) {
+                return null;
+            }
+            weights.put(at.index(), weight.mod(remainder.divisor()).longValueExact());
+        }
+        List<Integer> beside = new ArrayList<>();
+        for (Side side : sides.subList(1, sides.size())) {
+            if (side.number() instanceof NumericTerm.CodePointAt at
+                    && at.position().equals(string)) {
+                beside.add(at.index());
+            }
+        }
+        return new CodePointsOfTheForm(strings, weights, beside);
+    }
+
+    /**
+     * Whether {@code each} states nothing of {@code string} but how many code points it holds,
+     * and holds of a string of {@code length} code points.
+     */
+    private static boolean heldByEveryStringOf(OnAWay each, TermPath string, int length) {
+        if (!(each.relation() instanceof TakenConstraint.Affine(var form, var rel))) {
+            return false;
+        }
+        ExactRatio at = form.constant();
+        for (Map.Entry<NumericTerm, ExactRatio> term : form.coefs().entrySet()) {
+            if (!(term.getKey() instanceof NumericTerm.TakenOf taken)
+                    || !taken.position().equals(string)
+                    || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)
+                    || !(term.getValue().times(ExactRatio.of(length))
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weighed))
+                    || !(at.plus(weighed) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio added))) {
+                return false;
+            }
+            at = added;
+        }
+        return rel.holds(at.signum());
+    }
+
+    /**
+     * Whether {@code form} leaves every remainder whatever the code points the other sides are,
+     * and whatever the one at {@code held} is where that is an index of the form — each of
+     * {@code work} remainders moved at most.
+     *
+     * <p>Each of those code points is held at each set of the code points that stand alike at its
+     * index ({@link Language#alikeAt}) in turn, and the form is asked with the one at {@code held}
+     * weighed by nought: every value of the set moves each remainder the rest leaves by one same
+     * amount, so where the rest leaves every remainder, so does each of them.
+     *
+     * <p>Where the walks would move more remainders than {@code work}, it is not shown, and the
+     * figure the work is allowed under goes into {@code stopped}.
+     */
+    private boolean leavesEveryRemainder(CodePointsOfTheForm form, Integer held, int work,
+                                         Set<Figure> stopped) {
+        Quantities.StringsOfOneLength strings = form.strings();
+        StringsHeldAsWritten shown = strings.everyOneHeld();
+        if (shown == null) {
+            return false;
+        }
+        int divisor = remainder.divisor().intValueExact();
+        Map<Integer, Long> weights = new LinkedHashMap<>(form.weights());
+        List<Integer> fixed = new ArrayList<>(form.beside());
+        if (held != null) {
+            weights.remove(held);
+            fixed.add(held);
+        }
+        // Whatever a code point held still is, of every one a value may hold at its index; and
+        // a remainder reached, by a string that is a value. So every code point some value may
+        // hold there is one a string shown to be a value holds there too.
+        List<List<CodePoints>> alike = new ArrayList<>();
+        long sets = 1;
+        for (int index : fixed) {
+            CodePoints taken = shown.codePointsAt(strings.length(), index);
+            if (!strings.holding().codePointsAt(strings.length(), index).less(taken).isEmpty()) {
+                return false;
+            }
+            alike.add(shown.alikeAt(strings.length(), index, taken));
+            sets *= alike.getLast().size();
+            if (sets > work) {
+                stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.figure());
+                return false;
+            }
+        }
+        int each = (int) (work / sets);
+        int[] chosen = new int[fixed.size()];
+        while (true) {
+            Map<Integer, CodePoints> at = new LinkedHashMap<>();
+            for (int i = 0; i < fixed.size(); i++) {
+                at.put(fixed.get(i), alike.get(i).get(chosen[i]));
+            }
+            BitSet left = shown.remaindersLeft(strings.length(), weights,
+                    remainder.shift().mod(remainder.divisor()).longValueExact(), divisor, at,
+                    each);
+            if (left == null) {
+                stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.figure());
+                return false;
+            }
+            if (left.cardinality() < divisor) {
+                return false;
+            }
+            int next = 0;
+            while (next < chosen.length && ++chosen[next] == alike.get(next).size()) {
+                chosen[next++] = 0;
+            }
+            if (next == chosen.length) {
+                return true;
+            }
+        }
+    }
+
+    /**
+     * What the format shows of the remainder and the places of its form, where the form is made of
+     * code points of one string ({@link #codePointsOfTheForm}): whether the form leaves every
+     * remainder whatever the code points of the string the other sides are, and the places of the
+     * form that leave it so whatever their own code point is. Null where the form is no such
+     * form or it does not leave every remainder.
+     *
+     * <p>One budget for every question asked of the strings, shared out among them; a question
+     * the share runs out on is not shown, and the figure goes into {@code stopped}.
+     */
+    private Set<FilingCoordinate> leftByTheFormat(InputReading read, List<OnAWay> conditions,
+                                                  Set<Figure> stopped) {
+        if (remainder == null || !(remainder.dividend().coefs().keySet().iterator().next()
+                instanceof NumericTerm.CodePointAt first)) {
+            return null;
+        }
+        // A layer of the walk holds a remainder or not for each of the divisor's, so a divisor
+        // past the work is a walk past it.
+        int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
+        if (remainder.divisor().compareTo(BigInteger.valueOf(steps)) > 0) {
+            stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.figure());
+            return null;
+        }
+        CodePointsOfTheForm form = codePointsOfTheForm(first.position(), read, conditions);
+        if (form == null) {
+            return null;
+        }
+        int work = steps / (1 + remainder.dividend().coefs().size());
+        if (!leavesEveryRemainder(form, null, work, stopped)) {
+            return null;
+        }
+        Set<FilingCoordinate> out = new LinkedHashSet<>();
+        for (NumericTerm each : remainder.dividend().coefs().keySet()) {
+            if (each instanceof NumericTerm.CodePointAt at
+                    && leavesEveryRemainder(form, at.index(), work, stopped)) {
+                out.add(FilingCoordinate.of(each));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether the sides at {@code one} and {@code other} are the remainder and a code point of the
+     * string its form is of, which the format shows apart where the form is such a form
+     * ({@link #leftByTheFormat}).
+     */
+    private boolean apartByTheFormat(int one, int other) {
+        int beside = one == 0 ? other : other == 0 ? one : -1;
+        return remainder != null && beside > 0
+                && sides.get(beside).number() instanceof NumericTerm.CodePointAt at
+                && atTheStringOfTheForm(at);
+    }
+
+    /**
+     * Whether {@code one} and {@code other} are a code point of the remainder's form and one at
+     * another index of its string that the form holds no weight for, which the format shows apart
+     * where the form is such a form ({@link #leftByTheFormat}).
+     */
+    private boolean apartByTheFormat(FilingCoordinate one, FilingCoordinate other) {
+        if (remainder == null
+                || !(one instanceof FilingCoordinate.OfTerm(NumericTerm.CodePointAt first))
+                || !(other instanceof FilingCoordinate.OfTerm(NumericTerm.CodePointAt second))
+                || first.index() == second.index()) {
+            return false;
+        }
+        boolean firstOfTheForm = remainder.dividend().coefs().containsKey(first);
+        boolean secondOfTheForm = remainder.dividend().coefs().containsKey(second);
+        return firstOfTheForm != secondOfTheForm && atTheStringOfTheForm(first)
+                && atTheStringOfTheForm(second);
+    }
+
+    /** Whether {@code at} is a code point of the string the remainder's form is made of code
+     *  points of. */
+    private boolean atTheStringOfTheForm(NumericTerm.CodePointAt at) {
+        return remainder.dividend().coefs().keySet().stream().allMatch(each ->
+                each instanceof NumericTerm.CodePointAt of && of.position().equals(at.position()));
+    }
+
+    /**
+     * The strings at {@code string}, where they are a format's strings of one length and no rule
+     * of a value around them reads them — or null. Which of them are shown to be values is the
+     * reading's to say ({@link Quantities.StringsOfOneLength#everyOneHeld}).
+     */
+    private static Quantities.StringsOfOneLength theStringsOf(TermPath string,
+                                                              InputReading read) {
+        return namedByTheDeclarations(string, read) == Named.UNSEEN
+                ? null : read.quantities().stringsOfOneLength(string);
+    }
+
+    /**
+     * Every value the code point {@code at} is shown to take whatever the others of the relation
+     * are: the code points standing at its index of the strings the rules leave, where those are
+     * one run, it is the one number of its string among the other sides, and nothing of
+     * {@code stating}, what the way states of it, holds a string of the format back. That the
+     * remainder beside it is not held back by it is the remainder's to show
+     * ({@link #leftByTheFormat}).
+     */
+    private NumericDomain.Bounds codePointsTakenAt(NumericTerm.CodePointAt at, InputReading read,
+                                                   List<OnAWay> stating) {
+        long ofTheString = sides.stream().filter(side -> side.number() != null
+                && side.number().sharesAPlaceWith(new NumericTerm.ValueOf(at.position())))
+                .count();
+        Quantities.StringsOfOneLength strings = ofTheString == 1
+                ? theStringsOf(at.position(), read) : null;
+        if (strings == null || strings.everyOneHeld() == null
+                || wayOf(at, stating.stream().filter(each ->
+                        !heldByEveryStringOf(each, at.position(), strings.length())).toList())
+                != Way.UNTOUCHED) {
+            return null;
+        }
+        // Taken is what a string shown to be a value holds there, and not what the format places
+        // there: a format places code points in sequences no value is.
+        List<CodePoints.Range> runs = strings.everyOneHeld()
+                .codePointsAt(strings.length(), at.index()).ranges();
+        return runs.size() != 1 ? null : new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(runs.getFirst().from())),
+                Endpoint.inclusive(Count.of(runs.getFirst().to())));
     }
 
     /**
@@ -2395,7 +3060,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.TakenOf taken -> every && DefaultBoundOperationFacts.get()
                     .everyAnswerItCanGiveHasASourceValue(taken.operation())
                     ? region.wholeRunOf(taken) : null;
-            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> null;
+            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                 NumericTerm.CodePointAt _ -> null;
         };
     }
 
@@ -2717,7 +3383,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.ValueOf value -> takes(value, read);
             case NumericTerm.TakenOf taken ->
                     takes(new NumericTerm.ValueOf(taken.position()), read);
-            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> null;
+            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                 NumericTerm.CodePointAt _ -> null;
         };
     }
 
@@ -3205,6 +3872,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (reading.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN) {
             return namedByARunOfEachElement(reading, here, place, read);
         }
+        if (reading.kind() == ClauseRead.Kind.A_LOOKED_UP_MEMBER) {
+            return Named.UNSEEN;
+        }
+        if (reading.kind() == ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS) {
+            return namedByAMemberTheClauseNeeds(at.size() == fields, here, rest, read);
+        }
         if (at.size() > fields || reading.kind() != ClauseRead.Kind.HOW_MANY_IT_HOLDS) {
             return Named.UNSEEN;
         }
@@ -3217,6 +3890,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TermPath.Step> container = new ArrayList<>(here.steps());
         container.addAll(rest.subList(0, fields));
         return mayHoldOne(new TermPath(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
+    }
+
+    /**
+     * What a rule reading a member of a container it cannot be true without says of the members
+     * that stand where the container's keys or elements do: nothing, where the container has no
+     * limit on how many it holds, and unseen of everything else the path goes on to.
+     *
+     * <p>Every value of a container the rule accepts has the member the rule looks for, because
+     * the rule is false without it. So any other member is none the rule looks up, and adding it
+     * changes no lookup the rule makes. Any value is then a member of some container the rule
+     * accepts: it is there already, or it is added beside the members that are, with a value one
+     * of them has. A rule that merely reads a member says nothing of that
+     * ({@link ClauseRead.Kind#A_LOOKED_UP_MEMBER}): one that wants the member missing accepts no
+     * container with it. The values of a map's entries are left out: a second entry takes a value
+     * only under a key the type has a second value of.
+     *
+     * @param atTheContainer whether the fields the rule names end where the fields of the path do
+     */
+    private static Named namedByAMemberTheClauseNeeds(boolean atTheContainer, TermPath here,
+                                                      List<TermPath.Step> rest,
+                                                      InputReading read) {
+        int fields = 0;
+        while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
+            fields++;
+        }
+        if (!atTheContainer || fields + 1 != rest.size()) {
+            return Named.UNSEEN;
+        }
+        List<TermPath.Step> container = new ArrayList<>(here.steps());
+        container.addAll(rest.subList(0, fields));
+        TermPath at = new TermPath(here.head(), container);
+        Position held = read.domain().at(at.position());
+        boolean standsWhereAMemberDoes = held != null && switch (held.view().shape()) {
+            case Shape.Mapping _ -> rest.get(fields) instanceof TermPath.Step.Key;
+            case Shape.Sequence _ -> rest.get(fields) instanceof TermPath.Step.Element;
+            default -> false;
+        };
+        return standsWhereAMemberDoes && holdsWithoutLimit(at, read) ? Named.NOT : Named.UNSEEN;
     }
 
     /**
@@ -3255,18 +3966,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * beside it is held to says nothing of how many it holds.
      */
     private static boolean mayHoldOne(TermPath at, InputReading read) {
+        NumericDomain.Bounds whole = howManyItHoldsWhole(at, read);
+        return whole != null && whole.admits(ExactRatio.ONE);
+    }
+
+    /**
+     * Whether the container at {@code at} is shown to hold as many as it is asked to and no
+     * upper end is placed on how many: the rules are shown to leave the whole of the run of how
+     * many it holds ({@link SearchRegion#wholeRunOf}), and it has no end above.
+     */
+    private static boolean holdsWithoutLimit(TermPath at, InputReading read) {
+        NumericDomain.Bounds whole = howManyItHoldsWhole(at, read);
+        return whole != null && whole.max() == null;
+    }
+
+    /** The run of how many the container at {@code at} holds that the rules are shown to leave
+     *  whole, or null where there is none shown or no value of the container exists. */
+    private static NumericDomain.Bounds howManyItHoldsWhole(TermPath at, InputReading read) {
         Position container = read.domain().at(at.position());
         if (container == null || container.nothingExists()) {
-            return false;
+            return null;
         }
         for (PositionBounds each : container.bounds()) {
             if (each.term() instanceof NumericTerm.TakenOf taken
                     && taken.takenAs() instanceof TakenAs.HowManyItHolds) {
-                NumericDomain.Bounds whole = read.quantities().region().wholeRunOf(taken);
-                return whole != null && whole.admits(ExactRatio.ONE);
+                return read.quantities().region().wholeRunOf(taken);
             }
         }
-        return false;
+        return null;
     }
 
     private static boolean overlap(FilingCoordinate one, FilingCoordinate other) {

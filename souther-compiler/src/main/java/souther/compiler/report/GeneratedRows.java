@@ -18,6 +18,7 @@ import souther.compiler.partition.StringOfferShortfall;
 import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.query.Sites;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
@@ -556,6 +557,26 @@ public final class GeneratedRows {
         };
     }
 
+    /** What a case a statement of the decision draws inside itself is, said in a few words. */
+    private static String wordsOf(CaseOfAStatement which) {
+        return switch (which) {
+            case CaseOfAStatement.Search(var _, var step) -> switch (step) {
+                case AT_THE_NODE -> "a search that finds what it asks at the node it starts at";
+                case BELOW_IT -> "a search that finds what it asks below the node it starts at";
+                case NOWHERE_AT_A_LEAF ->
+                        "a search that finds nothing at a node with nothing below it";
+                case NOWHERE_BELOW ->
+                        "a search that finds nothing through the nodes below its start";
+            };
+            case CaseOfAStatement.KeyOrder(var _, var _, var way) -> switch (way) {
+                case HOLDS_BY_THE_LAST ->
+                        "a key held twice whose last element makes the statement hold";
+                case FAILS_BY_THE_LAST ->
+                        "a key held twice whose last element makes the statement fail";
+            };
+        };
+    }
+
     /** The conditions of one way, as the report says each, in their order. */
     private static String said(List<AdequacyReport.ShownCondition> way, SourceId declaredIn,
                                SourceRendering rendering) {
@@ -636,6 +657,14 @@ public final class GeneratedRows {
                             new ObligationIdentity.OfADecisionRule(behavior, rule));
                     case Generator.Purpose.ForACombinationOfDecisions(var settled) -> add(out,
                             new ObligationIdentity.OfACombinationOfDecisions(behavior, settled));
+                    // No finding names a case: the decision's measure is short of it, and the
+                    // words are the ones a case has, with no place to send a reader to.
+                    case Generator.Purpose.ForACaseOfAStatement(var which) -> {
+                        Owed owed = new Owed.AnObligation(
+                                new ObligationIdentity.OfACaseOfAStatement(behavior, which));
+                        out.putIfAbsent(owed, new Called(owed, wordsOf(which), Optional.empty(),
+                                false));
+                    }
                     case Generator.Purpose.ForAClass _, Generator.Purpose.ForAFallbackPairCell _,
                             Generator.Purpose.ForAPoint _, Generator.Purpose.Unstated _ ->
                             purpose.labels().forEach(label -> {

@@ -230,6 +230,48 @@ final class RunReach {
             case ElementValue.Indexed _ -> {
                 return null;
             }
+            // Each product at what its fields multiplied reach, each rounding within a step of what
+            // it rounds, and the sum of them read off the same domain a form is, each term as one
+            // atom. The terms are not assumed to fall out together — two of them sharing a field
+            // move together — so this is the widest sum they allow.
+            case ElementValue.Multilinear products -> {
+                Granularity spacing = spacingOf(orders.observed());
+                if (spacing == null) {
+                    return null;
+                }
+                Map<ElementProjection, NumericDomain.Bounds> fields = new LinkedHashMap<>();
+                for (ElementProjection field : products.reads()) {
+                    Type at = typeAt.apply(field.from(elements));
+                    NumericDomain.Bounds guaranteed = at == null ? null
+                            : ValueGuarantees.of(at, reading).get(RuleKey.THE_VALUE);
+                    if (guaranteed == null || spacingOf(orders.fieldCarrier(field)) == null) {
+                        return null;
+                    }
+                    fields.put(field, guaranteed);
+                }
+                NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
+                Map<Integer, Granularity> kinds = new LinkedHashMap<>();
+                Map<Integer, ExactRatio> weights = new LinkedHashMap<>();
+                for (Map.Entry<ElementValue.Monomial, ExactRatio> each
+                        : products.form().coefs().entrySet()) {
+                    ElementValue.Rounding rounding = each.getKey().rounding();
+                    NumericDomain.Bounds reached = rounding == null ? null
+                            : withinAStepOf(rounding, ofWhatWasComputed(rounding.inner(),
+                                    elements, orders, typeAt, reading), spacing);
+                    if (rounding != null && reached == null) {
+                        return null;
+                    }
+                    for (ElementProjection field : each.getKey().fields()) {
+                        reached = reached == null ? fields.get(field)
+                                : Intervals.product(reached, fields.get(field));
+                    }
+                    int part = weights.size();
+                    weights.put(part, each.getValue());
+                    kinds.put(part, spacing);
+                    domain = domain.assuming(part, reached, kinds);
+                }
+                return domain.boundsOf(new LinearForm<>(products.form().constant(), weights));
+            }
             case ElementValue.OfItsCase choice -> {
                 NumericDomain.Bounds every = choice.rest() == null ? null
                         : ofWhatWasComputed(choice.rest(), elements, orders, typeAt, reading);
@@ -276,6 +318,29 @@ final class RunReach {
                 return domain.boundsOf(new LinearForm<>(ExactRatio.ZERO, weights));
             }
         }
+    }
+
+    /**
+     * What {@code rounding} can come to, where what it rounds runs over {@code rounded}: no
+     * further out than a step either way, the step being what it rounds to — or null where
+     * nothing is said of what it rounds.
+     */
+    private static NumericDomain.Bounds withinAStepOf(ElementValue.Rounding rounding,
+                                                      NumericDomain.Bounds rounded,
+                                                      Granularity spacing) {
+        ExactRatio step = rounded == null ? null
+                : ExactRatio.ONE.dividedBy(rounding.stepsInOne()).orNull();
+        if (step == null) {
+            return null;
+        }
+        NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION)
+                .assuming(0, rounded, Map.of(0, spacing));
+        NumericDomain.Bounds below = domain.boundsOf(
+                new LinearForm<>(step.negated(), Map.of(0, ExactRatio.ONE)));
+        NumericDomain.Bounds above = domain.boundsOf(
+                new LinearForm<>(step, Map.of(0, ExactRatio.ONE)));
+        return below == null || above == null ? null
+                : new NumericDomain.Bounds(below.min(), above.max());
     }
 
     /** The value the walk starts from, as a range, or null where this reading has no number for it.

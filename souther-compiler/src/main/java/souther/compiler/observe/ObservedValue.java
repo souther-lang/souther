@@ -167,6 +167,18 @@ public sealed interface ObservedValue {
     }
 
     /**
+     * {@code inside} under every name of {@code worn}, the outermost first: the value {@link
+     * #wearing} would take those names off.
+     */
+    static ObservedValue wrapped(List<TypeSymbol> worn, ObservedValue inside) {
+        ObservedValue at = inside;
+        for (int name = worn.size() - 1; name >= 0; name--) {
+            at = new Constructed(worn.get(name), Map.of("value", at));
+        }
+        return at;
+    }
+
+    /**
      * Why nothing can be read here, or null where there is a value to read.
      *
      * <p>Two of these cases stand where a value would have been rather than being one, and what they

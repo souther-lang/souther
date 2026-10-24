@@ -1,12 +1,18 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.ARounding;
+import souther.compiler.check.Choice;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Location;
+import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ValueStanding;
+import souther.compiler.check.WholeRounding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.RuleReadingSource;
@@ -16,6 +22,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
@@ -36,6 +43,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * What a closure computed from one element of a walk, for a closure whose answer is not a place of
@@ -80,7 +88,7 @@ public sealed interface ElementValue {
      */
     default boolean readsThePosition() {
         return switch (this) {
-            case Affine _ -> false;
+            case Affine _, Multilinear _ -> false;
             case ByPosition _, Indexed _ -> true;
             case Choose choice -> choice.whenSet().readsThePosition()
                     || choice.otherwise().readsThePosition();
@@ -88,6 +96,38 @@ public sealed interface ElementValue {
                     || choice.arms().stream().anyMatch(arm -> arm.value().readsThePosition());
             case SumOfChoices sum -> sum.besides().readsThePosition()
                     || sum.chosen().keySet().stream().anyMatch(ElementValue::readsThePosition);
+        };
+    }
+
+    /**
+     * What this comes to for the element standing at {@code position}, as a form of its fields —
+     * or null where it is no form there: where it turns on a flag of the element or the case of a
+     * value of it, which no form of the fields says, where it multiplies fields or rounds, which a
+     * fixed position leaves as it is, or where the exact arithmetic cannot hold it.
+     *
+     * <p>The position is fixed, so every choice made by it is made and every number made of it is
+     * one number: {@code (if i mod 2 = 0 then 1 else 3)·c} is {@code c} at nought and {@code 3·c}
+     * at one, and {@code (i + 2)·c} is {@code 2·c} at nought.
+     */
+    default LinearForm<ElementProjection> atPosition(long position) {
+        return switch (this) {
+            case Affine form -> form.form();
+            case Indexed form -> form.perPosition().form().times(ExactRatio.of(position))
+                    .flatMap(moved -> moved.plus(form.base().form())).orNull();
+            case ByPosition choice -> (choice.test().holdsOf(position) ? choice.whenHolds()
+                    : choice.otherwise()).atPosition(position);
+            case Choose _, OfItsCase _, Multilinear _ -> null;
+            case SumOfChoices sum -> {
+                LinearForm<ElementProjection> total = sum.besides().atPosition(position);
+                for (Map.Entry<ElementValue, ExactRatio> each : sum.chosen().entrySet()) {
+                    LinearForm<ElementProjection> sofar = total;
+                    LinearForm<ElementProjection> one = sofar == null ? null
+                            : each.getKey().atPosition(position);
+                    total = one == null ? null : one.times(each.getValue())
+                            .flatMap(sofar::plus).orNull();
+                }
+                yield total;
+            }
         };
     }
 
@@ -182,7 +222,37 @@ public sealed interface ElementValue {
             }
             case SumOfChoices sum -> added(sum.besides(), other) instanceof Form besides
                     ? new SumOfChoices(besides, sum.chosen()) : null;
+            // A form of the fields is a sum of products of one field each. One made of the
+            // position is no product of fields.
+            case Multilinear products -> {
+                LinearForm<Monomial> asProducts = other instanceof Affine form
+                        ? asProducts(form) : null;
+                yield asProducts != null && products.form().plus(asProducts)
+                        instanceof ExactAnswer.Held<LinearForm<Monomial>>(var summed)
+                        ? multilinear(summed) : null;
+            }
         };
+    }
+
+    /**
+     * What {@code one} and {@code other} come to added, for each element; or null where this holds
+     * no value of it.
+     *
+     * <p>A form is added as {@link #plus} adds one, and two sums of products are one sum of all of
+     * their products. Two choices are not added here: each is made for the element on its own, and
+     * a sum of them is what {@link SumOfChoices} holds, put together where the choices are read.
+     */
+    static ElementValue sumOf(ElementValue one, ElementValue other) {
+        if (other instanceof Form form) {
+            return plus(one, form);
+        }
+        if (one instanceof Form form) {
+            return plus(other, form);
+        }
+        return one instanceof Multilinear first && other instanceof Multilinear second
+                && first.form().plus(second.form())
+                        instanceof ExactAnswer.Held<LinearForm<Monomial>>(var summed)
+                ? multilinear(summed) : null;
     }
 
     /** What {@code value} comes to weighed by {@code weight}, for each element, pushed into every
@@ -192,6 +262,9 @@ public sealed interface ElementValue {
             case Affine form -> form.form().times(weight)
                     instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var weighed)
                     ? new Affine(weighed) : null;
+            case Multilinear products -> products.form().times(weight)
+                    instanceof ExactAnswer.Held<LinearForm<Monomial>>(var weighed)
+                    ? multilinear(weighed) : null;
             case Choose choice -> {
                 ElementValue yes = times(choice.whenSet(), weight);
                 ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
@@ -327,7 +400,7 @@ public sealed interface ElementValue {
     private static boolean isAChoice(ElementValue value) {
         return switch (value) {
             case Choose _, OfItsCase _, ByPosition _ -> true;
-            case Affine _, Indexed _, SumOfChoices _ -> false;
+            case Affine _, Indexed _, SumOfChoices _, Multilinear _ -> false;
         };
     }
 
@@ -601,6 +674,355 @@ public sealed interface ElementValue {
     }
 
     /**
+     * One term of a sum of products: fields of the element multiplied together, no two of them one
+     * field — {@code q·p·d} — or a rounding of a number made of the element, standing alone.
+     *
+     * <p>A set, so the order the factors were written in is no part of it. A field times itself is
+     * a square, which fixing every other field leaves no form of, and is not one of these. A
+     * rounding is multiplied by nothing: what it comes to is a step of what it rounds, and a step
+     * times a field is no step of anything.
+     *
+     * @param fields   the factors; a product of one field is that field. None where this is a
+     *                 rounding
+     * @param rounding the rounding this is, or null where it is a product of fields
+     */
+    public record Monomial(Set<ElementProjection> fields, Rounding rounding) {
+
+        public Monomial {
+            if (fields == null || fields.isEmpty() == (rounding == null)) {
+                throw new IllegalArgumentException("a term of a sum of products is fields of the"
+                        + " element multiplied, or a rounding alone");
+            }
+            fields = Set.copyOf(fields);
+        }
+
+        /** The product of {@code fields}. */
+        public static Monomial of(Set<ElementProjection> fields) {
+            return new Monomial(fields, null);
+        }
+
+        /** {@code rounding}, as a term. */
+        public static Monomial of(Rounding rounding) {
+            return new Monomial(Set.of(), rounding);
+        }
+
+        /** The field this is, where it is one field and nothing made of it, or null. */
+        ElementProjection asAField() {
+            return fields.size() == 1 ? fields.iterator().next() : null;
+        }
+
+        /** Every field of the element this reads, a rounding reading what it rounds. */
+        public Set<ElementProjection> reads() {
+            return rounding == null ? fields : rounding.inner().reads();
+        }
+
+        /** The product of this and {@code other}, or null where the two share a field and the
+         *  product is a square of it, or where either is a rounding. */
+        Monomial times(Monomial other) {
+            if (rounding != null || other.rounding() != null) {
+                return null;
+            }
+            Set<ElementProjection> all = new LinkedHashSet<>(fields);
+            for (ElementProjection each : other.fields()) {
+                if (!all.add(each)) {
+                    return null;
+                }
+            }
+            return of(all);
+        }
+
+        /** What this comes to for {@code element}, or null where it holds no number this needs. */
+        ExactAnswer<ExactRatio> at(OneElement element) {
+            if (rounding != null) {
+                return rounding.at(element);
+            }
+            ExactAnswer<ExactRatio> product = ExactAnswer.held(ExactRatio.ONE);
+            for (ElementProjection field : fields) {
+                ExactRatio held = element.number(field);
+                if (held == null) {
+                    return null;
+                }
+                product = product.flatMap(sofar -> sofar.times(held));
+            }
+            return product;
+        }
+
+        @Override
+        public String toString() {
+            return rounding != null ? rounding.toString()
+                    : fields.stream().map(ElementProjection::toString).sorted()
+                            .collect(Collectors.joining("·"));
+        }
+    }
+
+    /**
+     * A number made of the element, rounded to a whole multiple of ten to the minus
+     * {@code scale} the way {@code way} says — what {@code Decimal.round(scale, mode, x)} answers
+     * of the element, read off the law the library states of the operation.
+     *
+     * @param scale how many places the number keeps; below nought, how many it rounds off before
+     *              the point. One the run time rounds at, since a rounding at another answers
+     *              nothing ({@link ARounding#answersAtAScale})
+     * @param way   how it is rounded
+     * @param inner what is rounded
+     */
+    public record Rounding(BigInteger scale, WholeRounding way, ElementValue inner) {
+
+        public Rounding {
+            Objects.requireNonNull(scale, "a number is rounded at a scale");
+            Objects.requireNonNull(way, "some way");
+            Objects.requireNonNull(inner, "and a number is rounded");
+            if (!ARounding.answersAtAScale(scale)) {
+                throw new IllegalArgumentException("the run time rounds at no scale " + scale);
+            }
+        }
+
+        /** Ten to the {@code scale}, held as its exponents: how many of the steps this rounds to
+         *  make one. */
+        public ExactRatio stepsInOne() {
+            return ExactRatio.tenTo(scale.longValueExact());
+        }
+
+        /** What this comes to for {@code element}, or null where it holds no number this needs. */
+        ExactAnswer<ExactRatio> at(OneElement element) {
+            ExactAnswer<ExactRatio> rounded = inner.at(element);
+            if (rounded == null) {
+                return null;
+            }
+            ExactRatio steps = stepsInOne();
+            return rounded.flatMap(value -> value.times(steps).flatMap(scaled -> {
+                // A number on a step rounds to itself, and its steps are not written out to say so.
+                if (scaled.isWhole()) {
+                    return ExactAnswer.held(value);
+                }
+                BigInteger whole = way.of(scaled);
+                return whole == null ? ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER)
+                        : ExactRatio.of(whole).dividedBy(steps);
+            }));
+        }
+
+        @Override
+        public String toString() {
+            return "round(" + scale + ", " + way + ", " + inner + ")";
+        }
+    }
+
+    /**
+     * A sum of products of fields of the element and of roundings of numbers made of it, each at
+     * its weight, and a constant beside: {@code q·p − q·p·d}, or
+     * {@code round(2, HALF_UP, q·p·(1 − d)) − 0.6·round(2, HALF_UP, q·p)}.
+     *
+     * <p>The number a closure makes of an element by multiplying its fields, or by rounding what
+     * it made of them. A product is no form of the fields, but it is linear in each field taken
+     * alone: with every other field fixed it is a form of the one left
+     * ({@link ElementValue#withOnly}), so a total of it is reached by fixing all of an element's
+     * fields but one and solving for that one, as a total of a form is.
+     *
+     * <p>One value however it was written. The terms are a mapping to their weights, so
+     * {@code q·p·(1 − d)} and {@code p·q − d·q·p} are one value, and the arithmetic that adds and
+     * scales them is {@link AffineForms}'s.
+     *
+     * <p>The value of an element wherever working it out answers, and only that. Two writings of
+     * one product stop on different elements — {@code (a·b)·c} stops where {@code a·b} is past a
+     * long and {@code a·(b·c)} does not when {@code c} is nought — and that is told of the
+     * operators as they were written, and a row is taken to stand where it was run and answered.
+     * Where both answer they answer this.
+     *
+     * @param form each term at its weight, at least one of them no single field: a product of two
+     *             fields or more, or a rounding
+     */
+    record Multilinear(LinearForm<Monomial> form) implements ElementValue {
+
+        public Multilinear {
+            if (form == null || form.coefs().keySet().stream()
+                    .allMatch(term -> term.asAField() != null)) {
+                throw new IllegalArgumentException("a sum of products multiplies two fields or"
+                        + " rounds somewhere, or it is a form: " + form);
+            }
+        }
+
+        @Override
+        public Set<ElementProjection> reads() {
+            Set<ElementProjection> all = new LinkedHashSet<>();
+            form.coefs().keySet().forEach(term -> all.addAll(term.reads()));
+            return Set.copyOf(all);
+        }
+
+        @Override
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            ExactAnswer<ExactRatio> total = ExactAnswer.held(form.constant());
+            for (Map.Entry<Monomial, ExactRatio> each : form.coefs().entrySet()) {
+                ExactAnswer<ExactRatio> term = each.getKey().at(element);
+                if (term == null) {
+                    return null;
+                }
+                ExactAnswer<ExactRatio> one = term.flatMap(made -> made.times(each.getValue()));
+                total = total.flatMap(sofar -> one.flatMap(sofar::plus));
+            }
+            return total;
+        }
+
+        /** Whether this rounds anywhere. */
+        public boolean rounds() {
+            return form.coefs().keySet().stream().anyMatch(term -> term.rounding() != null);
+        }
+
+        /** A sum of products is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            List<String> terms = new ArrayList<>();
+            form.coefs().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparing(Monomial::toString)))
+                    .forEach(each -> terms.add(each.getValue() + "·" + each.getKey()));
+            terms.add(form.constant().toString());
+            return String.join(" + ", terms);
+        }
+    }
+
+    /**
+     * What the sum of products {@code form} comes to with every field but {@code free} at the
+     * number {@code fixed} holds of it, as a form of {@code free}; or null where {@code fixed}
+     * holds no number at a field the sum reads, or the exact arithmetic cannot hold one.
+     *
+     * <p>A form of the fields is a sum of products of one field each, and fixing all of its
+     * fields but one leaves it a form of that one as well.
+     */
+    static LinearForm<ElementProjection> withOnly(LinearForm<Monomial> form,
+                                                  ElementProjection free,
+                                                  Map<ElementProjection, ExactRatio> fixed) {
+        return heldStill(form, free, fixed, false);
+    }
+
+    /**
+     * What a total of {@code form} is solved for {@code free} through, with every other field at
+     * the number {@code fixed} holds of it: {@link #withOnly}, with a rounding of a number that
+     * reads {@code free} taken as the number it rounds — or null where {@code fixed} holds no
+     * number at a field the sum reads, a rounding rounds what is no form or sum of products, or the
+     * exact arithmetic cannot hold one.
+     *
+     * <p>A rounding answers what it rounds wherever that lies on the steps it rounds to, so an
+     * element whose number does is written by solving through it, and the row is read back for
+     * what it comes to. One whose number lies between two steps comes to another total than it was
+     * solved for, and is filed where it does.
+     */
+    static LinearForm<ElementProjection> solvedThrough(LinearForm<Monomial> form,
+                                                       ElementProjection free,
+                                                       Map<ElementProjection, ExactRatio> fixed) {
+        return heldStill(form, free, fixed, true);
+    }
+
+    /**
+     * {@link #withOnly}, or {@link #solvedThrough} where {@code throughRoundings}.
+     */
+    private static LinearForm<ElementProjection> heldStill(LinearForm<Monomial> form,
+                                                           ElementProjection free,
+                                                           Map<ElementProjection, ExactRatio> fixed,
+                                                           boolean throughRoundings) {
+        ExactAnswer<LinearForm<ElementProjection>> total =
+                ExactAnswer.held(LinearForm.constant(form.constant()));
+        for (Map.Entry<Monomial, ExactRatio> each : form.coefs().entrySet()) {
+            Rounding rounding = each.getKey().rounding();
+            if (rounding != null) {
+                LinearForm<ElementProjection> rounded = roundingHeldStill(rounding, free, fixed,
+                        throughRoundings);
+                if (rounded == null) {
+                    return null;
+                }
+                ExactAnswer<LinearForm<ElementProjection>> term = rounded.times(each.getValue());
+                total = total.flatMap(sofar -> term.flatMap(sofar::plus));
+                continue;
+            }
+            ExactAnswer<ExactRatio> weight = ExactAnswer.held(each.getValue());
+            boolean freeIn = false;
+            for (ElementProjection field : each.getKey().fields()) {
+                if (field.equals(free)) {
+                    freeIn = true;
+                    continue;
+                }
+                ExactRatio held = fixed.get(field);
+                if (held == null) {
+                    return null;
+                }
+                weight = weight.flatMap(sofar -> sofar.times(held));
+            }
+            boolean weighsFree = freeIn;
+            ExactAnswer<LinearForm<ElementProjection>> term = weight.map(w -> weighsFree
+                    ? LinearForm.weighing(free, w) : LinearForm.constant(w));
+            total = total.flatMap(sofar -> term.flatMap(sofar::plus));
+        }
+        return total.orNull();
+    }
+
+    /**
+     * What {@code rounding} comes to with every field but {@code free} at the number {@code fixed}
+     * holds of it: the number it rounds to where it reads none but fixed fields, and where it reads
+     * {@code free} and {@code through}, what it rounds held the same way — or null otherwise.
+     */
+    private static LinearForm<ElementProjection> roundingHeldStill(
+            Rounding rounding, ElementProjection free, Map<ElementProjection, ExactRatio> fixed,
+            boolean through) {
+        if (!rounding.inner().reads().contains(free)) {
+            ExactAnswer<ExactRatio> rounded = rounding.at(new HeldAt(fixed));
+            return rounded == null ? null : rounded.map(LinearForm::<ElementProjection>constant)
+                    .orNull();
+        }
+        LinearForm<Monomial> inner = !through ? null : switch (rounding.inner()) {
+            case Affine affine -> asProducts(affine);
+            case Multilinear products -> products.form();
+            case Choose _, ByPosition _, Indexed _, OfItsCase _, SumOfChoices _ -> null;
+        };
+        return inner == null ? null : heldStill(inner, free, fixed, true);
+    }
+
+    /** An element holding the numbers {@code fixed} holds and nothing else. */
+    record HeldAt(Map<ElementProjection, ExactRatio> fixed) implements OneElement {
+
+        @Override
+        public ExactRatio number(ElementProjection field) {
+            return fixed.get(field);
+        }
+
+        @Override
+        public Boolean flag(ElementProjection field) {
+            return null;
+        }
+
+        @Override
+        public Predicate<CasesLeft> caseAt(ElementProjection subject) {
+            return null;
+        }
+
+        @Override
+        public long position() {
+            throw new IllegalStateException("an element held at fixed numbers stands nowhere");
+        }
+    }
+
+    /** {@code form} as a sum of products of one field each, or null where the exact arithmetic
+     *  cannot hold it. */
+    static LinearForm<Monomial> asProducts(Affine form) {
+        return form.form().over(field -> LinearForm.atom(Monomial.of(Set.of(field))));
+    }
+
+    /**
+     * {@code form} as what it is: a form of the element's fields where every term in it is one
+     * field, and a sum of products where one multiplies two or rounds.
+     */
+    static ElementValue multilinear(LinearForm<Monomial> form) {
+        if (form.coefs().keySet().stream().anyMatch(term -> term.asAField() == null)) {
+            return new Multilinear(form);
+        }
+        Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+        form.coefs().forEach((term, weight) -> places.put(term.asAField(), weight));
+        return new Affine(new LinearForm<>(form.constant(), places));
+    }
+
+    /**
      * A comparison of an element's position, or of what is left of it divided by a whole number
      * with the quotient floored, against a whole number.
      *
@@ -741,7 +1163,7 @@ public sealed interface ElementValue {
                 yield choice.rest() != null && rest == null ? null
                         : choosingByCase(choice.subject(), arms, rest);
             }
-            case SumOfChoices _ -> null;
+            case SumOfChoices _, Multilinear _ -> null;
         };
     }
 
@@ -1022,18 +1444,54 @@ public sealed interface ElementValue {
                     case Atom.Invariant _ -> {
                         return null;
                     }
-                    case Atom.Place _, Atom.ThePosition _, Atom.PositionTimes _ ->
+                    case Atom.Place _, Atom.ThePosition _, Atom.PositionTimes _, Atom.Product _ ->
                             ofTheElement.put(each.getKey(), each.getValue());
                 }
             }
-            return ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
+            return ofAtoms(form.constant(), ofTheElement, chosen);
         }
 
         /**
-         * {@code constant} and the atoms that are no choice, as the form they are: the places of
-         * the element, the position, and the position times a place.
+         * {@code constant}, the atoms that are no choice and the choices, as the value they come
+         * to: a form with the choices beside it, as {@link #summed} puts them, or a sum of products
+         * where a product of fields is among the atoms — or null where the exact arithmetic cannot
+         * hold it.
+         *
+         * <p>A product of fields beside a choice, or beside a number made of the position, is not
+         * read: each element would come to a product in one answer and to something else in
+         * another, which no sum of products holds.
          *
          * @param atoms each of them at its weight; none a {@link Atom.Chosen}
+         */
+        private static ElementValue ofAtoms(ExactRatio constant, Map<Atom, ExactRatio> atoms,
+                                            Map<ElementValue, ExactRatio> chosen) {
+            if (atoms.keySet().stream().noneMatch(Atom.Product.class::isInstance)) {
+                return ElementValue.summed(formOf(constant, atoms), chosen);
+            }
+            if (!chosen.isEmpty()) {
+                return null;
+            }
+            Map<Monomial, ExactRatio> products = new LinkedHashMap<>();
+            for (Map.Entry<Atom, ExactRatio> each : atoms.entrySet()) {
+                switch (each.getKey()) {
+                    case Atom.Place(ElementProjection place) ->
+                            products.put(Monomial.of(Set.of(place)), each.getValue());
+                    case Atom.Product(Monomial product) -> products.put(product, each.getValue());
+                    case Atom.ThePosition _, Atom.PositionTimes _, Atom.Chosen _,
+                         Atom.Invariant _ -> {
+                        return null;
+                    }
+                }
+            }
+            return multilinear(new LinearForm<>(constant, products));
+        }
+
+        /**
+         * {@code constant} and the atoms that are no choice and no product, as the form they are:
+         * the places of the element, the position, and the position times a place.
+         *
+         * @param atoms each of them at its weight; none a {@link Atom.Chosen} or a
+         *              {@link Atom.Product}
          */
         private static Form formOf(ExactRatio constant, Map<Atom, ExactRatio> atoms) {
             Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
@@ -1045,8 +1503,9 @@ public sealed interface ElementValue {
                     case Atom.PositionTimes(ElementProjection place) ->
                             moved.put(place, each.getValue());
                     case Atom.ThePosition _ -> step = each.getValue();
-                    case Atom.Chosen _, Atom.Invariant _ -> throw new IllegalArgumentException(
-                            "a choice, or a number beside the element, is no part of a form: "
+                    case Atom.Chosen _, Atom.Invariant _, Atom.Product _ ->
+                            throw new IllegalArgumentException("a choice, a product of fields or"
+                                    + " a number beside the element is no part of a form: "
                                     + each);
                 }
             }
@@ -1057,14 +1516,26 @@ public sealed interface ElementValue {
 
         /**
          * What an atom of what a closure computed is: a place of the element, the position, the
-         * position times a place, or a choice made of the element.
+         * position times a place, a product of places, or a choice made of the element.
          *
-         * <p>The first three are linear in one another, so a sum of them is the one form however it
+         * <p>The first four are linear in one another, so a sum of them is the one value however it
          * was written, and the arithmetic that adds and scales them is {@link AffineForms}'s.
          */
         private sealed interface Atom {
 
             record Place(ElementProjection place) implements Atom {}
+
+            /** Places of the element multiplied, two of them or more, or a rounding of a number
+             *  made of the element. */
+            record Product(Monomial product) implements Atom {
+
+                public Product {
+                    if (product.asAField() != null) {
+                        throw new IllegalArgumentException("a product of one place is the place: "
+                                + product);
+                    }
+                }
+            }
 
             /** Where the element stands, as a number. */
             record ThePosition() implements Atom {}
@@ -1076,6 +1547,36 @@ public sealed interface ElementValue {
 
             /** A number of the input that stands the same for every element. */
             record Invariant(NumericTerm term) implements Atom {}
+        }
+
+        /**
+         * What a rounding of a number made of the element comes to, as the one term of a sum of
+         * products it is — or null where {@code e} rounds nothing, its scale is no whole number
+         * written down, its policy no one case of the policy where it is read, or what it rounds
+         * is no number this reads.
+         *
+         * <p>Which call rounds, which of its arguments are the scale, the policy and the number,
+         * and what each case of the policy does are what the library says the operation computes
+         * ({@link BoundOperationFacts#roundsToAStep}); one rounding to a whole number takes the
+         * scale nought.
+         */
+        private ElementValue roundingOf(Core e, Map<BindingId, Core> at) {
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            ARounding rounds = applied == null ? null
+                    : DefaultBoundOperationFacts.get().rounding(applied);
+            if (rounds == null) {
+                return null;
+            }
+            Long scale = rounds.scale() == null ? Long.valueOf(0) : wholeNumberOf(rounds.scale());
+            WholeRounding way = rounds.wayOf(followed(rounds.policy()));
+            if (scale == null || way == null
+                    || !ARounding.answersAtAScale(BigInteger.valueOf(scale))) {
+                return null;
+            }
+            LinearForm<Atom> form = AffineForms.of(rounds.rounded(), at, atoms());
+            ElementValue inner = form == null ? null : valueOf(form);
+            return inner == null ? null : multilinear(LinearForm.atom(Monomial.of(
+                    new Rounding(BigInteger.valueOf(scale), way, inner))));
         }
 
         /** What a branch on a flag of the element or on a test of its position comes to, or null
@@ -1194,6 +1695,117 @@ public sealed interface ElementValue {
         }
 
         /**
+         * What a {@code match} on an option that holds an element of a list written out comes to:
+         * the arm that takes a present option, read with its name standing for that element — or
+         * null where the option is no such lookup.
+         *
+         * <p>Which element it is is {@link WhatAnOptionHolds}'s, which the discharge of a rule and
+         * the reading of an input follow as well; and it is there on every run, so the option is
+         * present on every run and the arm taking an absent one is taken by none. The same value
+         * for every element, so the arm's answer is read as any other part of the answer is.
+         */
+        private ElementValue byAWrittenOption(Core.Match match) {
+            Core picked = WhatAnOptionHolds.of(match.scrutinee(), held, new WrittenOut());
+            if (picked == null) {
+                return null;
+            }
+            for (Core.Case arm : match.cases()) {
+                boolean takesIt = arm.pattern() == null
+                        || (arm.pattern() instanceof Core.ResolvedPattern.Single one
+                                && one.selected().refinement()
+                                        instanceof souther.compiler.types.Refinement.OptionPresent);
+                if (!takesIt) {
+                    continue;
+                }
+                Map<BindingId, Core> named = new LinkedHashMap<>(held);
+                if (arm.binder() != null && arm.binder().binding() != null) {
+                    named.put(arm.binder().binding(), switch (arm.binding()) {
+                        case Core.ArmBinding.Payload _ -> picked;
+                        case Core.ArmBinding.Selected _, Core.ArmBinding.Unbound _ ->
+                                match.scrutinee();
+                    });
+                }
+                return new Reader(element, position, standing, Map.copyOf(named), source, elements,
+                        invariantAt).value(arm.body());
+            }
+            return null;
+        }
+
+        /**
+         * How {@link WhatAnOptionHolds} reads names here: through what the body bound them to,
+         * never through the element or its position, and with nothing but a value written down
+         * answered — an option made of the element is a place of it, which {@link #placeOf} reads.
+         */
+        private final class WrittenOut implements WhatAnOptionHolds.Reading<Map<BindingId, Core>,
+                Core> {
+
+            @Override
+            public Symbols symbols() {
+                return source.symbols();
+            }
+
+            @Override
+            public ElementsWrittenOut.Stood<Map<BindingId, Core>> standing(Core e,
+                    Map<BindingId, Core> at) {
+                Core here = Core.withoutStanding(e);
+                Set<BindingId> seen = new HashSet<>();
+                while (here instanceof Core.Read read && seen.add(read.binding())
+                        && !read.binding().equals(element) && !read.binding().equals(position)
+                        && at.get(read.binding()) != null) {
+                    here = Core.withoutStanding(at.get(read.binding()));
+                }
+                return new ElementsWrittenOut.Stood<>(here, at);
+            }
+
+            @Override
+            public Map<BindingId, Core> handing(Map<BindingId, Core> at, BindingId parameter,
+                    ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
+                Map<BindingId, Core> wider = new LinkedHashMap<>(at);
+                wider.put(parameter, value.value());
+                return wider;
+            }
+
+            @Override
+            public Map<BindingId, Core> choosing(Map<BindingId, Core> at,
+                                                 Choice.Decides decidedBy) {
+                return at;
+            }
+
+            @Override
+            public Optional<Object> folded(ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Core anElement(ElementsWrittenOut.Stood<Map<BindingId, Core>> one) {
+                return one.value();
+            }
+
+            @Override
+            public Core madeByAClosure(ElementsWrittenOut.Stood<Map<BindingId, Core>> answered,
+                                       Core handed) {
+                return null;
+            }
+
+            @Override
+            public Map<BindingId, Core> holding(Map<BindingId, Core> at, BindingId parameter,
+                                                Core handed) {
+                return at;
+            }
+
+            @Override
+            public Core otherwise(ElementsWrittenOut.Stood<Map<BindingId, Core>> option,
+                                  AnOperationApplied applied) {
+                return null;
+            }
+
+            @Override
+            public Core unsaid() {
+                return null;
+            }
+        }
+
+        /**
          * What a {@code match} on a place of the element comes to: each arm read with its name
          * standing at the place the arm narrowed, or null where any arm is not read.
          *
@@ -1208,7 +1820,10 @@ public sealed interface ElementValue {
          */
         private ElementValue byCase(Core.Match match) {
             ElementProjection subject = placeOf(match.scrutinee(), held);
-            if (subject == null || elements == null) {
+            if (subject == null) {
+                return byAWrittenOption(match);
+            }
+            if (elements == null) {
                 return null;
             }
             TermPath at = subject.from(elements.at());
@@ -1280,15 +1895,16 @@ public sealed interface ElementValue {
                     ElementValue choice = switch (Core.withoutStanding(e)) {
                         case Core.If branch -> byCondition(branch);
                         case Core.Match match -> byCase(match);
-                        case null, default -> null;
+                        case null, default -> roundingOf(e, at);
                     };
                     return choice == null ? null : termsOf(choice);
                 }
 
                 /** The position times a form of the places of the element, which is a form of the
-                 *  places and of the position times them ({@link #movedByThePosition}); or a
-                 *  choice of numbers times a form, which weighs it ({@link ElementValue#weighedBy}).
-                 *  And nothing else. */
+                 *  places and of the position times them ({@link #movedByThePosition}); two sums
+                 *  of places and products of them, which multiply out ({@link #multipliedOut}); or
+                 *  a choice of numbers times a form, which weighs it
+                 *  ({@link ElementValue#weighedBy}). And nothing else. */
                 @Override
                 public LinearForm<Atom> productOf(LinearForm<Atom> left, LinearForm<Atom> right) {
                     LinearForm<Atom> moved = movedByThePosition(left, right);
@@ -1297,6 +1913,10 @@ public sealed interface ElementValue {
                     }
                     if (moved != null) {
                         return moved;
+                    }
+                    LinearForm<Atom> multiplied = multipliedOut(left, right);
+                    if (multiplied != null) {
+                        return multiplied;
                     }
                     ElementValue one = valueOf(left);
                     ElementValue other = one == null ? null : valueOf(right);
@@ -1348,8 +1968,61 @@ public sealed interface ElementValue {
         }
 
         /**
+         * {@code left · right}, where each is a constant and places of the element and products of
+         * them; or null where either holds anything else, where two of the products multiplied
+         * would take one place twice, or where the exact arithmetic cannot hold a weight.
+         *
+         * <p>{@code (a + Σ w·m) · (b + Σ v·n)} is {@code a·b + Σ b·w·m + Σ a·v·n + Σ w·v·(m·n)},
+         * each product an atom, so it is one sum of products however its factors were grouped. A
+         * place times itself is a square, and is not read.
+         */
+        private static LinearForm<Atom> multipliedOut(LinearForm<Atom> left,
+                                                      LinearForm<Atom> right) {
+            LinearForm<Monomial> one = asProducts(left);
+            LinearForm<Monomial> other = one == null ? null : asProducts(right);
+            if (other == null) {
+                return null;
+            }
+            ExactAnswer<LinearForm<Monomial>> total = one.times(other.constant())
+                    .flatMap(weighed -> new LinearForm<>(ExactRatio.ZERO, other.coefs())
+                            .times(one.constant()).flatMap(weighed::plus));
+            for (Map.Entry<Monomial, ExactRatio> a : one.coefs().entrySet()) {
+                for (Map.Entry<Monomial, ExactRatio> b : other.coefs().entrySet()) {
+                    Monomial product = a.getKey().times(b.getKey());
+                    ExactRatio weight = product == null ? null
+                            : a.getValue().times(b.getValue()).orNull();
+                    if (weight == null) {
+                        return null;
+                    }
+                    total = total.flatMap(sofar -> sofar.plus(LinearForm.weighing(product,
+                            weight)));
+                }
+            }
+            LinearForm<Monomial> multiplied = total.orNull();
+            return multiplied == null ? null : termsOf(multilinear(multiplied));
+        }
+
+        /** {@code form} as a constant and products of places, a place being a product of one; or
+         *  null where it holds the position or a choice. */
+        private static LinearForm<Monomial> asProducts(LinearForm<Atom> form) {
+            Map<Monomial, ExactRatio> products = new LinkedHashMap<>();
+            for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
+                switch (each.getKey()) {
+                    case Atom.Place(ElementProjection place) ->
+                            products.put(Monomial.of(Set.of(place)), each.getValue());
+                    case Atom.Product(Monomial product) -> products.put(product, each.getValue());
+                    case Atom.ThePosition _, Atom.PositionTimes _, Atom.Chosen _,
+                         Atom.Invariant _ -> {
+                        return null;
+                    }
+                }
+            }
+            return new LinearForm<>(form.constant(), products);
+        }
+
+        /**
          * {@code value} as terms of a form: a form is its own places, a sum of choices its form
-         * and each of its choices, and a choice one term.
+         * and each of its choices, a sum of products each product, and a choice one term.
          *
          * <p>What a branch or a {@code match} came to need not be a choice — two answers that are
          * one are that answer, and arms adding choices up are a sum of them — and is put into the
@@ -1381,6 +2054,13 @@ public sealed interface ElementValue {
                     sum.chosen().forEach((choice, weight) ->
                             all.put(new Atom.Chosen(choice), weight));
                     yield new LinearForm<>(besides.constant(), all);
+                }
+                case Multilinear products -> {
+                    Map<Atom, ExactRatio> all = new LinkedHashMap<>();
+                    products.form().coefs().forEach((product, weight) -> all.put(
+                            product.asAField() != null ? new Atom.Place(product.asAField())
+                                    : new Atom.Product(product), weight));
+                    yield new LinearForm<>(products.form().constant(), all);
                 }
                 case Choose _, OfItsCase _, ByPosition _ ->
                         LinearForm.atom(new Atom.Chosen(value));
@@ -1474,7 +2154,7 @@ public sealed interface ElementValue {
                     case TheStep.TheAnswerSoFar _ -> { }
                 }
             });
-            ElementValue adds = ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
+            ElementValue adds = ofAtoms(form.constant(), ofTheElement, chosen);
             return adds == null ? null : new Added(adds, counted);
         }
 

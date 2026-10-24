@@ -103,7 +103,8 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
                                                  ModelOccurrence at) {
         return new DecisionPath.Consulted(consulted.answer(), new ShownBy.AtAnOutcome(at, true),
                 consulted.states(),
-                ReachingCuts.Stating.of(consulted.states(), ModelOccurrences.of(at)).by());
+                ReachingCuts.Stating.of(consulted.states(), ModelOccurrences.of(at)).by(),
+                consulted.cases());
     }
 
     /** The comparison of the helper `positive` in its copy made at {@code made}. */
@@ -122,7 +123,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
     private static DecisionPath way(DecisionPath.Consulted... consulted) {
         DecisionPath out = DecisionPath.NOWHERE;
         for (DecisionPath.Consulted each : consulted) {
-            out = out.and(each.answer(), each.shown(), each.states(), each.said());
+            out = out.and(each.answer(), each.shown(), each.states(), each.said(), each.cases());
         }
         return out;
     }
@@ -148,6 +149,6 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
                                 "b", ConditionOccurrence.Reading.DECIDING, met)),
                         new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))),
-                SaidOnTheWay.NONE);
+                SaidOnTheWay.NONE, List.of());
     }
 }

@@ -143,7 +143,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),
-            new Held("souther.compiler.check.PathCompletion.operated",
+            new Held("souther.compiler.check.PathCompletion.whereItAnswers",
                     "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
                             + " answers a value, once for every question asked of the evaluation"),
             new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
@@ -152,12 +152,19 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.PathCompletion.operationAt",
                     "whether the operator is one a recipe is recorded against, which a product and"
                             + " a quotient are and a sum and a difference are not"),
+            new Held("souther.compiler.check.PathCompletion.workedOut",
+                    "which side of a connective inside an operand a run works out whenever the part"
+                            + " is: the left, and not the right"),
             new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
                     "hands each operator a closure's body was worked out through to"
                             + " WhereAnOperatorAnswers, for where an application of it answers"),
             new Held("souther.compiler.partition.Pullback.operatorsIn",
                     "which operators a body works out, which a sum, a difference and a product"
                             + " are and a comparison is not"),
+            new Held("souther.compiler.partition.Pullback.isWhatADivisorAloneStopsOnDividing",
+                    "which operand of a quotient it stops a run on, the one it divides by and not"
+                            + " the one it divides, where the operator's account says its divisor"
+                            + " alone"),
             new Held("souther.compiler.partition.Pullback.comparisonHolding",
                     "which comparison a read of a step stands in, whose arithmetic is the"
                             + " relation it states and not something the step works out beside it"),
@@ -570,7 +577,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"
-                            + " placed"));
+                            + " placed"),
+            new Held("souther.compiler.check.LookupsAClauseNeeds.work",
+                    "names the conjunction and the disjunction, which are the two forms that carry"
+                            + " a false part on to the whole clause; any other operator says"
+                            + " nothing of the lookup"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {

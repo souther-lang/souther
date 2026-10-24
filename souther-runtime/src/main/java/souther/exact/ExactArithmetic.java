@@ -89,7 +89,7 @@ public final class ExactArithmetic {
         if (numerator.bitLength() < Long.SIZE - 1 && denominator.bitLength() < Long.SIZE - 1) {
             return canonical(numerator.longValue(), denominator.longValue(), twos, fives);
         }
-        BigInteger common = numerator.gcd(denominator);
+        BigInteger common = commonFactor(numerator, denominator);
         if (!common.equals(BigInteger.ONE)) {
             numerator = numerator.divide(common);
             denominator = denominator.divide(common);
@@ -110,26 +110,61 @@ public final class ExactArithmetic {
             denominator = denominator.shiftRight(inDenominator);
             twos = ExactPowers.added(twos, -inDenominator);
         }
-        // A five leaves no such mark, so it is one division each — bounded by the digits the number
-        // already has, so nothing here is amplified by the exponents: a power of ten held as a scale never
-        // reaches this loop at all.
-        while (true) {
-            BigInteger[] divided = numerator.divideAndRemainder(ExactPowers.FIVE);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            numerator = divided[0];
-            fives = ExactPowers.added(fives, 1);
-        }
-        while (true) {
-            BigInteger[] divided = denominator.divideAndRemainder(ExactPowers.FIVE);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            denominator = divided[0];
-            fives = ExactPowers.added(fives, -1);
-        }
+        // A five leaves no such mark, so the fives come off by division.
+        long[] taken = new long[1];
+        numerator = withoutFives(numerator, taken);
+        fives = ExactPowers.added(fives, taken[0]);
+        taken[0] = 0;
+        denominator = withoutFives(denominator, taken);
+        fives = ExactPowers.added(fives, -taken[0]);
         return new ExactParts(numerator, denominator, twos, fives);
+    }
+
+    /**
+     * {@code of}, which is not nought, with every factor of five taken off, and how many were added
+     * to {@code taken}.
+     *
+     * <p>Five to each power of two is tried while it divides what is left, and then each of those
+     * powers once more from the largest down: a number holding {@code k} fives is divided about
+     * {@code 2·log k} times, each by a power no larger than what comes off. One five at a time, a
+     * whole number written out from a power of ten — a decimal rounded to a scale far from nought
+     * is one — would be divided once per digit, each time across all of its digits.
+     */
+    private static BigInteger withoutFives(BigInteger of, long[] taken) {
+        int levels = 0;
+        BigInteger power = ExactPowers.FIVE;
+        while (true) {
+            BigInteger[] divided = of.divideAndRemainder(power);
+            if (divided[1].signum() != 0) {
+                break;
+            }
+            of = divided[0];
+            taken[0] += 1L << levels;
+            levels++;
+            // A square with more bits than what is left cannot divide it.
+            if (2L * power.bitLength() - 1 > of.bitLength()) {
+                break;
+            }
+            power = power.multiply(power);
+        }
+        // Each power is squared up again rather than kept: the largest dominates the cost of all.
+        for (int i = levels - 1; i >= 0; i--) {
+            BigInteger[] divided = of.divideAndRemainder(fiveToTheTwoTo(i));
+            if (divided[1].signum() == 0) {
+                of = divided[0];
+                taken[0] += 1L << i;
+            }
+        }
+        return of;
+    }
+
+    /** Five to the power of two to the {@code level}. */
+    private static BigInteger fiveToTheTwoTo(int level) {
+        BigInteger power = ExactPowers.FIVE;
+        for (int i = 0; i < level; i++) {
+            power = power.multiply(power);
+        }
+        return power;
     }
 
     /**
@@ -143,29 +178,47 @@ public final class ExactArithmetic {
      * lets the magnitude of the numerator be taken without the least long, which has none.
      */
     private static ExactParts canonical(long numerator, long denominator, long twos, long fives) {
-        long common = commonFactor(Math.abs(numerator), denominator);
-        numerator /= common;
-        denominator /= common;
+        // A division for each side is skipped where there is nothing to take off: most values are
+        // whole numbers, and a denominator of one has no factor of two or five to look for.
+        long common = denominator == 1 ? 1 : commonFactor(Math.abs(numerator), denominator);
+        if (common != 1) {
+            numerator /= common;
+            denominator /= common;
+        }
         int inNumerator = Long.numberOfTrailingZeros(numerator);
         if (inNumerator > 0) {
             numerator >>= inNumerator;
             twos = ExactPowers.added(twos, inNumerator);
         }
-        int inDenominator = Long.numberOfTrailingZeros(denominator);
-        if (inDenominator > 0) {
-            denominator >>= inDenominator;
-            twos = ExactPowers.added(twos, -inDenominator);
-        }
         while (numerator % 5 == 0) {
             numerator /= 5;
             fives = ExactPowers.added(fives, 1);
         }
-        while (denominator % 5 == 0) {
-            denominator /= 5;
-            fives = ExactPowers.added(fives, -1);
+        if (denominator != 1) {
+            int inDenominator = Long.numberOfTrailingZeros(denominator);
+            if (inDenominator > 0) {
+                denominator >>= inDenominator;
+                twos = ExactPowers.added(twos, -inDenominator);
+            }
+            while (denominator % 5 == 0) {
+                denominator /= 5;
+                fives = ExactPowers.added(fives, -1);
+            }
         }
         return new ExactParts(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator),
                 twos, fives);
+    }
+
+    /**
+     * The greatest common factor of two whole numbers of any size, which is one wherever either is.
+     *
+     * <p>The one place a gcd of these is taken. A whole number is a fraction over one and the ends of
+     * an integer type, the least and greatest long, are past the long route, so these come through
+     * here at every read of such a bound; and a gcd with one is not free — it walks the bits of the
+     * other.
+     */
+    public static BigInteger commonFactor(BigInteger a, BigInteger b) {
+        return a.equals(BigInteger.ONE) || b.equals(BigInteger.ONE) ? BigInteger.ONE : a.gcd(b);
     }
 
     /** The greatest common factor of two positive longs. */
@@ -348,8 +401,8 @@ public final class ExactArithmetic {
         if (a.isZero() || b.isZero()) {
             return ExactParts.ZERO;
         }
-        BigInteger acrossOne = a.numerator().gcd(b.denominator());
-        BigInteger acrossTwo = b.numerator().gcd(a.denominator());
+        BigInteger acrossOne = commonFactor(a.numerator(), b.denominator());
+        BigInteger acrossTwo = commonFactor(b.numerator(), a.denominator());
         try {
             return new ExactParts(
                     a.numerator().divide(acrossOne).multiply(b.numerator().divide(acrossTwo)),
@@ -404,8 +457,8 @@ public final class ExactArithmetic {
         if (a.isZero()) {
             return ExactParts.ZERO;
         }
-        BigInteger acrossOne = a.numerator().gcd(b.numerator());
-        BigInteger acrossTwo = a.denominator().gcd(b.denominator());
+        BigInteger acrossOne = commonFactor(a.numerator(), b.numerator());
+        BigInteger acrossTwo = commonFactor(a.denominator(), b.denominator());
         try {
             return new ExactParts(
                     a.numerator().divide(acrossOne).multiply(b.denominator().divide(acrossTwo)),
@@ -811,12 +864,12 @@ public final class ExactArithmetic {
                 ExactPowers.lessened(b.fives(), commonFives)));
         // The denominators' common factor off before either is multiplied out, and the sum's
         // common factor with its denominator after, so the fraction is no larger than it is.
-        BigInteger shared = a.denominator().gcd(b.denominator());
+        BigInteger shared = commonFactor(a.denominator(), b.denominator());
         BigInteger overA = a.denominator().divide(shared);
         BigInteger overB = b.denominator().divide(shared);
         BigInteger sum = here.multiply(overB).add(there.multiply(overA));
         BigInteger denominator = overA.multiply(b.denominator());
-        BigInteger common = sum.gcd(denominator);
+        BigInteger common = commonFactor(sum, denominator);
         if (common.signum() != 0 && !common.equals(BigInteger.ONE)) {
             sum = sum.divide(common);
             denominator = denominator.divide(common);
@@ -922,7 +975,7 @@ public final class ExactArithmetic {
             BigInteger there = b.numerator().multiply(ExactPowers.powers(
                     ExactPowers.lessened(b.twos(), commonTwos),
                     ExactPowers.lessened(b.fives(), commonFives)));
-            BigInteger shared = a.denominator().gcd(b.denominator());
+            BigInteger shared = commonFactor(a.denominator(), b.denominator());
             BigInteger overThis = a.denominator().divide(shared);
             Summed sum = summed(
                     here.multiply(b.denominator().divide(shared)), there.multiply(overThis));

@@ -19,6 +19,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Which sign a run is on is the path's and the declarations', so where a guard or a type keeps the
  * divisor above nought, the comparison draws the line the comparison written out with the product
  * draws. The rows built at it are held against the run time's exact quotient.
+ *
+ * <p>Past the product the two are not one comparison: a row that stops in {@code k * d} is no row
+ * at the comparison written out, so the pay is parted once more at the greatest product a divisor
+ * gets past, and the quotient stops nowhere there.
  */
 class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
@@ -71,7 +76,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         String report = human(MODEL.formatted("guard b.days > 0 else No",
                 "a.pay / b.days >= 100"));
         assertFalse(report.contains("a quotient by a value that is not a constant"), report);
-        assertEquals(Set.copyOf(borders("guard b.days > 0 else No", "a.pay >= 100 * b.days")),
+        assertEquals(withoutWhereTheProductStops(
+                        borders("guard b.days > 0 else No", "a.pay >= 100 * b.days")),
                 Set.copyOf(borders("guard b.days > 0 else No", "a.pay / b.days >= 100")));
     }
 
@@ -92,7 +98,7 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         }
         Map<String, List<BorderAssessment>> each = linesOfEach(modelOf(bodies));
         for (int i = 0; i < bodies.size(); i += 2) {
-            assertEquals(Set.copyOf(described(each.get("f" + i))),
+            assertEquals(withoutWhereTheProductStops(described(each.get("f" + i))),
                     Set.copyOf(described(each.get("f" + (i + 1)))),
                     bodies.get(i + 1)[0] + " / " + bodies.get(i + 1)[1]);
         }
@@ -163,7 +169,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                     Ok
                 }
                 """;
-        assertEquals(Set.copyOf(bordersOfModel(declared.formatted("a.pay >= 100 * b.days"))),
+        assertEquals(withoutWhereTheProductStops(
+                        bordersOfModel(declared.formatted("a.pay >= 100 * b.days"))),
                 Set.copyOf(bordersOfModel(declared.formatted("a.pay / b.days >= 100"))));
     }
 
@@ -653,6 +660,46 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
             }
         }
         return out;
+    }
+
+    /**
+     * The least size of a value a comparison written out with the product draws a line at only
+     * because the product stops there: {@code 100 * days} is an {@code Int} for a {@code days}
+     * up to the greatest {@code Int} over a hundred, and that quotient times a hundred is as
+     * far from nought as a pay the divisor can get past.
+     */
+    private static final BigInteger WHERE_THE_PRODUCT_STOPS = BigInteger.valueOf(Long.MAX_VALUE)
+            .divide(BigInteger.valueOf(100)).multiply(BigInteger.valueOf(100));
+
+    private static final Pattern AT = Pattern.compile("at=(-?\\d+)\\]");
+
+    /** Whether {@code line} is a line of {@code a.pay} at a value its product with the divisor
+     *  has no {@code Int} for. */
+    private static boolean drawnWhereTheProductStops(String line) {
+        Matcher at = AT.matcher(line);
+        return line.contains("term=a.pay") && at.find()
+                && new BigInteger(at.group(1)).abs().compareTo(WHERE_THE_PRODUCT_STOPS) >= 0;
+    }
+
+    /** {@code lines} but for those the comparison written out draws only where the product
+     *  stops ({@link #drawnWhereTheProductStops}). */
+    private static Set<String> withoutWhereTheProductStops(List<String> lines) {
+        return lines.stream().filter(line -> !drawnWhereTheProductStops(line))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Where the product stops, the comparison written out draws lines and the quotient does not:
+     * a pay there is no row of the first, and the quotient is worked out for it all the same.
+     */
+    @Test
+    void onlyTheComparisonWrittenOutDrawsLinesWhereTheProductStops() {
+        List<String> written = borders(ABOVE, "a.pay >= 100 * b.days");
+        List<String> quotient = borders(ABOVE, "a.pay / b.days >= 100");
+        assertTrue(written.stream().anyMatch(line -> drawnWhereTheProductStops(line)),
+                written.toString());
+        assertTrue(quotient.stream().noneMatch(line -> drawnWhereTheProductStops(line)),
+                quotient.toString());
     }
 
     private static List<String> borders(String guard, String condition) {

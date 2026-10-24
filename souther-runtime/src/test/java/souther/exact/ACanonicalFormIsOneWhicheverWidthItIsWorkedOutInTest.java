@@ -62,6 +62,43 @@ class ACanonicalFormIsOneWhicheverWidthItIsWorkedOutInTest {
                 BigInteger.ONE, BigInteger.valueOf(5), 0, Long.MIN_VALUE));
     }
 
+    /**
+     * A value too wide for longs with fives on it, from none to several hundred on either side and
+     * a run of them that is a power of two and one short of it, comes to the form taking them one
+     * at a time gives.
+     */
+    @Test
+    void theFivesOfAWideValueComeOffAsTheyWouldOneAtATime() {
+        Random random = new Random(20261024L);
+        BigInteger wide = BigInteger.ONE.shiftLeft(80);
+        List<String> differ = new ArrayList<>();
+        int[] runs = {0, 1, 2, 3, 7, 8, 63, 64, 65, 255, 256, 511};
+        for (int on : runs) {
+            for (int under : runs) {
+                BigInteger top = wide.add(BigInteger.valueOf(random.nextInt(1000) * 10 + 3))
+                        .multiply(BigInteger.valueOf(5).pow(on));
+                BigInteger bottom = wide.add(BigInteger.valueOf(random.nextInt(1000) * 10 + 7))
+                        .multiply(BigInteger.valueOf(5).pow(under));
+                for (BigInteger numerator : List.of(top, top.negate())) {
+                    ExactParts asked = ExactArithmetic.canonical(numerator, bottom, 3, -4);
+                    ExactParts expected = reduced(numerator, bottom, 3, -4);
+                    if (!asked.equals(expected)) {
+                        differ.add(on + " over " + under + ": " + asked + " != " + expected);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
+    }
+
+    /** A power of ten written out as a whole number, as a rounding to a scale far from nought
+     *  writes one, is the two exponents it is. */
+    @Test
+    void aPowerOfTenWrittenOutIsItsExponents() {
+        assertEquals(new ExactParts(BigInteger.ONE, BigInteger.ONE, 100_000, 100_000),
+                ExactArithmetic.canonical(BigInteger.TEN.pow(100_000), BigInteger.ONE, 0, 0));
+    }
+
     /** The canonical form worked out the plain way, one factor at a time. */
     private static ExactParts reduced(BigInteger numerator, BigInteger denominator, long twos,
                                       long fives) {

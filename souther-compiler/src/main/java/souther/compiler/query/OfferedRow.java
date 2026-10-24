@@ -70,6 +70,7 @@ public record OfferedRow(RowKey key, List<FixtureTemplate> inputs, List<StoodInA
             if (!(purpose instanceof Generator.Purpose.ForAClass
                     || purpose instanceof Generator.Purpose.ForAnArm
                     || purpose instanceof Generator.Purpose.ForADecisionRule
+                    || purpose instanceof Generator.Purpose.ForACaseOfAStatement
                     || purpose instanceof Generator.Purpose.ForAFallbackPairCell
                     || purpose instanceof Generator.Purpose.ForACombinationOfDecisions
                     || purpose instanceof Generator.Purpose.ForAReplacement)) {

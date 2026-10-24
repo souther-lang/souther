@@ -4,11 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ComposedRows;
 import souther.compiler.report.AdequacyReport;
 
 import java.math.BigInteger;
@@ -29,10 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * as a rule about how long it is: its line is drawn at the string's position, and a row on each
  * side of it is a string written to come to the number there.
  *
- * <p>Held by running the rows. Each row composed for a rule is put back as an example, answered
- * with what the condition works out to over the string the row holds — added up here, apart from
- * anything the compiler read — so a string that does not come to what it was written for is an
- * example the model answers otherwise.
+ * <p>Held by running the rows. Each row composed for a rule is run through the module, and its
+ * answer is held to what the condition works out to over the string the row holds — added up here,
+ * apart from anything the compiler read — so a string that does not come to what it was written
+ * for is a row the model answers otherwise.
  */
 class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
 
@@ -184,27 +187,87 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
      *  its string says. */
     @Test
     void everyRuleSomeStringTakesIsComposedARowThatTakesIt() {
-        ANSWERED.forEach((model, by) -> {
-            List<String> examples = new ArrayList<>();
-            Set<Integer> answers = new TreeSet<>();
-            for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
-                int answer = by.apply(textOf(row.getFirst().value()));
-                answers.add(answer);
-                examples.add("    | \"composed " + examples.size() + "\" : ("
-                        + row.getFirst().text() + ") -> " + answer);
-            }
-            assertEquals(COMPOSED_FOR.get(model), answers,
-                    () -> "a row for every rule some string takes: " + examples);
+        ANSWERED.forEach((model, by) -> composedAndAnswered(model, by, COMPOSED_FOR.get(model)));
+    }
 
-            // Run and not measured: an example whose answer is not the program's is an error,
-            // which is all this asks of the rows.
-            Compilation answeredBy = Compilation.ofSource(model + "example pick\n"
-                    + String.join("\n", examples) + "\n", "Main");
-            answeredBy.answerEverything();
-            assertEquals(List.of(), answeredBy.errors().stream()
-                    .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                    .toList(), () -> "each row is answered as its string says: " + examples);
-        });
+    /**
+     * Where the type holds its strings to a format, the strings coming to the number are ones it
+     * holds: thirteen digits come to no less than 624 and no more than 741, so a string of the
+     * format is on each side of 700, and a string written plainly and moved to the number is one
+     * the format refuses. The format that loops reaches 700 only past twelve digits.
+     */
+    @Test
+    void aStringComingToTheNumberIsOneItsTypeHolds() {
+        for (String rule : List.of("String.matches(\"[0-9]{13}\", value)",
+                "String.matches(\"[0-9]+\", value)")) {
+            composedAndAnswered("""
+                    module p
+                    data Code = String
+                        invariant %s
+                    behavior pick : (c: Code) -> Int
+                    let pick (c) = {
+                        guard List.sum(String.codePoints(c.value)) >= 700 else 0
+                        1
+                    }
+                    """.formatted(rule), text -> sumOf(text) >= 700 ? 1 : 0, Set.of(0, 1));
+        }
+    }
+
+    /**
+     * A rule on what a division leaves of what the code points of a formatted string come to has a
+     * row on each side: a string of the format whose sum leaves the remainder asked for, and one
+     * whose sum does not. Thirteen digits come to no less than 624, so a sum of the class nearest
+     * nought is no sum any of them comes to.
+     */
+    @Test
+    void aRemainderOfWhatTheCodePointsComeToIsComposedAStringOfTheFormat() {
+        composedAndAnswered("""
+                module p
+                data Code = String
+                    invariant String.matches("[0-9]{13}", value)
+                behavior pick : (c: Code) -> Int
+                let pick (c) = {
+                    guard Int.floorMod(List.sum(String.codePoints(c.value)), 10) == 0 else 0
+                    1
+                }
+                """, text -> Math.floorMod(sumOf(text), 10) == 0 ? 1 : 0, Set.of(0, 1));
+        // A digit's value is its code point less 48, so the total is the code points' less 48 for
+        // each: two numbers of the string, the second of which is the length the format holds.
+        composedAndAnswered("""
+                module p
+                data Code = String
+                    invariant String.matches("[0-9]{13}", value)
+                behavior pick : (c: Code) -> Int
+                let pick (c) = {
+                    guard Int.floorMod(List.sum(List.map((x) -> x - 48,
+                        String.codePoints(c.value))), 10) == 0 else 0
+                    1
+                }
+                """, text -> Math.floorMod(sumOf(text) - 48 * lengthOf(text), 10) == 0 ? 1 : 0,
+                Set.of(0, 1));
+    }
+
+    /** The rows composed for {@code model}'s rules, answered as {@code by} works them out and run:
+     *  {@code expected} are the answers some row is composed for. */
+    private static void composedAndAnswered(String model, Function<String, Integer> by,
+                                            Set<Integer> expected) {
+        Compilation compilation = measured(model);
+        List<String> texts = new ArrayList<>();
+        Set<Integer> answers = new TreeSet<>();
+        for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
+            String text = textOf(row.getFirst().value());
+            int answer = by.apply(text);
+            texts.add(text);
+            answers.add(answer);
+            assertEquals(answered(answer), ComposedRows.answer(compilation, "pick", row),
+                    () -> text + " is answered as its string says");
+        }
+        assertEquals(expected, answers,
+                () -> "a row for every rule some string takes: " + texts + "\n" + model);
+    }
+
+    private static AnswerObservation answered(int answer) {
+        return new AnswerObservation.Answered(new ObservedValue.Integer(answer));
     }
 
     /** The total of a weighed code point is a multiple of the total, however far it is carried
@@ -225,6 +288,42 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
                 "read as verify/Int.floorMod(3 * List.sum(String.codePoints(s)), 11): = 1"),
                 () -> report);
         assertFalse(report.contains("not read:"), () -> report);
+    }
+
+    /**
+     * A digit's value read off the code point of {@code "0"}, as a lookup in the code points of a
+     * written string, is the same weighing as the number written down: the arm taking a present
+     * option is the one every element takes, whichever order the arms are in and whether the
+     * match is in a helper or in the closure.
+     */
+    @Test
+    void aLookupInWrittenCodePointsIsTheNumberItPicks() {
+        for (String closure : List.of(
+                "(x) -> x - 48",
+                """
+                (x) -> match List.get(0, String.codePoints("0")) with
+                        | Some zero -> x - zero
+                        | None -> 0""",
+                """
+                (x) -> match List.get(0, String.codePoints("0")) with
+                        | None -> 0
+                        | Some zero -> x - zero""",
+                "(x) -> digit(x)")) {
+            String report = report(measured("""
+                    module p
+                    behavior pick : (s: String) -> Int
+                    let digit (c: Int): Int =
+                        match List.get(0, String.codePoints("0")) with
+                            | Some zero -> c - zero
+                            | None -> unreachable "a one-character string has a first code point"
+                    let pick (s) = {
+                        guard List.sum(List.map(%s, String.codePoints(s))) >= 10 else 0
+                        1
+                    }
+                    """.formatted(closure)));
+            assertTrue(report.contains("read as pick/List.sum(String.codePoints(s))"
+                    + " - 48 * String.length(s): = 10"), () -> closure + "\n" + report);
+        }
     }
 
     /** A walk whose answer is no term of the total is no weighing of it. {@code sortBy} hands its
@@ -257,27 +356,18 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
      *  a string can do: it is silent on "-(" and says so, it does not say there is none. */
     @Test
     void aProductPastTheRangeAbortsWhereAnInRangeStringWithTheSameTotalAnswers() {
-        String model = PAST_THE_RANGE_ON_THE_WAY;
-        assertEquals(List.of(), errorsOf(model, "\"-(\"", 1), () -> "\"-(\" answers 1");
-        assertEquals(1, errorsOf(model, "\"-(\"", 0).size(), () -> "and not 0");
+        Compilation compilation = measured(PAST_THE_RANGE_ON_THE_WAY);
+        assertEquals(answered(1),
+                ComposedRows.answer(compilation, "pick", List.of(FixtureTemplate.string("-("))),
+                () -> "\"-(\" answers 1");
         // An abort is no answer: of an `Int` answer that is 0 or 1, neither holds.
-        assertEquals(1, errorsOf(model, "\"A\"", 0).size(), () -> "\"A\" does not answer 0");
-        assertEquals(1, errorsOf(model, "\"A\"", 1).size(), () -> "and does not answer 1");
+        assertEquals(new AnswerObservation.NotAnswered(),
+                ComposedRows.answer(compilation, "pick", List.of(FixtureTemplate.string("A"))),
+                () -> "\"A\" aborts");
 
-        String report = report(measured(model));
+        String report = report(compilation);
         assertTrue(report.contains("nothing could show a row can be written at a decision rule"),
                 () -> "a rule no row was composed for is undecided: " + report);
-    }
-
-    /** The errors of {@code model} given one example, the string {@code literal} answering
-     *  {@code answer}. */
-    private static List<String> errorsOf(String model, String literal, int answer) {
-        Compilation compilation = Compilation.ofSource(model + "example pick\n    | \"fixed\" : ("
-                + literal + ") -> " + answer + "\n", "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList();
     }
 
     /** The rows composed for the decision rules no row takes, each as its inputs. */
