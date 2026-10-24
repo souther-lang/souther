@@ -226,26 +226,59 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   nothing of any row, and a way put beside it is what the two come to
      * @param stoppedAt  the figures a search for what would have shown more stopped at: a place
      *                   nothing is shown of here may be one a run allowed more shows undivided
+     * @param mayStopBefore the places some way leaves no value shown undivided at because a run
+     *                   may stop before the relation on what nothing here says: every value there
+     *                   getting to it is what undivided would claim, and none of them is among
+     *                   {@code undivided}
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
-                        boolean rowsArrive, Set<Figure> stoppedAt) {
+                        boolean rowsArrive, Set<Figure> stoppedAt,
+                        Set<FilingCoordinate> mayStopBefore) {
 
         WhatItLeaves {
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
+            mayStopBefore = Set.copyOf(mayStopBefore);
+            if (!Collections.disjoint(undivided, mayStopBefore)) {
+                throw new IllegalArgumentException("a place a run may stop before the relation on"
+                        + " the way to is not shown undivided by it");
+            }
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
                      Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled) {
-            this(undivided, settled, true, Set.of());
+            this(undivided, settled, true, Set.of(), Set.of());
+        }
+
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                     boolean rowsArrive, Set<Figure> stoppedAt) {
+            this(undivided, settled, rowsArrive, stoppedAt, Set.of());
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
          *  rows there are none of. */
         static WhatItLeaves ofAWayNoRowComesAlong(Set<FilingCoordinate> places) {
             return new WhatItLeaves(places, Map.of(), false, Set.of());
+        }
+
+        /**
+         * This, along a way whose run may stop before the relation on {@code places}: those of
+         * them shown undivided are not, and each is said to be for that. A place not shown
+         * undivided keeps what it was not shown for, which is no claim about every value getting
+         * there. What the relation settles stays as it is, since a value settling it settles it
+         * wherever a row gets there.
+         */
+        WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
+            Set<FilingCoordinate> held = new LinkedHashSet<>(undivided);
+            held.retainAll(places);
+            Set<FilingCoordinate> shown = new LinkedHashSet<>(undivided);
+            shown.removeAll(held);
+            Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
+            stops.addAll(held);
+            return new WhatItLeaves(shown, settled, rowsArrive, stoppedAt, stops);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -269,7 +302,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             });
             Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
             stopped.addAll(other.stoppedAt);
-            return new WhatItLeaves(both, alike, true, stopped);
+            Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
+            stops.addAll(other.mayStopBefore);
+            return new WhatItLeaves(both, alike, true, stopped, stops);
         }
     }
 
@@ -1041,7 +1076,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
             }
-            return new WhatItLeaves(out, settled);
+            return reachedAlong(new WhatItLeaves(out, settled), past);
         }
         if (kind == Kind.DIVISIBILITY) {
             boolean apart = !overlapping(sides.get(0), sides.get(1))
@@ -1051,7 +1086,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(1), at == 0, relation, apart, endsOf(carriers.get(0)),
                         endsOf(carriers.get(1))), out, settled);
             }
-            return new WhatItLeaves(out, settled);
+            return reachedAlong(new WhatItLeaves(out, settled), past);
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
@@ -1078,7 +1113,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return new WhatItLeaves(out, settled);
             }
             putDown(within.whole(), ofTheWhole, out, settled);
-            return new WhatItLeaves(out, settled);
+            return reachedAlong(new WhatItLeaves(out, settled), past);
         }
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
@@ -1136,7 +1171,56 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        return new WhatItLeaves(out, settled, true, stopped);
+        return reachedAlong(new WhatItLeaves(out, settled, true, stopped), past);
+    }
+
+    /**
+     * {@code shown}, which says what every value of each place does where it gets to this
+     * relation, along a run that works out {@code past} on the way to it: as it is where every
+     * value there is shown to get there, and with none of its places shown undivided where the run
+     * may stop on what nothing here says on a value this relation reads.
+     *
+     * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
+     * none of its places whichever values get there. And no line is drawn where a run may stop:
+     * that is no line of the model, and where it falls is what nothing here says.
+     */
+    private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past) {
+        return mayStopOnWhatItReads(past) ? shown.mayStopBefore(places()) : shown;
+    }
+
+    /**
+     * Whether a run working out {@code past} may stop on what nothing here says on a value this
+     * relation reads: an operator on what no place holds, after which no number is known to take
+     * every value it did, or one tying a place a side reads to others
+     * ({@link DemandReading.Answered#tied}), which the region the relation is read over does not
+     * hold. A side whose places are not known is taken to read any.
+     */
+    private boolean mayStopOnWhatItReads(DemandReading.Answered past) {
+        if (past.unsaid()) {
+            return true;
+        }
+        if (past.tied().isEmpty()) {
+            return false;
+        }
+        List<TermPath> reads = new ArrayList<>();
+        amongThemselves.forEach(each -> reads.add(each.path()));
+        for (Side side : sides) {
+            Optional<List<TermPath>> read = placesRead(side);
+            if (read.isEmpty()) {
+                return true;
+            }
+            reads.addAll(read.get());
+        }
+        for (Set<TermPath> ties : past.tied()) {
+            for (TermPath tie : ties) {
+                for (TermPath at : reads) {
+                    if (overlap(tie, at)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**

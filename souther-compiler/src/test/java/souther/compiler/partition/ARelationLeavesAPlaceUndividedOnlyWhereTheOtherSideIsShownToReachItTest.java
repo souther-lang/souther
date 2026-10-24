@@ -61,6 +61,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String OVER_A_RUN = "over a run";
 
+    private static final String NOT_REACHED = "not reached";
+
     /** Each model measured once for the class: a test asks the words and the classes of one
      *  model, and only reads it. */
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
@@ -163,6 +165,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             String place = line.substring(line.lastIndexOf("about `") + 7, line.length() - 1);
             out.put(place, line.contains("rather than dividing the values here") ? RELATES
                     : line.contains("not shown to reach every value here") ? NOT_SHOWN
+                    : line.contains("not every value here is shown to get to it") ? NOT_REACHED
                     : line.contains("come to rather than about any one of them") ? OVER_A_RUN
                     : line);
         }
@@ -456,6 +459,48 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
         assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen,
                 "a.value + 9223372036854775807 - 9223372036854775807 + b.value >= 30", "a"));
+    }
+
+    /**
+     * A run that may stop before the relation on what no region says leaves no value of what the
+     * relation reads shown to get to it, and the relation is not read as dividing none of them.
+     * A square, a product of the two, a construction refusing nought and a sum in an arm each stop
+     * a run on {@code a} where nothing says, and {@code a} and {@code b} are not shown reached. A
+     * sum a region says, the same arithmetic after the comparison and a stop on a number the
+     * relation does not read leave it relating the two.
+     */
+    @Test
+    void aRunThatMayStopBeforeARelationOnWhatItReadsLeavesNoValueShownToGetThere() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "a: Yen, b: Yen, p: Yen, c: Bool";
+        Map<String, String> notReached = Map.of("a", NOT_REACHED, "b", NOT_REACHED);
+        for (String before : List.of("a.value * a.value", "a.value * b.value",
+                "Yen(a.value - 1)", "if c then a.value + 9223372036854775807 else 0")) {
+            assertEquals(notReached, left(inputs, yen,
+                    "{\n    let before = " + before + "\n    a.value == b.value\n}", "6:13"),
+                    before);
+        }
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left(inputs, yen,
+                "{\n    let before = p.value * p.value\n    a.value == b.value\n}", "6:13"));
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left(inputs, yen,
+                "{\n    let r = a.value == b.value\n    let after = a.value * a.value\n    r\n}",
+                "5:21"));
+        assertEquals(Map.of("a", RELATES), left(inputs, yen,
+                "{\n    let before = a.value + 9223372036854775807\n    a.value == b.value\n}",
+                "6:13"));
+    }
+
+    /**
+     * A relation every row getting to it comes out one way at divides none of its places,
+     * whichever values get there: past {@code a * a}, {@code a >= b} with {@code b} below nought
+     * is true wherever a row arrives.
+     */
+    @Test
+    void aRelationThatComesOutOneWayWhereverARowGetsThereIsNotHeldBackByAStop() {
+        String declared = "data Yen = Int invariant value >= 0\n"
+                + "data Debt = Int invariant value < 0";
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left("a: Yen, b: Debt", declared,
+                "{\n    let before = a.value * a.value\n    a.value >= b.value\n}", "6:13"));
     }
 
     /**
@@ -1050,7 +1095,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         ComparisonAssessment.AgainstAnotherValue both =
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
-                        List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of())
+                        List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
+                        Set.of())
                         .whereRowsArrive(read, List.of(), stoppedShort);
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
