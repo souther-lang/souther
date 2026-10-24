@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -67,7 +68,8 @@ final class NearbyValues {
      */
     static Iterator<ObservedValue> demanded(ObservedValue value, Type type,
                                             RuleReadingContext reading, String parameter,
-                                            List<PieceDemand> demands, List<ObservedValue> row) {
+                                            List<PieceDemand> demands, List<ObservedValue> row,
+                                            Consumer<CompositionBudget> stoppedAt) {
         return of(value, type, reading, TermPath.of(parameter), (prim, leaf, at, view) -> {
             if (prim != Type.Prim.STRING || !(leaf instanceof ObservedValue.Text text)) {
                 return none();
@@ -76,7 +78,7 @@ final class NearbyValues {
                     .filter(each -> withoutNarrowing(each.position()).equals(at)).toList();
             Set<String> offered = new HashSet<>(List.of(text.value()));
             Iterator<String> strings = flat(here.iterator(), demand -> flat(
-                    shapesOf(text.value(), demand, reading, row).iterator(),
+                    shapesOf(text.value(), demand, reading, row, stoppedAt).iterator(),
                     shape -> Partitions.stringsPartedInto(view, reading, demand.attempted(),
                             demand.separator(), shape).iterator()));
             return mapped(filtered(strings, offered::add), ObservedValue.Text::new);
@@ -98,10 +100,12 @@ final class NearbyValues {
      */
     private static List<List<Optional<String>>> shapesOf(String seen, PieceDemand demand,
                                                          RuleReadingContext reading,
-                                                         List<ObservedValue> row) {
+                                                         List<ObservedValue> row,
+                                                         Consumer<CompositionBudget> stoppedAt) {
+        CompositionBudget budget = CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF;
         List<String> pieces = partsOf(seen, demand.separator());
         List<List<Optional<String>>> out = new ArrayList<>();
-        if (pieces.size() <= MOST_PIECES) {
+        if (pieces.size() <= budget.maximum()) {
             for (int changed = 0; changed < pieces.size(); changed++) {
                 out.add(changing(pieces, changed, Optional.empty()));
             }
@@ -109,15 +113,23 @@ final class NearbyValues {
             row.forEach(each -> textsIn(each, held));
             held.removeIf(text -> text.codePoints().anyMatch(each -> each == demand.separator())
                     || !Partitions.pieceAdmits(demand.attempted(), reading, text));
-            for (String text : held.stream().limit(MOST_PIECES).toList()) {
+            if (held.size() > budget.maximum()) {
+                stoppedAt.accept(budget);
+            }
+            for (String text : held.stream().limit(budget.maximum()).toList()) {
                 for (int changed = 0; changed < pieces.size(); changed++) {
                     if (!pieces.get(changed).equals(text)) {
                         out.add(changing(pieces, changed, Optional.of(text)));
                     }
                 }
             }
+        } else {
+            stoppedAt.accept(budget);
         }
-        for (int count = 1; count <= Math.min(pieces.size() + 1, MOST_PIECES); count++) {
+        if (pieces.size() + 1 > budget.maximum()) {
+            stoppedAt.accept(budget);
+        }
+        for (int count = 1; count <= Math.min(pieces.size() + 1, budget.maximum()); count++) {
             out.add(Collections.nCopies(count, Optional.<String>empty()));
         }
         return out;
@@ -173,9 +185,6 @@ final class NearbyValues {
         return new TermPath(position.head(), position.steps().stream()
                 .filter(step -> !(step instanceof TermPath.Step.Refine)).toList());
     }
-
-    /** The most pieces a string put together to meet a body's demand is made of. */
-    private static final int MOST_PIECES = 8;
 
     private static Iterator<ObservedValue> of(ObservedValue value, Type type,
                                               RuleReadingContext reading, TermPath at,

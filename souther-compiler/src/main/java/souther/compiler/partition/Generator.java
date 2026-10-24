@@ -780,6 +780,9 @@ public final class Generator {
                              WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                             // The strings past this many pieces were never offered, so what the
+                             // search came to is about the strings it tried.
+                             PIECES_A_STRING_IS_PUT_TOGETHER_OF,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
                              // The divisors past this one were never asked for, so what the search
@@ -2340,7 +2343,8 @@ public final class Generator {
         }
         return beside(seen, axes, purposes, looking, check, answers,
                 (value, type, reading, parameter) ->
-                        NearbyValues.demanded(value, type, reading, parameter, demands, seen));
+                        NearbyValues.demanded(value, type, reading, parameter, demands, seen,
+                                budget -> looking.composingStopped(List.of(budget.figure()))));
     }
 
     private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,

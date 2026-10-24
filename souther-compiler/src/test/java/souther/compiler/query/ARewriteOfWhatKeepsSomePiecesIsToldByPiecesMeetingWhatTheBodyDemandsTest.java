@@ -164,7 +164,7 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
      */
     @Test
     void aStringOfManyPiecesIsNotMadeOutInFull() {
-        String many = String.join(";", java.util.Collections.nCopies(300, "x"));
+        String many = String.join(";", java.util.Collections.nCopies(12, "x"));
         Collection<Replacements.Searched> came = searchedAll(
                 tags("[^;]+(;[^;]+)*", "(TagList(\"" + many + "\")) -> []"),
                 "example.catalog", "tagsOf");
@@ -172,6 +172,24 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
         assertEquals(List.of(), came.stream()
                 .filter(each -> !(each.disposition() instanceof ReplacementDisposition.Witnessed))
                 .toList(), "every rewrite the rows left open is told apart by a string put together");
+    }
+
+    /**
+     * Where the strings are not made for want of a bound, the rewrite is left undecided and the
+     * figure it stopped at is said, so that a reader knows which to raise.
+     */
+    @Test
+    void aStringPastTheBoundSaysTheFigureItStoppedAt() {
+        String many = "x" + String.join("", java.util.Collections.nCopies(11, ";AB1"));
+        Replacements.Searched came = searched(
+                tags("x(;[A-Z]{2}[0-9])*", "(TagList(\"" + many + "\")) -> [Tag(\"AB1\")]"),
+                "example.catalog", "tagsOf");
+
+        assertInstanceOf(ReplacementDisposition.NoneFound.class, came.disposition(),
+                () -> "no string of the input has a first piece the construction accepts: " + came);
+        assertEquals(true, came.disposition().toString()
+                        .contains("PIECES_A_STRING_IS_PUT_TOGETHER_OF"),
+                () -> "the bound the strings were cut at is said: " + came);
     }
 
     /**
