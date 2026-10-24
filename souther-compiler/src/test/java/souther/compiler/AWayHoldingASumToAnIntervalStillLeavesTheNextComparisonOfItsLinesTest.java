@@ -39,6 +39,10 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
     private static final Pattern A_ROW = Pattern.compile("\\((-?\\d+),\\s*(-?\\d+)\\)");
 
     private static String model(String guards) {
+        return model("a: Int, b: Int", "a, b", guards);
+    }
+
+    private static String model(String parameters, String names, String guards) {
         return """
                 module example.band
 
@@ -46,17 +50,20 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
                 data Mid
                 data High
 
-                behavior band : (a: Int, b: Int) -> Low | Mid | High
+                behavior band : (%s) -> Low | Mid | High
 
-                let band (a, b) = {
+                let band (%s) = {
                 %s
                     Mid
                 }
-                """.formatted(guards);
+                """.formatted(parameters, names, guards);
     }
 
     private static Compilation compiled(String guards) {
-        String source = model(guards);
+        return compiledFrom(model(guards));
+    }
+
+    private static Compilation compiledFrom(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -254,6 +261,26 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
             String report = report(guards);
             assertTrue(report.contains(NOT_READ), guards + "\n" + report);
         }
+    }
+
+    /**
+     * Two numbers the rest of the way holds equal are tied, whatever the sum's guard before it
+     * leaves: {@code b} and {@code c} from minus one to nought and equal have {@code a} at nought
+     * below {@code a + b + c < 0} at no row that holds {@code a + b + c >= -1}, and the numbers
+     * are not read as though {@code b} could stand where {@code c} does not.
+     */
+    @Test
+    void twoNumbersTheRestOfTheWayHoldsEqualAreStillTied() {
+        String guards = "    guard b >= -1 else Low\n    guard b <= 0 else Low\n"
+                + "    guard c >= -1 else Low\n    guard c <= 0 else Low\n"
+                + "    guard b == c else Low\n"
+                + "    guard a + b + c >= -1 else Low\n    guard a + b + c < 0 else High";
+        String source = model("a: Int, b: Int, c: Int", "a, b, c", guards);
+        List<String> text = source.lines().toList();
+        int second = 1 + text.indexOf(text.stream().filter(each -> each.contains("a + b + c < 0"))
+                .findFirst().orElseThrow());
+        String report = report(compiledFrom(source));
+        assertTrue(report.contains(NOT_READ + "@" + second + ":"), report);
     }
 
     /** A way that does not hold on both sides of the line, as far from it as a row beside it can

@@ -10,7 +10,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,11 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * with the way — for every value a row has — and no line is drawn between values where one of
  * them has no row.
  *
- * <p>Held here by a walk of every pair of values over a small run, for the way
- * {@code least <= w1 * a + w2 * b <= most} and the relation {@code w1 * a + w2 * b < below}, where
- * the interval reaches as far from the line as the greatest weight: the premise, that a value
- * with a row is classed the same with the way as without it; and what the relation's reading
- * answers for the terms without it, which is that class.
+ * <p>Held here by a walk of every row over small runs, for the way
+ * {@code least <= w1 * a + w2 * b} and the relation {@code w1 * a + w2 * b < below}, where the
+ * interval reaches as far from the line as the greatest weight: the premise, that a value with a
+ * row is classed the same with the way as without it; what the relation's reading answers for the
+ * terms without it, which is that class, and that it answers for every value with a row where the
+ * terms are weighed one and minus one; and, over three terms, that two of them the rest of the
+ * way holds to one another are not read as though each could stand where the other does not.
  */
 class ATermReadWithoutAWayARowBesideTheLineMeetsIsClassedAsTheWayClassesItTest {
 
@@ -39,6 +41,8 @@ class ATermReadWithoutAWayARowBesideTheLineMeetsIsClassedAsTheWayClassesItTest {
     private static final int TYPE = 1000;
 
     private static final int[][] WEIGHTS = {{1, 1}, {1, -1}, {-1, 1}, {2, 1}, {1, -2}, {3, 2}};
+
+    private static final int[][] UNIT_WEIGHTS = {{1, 1}, {1, -1}, {-1, 1}};
 
     private enum Class { TRUE, FALSE, EITHER }
 
@@ -61,7 +65,11 @@ class ATermReadWithoutAWayARowBesideTheLineMeetsIsClassedAsTheWayClassesItTest {
     }
 
     private static int reach(int[] weights) {
-        return Math.max(Math.abs(weights[0]), Math.abs(weights[1]));
+        int greatest = 0;
+        for (int each : weights) {
+            greatest = Math.max(greatest, Math.abs(each));
+        }
+        return greatest;
     }
 
     /** Whether the way holds the form on both sides of the line as far as a row beside it
@@ -115,19 +123,24 @@ class ATermReadWithoutAWayARowBesideTheLineMeetsIsClassedAsTheWayClassesItTest {
                 Endpoint.inclusive(Count.of(high)));
     }
 
-    private static WhatARelationLeavesUndivided.Term<String> term(String place, long weight) {
-        NumericDomain.Bounds held = run(-ENDS, ENDS);
+    private static WhatARelationLeavesUndivided.Term<String> term(String place, long weight,
+                                                                 int low, int high) {
+        NumericDomain.Bounds held = run(low, high);
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), held,
                 held, null, true, Granularity.DISCRETE, run(-TYPE, TYPE));
     }
 
-    /** What the terms are read to leave of {@code value} of the term at {@code at}, or null where
-     *  nothing is shown of it. */
-    private static Class read(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
-                              int below, int value) {
-        WhatARelationLeavesUndivided.Leaves leaves = WhatARelationLeavesUndivided.leavesOf(terms,
-                at, ExactRatio.of(-below), Rel.LT, String::equals, (one, other) -> true,
-                Granularity.DISCRETE, BigInteger.valueOf(TYPE));
+    /** What the terms are read to leave of the term at {@code at}, or null where nothing is
+     *  shown of it. */
+    private static WhatARelationLeavesUndivided.Leaves leaves(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, int below,
+            WhatARelationLeavesUndivided.Independence independent) {
+        return WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(-below), Rel.LT,
+                String::equals, independent, Granularity.DISCRETE, BigInteger.valueOf(TYPE));
+    }
+
+    /** What {@code leaves} says of {@code value}: null where nothing is shown. */
+    private static Class classOf(WhatARelationLeavesUndivided.Leaves leaves, int value) {
         if (leaves == null) {
             return null;
         }
@@ -155,34 +168,124 @@ class ATermReadWithoutAWayARowBesideTheLineMeetsIsClassedAsTheWayClassesItTest {
         int shown = 0;
         for (int[] weights : WEIGHTS) {
             List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
-                    term("a", weights[0]), term("b", weights[1]));
+                    term("a", weights[0], -ENDS, ENDS), term("b", weights[1], -ENDS, ENDS));
             for (int below = -3 * ENDS; below <= 3 * ENDS; below++) {
+                // The relation's reading is the same whatever the way, so one way is asked
+                // for every line: a sum at least as far below the line as a row beside it
+                // reaches, and none above.
+                int least = below - reach(weights);
                 for (int at = 0; at < 2; at++) {
-                    List<Class> read = new ArrayList<>();
+                    WhatARelationLeavesUndivided.Leaves leaves = leaves(terms, at, below,
+                            (one, other) -> true);
                     for (int value = -ENDS; value <= ENDS; value++) {
-                        read.add(read(terms, at, below, value));
-                    }
-                    // The relation's reading is the same whatever the way, so one way is asked
-                    // for every line: a sum at least as far below the line as a row beside it
-                    // reaches, and none above.
-                    int least = below - reach(weights);
-                    for (int i = 0; i < read.size(); i++) {
-                        int value = i - ENDS;
+                        Class read = classOf(leaves, value);
                         Class here = walk(weights, at, value, least, Integer.MAX_VALUE, below);
-                        if (read.get(i) == null || here == null) {
+                        if (read == null || here == null) {
                             continue;
                         }
                         shown++;
-                        assertEquals(here, read.get(i), "weights " + weights[0] + ", "
-                                + weights[1] + " below " + below + " term " + at + " at " + value);
-                        if (i + 1 < read.size() && read.get(i + 1) != null
-                                && read.get(i) != read.get(i + 1)) {
-                            assertNotNull(walk(weights, at, value, least, Integer.MAX_VALUE,
-                                            below),
-                                    "a line after " + value + " with no row at it");
+                        assertEquals(here, read, "weights " + weights[0] + ", " + weights[1]
+                                + " below " + below + " term " + at + " at " + value);
+                        Class next = classOf(leaves, value + 1);
+                        if (value < ENDS && next != null && read != next) {
+                            assertNotNull(here, "a line after " + value + " with no row at it");
                             assertNotNull(walk(weights, at, value + 1, least, Integer.MAX_VALUE,
                                             below),
                                     "a line before " + (value + 1) + " with no row at it");
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(shown > 0, "some value is shown");
+    }
+
+    /**
+     * Where the terms are weighed one and minus one, a value with a row is read: the terms are
+     * read without the way for the lines of the relation, and one value of a term that has a row
+     * and is not shown is a line the reading would miss.
+     */
+    @Test
+    void everyValueWithARowIsReadWhereTheTermsAreWeighedOneAndMinusOne() {
+        for (int[] weights : UNIT_WEIGHTS) {
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("a", weights[0], -ENDS, ENDS), term("b", weights[1], -ENDS, ENDS));
+            for (int below = -2 * ENDS; below <= 2 * ENDS; below++) {
+                int least = below - reach(weights);
+                for (int at = 0; at < 2; at++) {
+                    WhatARelationLeavesUndivided.Leaves leaves = leaves(terms, at, below,
+                            (one, other) -> true);
+                    for (int value = -ENDS; value <= ENDS; value++) {
+                        if (walk(weights, at, value, least, Integer.MAX_VALUE, below) != null) {
+                            assertNotNull(classOf(leaves, value), "weights " + weights[0] + ", "
+                                    + weights[1] + " below " + below + " term " + at + " at "
+                                    + value + " has a row and is not read");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** What the relation comes to over the rows of three numbers from {@code runs}, two of which
+     *  are held equal, that hold the sum at {@code least} or more, among those whose number at
+     *  {@code at} is {@code value}; null where there is none. */
+    private static Class walkThree(int[][] runs, int[] tied, int at, int value, int least,
+                                   int below) {
+        boolean holds = false;
+        boolean fails = false;
+        for (int a = runs[0][0]; a <= runs[0][1]; a++) {
+            for (int b = runs[1][0]; b <= runs[1][1]; b++) {
+                for (int c = runs[2][0]; c <= runs[2][1]; c++) {
+                    int[] row = {a, b, c};
+                    int sum = a + b + c;
+                    if (row[at] != value || row[tied[0]] != row[tied[1]] || sum < least) {
+                        continue;
+                    }
+                    holds |= sum < below;
+                    fails |= sum >= below;
+                }
+            }
+        }
+        return !holds && !fails ? null : holds && fails ? Class.EITHER
+                : holds ? Class.TRUE : Class.FALSE;
+    }
+
+    /**
+     * Two of three terms the way holds equal to each other are tied, and neither is read as a term
+     * that stands where it may whatever the other is: {@code a + b + c < 0} after
+     * {@code a + b + c >= -1}, {@code b} and {@code c} from minus one to nought and equal, has
+     * {@code a} at nought below the line at no row, and the terms are read without the sum's
+     * statement but not without the equality.
+     */
+    @Test
+    void twoTermsTheRestOfTheWayHoldsToEachOtherAreNotReadAsFree() {
+        int[][][] allRuns = {{{-4, 4}, {-1, 0}, {-1, 0}}, {{-1, 0}, {-4, 4}, {-1, 0}},
+                {{-3, 3}, {-3, 3}, {-3, 3}}, {{-2, 2}, {-1, 1}, {0, 3}}};
+        int[][] allTied = {{1, 2}, {0, 1}, {0, 2}};
+        int shown = 0;
+        for (int[][] runs : allRuns) {
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("a", 1, runs[0][0], runs[0][1]), term("b", 1, runs[1][0], runs[1][1]),
+                    term("c", 1, runs[2][0], runs[2][1]));
+            for (int[] tied : allTied) {
+                WhatARelationLeavesUndivided.Independence independent = (one, other) ->
+                        !(Math.min(one, other) == tied[0] && Math.max(one, other) == tied[1]);
+                for (int below = -6; below <= 6; below++) {
+                    int least = below - 1;
+                    for (int at = 0; at < 3; at++) {
+                        WhatARelationLeavesUndivided.Leaves leaves = leaves(terms, at, below,
+                                independent);
+                        for (int value = runs[at][0]; value <= runs[at][1]; value++) {
+                            Class read = classOf(leaves, value);
+                            Class here = walkThree(runs, tied, at, value, least, below);
+                            if (read == null || here == null) {
+                                continue;
+                            }
+                            shown++;
+                            assertEquals(here, read, "runs " + Arrays.deepToString(runs)
+                                    + " tied " + tied[0] + ", " + tied[1] + " below " + below
+                                    + " term " + at + " at " + value);
                         }
                     }
                 }

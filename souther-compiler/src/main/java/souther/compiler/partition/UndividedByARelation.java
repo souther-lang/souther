@@ -1061,7 +1061,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
         // other reading is: they speak of the whole of what the way leaves, and a row beside the
-        // line is not that.
+        // line is not that. What is left of the way still ties the terms it ties: a witness is a
+        // term nothing ties to any other, so two terms the rest of the way holds to one another
+        // are neither of them one, and a value is settled only over every value the others may
+        // hold, which a tie among them cannot widen.
         List<TakenConstraint.Affine> met = offItsLine ? List.of()
                 : metByARowAtTheLine(unfree, past.narrowing());
         WayRead beside = met.isEmpty() ? entire : wayRead(
