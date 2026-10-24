@@ -267,17 +267,14 @@ final class CoupledCardinalityComposer {
                                                 NumericSet size, Type sourceType,
                                                 Shape.Sequence holding, Quantities measuring,
                                                 SearchRegion within, RuleReadingContext reading) {
-        NumericDomain.Bounds run = switch (within.projectionOf(coupled.number())) {
+        // Where the region leaves the number nothing, no element can be, which is no end of what
+        // can be composed: the container of none is still one.
+        WholeNumbersLeft domain = switch (within.projectionOf(coupled.number())) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    held == null ? NumericDomain.Bounds.OPEN : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
-            case null -> NumericDomain.Bounds.OPEN;
+                    WholeNumbersLeft.of(held == null ? NumericDomain.Bounds.OPEN : held);
+            case NumericDomain.FormProjection.NothingIsLeft _ -> WholeNumbersLeft.NONE;
+            case null -> WholeNumbersLeft.EVERY;
         };
-        if (run == null) {
-            return CardinalityComposer.none("no value of `" + coupled.number() + "` is left for the"
-                    + " elements of `" + container + "`");
-        }
-        WholeNumbersLeft domain = WholeNumbersLeft.of(run);
         if (domain == null) {
             return null;
         }
@@ -362,7 +359,6 @@ final class CoupledCardinalityComposer {
         private final Map<String, ListedAt> listings = new HashMap<>();
         private List<ObservedValue> keptValues;
         private boolean keptValuesAsked;
-        private ElementValues anyListing;
 
         private final List<FixtureTemplate> built = new ArrayList<>();
         private boolean stoppedEarly;
@@ -402,15 +398,46 @@ final class CoupledCardinalityComposer {
         private record ListedAt(List<ObservedValue> values, boolean all) {}
 
         TermRealizations.Realization run() {
+            // The container of none needs no element, so it is looked at before anything of one.
+            boolean room = size == null || size.holds(Count.of(0), Carrier.WHOLE);
+            boolean none = room && meetsEveryCount(List.of());
+            if (none && offer(List.of())) {
+                stoppedEarly = true;
+            }
+            boolean elements = !stoppedEarly && walkTheElements();
+            if (elements && !stoppedEarly) {
+                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+            }
+            CompositionShortfall shortfall = CompositionShortfall.of(refused, unnamed, unheld);
+            if (!built.isEmpty()) {
+                return new TermRealizations.Realization.Built(built, shortfall);
+            }
+            if (!shortfall.figures().isEmpty()) {
+                return new TermRealizations.Realization.Stopped(shortfall);
+            }
+            if (!shortfall.nothing()) {
+                return new TermRealizations.Realization.Unexhausted(shortfall, "what an element of `"
+                        + container + "` answers turns on the total of `" + number + "`, and no"
+                        + " container this composed meets the counts");
+            }
+            return CardinalityComposer.none("no container of `" + container + "` meets the counts:"
+                    + " no whole number is left for its elements, and the container of none does"
+                    + " not meet them");
+        }
+
+        /**
+         * Looks for containers of one element or more. False where there is no element to choose
+         * the values of, and nothing was left unsaid about why.
+         */
+        private boolean walkTheElements() {
             BigInteger placeholder = domain.one();
             if (placeholder == null) {
-                return CardinalityComposer.none("no whole number is left for the elements of `"
-                        + container + "`");
+                return false;
             }
             ListedAt first = listed(placeholder, 0);
             if (first == null || first.values().isEmpty()) {
-                return CardinalityComposer.notChosen("an element of `" + container + "` has a part"
-                        + " whose values are neither one of so many nor numbers the statements part");
+                unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+                return false;
             }
             if (!first.all()) {
                 refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
@@ -423,25 +450,48 @@ final class CoupledCardinalityComposer {
             if (!kinds.isEmpty()) {
                 walk(kinds);
             }
-            if (!stoppedEarly) {
-                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+            return true;
+        }
+
+        /** Whether a container of these elements meets every count, read whole. */
+        private boolean meetsEveryCount(List<ObservedValue> values) {
+            BorderQuantity.Observation whole = observing(values);
+            for (CardinalityComposer.Asked each : counts) {
+                if (!(each.over(container, List.of(), whole)
+                        instanceof AStatementAtARow.Answer.Holds)) {
+                    return false;
+                }
             }
-            CompositionShortfall shortfall = CompositionShortfall.of(refused, unnamed, unheld);
-            if (!built.isEmpty()) {
-                return new TermRealizations.Realization.Built(built, shortfall);
+            return true;
+        }
+
+        /**
+         * Writes rows holding a container of these elements, and keeps what they said of what was
+         * not reached. True once as many have been offered as are to be.
+         */
+        private boolean offer(List<ObservedValue> values) {
+            TermRealizations.Realization rows =
+                    standing.written(values, MOST_OFFERED - built.size());
+            if (rows instanceof TermRealizations.Realization.Built offered) {
+                offered.values().forEach(built::add);
             }
-            if (!shortfall.figures().isEmpty()) {
-                return new TermRealizations.Realization.Stopped(shortfall);
+            if (rows != null) {
+                CompositionShortfall met = rows.shortfall();
+                refused.addAll(met.figures());
+                unnamed.addAll(met.populations());
+                unheld.addAll(met.unheld());
             }
-            return new TermRealizations.Realization.Unexhausted(shortfall, "what an element of `"
-                    + container + "` answers turns on the total of `" + number + "`, and no"
-                    + " container this composed meets the counts");
+            if (built.size() >= MOST_OFFERED) {
+                refused.add(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
+                return true;
+            }
+            return false;
         }
 
         /** A row holding a container of these elements, with the numbers beside them written. */
         private BorderQuantity.Observation observing(List<ObservedValue> values) {
             return standing.read(CardinalityComposer.withNumbersBeside(
-                    anyListing.holding(sourceType, values), written));
+                    ElementValues.holding(container, reading, sourceType, values), written));
         }
 
         // ---- the element's other positions
@@ -486,7 +536,6 @@ final class CoupledCardinalityComposer {
             if (listing == null) {
                 return null;
             }
-            anyListing = listing;
             ListedAt out = new ListedAt(listing.listed().values(), listing.listed().all());
             listings.put(key, out);
             return out;
@@ -546,6 +595,11 @@ final class CoupledCardinalityComposer {
                 ExactRatio weight = relation.onElement().isZero() ? relation.onTotal()
                         : relation.onElement();
                 if (weight.isZero()) {
+                    // Neither the number nor the total is in it: the relation stands this way
+                    // everywhere or nowhere, and a way it never stands is no cell.
+                    if (!outcome.region().holds(relation.constant().signum())) {
+                        return null;
+                    }
                     continue;
                 }
                 Rel region = weight.signum() < 0 ? outcome.region().turned() : outcome.region();
@@ -702,7 +756,8 @@ final class CoupledCardinalityComposer {
             // cannot give a count asked for is dropped before the kinds after it are given any.
             SharingsAmongKinds sharings =
                     new SharingsAmongKinds(meets, asked, coupled.keptCount(), MOST_SHARES);
-            for (int held = 0; held <= MOST_ELEMENTS && !stoppedEarly; held++) {
+            // The container of none is looked at before this, apart from any element.
+            for (int held = 1; held <= MOST_ELEMENTS && !stoppedEarly; held++) {
                 if (size != null && !size.holds(Count.of(held), Carrier.WHOLE)) {
                     continue;
                 }
@@ -763,46 +818,17 @@ final class CoupledCardinalityComposer {
                 return true;
             }
             List<Integer> active = new ArrayList<>();
-            int held = 0;
             for (int kind = 0; kind < sharing.length; kind++) {
                 if (sharing[kind] > 0) {
                     active.add(kind);
-                    held += sharing[kind];
                 }
             }
-            List<BigInteger> totals = held == 0 ? List.of(BigInteger.ZERO)
-                    : totalsOf(kinds, sharing, active);
-            for (BigInteger total : totals) {
+            for (BigInteger total : totalsOf(kinds, sharing, active)) {
                 for (int[] count : counted) {
                     List<ObservedValue> values = valuesOf(kinds, sharing, active, total, count);
-                    if (values == null) {
-                        continue;
+                    if (values != null && meetsEveryCount(values)) {
+                        return !offer(values);
                     }
-                    BorderQuantity.Observation whole = observing(values);
-                    boolean every = true;
-                    for (CardinalityComposer.Asked each : counts) {
-                        every &= each.over(container, List.of(), whole)
-                                instanceof AStatementAtARow.Answer.Holds;
-                    }
-                    if (!every) {
-                        continue;
-                    }
-                    TermRealizations.Realization rows =
-                            standing.written(values, MOST_OFFERED - built.size());
-                    if (rows instanceof TermRealizations.Realization.Built offered) {
-                        offered.values().forEach(built::add);
-                    }
-                    if (rows != null) {
-                        CompositionShortfall met = rows.shortfall();
-                        refused.addAll(met.figures());
-                        unnamed.addAll(met.populations());
-                        unheld.addAll(met.unheld());
-                    }
-                    if (built.size() >= MOST_OFFERED) {
-                        refused.add(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
-                        return false;
-                    }
-                    return true;
                 }
             }
             return true;

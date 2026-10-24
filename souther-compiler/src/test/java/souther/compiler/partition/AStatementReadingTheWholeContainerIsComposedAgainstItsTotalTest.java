@@ -339,6 +339,23 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
         assertTrue(counts.contains(1L), counts::toString);
     }
 
+    /**
+     * A relation that reads nothing of the container once the number beside it is fixed stands
+     * the same way for every element, so it is a truth of the row: here the same number above
+     * three, asked in the statement and outside it, and the rows composed are those of the
+     * statement without it. (A way of standing the relation never has is dropped before the
+     * sharings are looked at, which saves figures and changes no row.)
+     */
+    @Test
+    void aRelationOfNothingInTheContainerIsATruthOfTheRow() {
+        String source = source(PLAIN, K_AND_FS, "if k > 3 && " + listCount("k > 3 && " + HALF)
+                + " == 1 then 1 else 0");
+        Set<Long> counts = rowsComposedHold(source,
+                row -> row.k() > 3 && row.k() > 3 && elementsAboveHalf(row) == 1 ? 1 : 0,
+                row -> row.k() > 3 ? elementsAboveHalf(row) : 0);
+        assertTrue(counts.contains(1L), counts::toString);
+    }
+
     /** Two counts asked together are composed together. */
     @Test
     void twoCountsAskedTogetherAreComposedTogether() {
