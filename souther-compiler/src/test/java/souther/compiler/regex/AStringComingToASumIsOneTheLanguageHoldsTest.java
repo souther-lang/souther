@@ -171,9 +171,9 @@ class AStringComingToASumIsOneTheLanguageHoldsTest {
      */
     @Test
     void theSumsAndLengthsLieBetweenTheLeastAndTheGreatestAStringComesTo() {
-        assertEquals(new Language.Ends(3 * '0', (long) 3 * '3'),
+        assertEquals(new Language.Ends(3 * '0', 3L * '3'),
                 language("[0-3]{3}").sumsOfCodePoints());
-        assertEquals(new Language.Ends('a', (long) 3 * 'c'),
+        assertEquals(new Language.Ends('a', 3L * 'c'),
                 language("[ac]{1,3}").sumsOfCodePoints());
         assertEquals(new Language.Ends(0, 2L * 'a'),
                 language("[\\x{0}a]{2}").sumsOfCodePoints());
