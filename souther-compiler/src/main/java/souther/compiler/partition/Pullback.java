@@ -5704,6 +5704,7 @@ final class Pullback {
         private final boolean onWhatNoPlaceHolds;
         private final Completion.WhereTheAnswerFits completion;
         private final Core within;
+        private final Core startedIn;
         private final Map<Core, InputReads> readsAt;
 
         /**
@@ -5719,11 +5720,18 @@ final class Pullback {
         StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
                        Completion.WhereTheAnswerFits completion, Core within,
                        Map<Core, InputReads> readsAt) {
+            this(operation, places, onWhatNoPlaceHolds, completion, within, within, readsAt);
+        }
+
+        private StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
+                               Completion.WhereTheAnswerFits completion, Core within,
+                               Core startedIn, Map<Core, InputReads> readsAt) {
             this.operation = Objects.requireNonNull(operation, "some operator is owed");
             this.places = Set.copyOf(places);
             this.onWhatNoPlaceHolds = onWhatNoPlaceHolds;
             this.completion = Objects.requireNonNull(completion, "it answers somewhere");
             this.within = Objects.requireNonNull(within, "it stands somewhere");
+            this.startedIn = Objects.requireNonNull(startedIn, "and was met somewhere");
             this.readsAt = Objects.requireNonNull(readsAt, "names are read somehow");
         }
 
@@ -5751,13 +5759,17 @@ final class Pullback {
          *  name it is handed may be bound in a part of the body read apart from this one. */
         StopObligation readIn(Core body) {
             return new StopObligation(operation, places, onWhatNoPlaceHolds, completion, body,
-                    readsAt);
+                    startedIn, readsAt);
         }
 
-        /** How names read at {@code node} are read there, or null where the walk did not reach
-         *  it. */
+        /**
+         * How names read at {@code node} are read there: as the walk that met this read them, or
+         * where it did not reach the node — a part of the body read apart from this one — as they
+         * are read where that walk started, which every name of the input is read under alike.
+         */
         InputReads readsAt(Core node) {
-            return readsAt.get(node);
+            InputReads met = readsAt.get(node);
+            return met != null ? met : readsAt.get(Core.withoutStanding(startedIn));
         }
     }
 
