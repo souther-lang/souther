@@ -489,7 +489,7 @@ final class LibraryEndings {
                                                   Map<BindingId, Integer> parts,
                                                   Map<BindingId, Added> added,
                                                   Map<Integer, BigInteger> mostAdded) {
-            switch (body) {
+            return switch (body) {
                 case Hir.LetIn let -> {
                     BindingId name = let.binder().binding();
                     Integer part = partRead(let.value(), carried, counts, parts);
@@ -502,43 +502,48 @@ final class LibraryEndings {
                         added.put(name, sum);
                         mostAdded.merge(sum.part(), sum.by(), BigInteger::max);
                     } else if (!of(let.value()).endsNone()) {
-                        return false;
+                        yield false;
                     }
-                    return answersWhatItCarriedGrown(let.body(), carried, counts, parts, added,
+                    yield answersWhatItCarriedGrown(let.body(), carried, counts, parts, added,
                             mostAdded);
                 }
-                case Hir.If fork -> {
-                    return of(fork.cond()).endsNone()
-                            && answersWhatItCarriedGrown(fork.then(), carried, counts, parts,
-                                    added, mostAdded)
-                            && answersWhatItCarriedGrown(fork.els(), carried, counts, parts,
-                                    added, mostAdded);
-                }
-                case Hir.Tuple tuple -> {
-                    if (tuple.elements().size() != counts.size()) {
-                        return false;
-                    }
-                    for (int at = 0; at < counts.size(); at++) {
-                        Hir.Expr each = tuple.elements().get(at);
-                        boolean grown = counts.get(at).aNumber()
-                                ? isPart(each, at, parts)
-                                        || addedTo(each, at, added, counts, parts, mostAdded)
-                                : isPart(each, at, parts) || putInOne(each, at, parts);
-                        if (!grown) {
-                            return false;
-                        }
-                    }
-                    return true;
-                }
+                case Hir.If fork -> of(fork.cond()).endsNone()
+                        && answersWhatItCarriedGrown(fork.then(), carried, counts, parts,
+                                added, mostAdded)
+                        && answersWhatItCarriedGrown(fork.els(), carried, counts, parts,
+                                added, mostAdded);
+                case Hir.Tuple tuple -> grownPartByPart(tuple, counts, parts, added, mostAdded);
                 default -> {
                     if (counts.size() != 1 || counts.getFirst().aNumber()) {
-                        return false;
+                        yield false;
                     }
                     Map<BindingId, Integer> whole = new HashMap<>(parts);
                     carried.forEach(name -> whole.put(name, 0));
-                    return isPart(body, 0, whole) || putInOne(body, 0, whole);
+                    yield isPart(body, 0, whole) || putInOne(body, 0, whole);
+                }
+            };
+        }
+
+        /** Whether {@code tuple} answers each part of what is carried grown as
+         *  {@link #walksNoFurtherThanItsList} says. */
+        private boolean grownPartByPart(Hir.Tuple tuple, List<Carried> counts,
+                                        Map<BindingId, Integer> parts,
+                                        Map<BindingId, Added> added,
+                                        Map<Integer, BigInteger> mostAdded) {
+            if (tuple.elements().size() != counts.size()) {
+                return false;
+            }
+            for (int at = 0; at < counts.size(); at++) {
+                Hir.Expr each = tuple.elements().get(at);
+                boolean grown = counts.get(at).aNumber()
+                        ? isPart(each, at, parts)
+                                || addedTo(each, at, added, counts, parts, mostAdded)
+                        : isPart(each, at, parts) || putInOne(each, at, parts);
+                if (!grown) {
+                    return false;
                 }
             }
+            return true;
         }
 
         /** Whether {@code read} reads what is carried, under one of {@code carried}. */
@@ -641,47 +646,38 @@ final class LibraryEndings {
          */
         GetsPast.AnswerSize.SumOf answerOfTheBody(Hir.FnDef declaration, Hir.Expr e,
                                                     Type answer) {
-            switch (e) {
-                case Hir.LetIn let -> {
-                    return of(let.value()).endsNone()
-                            ? answerOfTheBody(declaration, let.body(), answer) : null;
-                }
-                case Hir.If fork -> {
-                    return of(fork.cond()).endsNone()
-                            ? either(answerOfTheBody(declaration, fork.then(), answer),
-                                    answerOfTheBody(declaration, fork.els(), answer))
-                            : null;
-                }
+            return switch (e) {
+                case Hir.LetIn let -> of(let.value()).endsNone()
+                        ? answerOfTheBody(declaration, let.body(), answer) : null;
+                case Hir.If fork -> of(fork.cond()).endsNone()
+                        ? either(answerOfTheBody(declaration, fork.then(), answer),
+                                answerOfTheBody(declaration, fork.els(), answer))
+                        : null;
                 case Hir.Match match -> {
                     if (!of(match.scrutinee()).endsNone() || match.cases().isEmpty()) {
-                        return null;
+                        yield null;
                     }
                     GetsPast.AnswerSize.SumOf out = null;
                     for (Hir.Case arm : match.cases()) {
                         GetsPast.AnswerSize.SumOf one =
                                 answerOfTheBody(declaration, arm.body(), answer);
                         if (one == null) {
-                            return null;
+                            yield null;
                         }
                         out = out == null ? one : either(out, one);
                     }
-                    return out;
+                    yield out;
                 }
-                case Hir.Binary binary -> {
-                    return ofTheParameters(declaration,
-                            AbortSites.completionOfAnOperator(binary.op(), answer),
-                            List.of(binary.left(), binary.right()));
-                }
+                case Hir.Binary binary -> ofTheParameters(declaration,
+                        AbortSites.completionOfAnOperator(binary.op(), answer),
+                        List.of(binary.left(), binary.right()));
                 case Hir.Apply apply when apply.function() instanceof Hir.Var.Denoting callee
                         && callee.reachedAs() instanceof ReachName.OfLibrary called
-                        && library.intrinsicOf(called.denotes()) != null -> {
-                    return ofTheParameters(declaration, KernelContracts.completionOf(
-                            library.intrinsicOf(called.denotes()).kernel()), apply.args());
-                }
-                default -> {
-                    return null;
-                }
-            }
+                        && library.intrinsicOf(called.denotes()) != null ->
+                        ofTheParameters(declaration, KernelContracts.completionOf(
+                                library.intrinsicOf(called.denotes()).kernel()), apply.args());
+                default -> null;
+            };
         }
 
         /**
