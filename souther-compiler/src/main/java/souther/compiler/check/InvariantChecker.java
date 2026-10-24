@@ -845,6 +845,7 @@ public final class InvariantChecker {
         // answer is not in this reading at all.
         Set<RuleKey> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
+        List<WorkedClause> worked = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
         // Per part, because a rule is represented where every part of it is: a conjunct the bounds
@@ -939,8 +940,9 @@ public final class InvariantChecker {
                                 .put(of.at(), new PartAsRead(of, partRead(came))));
                 owed = owed == null ? said : owed.and(said);
             }
+            worked.add(new WorkedClause(written.size(), view));
             written.add(new Written(new ReadingId(written.size()), stated, view, constrained,
-                    Map.of()));
+                    Map.of(), Map.of()));
             if (owed == null) {
                 owed = Predicates.Owed.unread();
             }
@@ -969,6 +971,39 @@ public final class InvariantChecker {
                 k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                         atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
                         k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
+            }
+        }
+        // A value is one the clauses are worked out of and come to true, which the forms they came
+        // to do not say: they are the clauses over the whole numbers. What a run needs of the
+        // numbers to work each part out is kept with the reading, for the projection and for what
+        // is shown to exist. And it limits the values themselves only where it leaves none: a sum
+        // that fits wherever the clause holds draws no line of its own. Asked once the fields' own
+        // types are in, so that what a type already holds is not asked of a clause again.
+        ClauseWorkingOut working = new ClauseWorkingOut(c.completion, c.predicates, k,
+                c.terms::inside);
+        Known workedOut = k;
+        for (WorkedClause each : worked) {
+            Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> needs = new LinkedHashMap<>();
+            for (Clauses.StatedPart part : each.view().present()) {
+                WorkingOutNeeds asked = working.of(part.of(), at);
+                needs.put(part.id(), asked);
+                for (NumericConstraint one : asked.asked()) {
+                    workedOut = workedOut.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
+                            c.terms.kindsOf(one.form()));
+                }
+            }
+            written.set(each.reading(), written.get(each.reading()).alsoWorkedOut(needs));
+        }
+        if (workedOut.reachesNothing() && !k.reachesNothing()) {
+            k = workedOut;
+            for (Written each : written) {
+                each.view().present().forEach(part -> {
+                    WorkingOutNeeds asked = each.workedOutAt(part.id());
+                    if (asked != null) {
+                        asked.asked().forEach(one -> one.atoms()
+                                .forEach(spoken -> took.record(part.id().rule(), spoken)));
+                    }
+                });
             }
         }
         Map<RuleKey, FactSubject> atoms = new LinkedHashMap<>();
@@ -1641,10 +1676,12 @@ public final class InvariantChecker {
     record Written(ReadingId opened, Core clause, ClauseView view,
                    Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, PartAsRead>>
                            constrained,
-                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted) {
+                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted,
+                   Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> workedOut) {
 
         Written {
             constrained = Map.copyOf(constrained);
+            workedOut = Map.copyOf(workedOut);
         }
 
         /**
@@ -1669,7 +1706,25 @@ public final class InvariantChecker {
             if (authored.isEmpty()) {
                 throw new IllegalArgumentException("a clause reaching a value is written in parts");
             }
-            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of());
+            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of(),
+                    Map.of());
+        }
+
+        /**
+         * The same reading, with what a run needs of the numbers to work each of its parts out.
+         *
+         * <p>Held by the reading it is an account of, for the reason {@link #alsoAdopting} is: it is
+         * read once what holds where the value is built is known, which is after the reading of the
+         * clause was made.
+         */
+        Written alsoWorkedOut(Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> needs) {
+            return new Written(opened, clause, view, constrained, adopted, needs);
+        }
+
+        /** What a run needs to work the part {@code part} out, or null where this reading did not
+         *  ask — which is not the same as its needing nothing. */
+        WorkingOutNeeds workedOutAt(PartId<RuleRef.Invariant> part) {
+            return workedOut.get(part);
         }
 
         /**
@@ -1685,7 +1740,7 @@ public final class InvariantChecker {
             Map<ClauseOccurrence, ReadByClauses.OfAPart> out = new LinkedHashMap<>();
             account.forEach(each -> out.put(each.getKey(), each.getValue()));
             return new Written(opened, clause, view, constrained,
-                    Collections.unmodifiableMap(out));
+                    Collections.unmodifiableMap(out), workedOut);
         }
 
         /** What this reading made of the part at {@code at}, or null where it read no such part —
@@ -2042,6 +2097,15 @@ public final class InvariantChecker {
             stated = List.copyOf(stated);
         }
     }
+
+    /**
+     * One clause of a declaration as it was read, kept until the fields' types are in and what a
+     * run needs of the numbers to work it out can be told from what those already hold.
+     *
+     * @param reading which of the readings it is, where what that comes to is filed
+     * @param view    the parts it was written in
+     */
+    private record WorkedClause(int reading, ClauseView view) {}
 
     /**
      * One occurrence of a part as that reading read it: the shape it is, and what the reading made
