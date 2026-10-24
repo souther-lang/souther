@@ -213,7 +213,7 @@ public final class Replacements {
             int runs = db.ask(new Front.Adequacy()).value().measures().rewriteRuns();
             FillResult composed = here.searchedFor(GenerationPlan.of(here.subject(), List.of(),
                     List.of(), List.of(), List.of(), open,
-                    new RewriteSearch(RewriteSearch.For.THE_MEASURE, runs, here.demands())));
+                    new RewriteSearch(RewriteSearch.For.THE_MEASURE, runs)));
             Map<Replacement, Searched> out = new LinkedHashMap<>();
             for (ReplacementOwed each : open) {
                 ReplacementDisposition came = composed.discharge().at(each);

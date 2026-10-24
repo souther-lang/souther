@@ -16,26 +16,16 @@ import java.util.Objects;
  * row handed a person for a rewrite is the row the measure would have found, and looking for it
  * under another figure could hand over a row for a rewrite the measure never found one for.
  *
- * @param use     who a row found is for
- * @param runs    how many runs a search for one rewrite may make
- * @param demands what the bodies ask of the pieces of a string they part, which is where a
- *                string is looked for that a rewrite of what keeps some of the pieces answers
- *                differently on
+ * @param use  who a row found is for
+ * @param runs how many runs a search for one rewrite may make
  */
-public record RewriteSearch(For use, int runs, StringDemands demands) {
+public record RewriteSearch(For use, int runs) {
 
     public RewriteSearch {
         Objects.requireNonNull(use, "a row a rewrite is told on is looked for on somebody's behalf");
-        Objects.requireNonNull(demands, "what the bodies ask of the pieces of a string is asked"
-                + " of them, and may be nothing");
         if (runs < 1) {
             throw new IllegalArgumentException("a search runs at least once: " + runs);
         }
-    }
-
-    /** A search for a body that asks nothing of the pieces of a string. */
-    public RewriteSearch(For use, int runs) {
-        this(use, runs, StringDemands.NONE);
     }
 
     /** Who a row a rewrite is told on is looked for on behalf of. */

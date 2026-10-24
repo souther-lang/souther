@@ -7,6 +7,7 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
+import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.ast.Hir;
@@ -2151,6 +2152,15 @@ public final class Generator {
                             break;
                         }
                     }
+                    // And at the pieces of the strings the rows seen going through it held, where
+                    // the bodies part a string and go on to attempt a construction of each piece.
+                    // Before the rows below are moved, because the runs are one budget and these
+                    // are read off the body: a few strings, each one change from a row seen,
+                    // where moving a row asks for as many as composing a value takes.
+                    for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
+                        seen = demandedFrom(arm.seenThrough().get(at), axes, purposes, looking,
+                                check, answers, read.piecesAttempted());
+                    }
                     // And from the rows seen going through it, which is where a run through the
                     // arm is known to start whatever a reading of the way in could state — an arm
                     // decided by a relation between inputs, which no class of either holds a side
@@ -2158,14 +2168,6 @@ public final class Generator {
                     for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
                         seen = movedFrom(arm.seenThrough().get(at), axes, purposes, looking,
                                 check, answers);
-                    }
-                    // And at the pieces of the strings those rows held, where the bodies part a
-                    // string and go on to attempt a construction of each piece. Last, as the
-                    // neighbours below are: the runs are one budget.
-                    for (int at = 0; seen == null && !looking.spent()
-                            && at < arm.seenThrough().size(); at++) {
-                        seen = demandedFrom(arm.seenThrough().get(at), axes, purposes, looking,
-                                check, answers, plan.rewrites().demands());
                     }
                     yield seen;
                 }
@@ -2205,7 +2207,7 @@ public final class Generator {
                     for (int at = 0; seen == null && !looking.spent()
                             && at < one.answeredOn().size(); at++) {
                         seen = demandedFrom(one.answeredOn().get(at), axes, purposes, looking,
-                                check, answers, plan.rewrites().demands());
+                                check, answers, read.piecesAttempted());
                     }
                     yield seen;
                 }
@@ -2303,52 +2305,42 @@ public final class Generator {
     private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
                                        List<Purpose> purposes, ReplacementWitness looking,
                                        CandidateCheck check, List<StoodInAnswer> answers) {
-        return beside(seen, axes, purposes, looking, check, answers, NearbyValues::of);
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, _) -> NearbyValues.of(value, type, reading));
     }
 
-    /** The values a candidate puts at one position, given the value the run had there. */
+    /** The values a candidate puts at the position of one parameter, given the value the run had
+     *  there. */
     @FunctionalInterface
     private interface Beside {
 
-        Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading);
+        Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading,
+                                   String parameter);
     }
 
     /**
      * A row the rewrite {@code looking} asks about answers differently on, found beside the inputs
-     * of a row a run was seen going through, at the pieces of the strings it held: each is put as
-     * the pieces the bodies part it into, every one of them in a language the bodies go on to
-     * attempt a construction of ({@link StringDemands}). Where a rewrite changes which pieces are
-     * kept, a string whose first piece is dropped by the body is told apart from one whose first
-     * piece is not only by a string whose dropped piece is one the body would have gone on with.
-     * Which candidate answers, and whether it answers differently, is what running it says.
+     * of a row a run was seen going through, at the strings it held where a body parts one and
+     * builds a newtype of its pieces ({@link PieceDemand}).
+     *
+     * <p>Each such string is put as one whose pieces are all ones the newtype is written to
+     * admit, which the position's own rules are met with: a rewrite of which pieces are kept
+     * answers differently only where a piece it keeps and the body does not, or the other way, is
+     * one the construction goes on with. No class of the input holds that, since what the
+     * construction admits is stated of a value made from the string. Which candidate answers, and
+     * whether it answers differently, is what running it says.
      */
     private static GeneratedRow demandedFrom(List<ObservedValue> seen,
                                              MeasuredInput.MeasuredAxes axes,
                                              List<Purpose> purposes, ReplacementWitness looking,
                                              CandidateCheck check, List<StoodInAnswer> answers,
-                                             StringDemands demands) {
-        MeasuredInput subject = axes.subject();
-        return beside(seen, axes, purposes, looking, check, answers,
-                (value, type, reading) -> NearbyValues.demanded(value, type, reading, demands,
-                        standing -> stringsStandingFor(subject, standing)));
-    }
-
-    /** The strings the values that stand for {@code type} are written round, for a type that
-     *  wears a string. */
-    private static List<String> stringsStandingFor(MeasuredInput subject, Type type) {
-        List<String> out = new ArrayList<>();
-        for (FixtureTemplate each : subject.representativesHolding(type,
-                FieldDomains.ConstructionLimits.NONE).values()) {
-            Hir.Expr written = each.value();
-            // Under the names it wears, each of which is written round the value it wraps.
-            while (written instanceof Hir.Apply applied && applied.args().size() == 1) {
-                written = applied.args().getFirst();
-            }
-            if (written instanceof Hir.StringLit(String text, var _, var _)) {
-                out.add(text);
-            }
+                                             List<PieceDemand> demands) {
+        if (demands.isEmpty()) {
+            return null;
         }
-        return out;
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, parameter) ->
+                        NearbyValues.demanded(value, type, reading, parameter, demands, seen));
     }
 
     private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
@@ -2369,7 +2361,8 @@ public final class Generator {
         }
         for (int moved = 0; moved < seen.size(); moved++) {
             Iterator<ObservedValue> nearer = how.of(seen.get(moved),
-                    subject.types().get(moved), subject.ruleReading());
+                    subject.types().get(moved), subject.ruleReading(),
+                    subject.parameters().get(moved));
             while (nearer.hasNext()) {
                 ObservedValue near = nearer.next();
                 if (!(ObservedFixtures.of(near, subject.types().get(moved),

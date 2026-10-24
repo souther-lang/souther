@@ -78,7 +78,8 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
         BodyInputReading turnedRoundReading = BodyInputReading.of(new CoverageRead.Read(
                 read.interactions(), read.notJoined(), read.arms(), turned, answeredTurned,
                 turnedInPart,
-                read.restOfTheBlock(), read.answersNothing()), subject, arrives);
+                read.restOfTheBlock(), read.answersNothing(), read.piecesAttempted()),
+                subject, arrives);
         Map<AxisId, BodyDistinction> turnedRound = turnedRoundReading.distinctions();
 
         assertEquals(asWritten, turnedRoundReading);

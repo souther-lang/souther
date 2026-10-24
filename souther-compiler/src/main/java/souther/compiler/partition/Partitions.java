@@ -50,6 +50,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.regex.Language;
+import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.revision.RevisionKnowledge;
@@ -2924,6 +2925,111 @@ public final class Partitions {
      */
     private record Stated(PartId<RuleRef.Invariant> part,
                           StringPredicates.StatedPattern accepts) {}
+
+    /**
+     * Whether {@code text} is a string {@code piece} is written to admit, so far as its rules are
+     * one pattern — and false where they are not, which says nothing of whether the type admits it.
+     */
+    static boolean pieceAdmits(Type piece, RuleReadingContext reading, String text) {
+        RuleReadingSource ruleSource = reading.source();
+        PatternsStated stated = patternsStatedOn(TypeView.of(piece, ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums()), ruleSource);
+        return stated.read().size() == 1
+                && reading.revision().settled(
+                        new PatternForAWitness(stated.read().getFirst().accepts()))
+                        instanceof PatternForAWitness.Made.Built(Language language, var _)
+                && language.has(text);
+    }
+
+    /**
+     * A string the rules on {@code position} admit that parts at {@code separator} into pieces of
+     * which each one that is empty in {@code pieces} is a string {@code piece} is written to admit
+     * and each other is the string it holds — or nothing where the rules on {@code piece} are not
+     * one pattern, or leave no such string.
+     *
+     * <p>The two rules met and not one chosen from the other's strings: a piece that is a string
+     * the type admits may be refused as part of the position's string, and the one the position
+     * admits may part into pieces the type refuses, so a string meeting both is looked for in the
+     * language of their meet. A position whose rules say nothing about its strings admits every
+     * string, and the pieces alone decide.
+     *
+     * <p>One pattern of the piece and no more: a piece held to several patterns is not a language
+     * a sequence of pieces can be written in, and what is not read is left to the decoder, as a rule
+     * not read is anywhere.
+     */
+    static List<String> stringsPartedInto(TypeView position, RuleReadingContext reading,
+                                          Type piece, int separator,
+                                          List<Optional<String>> pieces) {
+        if (pieces.isEmpty() || !(position.shape() instanceof Shape.Scalar scalar)
+                || scalar.prim() != Type.Prim.STRING) {
+            return List.of();
+        }
+        RuleReadingSource ruleSource = reading.source();
+        PatternsStated ofAPiece = patternsStatedOn(TypeView.of(piece, ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums()), ruleSource);
+        if (ofAPiece.read().size() != 1) {
+            return List.of();
+        }
+        return reading.revision().settled(new StringsPartedInto(
+                rulesReadOn(position, reading), ofAPiece.read().getFirst().accepts(),
+                separator, pieces));
+    }
+
+    /**
+     * A string the rules admit that parts into {@code pieces} pieces of {@code piece}, as work
+     * settled by those rules.
+     *
+     * <p>The parts and the meet are made here, under the allowance of one witness: they are a
+     * machine this question composes, which is nobody's rule. The pattern of a piece is borrowed
+     * from the rule that states it.
+     *
+     * @param rules the rules on the position, or null where they say nothing about its strings
+     */
+    record StringsPartedInto(RulesRead rules, StringPredicates.StatedPattern piece, int separator,
+                             List<Optional<String>> pieces) implements RevisionWork<List<String>> {
+
+        @Override
+        public List<String> workedOut(RevisionKnowledge revision) {
+            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
+            PatternMeaning any = new PatternMeaning.Repeated(
+                    new PatternMeaning.Symbols(CodePoints.EVERYTHING), 0,
+                    PatternMeaning.Repeated.NO_CEILING);
+            PatternMeaning at = new PatternMeaning.Symbols(CodePoints.of(separator));
+            List<PatternMeaning> parted = new ArrayList<>();
+            List<PatternMeaning> tooMany = new ArrayList<>();
+            for (int each = 0; each < pieces.size(); each++) {
+                if (each > 0) {
+                    parted.add(at);
+                }
+                parted.add(pieces.get(each).map(StringsPartedInto::written)
+                        .orElse(piece.meaning()));
+                tooMany.add(any);
+                tooMany.add(at);
+            }
+            tooMany.add(any);
+            // A separator in a piece is another piece, so the strings with as many separators as
+            // pieces, or more, are left out.
+            Language made = PatternPlan.of(new PatternMeaning.InTurn(parted))
+                    .less(PatternPlan.of(new PatternMeaning.InTurn(tooMany))).compile(meter);
+            if (made != null && rules != null) {
+                Language admitted = admittedBy(rules.stated(), rules.characters(), meter,
+                        revision).language();
+                made = admitted == null ? made : made.and(admitted, meter);
+            }
+            String some = made == null ? null : made.someWritten();
+            return some == null ? List.of() : List.of(some);
+        }
+
+        /** The one string {@code text} is, as the pattern that accepts it alone. */
+        private static PatternMeaning written(String text) {
+            if (text.isEmpty()) {
+                return new PatternMeaning.Nothing();
+            }
+            return new PatternMeaning.InTurn(text.codePoints()
+                    .<PatternMeaning>mapToObj(each ->
+                            new PatternMeaning.Symbols(CodePoints.of(each))).toList());
+        }
+    }
 
     /** Whether a rule counts the characters, which leaves out every string of another length and
      *  is a thing to be met with the patterns like any other. */

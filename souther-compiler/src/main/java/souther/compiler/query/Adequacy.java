@@ -24,7 +24,6 @@ import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
-import souther.compiler.partition.StringDemands;
 import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CaseWay;
 import souther.compiler.partition.CasesTheRowsTook;
@@ -5669,8 +5668,7 @@ public final class Adequacy {
                             new RewriteSearch(
                                     RewriteSearch.For.THE_BLOCK,
                                     db.ask(new Front.Adequacy()).value().measures()
-                                            .rewriteRuns(),
-                                    here.demands()));
+                                            .rewriteRuns()));
             FillResult composed = here.searchedFor(asked);
             // The rows the requirement search already stood in each rule, which is where a row for
             // a rule comes from. Not a second search: settling whether a rule is owed a row is
@@ -5804,14 +5802,6 @@ public final class Adequacy {
                 return new Environment(db, name, behavior, prepared.value(), spec, sig, subject,
                         divided, edges, meetings, numbering,
                         RowReadings.readingFor(byTarget, behavior));
-            }
-
-            /** What the bodies this behavior runs ask of the pieces of a string they part. */
-            StringDemands demands() {
-                Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
-                return checked == null ? StringDemands.NONE
-                        : StringDemands.of(checked.run(behavior),
-                                subject.ruleReading().source());
             }
 
             /** What a search of this behavior for {@code asked} composed. */

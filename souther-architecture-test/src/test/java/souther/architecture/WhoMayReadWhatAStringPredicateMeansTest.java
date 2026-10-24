@@ -93,6 +93,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_PATTERNS_PRODUCER =
             "souther/compiler/partition/Partitions$PatternForAWitness -> " + OWNER;
 
+    /** The question of strings a position admits that part into pieces of another type, which
+     *  takes the pattern of a piece as the rule's reading handed it out. */
+    private static final String STRINGS_IN_PIECES =
+            "souther/compiler/partition/Partitions$StringsPartedInto -> " + OWNER;
+
     /** What the rules about a position's strings came to, as that reading holds it. */
     private static final String THE_PATTERNS_STATED =
             "souther/compiler/partition/Partitions$PatternsStated -> " + OWNER;
@@ -246,6 +251,14 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             ONE_STATED_RULE,
             ONE_STATED_RULE + IN_A_DESCRIPTOR,
             ONE_STATED_RULE + "$StatedPattern",
+            // The strings that part into pieces of a type, which are met with what the position
+            // admits: the pattern of a piece is carried and asked what it means, and nothing is
+            // read of any clause here.
+            STRINGS_IN_PIECES,
+            STRINGS_IN_PIECES + IN_A_DESCRIPTOR,
+            STRINGS_IN_PIECES + "$StatedPattern",
+            STRINGS_IN_PIECES
+                    + "$StatedPattern#meaning()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,
             A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"

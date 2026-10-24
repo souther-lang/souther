@@ -194,8 +194,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + ")Z",
                     THE_POSITION),
             row(PARTITION + "NearbyValues", "of",
-                    "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + "L" + PARTITION
-                            + "NearbyValues$Leaves;)Ljava/util/Iterator;",
+                    "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + "L" + INPUTS
+                            + "TermPath;L" + PARTITION + "NearbyValues$Leaves;)Ljava/util/Iterator;",
                     THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "levelsOf",
                     "(" + TYPE + "Ljava/util/List;L" + INPUTS + "SearchRegion;" + CONTEXT + "L"
@@ -231,11 +231,17 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "notOffered",
                     "(" + TYPE + CONTEXT + ")L" + PARTITION + "StringOfferShortfall;",
                     THE_POSITION),
+            row(PARTITION + "Partitions", "pieceAdmits",
+                    "(" + TYPE + CONTEXT + "Ljava/lang/String;)Z", THE_POSITION),
             row(PARTITION + "Partitions", "representativesHolding",
                     "(" + TYPE + CONTEXT + LIMITS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
+                    THE_POSITION),
+            row(PARTITION + "Partitions", "stringsPartedInto",
+                    "(L" + CHECK + "TypeView;" + CONTEXT + TYPE + "ILjava/util/List;)"
+                            + "Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "atThoseParts",
                     "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
