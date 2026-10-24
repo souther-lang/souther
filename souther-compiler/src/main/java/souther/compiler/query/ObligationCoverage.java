@@ -53,6 +53,20 @@ public sealed interface ObligationCoverage {
                         "an obligation left undecided says what left it so");
             }
         }
+
+        /**
+         * Whether everything that left the point undecided is a reading no row can settle it
+         * through ({@link Weakening.AReadingNotTiedToItsLine}).
+         *
+         * <p>Such a reading hides no row that would count: what stands at its place is evidence
+         * about the line and is counted neither for the point nor against it, so a row written for
+         * the point can only be settled by a reading that is tied to it. A point held open by
+         * nothing else is one a row can be offered for, and the row cannot be one already written.
+         */
+        boolean heldOpenOnlyByUntiedReadings() {
+            return by.causes().stream()
+                    .allMatch(Weakening.AReadingNotTiedToItsLine.class::isInstance);
+        }
     }
 
     /**
