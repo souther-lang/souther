@@ -9,6 +9,7 @@ import souther.compiler.report.GeneratedRows;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -210,6 +211,37 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
                 + "    guard a + b < 200 else High");
         assertTrue(sumsOfTheRows(compilation).containsAll(List.of(99, 100, 199, 200)),
                 sumsOfTheRows(compilation).toString());
+    }
+
+    /** Beside the greatest and the least {@code Int}, a row whose sum passes the type stops where
+     *  it adds, and is no row: what the way holds the sum to takes none of them in. */
+    @Test
+    void theRowsMadeBesideTheEndsOfIntAreRowsTheSumOfWhichIsAnInt() {
+        BigInteger greatest = BigInteger.valueOf(Long.MAX_VALUE);
+        BigInteger least = BigInteger.valueOf(Long.MIN_VALUE);
+        for (String guards : List.of(
+                "    guard a + b >= 9223372036854775790 else Low\n"
+                        + "    guard a + b < 9223372036854775800 else High",
+                "    guard a + b >= -9223372036854775800 else Low\n"
+                        + "    guard a + b < -9223372036854775790 else High",
+                "    guard a + b >= 100 else Low\n"
+                        + "    guard a + b < 9223372036854775807 else High")) {
+            Compilation compilation = compiled(guards);
+            String text = GeneratedRows.of(compilation, null, null,
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+            int made = 0;
+            for (RowsOfABlock.Row row : RowsOfABlock.of(text)) {
+                Matcher found = A_ROW.matcher(row.written());
+                if (found.find()) {
+                    made++;
+                    BigInteger sum = new BigInteger(found.group(1))
+                            .add(new BigInteger(found.group(2)));
+                    assertTrue(sum.compareTo(greatest) <= 0 && sum.compareTo(least) >= 0,
+                            guards + "\n a row with the sum " + sum + ": " + row.written());
+                }
+            }
+            assertTrue(made > 0, "rows are made for " + guards + "\n" + text);
+        }
     }
 
     /** A way holding the numbers to another form ties them, and says nothing a row at the line

@@ -92,6 +92,11 @@ final class WhatStatementsOfOneFormDecide {
      * the terms to one another by nothing that row needs. Statements are orders only: an
      * interval is what an order holds a form to, and two of them leave one.
      *
+     * <p>What follows from it is only of a reading that moves one term while the others stand
+     * where they may: a value of that term is then settled one way or the other, or left either
+     * way, as it is without the statements. A reading that moves two terms together moves the
+     * form by more than the greatest weight, and the interval need not reach as far as that.
+     *
      * @param asked the relation asked as a statement
      */
     static List<TakenConstraint.Affine> leavingRoomAroundTheLine(
