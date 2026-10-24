@@ -646,14 +646,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // a sum over values written out — asks here before reading any of them, and past
             // either figure carries what it would have read out as a part nothing read, naming
             // the one it reached.
-            Map.entry("souther.compiler.partition.Pullback#splitInto("
-                            + "Lsouther/compiler/inputs/InputReads;J)"
+            Map.entry("souther.compiler.partition.Pullback#splitInto(JJ)"
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "counts the readings a split makes along one way down, and says which figure"
                             + " where they are past it"),
             Map.entry("souther.compiler.partition.Pullback#splitInto("
-                            + "Lsouther/compiler/inputs/InputReads;"
-                            + "Ljava/util/function/LongUnaryOperator;)"
+                            + "JLjava/util/function/LongUnaryOperator;)"
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "tells a count of the readings of a split how far the figures can tell, and"
                             + " asks the split of what it counted"),

@@ -1398,7 +1398,12 @@ final class Pullback {
      * any figure in all.
      */
     private WhyUnread splitInto(InputReads reads, long more) {
-        if (more > 0 && reads.readings() > READINGS.maximum() / more) {
+        return splitInto(reads.readings(), more);
+    }
+
+    /** The same, of a reading that is one of {@code readingsAlready} readings. */
+    private WhyUnread splitInto(long readingsAlready, long more) {
+        if (more > 0 && readingsAlready > READINGS.maximum() / more) {
             return new WhyUnread.MoreReadingsThanAreMade();
         }
         return made(more);
@@ -1417,8 +1422,13 @@ final class Pullback {
      *              are that many or more
      */
     private WhyUnread splitInto(InputReads reads, LongUnaryOperator count) {
-        long mostAsked = Math.max(READINGS.maximum() / reads.readings(), readingsLeft) + 1;
-        return splitInto(reads, count.applyAsLong(mostAsked));
+        return splitInto(reads.readings(), count);
+    }
+
+    /** The same, of a reading that is one of {@code readingsAlready} readings. */
+    private WhyUnread splitInto(long readingsAlready, LongUnaryOperator count) {
+        long mostAsked = Math.max(READINGS.maximum() / readingsAlready, readingsLeft) + 1;
+        return splitInto(readingsAlready, count.applyAsLong(mostAsked));
     }
 
     /** Why {@code more} readings are not made in all — or null where they are, taken from what is
@@ -6944,7 +6954,14 @@ final class Pullback {
         Boolean[] decided = alreadyDecided(ways);
         // The elements the leaves of the tree read, as a total of elements kept by nothing reads
         // them ({@link #sumOfWrittenOut}); a count reads none of them.
-        WhyUnread past = splitInto(reads,
+        //
+        // A total that does not turn on an application is the same total on each of them, and the
+        // ways it is kept in are the same ways: they are split once, and what each application
+        // adds is the comparison it makes of the total in a way, which holds no split of its own.
+        long readingsAlready = total.at().turnsOnAnApplication(total.call(),
+                read.rules().symbols(), read.rules().newtypes())
+                ? reads.readings() : reads.readingsApartFromApplications();
+        WhyUnread past = splitInto(readingsAlready,
                 limit -> ways.work(decided, limit, !total.counted()));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));

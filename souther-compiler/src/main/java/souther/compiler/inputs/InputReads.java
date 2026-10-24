@@ -144,13 +144,16 @@ public final class InputReads {
      * @param picked   the element of a list at an index written down that a name an arm opening
      *                 the lookup bound stands for ({@link WhatItHolds.AtAnIndex})
      * @param entered  the behaviors whose bodies were entered on the way down
+     * @param applications how many of {@code readings} are the applications of closures on the way
+     *                 down, the rest being the arms of choices taken
      */
     private record Applied(Set<BindingId> handed, long readings, Taken taken,
                            Map<BindingId, Denotation> given,
                            Map<BindingId, PickedAtAnIndex> picked,
-                           Set<ValueName.Behavior> entered) {
+                           Set<ValueName.Behavior> entered, long applications) {
 
-        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of());
+        static final Applied NONE =
+                new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of(), 1);
 
         Applied {
             handed = Set.copyOf(handed);
@@ -161,7 +164,7 @@ public final class InputReads {
 
         /** The same, as one of {@code readings} readings, with {@code taken} for what was taken. */
         Applied as(long readings, Taken taken) {
-            return new Applied(handed, readings, taken, given, picked, entered);
+            return new Applied(handed, readings, taken, given, picked, entered, applications);
         }
     }
 
@@ -458,18 +461,19 @@ public final class InputReads {
         if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
             return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
                     new Applied(handed, applied.readings(), applied.taken(), applied.given(),
-                            applied.picked(), applied.entered()));
+                            applied.picked(), applied.entered(), applied.applications()));
         }
         if (namesSomething(value.value())) {
             Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
             given.put(binding, value);
             return new InputReads(names, narrower, declared, dependencies, new Applied(handed,
                     applied.readings(), applied.taken(), given, applied.picked(),
-                    applied.entered()));
+                    applied.entered(), applied.applications()));
         }
         return new InputReads(names.handing(binding, value.value()), narrower, declared,
                 dependencies, new Applied(handed, applied.readings(), applied.taken(),
-                        applied.given(), applied.picked(), applied.entered()));
+                        applied.given(), applied.picked(), applied.entered(),
+                        applied.applications()));
     }
 
     /**
@@ -709,7 +713,8 @@ public final class InputReads {
         }
         long counted = readings;
         List<Applications.Made> each = applications.stream()
-                .map(one -> new Applications.Made(one.reads().readAs(counted), one.keptWhere()))
+                .map(one -> new Applications.Made(one.reads().readAsApplication(counted),
+                        one.keptWhere()))
                 .toList();
         // An operation applying its closure to one element at most picks it out by something else
         // it was handed, and one applying it to some of them says not which; and applications made
@@ -770,6 +775,31 @@ public final class InputReads {
     public InputReads forADeclaredRule() {
         return new InputReads(names.overStandingCalls(), alternatives, declared, dependencies,
                 applied);
+    }
+
+    /** The same, as one of {@code readings} readings of one condition, the readings beyond the
+     *  ones already made being the applications of a closure. */
+    private InputReads readAsApplication(long readings) {
+        long made = applied.readings();
+        return new InputReads(names, alternatives, declared, dependencies,
+                new Applied(applied.handed(), readings, applied.taken(), applied.given(),
+                        applied.picked(), applied.entered(),
+                        applied.applications() * (readings / made)));
+    }
+
+    /**
+     * How many readings of one condition reading it here is one of, not counting the applications
+     * of closures on the way down: what a value that does not turn on an application is read in,
+     * once for all of them.
+     */
+    public long readingsApartFromApplications() {
+        return applied.readings() / applied.applications();
+    }
+
+    /** Whether {@code e}, read here, turns on which application of a closure this reading is on
+     *  ({@link #turnsOnAnApplication}). */
+    public boolean turnsOnAnApplication(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return !applied.handed().isEmpty() && readsAnApplied(e, symbols, newtypes, new HashSet<>());
     }
 
     /** The same, as one of {@code readings} readings of one condition. */
@@ -1002,7 +1032,7 @@ public final class InputReads {
         return new InputReads(inside, alternatives, declared,
                 souther.compiler.carrier.Membership.none(),
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.picked(), entered));
+                        applied.picked(), entered, applied.applications()));
     }
 
     /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
@@ -1860,7 +1890,7 @@ public final class InputReads {
         picked.put(name, element);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(),
-                        applied.given(), picked, applied.entered()));
+                        applied.given(), picked, applied.entered(), applied.applications()));
     }
 
     /**
@@ -1898,7 +1928,7 @@ public final class InputReads {
         given.put(name, value);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.picked(), applied.entered()));
+                        applied.picked(), applied.entered(), applied.applications()));
     }
 
     /**
