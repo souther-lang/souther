@@ -673,6 +673,28 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
     }
 
     /**
+     * A line on what the kept elements under a key total has rows composed for it: each element
+     * written inside what keeps it — a number away from five, a region held at one text — so
+     * every element written is kept and the total is theirs.
+     */
+    @Test
+    void aLineOnWhatTheKeptElementsUnderAKeyTotalHasRowsComposedForIt() {
+        String declared = REGIONED.substring("module probe\n\n".length());
+        everyRowComposedAnswersAsItsPointSays(declared + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.amount /= 5, fs)))) >= 1 then 1 else 0
+                """, "f/total(fs[*].amount kept by fs meeting !Affine[form=LinearForm["
+                + "constant=-5, coefs={fs[*].amount=1}], proposition=EQ] by currency)");
+        everyRowComposedAnswersAsItsPointSays(declared + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.region == "EU", fs)))) >= 1 then 1 else 0
+                """, "f/total(fs[*].amount kept by fs meeting Ordered[term=fs[*].region, at=EU,"
+                + " proposition=EQ] by currency)");
+    }
+
+    /**
      * What keeps an element may read the element of the outer list holding its list, and then it
      * turns on which list each element is put in: no row is composed by choosing the elements as
      * one container, and none is said to be.
