@@ -143,26 +143,32 @@ public final class ExactArithmetic {
      * lets the magnitude of the numerator be taken without the least long, which has none.
      */
     private static ExactParts canonical(long numerator, long denominator, long twos, long fives) {
-        long common = commonFactor(Math.abs(numerator), denominator);
-        numerator /= common;
-        denominator /= common;
+        // A division for each side is skipped where there is nothing to take off: most values are
+        // whole numbers, and a denominator of one has no factor of two or five to look for.
+        long common = denominator == 1 ? 1 : commonFactor(Math.abs(numerator), denominator);
+        if (common != 1) {
+            numerator /= common;
+            denominator /= common;
+        }
         int inNumerator = Long.numberOfTrailingZeros(numerator);
         if (inNumerator > 0) {
             numerator >>= inNumerator;
             twos = ExactPowers.added(twos, inNumerator);
         }
-        int inDenominator = Long.numberOfTrailingZeros(denominator);
-        if (inDenominator > 0) {
-            denominator >>= inDenominator;
-            twos = ExactPowers.added(twos, -inDenominator);
-        }
         while (numerator % 5 == 0) {
             numerator /= 5;
             fives = ExactPowers.added(fives, 1);
         }
-        while (denominator % 5 == 0) {
-            denominator /= 5;
-            fives = ExactPowers.added(fives, -1);
+        if (denominator != 1) {
+            int inDenominator = Long.numberOfTrailingZeros(denominator);
+            if (inDenominator > 0) {
+                denominator >>= inDenominator;
+                twos = ExactPowers.added(twos, -inDenominator);
+            }
+            while (denominator % 5 == 0) {
+                denominator /= 5;
+                fives = ExactPowers.added(fives, -1);
+            }
         }
         return new ExactParts(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator),
                 twos, fives);
