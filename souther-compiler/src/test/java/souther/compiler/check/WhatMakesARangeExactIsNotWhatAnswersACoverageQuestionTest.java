@@ -163,10 +163,13 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
     }
 
     /** A rule nothing took in is unanswered as well, which is the one row where the two agree that
-     *  something is missing — and they are answering different questions to get there. */
+     *  something is missing — and they are answering different questions to get there.
+     *
+     *  <p>And the operation stops a run at the least {@code Int}, whose absolute value is no
+     *  {@code Int}, which nothing here says the region of: a second cause beside the first. */
     @Test
     void aRuleNothingReadIsUnansweredAndLeavesTheRangeApproximate() {
-        assertEquals(UNANSWERED_AND_UNREPRESENTED,
+        assertEquals(new Answers(false, "Unrepresented, OperatorsStopARunWhereNothingSays"),
                 Answers.of("invariant said = Int.abs(value) >= 2"));
     }
 

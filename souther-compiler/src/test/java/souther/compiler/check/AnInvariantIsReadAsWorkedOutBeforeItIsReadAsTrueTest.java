@@ -143,6 +143,23 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
         assertInstanceOf(ProjectionEvidence.CertifiedExact.class, read.projection());
     }
 
+    /** A call that may end a run is no less one for not being an operator. */
+    @Test
+    void aCallThatMayEndARunLeavesTheBoundsShortOfTheRule() {
+        FieldDomains read = domainsOf("value >= 0 && value <= 5 && Int.floorMod(7, value) == 1");
+        assertTrue(read.projection().causes().stream().anyMatch(cause ->
+                cause instanceof ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays),
+                "a floor remainder by nought ends the run");
+    }
+
+    /** And one that ends none is read as any other part is. */
+    @Test
+    void aCallThatEndsNoRunIsReadAsAnyOtherPartIs() {
+        FieldDomains read = domainsOf("String", "String.length(value) >= 1");
+        assertFalse(read.projection().causes().stream().anyMatch(cause ->
+                cause instanceof ProjectionEvidence.Cause.OperatorsStopARunWhereNothingSays));
+    }
+
     /** An operator no region is written for is not read as answering everywhere. */
     @Test
     void anOperatorWithNoRegionLeavesTheBoundsShortOfTheRule() {

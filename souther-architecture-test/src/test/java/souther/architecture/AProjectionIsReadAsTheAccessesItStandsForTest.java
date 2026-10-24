@@ -294,9 +294,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ElementsApart", "readOff", "(" + core + "L" + c
                 + "check/DeclarationNewtypes;)L" + c + "check/ElementsApart$ReadOff;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/PathCompletion", "mayStopARun", "(" + core + ")Z",
-                Reading.STRUCTURE, "asks whether an operator stands anywhere in an expression,"
-                        + " which no name read adds to");
         row(out, c + "check/ElementsApart", "bindingUnder",
                 "(" + core + ")L" + c + "types/BindingId;", Reading.STRUCTURE,
                 "asks which binding a run of fields is read off, which is the base");

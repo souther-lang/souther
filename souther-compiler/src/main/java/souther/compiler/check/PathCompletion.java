@@ -373,7 +373,7 @@ final class PathCompletion {
                 // The left is worked out first, and the right only on the runs the left lets
                 // through.
                 past = workedOut(binary.left(), past, at, asked, read);
-                read[0] &= !mayStopARun(binary.right());
+                read[0] &= endsNone(binary.right());
                 return past;
             }
             case Core.Binary binary -> {
@@ -385,15 +385,18 @@ final class PathCompletion {
                 for (Core argument : call.args()) {
                     past = workedOut(argument, past, at, asked, read);
                 }
+                // What the operation itself ends a run for is the library's to say, and nothing
+                // here says on which arguments.
+                read[0] &= WhatARunMayEndFor.itself(call).endsNone();
                 return past;
             }
             case Core.If branching -> {
                 past = workedOut(branching.cond(), past, at, asked, read);
-                read[0] &= !mayStopARun(branching.then()) && !mayStopARun(branching.els());
+                read[0] &= endsNone(branching.then()) && endsNone(branching.els());
                 return past;
             }
             default -> {
-                read[0] &= !mayStopARun(bare);
+                read[0] &= endsNone(bare);
                 return past;
             }
         }
@@ -468,16 +471,9 @@ final class PathCompletion {
                 && !right.coefs().isEmpty();
     }
 
-    /** Whether an operator under {@code e}, or {@code e} itself, answers on some operands only. */
-    private static boolean mayStopARun(Core e) {
-        Core bare = Core.withoutStanding(e);
-        if (whereItAnswers(bare) != null
-                && !(whereItAnswers(bare) instanceof WhereAnOperatorAnswers.Everywhere)) {
-            return true;
-        }
-        boolean[] found = {false};
-        Core.forEachChild(bare, child -> found[0] |= mayStopARun(child));
-        return found[0];
+    /** Whether working {@code e} out, and everything under it, is known to end no run. */
+    private static boolean endsNone(Core e) {
+        return WhatARunMayEndFor.of(e).endsNone();
     }
 
     /**
