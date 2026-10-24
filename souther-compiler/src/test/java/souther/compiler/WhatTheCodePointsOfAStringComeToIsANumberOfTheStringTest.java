@@ -228,6 +228,20 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
                     1
                 }
                 """, text -> Math.floorMod(sumOf(text), 10) == 0 ? 1 : 0, Set.of(0, 1));
+        // A digit's value is its code point less 48, so the total is the code points' less 48 for
+        // each: two numbers of the string, the second of which is the length the format holds.
+        composedAndAnswered("""
+                module p
+                data Code = String
+                    invariant String.matches("[0-9]{13}", value)
+                behavior pick : (c: Code) -> Int
+                let pick (c) = {
+                    guard Int.floorMod(List.sum(List.map((x) -> x - 48,
+                        String.codePoints(c.value))), 10) == 0 else 0
+                    1
+                }
+                """, text -> Math.floorMod(sumOf(text) - 48 * lengthOf(text), 10) == 0 ? 1 : 0,
+                Set.of(0, 1));
     }
 
     /** The rows composed for {@code model}'s rules, answered as {@code by} works them out and run:

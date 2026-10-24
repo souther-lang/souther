@@ -167,20 +167,26 @@ class AStringComingToASumIsOneTheLanguageHoldsTest {
 
     /**
      * The least and the greatest sum are those of the strings themselves, control codes among
-     * them, and a language that loops has no greatest.
+     * them, and a language that loops has no greatest. The same of how long they are.
      */
     @Test
-    void theSumsLieBetweenTheLeastAndTheGreatestAStringComesTo() {
-        assertEquals(new Language.SumsOfCodePoints(3 * '0', (long) 3 * '3'),
+    void theSumsAndLengthsLieBetweenTheLeastAndTheGreatestAStringComesTo() {
+        assertEquals(new Language.Ends(3 * '0', (long) 3 * '3'),
                 language("[0-3]{3}").sumsOfCodePoints());
-        assertEquals(new Language.SumsOfCodePoints('a', (long) 3 * 'c'),
+        assertEquals(new Language.Ends('a', (long) 3 * 'c'),
                 language("[ac]{1,3}").sumsOfCodePoints());
-        assertEquals(new Language.SumsOfCodePoints(0, 2L * 'a'),
+        assertEquals(new Language.Ends(0, 2L * 'a'),
                 language("[\\x{0}a]{2}").sumsOfCodePoints());
-        assertEquals(new Language.SumsOfCodePoints('c', null),
+        assertEquals(new Language.Ends('c', null),
                 language("(ab)*c|b{2,}").sumsOfCodePoints());
-        assertEquals(new Language.SumsOfCodePoints(0, 0L), language("").sumsOfCodePoints());
+        assertEquals(new Language.Ends(0, 0L), language("").sumsOfCodePoints());
         assertNull(language("a").and(language("b"), roomy()).sumsOfCodePoints());
+
+        assertEquals(new Language.Ends(3, 3L), language("[0-3]{3}").lengths());
+        assertEquals(new Language.Ends(1, 3L), language("[ac]{1,3}").lengths());
+        assertEquals(new Language.Ends(1, null), language("(ab)*c|b{2,}").lengths());
+        assertEquals(new Language.Ends(0, 0L), language("").lengths());
+        assertNull(language("a").and(language("b"), roomy()).lengths());
     }
 
     /** Past the work allowed nothing is offered, and that is said apart from there being none. */

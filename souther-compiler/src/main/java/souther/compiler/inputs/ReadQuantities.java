@@ -2254,7 +2254,7 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.ValueOf) {
             return admittedAt(term);
         }
-        Language.SumsOfCodePoints sums = sumsOfAFormatsCodePoints(term);
+        Language.Ends sums = sumsOfAFormatsCodePoints(term);
         if (sums != null) {
             return ValueSet.wholeNumbers(WholeNumberRuns.one(BigInteger.valueOf(sums.least()),
                     sums.most() == null ? null : BigInteger.valueOf(sums.most())));
@@ -2473,7 +2473,7 @@ final class ReadQuantities implements Quantities {
         if (bounds != null) {
             return bounds.admissible();
         }
-        Language.SumsOfCodePoints sums = sumsOfAFormatsCodePoints(term);
+        Language.Ends sums = sumsOfAFormatsCodePoints(term);
         return sums == null ? null : new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(sums.least())),
                 sums.most() == null ? null : Endpoint.inclusive(Count.of(sums.most())));
@@ -2488,7 +2488,7 @@ final class ReadQuantities implements Quantities {
      * 98. No clause states it, so no position's bounds hold it; it is what the strings the rules
      * admit are.
      */
-    private Language.SumsOfCodePoints sumsOfAFormatsCodePoints(NumericTerm.FromOnePosition term) {
+    private Language.Ends sumsOfAFormatsCodePoints(NumericTerm.FromOnePosition term) {
         return term instanceof NumericTerm.CodePointValueSum
                 && admittedAt(term) instanceof ValueSet.Matching(var language)
                 ? language.sumsOfCodePoints() : null;

@@ -32,7 +32,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ValueName;
+import souther.compiler.regex.Language;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -1701,7 +1703,7 @@ public final class InputDomain {
         List<PositionBounds> bounds = new ArrayList<>();
         for (NumberAt.OfWhatNumber kind : kinds) {
             bounds.add(boundsOn(kind, path, type, taken, source, counted, carried, placed,
-                    movedHere, stated, nothingExists));
+                    movedHere, stated, nothingExists, admitted.approximation()));
         }
         rulesWithoutALineAt(placed, path, type, source, found);
         // Everything left open about the rules of this position: what the accounting of the
@@ -1858,7 +1860,7 @@ public final class InputDomain {
                                            PlacedRules placed,
                                            List<FieldDomains.Placed> movedHere,
                                            List<FieldDomains.Placed> stated,
-                                           boolean nothingExists) {
+                                           boolean nothingExists, ValueSet admitted) {
         NumericTerm.FromOnePosition term = switch (kind) {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
@@ -1914,7 +1916,8 @@ public final class InputDomain {
                 // a partition of one.
                 nothingExists ? null
                         : TypeBounds.admissible(own == null ? null : own.range(),
-                                projected.bounds(), term, heldBy(kind, type, source, counted)),
+                                projected.bounds(), term,
+                                heldBy(kind, type, source, counted, admitted)),
                 own, projected,
                 // Where the number actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a number whose
@@ -1929,12 +1932,23 @@ public final class InputDomain {
      * <p>How many a set or a map holds, where what it holds apart has few enough values to say
      * ({@link TypeCardinality#mostItHoldsApart}). The count the type declares is the one a position
      * holding either has, so it is that number and no other this bounds.
+     *
+     * <p>And how long a string of a format is, which is between the shortest and the longest
+     * string the format holds: a format of thirteen digits holds no string of twelve. No clause
+     * states it; it is what the strings {@code admitted} are.
      */
     private static NumericDomain.Bounds heldBy(NumberAt.OfWhatNumber kind, Type type,
                                                RuleReadingSource source,
-                                               TypeCardinality.Counts counted) {
+                                               TypeCardinality.Counts counted,
+                                               ValueSet admitted) {
         if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)) {
             return null;
+        }
+        if (admitted instanceof ValueSet.Matching(var language)) {
+            Language.Ends lengths = language.lengths();
+            return lengths == null ? null : new NumericDomain.Bounds(
+                    Endpoint.inclusive(Count.of(lengths.least())),
+                    lengths.most() == null ? null : Endpoint.inclusive(Count.of(lengths.most())));
         }
         long most = TypeCardinality.mostItHoldsApart(type, source, counted);
         return most < 0 ? null

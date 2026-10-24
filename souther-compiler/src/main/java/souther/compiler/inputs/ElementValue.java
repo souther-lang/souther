@@ -22,7 +22,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
@@ -1216,7 +1215,8 @@ public sealed interface ElementValue {
             for (Core.Case arm : match.cases()) {
                 boolean takesIt = arm.pattern() == null
                         || (arm.pattern() instanceof Core.ResolvedPattern.Single one
-                                && one.selected().refinement() instanceof Refinement.OptionPresent);
+                                && one.selected().refinement()
+                                        instanceof souther.compiler.types.Refinement.OptionPresent);
                 if (!takesIt) {
                     continue;
                 }

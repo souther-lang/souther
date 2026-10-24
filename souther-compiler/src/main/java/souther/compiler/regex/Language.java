@@ -239,19 +239,25 @@ public final class Language {
      * Where what the code points of a string it holds come to lies, or null where it holds none.
      * Read off the machine, which is walked once.
      */
-    public SumsOfCodePoints sumsOfCodePoints() {
-        return CodePointSums.range(machine);
+    public Ends sumsOfCodePoints() {
+        return CodePointSums.range(machine, CodePoints::least,
+                over -> over.ranges().getLast().to());
+    }
+
+    /** Where how many code points a string it holds is lies, or null where it holds none. */
+    public Ends lengths() {
+        return CodePointSums.range(machine, _ -> 1, _ -> 1);
     }
 
     /**
-     * The least and the greatest number the code points of a string of a language come to: every
-     * such number lies between them, and not every number between them is one.
+     * The least and the greatest of some number of the strings of a language: every such number
+     * lies between them, and not every number between them need be one.
      *
      * @param least the least of them
-     * @param most  the greatest, or null where a string of the language goes round a loop and so
-     *              they have none
+     * @param most  the greatest, or null where a string of the language goes round a loop that
+     *              adds to the number, and so they have none
      */
-    public record SumsOfCodePoints(long least, Long most) {}
+    public record Ends(long least, Long most) {}
 
     /**
      * The same strings and these others, or null past what {@code meter} allows.

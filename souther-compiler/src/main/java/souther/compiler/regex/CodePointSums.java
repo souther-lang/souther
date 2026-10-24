@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.IntPredicate;
+import java.util.function.ToLongFunction;
 
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
@@ -78,14 +79,18 @@ final class CodePointSums {
     }
 
     /**
-     * The least and the greatest number the code points of a string {@code machine} accepts come
-     * to, the greatest null where a walk to a state it stops at goes round a loop and so comes to
-     * no greatest; null where it accepts nothing.
+     * The least and the greatest number a string {@code machine} accepts comes to, where each step
+     * adds no less than {@code leastOf} and no more than {@code mostOf} of the code points it is
+     * taken on — what its code points come to, or how many it holds. The greatest is null where a
+     * walk to a state it stops at goes round a loop and so comes to no greatest; the whole null
+     * where it accepts nothing.
      *
      * <p>The ends and not every number between: a language of {@code a} and {@code c} holds no
-     * string coming to 98. What lies between is every sum there is and some that are not.
+     * string coming to 98. What lies between is every number there is and some that are not.
+     * Every step adds nought or more, which is what lets the least be read a state at a time.
      */
-    static Language.SumsOfCodePoints range(Automaton machine) {
+    static Language.Ends range(Automaton machine, ToLongFunction<CodePoints> leastOf,
+                               ToLongFunction<CodePoints> mostOf) {
         boolean[] reaches = machine.reachingSomewhereItStops();
         if (!reaches[Automaton.START]) {
             return null;
@@ -116,25 +121,27 @@ final class CodePointSums {
             for (Automaton.Step step : machine.stepsFrom(here)) {
                 if (reaches[step.to()]) {
                     least[step.to()] = Math.min(least[step.to()],
-                            least[here] + step.over().least());
+                            least[here] + leastOf.applyAsLong(step.over()));
                 }
             }
         }
-        return new Language.SumsOfCodePoints(fewest, greatest(machine, reaches));
+        return new Language.Ends(fewest, greatest(machine, reaches, mostOf));
     }
 
-    /** The greatest sum, or null where a walk that can still stop goes round a loop. */
-    private static Long greatest(Automaton machine, boolean[] reaches) {
+    /** The greatest, or null where a walk that can still stop goes round a loop. */
+    private static Long greatest(Automaton machine, boolean[] reaches,
+                                 ToLongFunction<CodePoints> mostOf) {
         int states = machine.size();
         long[] most = new long[states];
         // 0 not yet walked, 1 being walked, 2 walked.
         int[] seen = new int[states];
-        return greatestFrom(machine, Automaton.START, reaches, most, seen) ? most[Automaton.START]
-                : null;
+        return greatestFrom(machine, Automaton.START, reaches, mostOf, most, seen)
+                ? most[Automaton.START] : null;
     }
 
     private static boolean greatestFrom(Automaton machine, int state, boolean[] reaches,
-                                        long[] most, int[] seen) {
+                                        ToLongFunction<CodePoints> mostOf, long[] most,
+                                        int[] seen) {
         if (seen[state] == 2) {
             return true;
         }
@@ -147,11 +154,10 @@ final class CodePointSums {
             if (!reaches[step.to()]) {
                 continue;
             }
-            if (!greatestFrom(machine, step.to(), reaches, most, seen)) {
+            if (!greatestFrom(machine, step.to(), reaches, mostOf, most, seen)) {
                 return false;
             }
-            List<CodePoints.Range> ranges = step.over().ranges();
-            out = Math.max(out, most[step.to()] + ranges.get(ranges.size() - 1).to());
+            out = Math.max(out, most[step.to()] + mostOf.applyAsLong(step.over()));
         }
         most[state] = out;
         seen[state] = 2;
