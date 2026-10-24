@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.RuleReadingSource;
@@ -32,7 +33,7 @@ import java.util.Objects;
  * are left as they were written.
  *
  * <p>What makes it one total is what the library says the operation is
- * ({@link DefaultBoundOperationFacts#accumulation}): an addition from nought. Two runs over the same
+ * ({@link BoundOperationFacts#accumulation}): an addition from nought. Two runs over the same
  * elements are one run only where each element is handed to both in the same order, which is asked
  * only of a computation that turns on that order.
  */
