@@ -89,10 +89,14 @@ public final class ExactArithmetic {
         if (numerator.bitLength() < Long.SIZE - 1 && denominator.bitLength() < Long.SIZE - 1) {
             return canonical(numerator.longValue(), denominator.longValue(), twos, fives);
         }
-        BigInteger common = numerator.gcd(denominator);
-        if (!common.equals(BigInteger.ONE)) {
-            numerator = numerator.divide(common);
-            denominator = denominator.divide(common);
+        // A whole number has nothing in common with its denominator, and the ends of an integer
+        // type come through here as one: the least and greatest long are past the long route.
+        if (!denominator.equals(BigInteger.ONE)) {
+            BigInteger common = numerator.gcd(denominator);
+            if (!common.equals(BigInteger.ONE)) {
+                numerator = numerator.divide(common);
+                denominator = denominator.divide(common);
+            }
         }
         // The two sides are coprime by now, so a factor of two or of five is on one of them alone, and
         // taking it off one cannot put it back on the other.
