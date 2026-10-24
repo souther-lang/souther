@@ -53,7 +53,8 @@ final class CodePointRemainders {
                     continue;
                 }
                 for (Automaton.Step step : machine.stepsFrom(state)) {
-                    CodePoints over = step.over().and(at.getOrDefault(index, CodePoints.EVERYTHING));
+                    CodePoints asked = at.get(index);
+                    CodePoints over = asked == null ? step.over() : step.over().and(asked);
                     if (!onTheWay[index + 1][step.to()] || over.isEmpty()) {
                         continue;
                     }
@@ -134,6 +135,33 @@ final class CodePointRemainders {
     }
 
     /**
+     * Whether a step over {@code over} takes some code point {@code asked} names, every code
+     * point where nothing is asked. Read off the two runs in order rather than by making their
+     * meet: whether they share one is all a walk asks.
+     */
+    private static boolean meets(CodePoints over, CodePoints asked) {
+        if (asked == null) {
+            return !over.isEmpty();
+        }
+        List<CodePoints.Range> one = over.ranges();
+        List<CodePoints.Range> other = asked.ranges();
+        int i = 0;
+        int j = 0;
+        while (i < one.size() && j < other.size()) {
+            CodePoints.Range a = one.get(i);
+            CodePoints.Range b = other.get(j);
+            if (a.to() < b.from()) {
+                i++;
+            } else if (b.to() < a.from()) {
+                j++;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * For each index from nought to {@code length}, the states a walk of that many code points
      * from the start reaches that a walk of the rest reaches a state the machine stops at from —
      * each code point one {@code at} allows at its index.
@@ -148,8 +176,9 @@ final class CodePointRemainders {
                 if (!from[index][state]) {
                     continue;
                 }
+                CodePoints asked = at.get(index);
                 for (Automaton.Step step : machine.stepsFrom(state)) {
-                    if (!step.over().and(at.getOrDefault(index, CodePoints.EVERYTHING)).isEmpty()) {
+                    if (meets(step.over(), asked)) {
                         from[index + 1][step.to()] = true;
                     }
                 }
@@ -164,9 +193,9 @@ final class CodePointRemainders {
                 if (!from[index][state]) {
                     continue;
                 }
+                CodePoints asked = at.get(index);
                 for (Automaton.Step step : machine.stepsFrom(state)) {
-                    if (onTheWay[index + 1][step.to()] && !step.over()
-                            .and(at.getOrDefault(index, CodePoints.EVERYTHING)).isEmpty()) {
+                    if (onTheWay[index + 1][step.to()] && meets(step.over(), asked)) {
                         onTheWay[index][state] = true;
                         break;
                     }

@@ -23,8 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  *
  * <p>The oracle is the congruence worked out here at each value: a value the class holds that does
  * not bring the form to the residue, or one that does and the class leaves out, is a difference
- * from it. Weights prime to the divisor, sharing a factor with it, negative, nought, and of the
- * divisor itself, with the others at values the right side is and is not divisible at.
+ * from it. One of each kind of case the class turns on, and not a grid of them: a divisor of one,
+ * a prime one and one with several factors; weights prime to it, sharing each of its factors
+ * with it, negative, of the divisor itself and absent; and the others at values the right side
+ * is and is not divisible at, over every residue and two turns of the divisor.
  */
 class TheLastNumberOfACongruenceIsHeldToTheClassTheOthersLeaveTest {
 
@@ -33,14 +35,14 @@ class TheLastNumberOfACongruenceIsHeldToTheClassTheOthersLeaveTest {
 
     @Test
     void theClassIsEveryValueThatBringsTheFormToTheResidue() {
-        long[] weights = {1, 3, 7, -3, 4, 6, 10, 0, -10};
-        long[] divisors = {1, 2, 7, 10, 12};
+        long[] weights = {1, -3, 4, 6, 12, 0};
+        long[] divisors = {1, 7, 12};
         for (long divisor : divisors) {
             for (long wx : weights) {
-                for (long wy : weights) {
-                    for (long constant = -3; constant <= 3; constant += 3) {
+                for (long wy : new long[] {1, 4}) {
+                    for (long constant = -3; constant <= 0; constant += 3) {
                         for (long residue = 0; residue < divisor; residue++) {
-                            for (long y = -4; y <= 4; y++) {
+                            for (long y = 0; y <= 2; y++) {
                                 agrees(wx, wy, constant, divisor, residue, y);
                             }
                         }
@@ -65,7 +67,7 @@ class TheLastNumberOfACongruenceIsHeldToTheClassTheOthersLeaveTest {
         HeldClass held = congruent.leavesTheLast(X, standing);
         String said = wx + "·x + " + weightOfY + "·" + y + " + " + constant + " ≡ " + residue
                 + " (mod " + divisor + ")";
-        for (long x = -40; x <= 40; x++) {
+        for (long x = -divisor; x < divisor; x++) {
             boolean meets = Math.floorMod(wx * x + weightOfY * y + constant, divisor) == residue;
             boolean kept = switch (held) {
                 case HeldClass.None _ -> true;

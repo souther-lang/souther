@@ -121,18 +121,23 @@ final class NumericWitness {
     }
 
     /**
-     * Where each of {@code terms} may stand together inside {@code within} with {@code congruent}
-     * holding of them besides, or what this found out about there being none.
+     * Where each of {@code terms} may stand together inside {@code within} with one of
+     * {@code congruents} holding of them besides, tried in order, or what this found out about
+     * there being none: none stands only where none stands under any of them.
      *
      * <p>The last of {@code terms} is the one the class is read for: once the others stand, the
      * values of it the congruence leaves are a class ({@link Congruent#leavesTheLast}), and those
      * are what it is walked over. A region holds runs and no class, so this is how a statement no
      * region carries is met without the form being put at a value before its numbers are.
+     *
+     * <p>The congruences are the remainders of one form, which differ in what the last is held to
+     * and in nothing the region says. What the region leaves the terms, and where each usually
+     * stands, is asked once for them all.
      */
     static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
                        Function<NumericTerm, Carrier> on, WitnessSearch looking,
-                       Congruent congruent) {
-        return of(within, terms, on, looking, Composing.ANY_ASSIGNMENT, congruent);
+                       List<Congruent> congruents) {
+        return of(within, terms, on, looking, Composing.ANY_ASSIGNMENT, congruents);
     }
 
     /**
@@ -145,8 +150,8 @@ final class NumericWitness {
      */
     static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
                        Function<NumericTerm, Carrier> on, WitnessSearch looking,
-                       Composing composing, Congruent congruent) {
-        if (leavesTheQuestionNothing(within, terms)) {
+                       Composing composing, List<Congruent> congruents) {
+        if (congruents.isEmpty() || leavesTheQuestionNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
         List<NumericTerm> nearFirst = new ArrayList<>();
@@ -157,7 +162,21 @@ final class NumericWitness {
                     ? nearFirst : rest).add(term);
         }
         nearFirst.addAll(rest);
-        return walked(within, nearFirst, on, looking, composing, congruent);
+        boolean proved = true;
+        CompositionShortfall met = CompositionShortfall.NONE;
+        for (Congruent congruent : congruents) {
+            switch (walked(within, nearFirst, on, looking, composing, congruent)) {
+                case Standing.Found found -> {
+                    return found;
+                }
+                case Standing.ProvedImpossible _ -> { }
+                case Standing.NotFound(CompositionShortfall shortOf) -> {
+                    proved = false;
+                    met = met.and(shortOf);
+                }
+            }
+        }
+        return proved ? new Standing.ProvedImpossible() : new Standing.NotFound(met);
     }
 
     private static Standing walked(SearchRegion within, List<? extends NumericTerm> terms,

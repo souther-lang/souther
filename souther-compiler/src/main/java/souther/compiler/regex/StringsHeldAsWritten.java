@@ -35,7 +35,6 @@ public final class StringsHeldAsWritten {
     /** The strings of {@code language} held as written, or null where its machine is no plain
      *  one, with a step that takes no code point. */
     static StringsHeldAsWritten of(Automaton language) {
-        CodePoints stable = StableStarters.all();
         List<List<Automaton.Step>> steps = new ArrayList<>();
         BitSet accepting = new BitSet();
         for (int state = 0; state < language.size(); state++) {
@@ -44,7 +43,7 @@ public final class StringsHeldAsWritten {
             }
             List<Automaton.Step> kept = new ArrayList<>();
             for (Automaton.Step step : language.stepsFrom(state)) {
-                CodePoints over = step.over().and(stable);
+                CodePoints over = StableStarters.within(step.over());
                 if (!over.isEmpty()) {
                     kept.add(new Automaton.Step(over, step.to()));
                 }

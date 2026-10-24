@@ -13,12 +13,15 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ComposedRows;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
 
@@ -31,10 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * code point by code point, where the string's rules settle how many it holds, and a row on each
  * side of a rule about it is a string of the format.
  *
- * <p>Held by running the rows. Each row composed for a rule is put back as an example, answered
- * with what the rule works out to over the string the row holds — worked out here, from the digits
- * and the weights written in the model — so a row whose string does not leave what it was composed
- * for is an example the model answers otherwise, which is an error of the run. The models vary the
+ * <p>Held by running the rows. Each row composed for a rule is run through the module and held to
+ * what the rule works out to over the string the row holds — worked out here, from the digits and
+ * the weights written in the model — so a row whose string does not leave what it was composed for
+ * is a row the model answers otherwise. The models vary the
  * weights, their period, whether the walk is of the code points reversed or cut, how long the
  * string is, and whether the list is bound to a name.
  */
@@ -171,25 +174,19 @@ class ACodePointWeighedByItsIndexIsReadAtThatIndexTest {
     @Test
     void everyRuleIsComposedAStringThatTakesIt() {
         for (Case each : READ) {
-            List<String> examples = new ArrayList<>();
+            Compilation compilation = measured(each.model());
             Set<Integer> answers = new TreeSet<>();
-            for (List<FixtureTemplate> row : composedForTheRules(measured(each.model()))) {
+            for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
                 String text = textOf(row.getFirst().value());
                 assertTrue(text.matches("[0-9]+"), () -> each.name() + ": " + text);
                 int answer = each.answer(text);
                 answers.add(answer);
-                examples.add("    | \"composed " + examples.size() + "\" : ("
-                        + row.getFirst().text() + ") -> " + answer);
+                assertEquals(new AnswerObservation.Answered(new ObservedValue.Integer(answer)),
+                        ComposedRows.answer(compilation, "pick", row),
+                        () -> each.name() + ": " + text + " is answered as its string says");
             }
             assertEquals(Set.of(0, 1), answers,
-                    () -> each.name() + ": a row on each side, and not " + examples);
-            Compilation answeredBy = Compilation.ofSource(each.model() + "example pick\n"
-                    + String.join("\n", examples) + "\n", "Main");
-            answeredBy.answerEverything();
-            assertEquals(List.of(), answeredBy.errors().stream()
-                    .map(error -> error.diagnostic().code() + " " + error.diagnostic().said())
-                    .toList(), () -> each.name() + ": each row is answered as its string says: "
-                            + examples);
+                    () -> each.name() + ": a row on each side, and not " + answers);
         }
     }
 

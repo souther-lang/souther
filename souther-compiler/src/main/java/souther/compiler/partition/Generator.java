@@ -7019,32 +7019,29 @@ public final class Generator {
             terms.add(term.atOnePosition());
         }
         int left = CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
-        boolean proved = true;
-        CompositionShortfall met = CompositionShortfall.NONE;
+        List<NumericWitness.Congruent> tried = new ArrayList<>();
+        boolean cut = false;
         for (WholeNumberRuns.Run run : remainder.leaves().runs()) {
-            for (BigInteger r = run.from(); r.compareTo(run.to()) <= 0; r = r.add(BigInteger.ONE)) {
+            for (BigInteger r = run.from(); !cut && r.compareTo(run.to()) <= 0;
+                 r = r.add(BigInteger.ONE)) {
                 if (new Congruences(r.subtract(moved), divisor).meet(reached) == null) {
                     continue;
                 }
                 if (left-- <= 0) {
-                    return new NumericWitness.Standing.NotFound(met.and(CompositionShortfall.of(
-                            Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
-                }
-                switch (NumericWitness.of(here, terms, on, looking,
-                        new NumericWitness.Congruent(dividend, divisor, r))) {
-                    case NumericWitness.Standing.Found found -> {
-                        return found;
-                    }
-                    case NumericWitness.Standing.ProvedImpossible _ -> { }
-                    case NumericWitness.Standing.NotFound(CompositionShortfall shortOf) -> {
-                        proved = false;
-                        met = met.and(shortOf);
-                    }
+                    cut = true;
+                } else {
+                    tried.add(new NumericWitness.Congruent(dividend, divisor, r));
                 }
             }
         }
-        return proved ? new NumericWitness.Standing.ProvedImpossible()
-                : new NumericWitness.Standing.NotFound(met);
+        NumericWitness.Standing standing = NumericWitness.of(here, terms, on, looking, tried);
+        if (!cut || standing instanceof NumericWitness.Standing.Found) {
+            return standing;
+        }
+        CompositionShortfall met = standing instanceof NumericWitness.Standing.NotFound(
+                CompositionShortfall shortOf) ? shortOf : CompositionShortfall.NONE;
+        return new NumericWitness.Standing.NotFound(met.and(CompositionShortfall.of(
+                Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
     }
 
     /**

@@ -13,12 +13,15 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ComposedRows;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
 
@@ -33,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The model is a check digit: the twelfth digit against eleven less what the first eleven,
  * reversed and weighed by where each stands, leave divided by eleven, nought where that is nought
- * or one. Held by running the rows: each row composed for a rule is put back as an example,
- * answered with what the check works out to over its string here, and a row at a point of a line
+ * or one. Held by running the rows: each row composed for a rule is run through the module and
+ * held to what the check works out to over its string here, and a row at a point of a line
  * is a string whose numbers are the ones its label names, worked out here of its digits.
  *
  * <p>Apart only where the format shows it. Where the format ties the code point to one the total
@@ -107,22 +110,17 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
 
     @Test
     void everyRuleIsComposedAStringThatTakesIt() {
-        List<String> examples = new ArrayList<>();
+        Compilation compilation = measured(MODEL);
         Set<Integer> answers = new TreeSet<>();
-        for (List<FixtureTemplate> row : composedForTheRules(measured(MODEL))) {
+        for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
             String text = textOf(row.getFirst().value());
             assertTrue(text.matches("[0-9]{12}"), text);
             answers.add(answer(text));
-            examples.add("    | \"composed " + examples.size() + "\" : (" + row.getFirst().text()
-                    + ") -> " + answer(text));
+            assertEquals(new AnswerObservation.Answered(new ObservedValue.Integer(answer(text))),
+                    ComposedRows.answer(compilation, "verify", row),
+                    () -> text + " is answered as its string says");
         }
-        assertEquals(Set.of(0, 1), answers, () -> "a row on each side, and not " + examples);
-        Compilation answeredBy = Compilation.ofSource(MODEL + "example verify\n"
-                + String.join("\n", examples) + "\n", "Main");
-        answeredBy.answerEverything();
-        assertEquals(List.of(), answeredBy.errors().stream()
-                .map(error -> error.diagnostic().code() + " " + error.diagnostic().said())
-                .toList(), () -> "each row is answered as its string says: " + examples);
+        assertEquals(Set.of(0, 1), answers, () -> "a row on each side, and not " + answers);
     }
 
     private static final Pattern AT = Pattern.compile(" = (\\d+)$");

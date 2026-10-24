@@ -4,11 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ComposedRows;
 import souther.compiler.report.AdequacyReport;
 
 import java.math.BigInteger;
@@ -29,10 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * as a rule about how long it is: its line is drawn at the string's position, and a row on each
  * side of it is a string written to come to the number there.
  *
- * <p>Held by running the rows. Each row composed for a rule is put back as an example, answered
- * with what the condition works out to over the string the row holds — added up here, apart from
- * anything the compiler read — so a string that does not come to what it was written for is an
- * example the model answers otherwise.
+ * <p>Held by running the rows. Each row composed for a rule is run through the module, and its
+ * answer is held to what the condition works out to over the string the row holds — added up here,
+ * apart from anything the compiler read — so a string that does not come to what it was written
+ * for is a row the model answers otherwise.
  */
 class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
 
@@ -248,25 +251,23 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
      *  {@code expected} are the answers some row is composed for. */
     private static void composedAndAnswered(String model, Function<String, Integer> by,
                                             Set<Integer> expected) {
-        List<String> examples = new ArrayList<>();
+        Compilation compilation = measured(model);
+        List<String> texts = new ArrayList<>();
         Set<Integer> answers = new TreeSet<>();
-        for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
-            int answer = by.apply(textOf(row.getFirst().value()));
+        for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
+            String text = textOf(row.getFirst().value());
+            int answer = by.apply(text);
+            texts.add(text);
             answers.add(answer);
-            examples.add("    | \"composed " + examples.size() + "\" : ("
-                    + row.getFirst().text() + ") -> " + answer);
+            assertEquals(answered(answer), ComposedRows.answer(compilation, "pick", row),
+                    () -> text + " is answered as its string says");
         }
         assertEquals(expected, answers,
-                () -> "a row for every rule some string takes: " + examples + "\n" + model);
+                () -> "a row for every rule some string takes: " + texts + "\n" + model);
+    }
 
-        // Run and not measured: an example whose answer is not the program's is an error, which
-        // is all this asks of the rows.
-        Compilation answeredBy = Compilation.ofSource(model + "example pick\n"
-                + String.join("\n", examples) + "\n", "Main");
-        answeredBy.answerEverything();
-        assertEquals(List.of(), answeredBy.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                .toList(), () -> "each row is answered as its string says: " + examples);
+    private static AnswerObservation answered(int answer) {
+        return new AnswerObservation.Answered(new ObservedValue.Integer(answer));
     }
 
     /** The total of a weighed code point is a multiple of the total, however far it is carried
@@ -355,27 +356,18 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
      *  a string can do: it is silent on "-(" and says so, it does not say there is none. */
     @Test
     void aProductPastTheRangeAbortsWhereAnInRangeStringWithTheSameTotalAnswers() {
-        String model = PAST_THE_RANGE_ON_THE_WAY;
-        assertEquals(List.of(), errorsOf(model, "\"-(\"", 1), () -> "\"-(\" answers 1");
-        assertEquals(1, errorsOf(model, "\"-(\"", 0).size(), () -> "and not 0");
+        Compilation compilation = measured(PAST_THE_RANGE_ON_THE_WAY);
+        assertEquals(answered(1),
+                ComposedRows.answer(compilation, "pick", List.of(FixtureTemplate.string("-("))),
+                () -> "\"-(\" answers 1");
         // An abort is no answer: of an `Int` answer that is 0 or 1, neither holds.
-        assertEquals(1, errorsOf(model, "\"A\"", 0).size(), () -> "\"A\" does not answer 0");
-        assertEquals(1, errorsOf(model, "\"A\"", 1).size(), () -> "and does not answer 1");
+        assertEquals(new AnswerObservation.NotAnswered(),
+                ComposedRows.answer(compilation, "pick", List.of(FixtureTemplate.string("A"))),
+                () -> "\"A\" aborts");
 
-        String report = report(measured(model));
+        String report = report(compilation);
         assertTrue(report.contains("nothing could show a row can be written at a decision rule"),
                 () -> "a rule no row was composed for is undecided: " + report);
-    }
-
-    /** The errors of {@code model} given one example, the string {@code literal} answering
-     *  {@code answer}. */
-    private static List<String> errorsOf(String model, String literal, int answer) {
-        Compilation compilation = Compilation.ofSource(model + "example pick\n    | \"fixed\" : ("
-                + literal + ") -> " + answer + "\n", "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList();
     }
 
     /** The rows composed for the decision rules no row takes, each as its inputs. */

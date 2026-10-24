@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Random;
 
 import net.unit8.notation199x.Normalization;
+import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternParser;
@@ -181,15 +182,21 @@ class WhatAFormatHoldsAsAValueIsWhatAStringHoldsTest {
                         Map.of(), Integer.MAX_VALUE)));
     }
 
-    /** What a format of many code points comes to is worked out without a step for each of them
-     *  on the call stack. */
+    /** What a machine of many code points in a row comes to is worked out without a step for each
+     *  of them on the call stack: a chain of digits, made as the machine of {@code [0-9]{n}} is
+     *  without compiling the pattern. */
     @Test
     void theSumsOfALongFormatAreWorkedOutWhole() {
         int many = 50_000;
-        Language format = PatternPlan.of(assertInstanceOf(PatternRead.Read.class,
-                PatternParser.read("[0-9]{" + many + "}"))
-                .meaning()).compile(new Meter(200_000, 10_000_000, 1_000_000_000L));
-        assertNotNull(format);
-        assertEquals(new Language.Ends(48L * many, 57L * many), format.sumsOfCodePoints());
+        List<List<Automaton.Step>> steps = new ArrayList<>();
+        for (int state = 0; state < many; state++) {
+            steps.add(List.of(new Automaton.Step(CodePoints.between('0', '9'), state + 1)));
+        }
+        steps.add(List.of());
+        BitSet accepting = new BitSet();
+        accepting.set(many);
+        assertEquals(new Language.Ends(48L * many, 57L * many),
+                CodePointSums.range(Automaton.madeOf(steps, accepting), CodePoints::least,
+                        over -> over.ranges().getLast().to()));
     }
 }

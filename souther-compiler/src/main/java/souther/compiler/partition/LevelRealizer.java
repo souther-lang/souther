@@ -1040,27 +1040,27 @@ public final class LevelRealizer {
         for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.dividend())) {
             terms.add(each.getKey());
         }
+        List<NumericWitness.Congruent> congruents = new ArrayList<>();
         for (Level level : LevelCandidateSource.forItem(over.where(), over.levels()).levels()) {
             ExactRatio asked = level.asAnExactNumber();
-            if (asked == null || !asked.isWhole()
-                    || !(asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger r))
-                    || r.signum() < 0 || r.compareTo(over.divisor()) >= 0) {
-                continue;
+            if (asked != null && asked.isWhole()
+                    && asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger r)
+                    && r.signum() >= 0 && r.compareTo(over.divisor()) < 0) {
+                congruents.add(new NumericWitness.Congruent(over.dividend(), over.divisor(), r));
             }
-            // An assignment a row was already built from is stepped past inside the walk, which
-            // then tries the next value of the last number rather than handing the same one back.
-            NumericWitness.Composing notTried = standing -> found(fixingOf(standing), within, tried)
-                    instanceof Realization.Found ? new NumericWitness.Composed.Built()
-                    : new NumericWitness.Composed.NotBuilt(CompositionShortfall.NONE);
-            if (NumericWitness.of(within, terms, over.on()::get, looking, notTried,
-                    new NumericWitness.Congruent(over.dividend(), over.divisor(), r))
-                    instanceof NumericWitness.Standing.Found standing) {
-                Map<NumericTerm, Place> placed = new LinkedHashMap<>();
-                for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
-                    placed.put(each.term(), each.place());
-                }
-                return found(fixingOf(placed), within, tried);
+        }
+        // An assignment a row was already built from is stepped past inside the walk, which then
+        // tries the next value of the last number rather than handing the same one back.
+        NumericWitness.Composing notTried = standing -> found(fixingOf(standing), within, tried)
+                instanceof Realization.Found ? new NumericWitness.Composed.Built()
+                : new NumericWitness.Composed.NotBuilt(CompositionShortfall.NONE);
+        if (NumericWitness.of(within, terms, over.on()::get, looking, notTried, congruents)
+                instanceof NumericWitness.Standing.Found standing) {
+            Map<NumericTerm, Place> placed = new LinkedHashMap<>();
+            for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
+                placed.put(each.term(), each.place());
             }
+            return found(fixingOf(placed), within, tried);
         }
         return null;
     }
