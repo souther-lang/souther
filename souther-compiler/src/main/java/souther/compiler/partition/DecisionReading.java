@@ -110,6 +110,20 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
                     .flatMap(each -> each.states().stream()).toList());
         }
 
+        /** What a row has to be, beside the way, for each case the statements on this path draw
+         *  inside themselves that the reading can say it of. */
+        public List<CaseWay> caseWays() {
+            return steps.stream().flatMap(each -> each.cases().stream()).toList();
+        }
+
+        /** The way to this rule with what {@code toACase} asks of the row put on it: what a row
+         *  composed for the case has to satisfy of the input. */
+        public WayToTheBorder statesToACase(CaseWay toACase) {
+            List<OnTheWay> entries = new ArrayList<>(states().onTheWay());
+            entries.addAll(toACase.puts());
+            return new WayToTheBorder(entries);
+        }
+
         /**
          * What the same conditions ask of the answers a row stands the dependencies in with, which
          * is the other half of what such a row has to be.

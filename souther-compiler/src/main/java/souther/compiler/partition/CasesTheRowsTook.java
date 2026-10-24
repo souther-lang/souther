@@ -141,8 +141,7 @@ public final class CasesTheRowsTook {
      * case it comes out in cannot be told from another, and then it is owed one nothing is seen
      * in.
      */
-    private static Set<CaseOfAStatement.Step> owedBy(Proposition.SomeReachable search,
-                                                     boolean finds) {
+    static Set<CaseOfAStatement.Step> owedBy(Proposition.SomeReachable search, boolean finds) {
         if (!finds) {
             return tellsTheStepsApart(search)
                     ? EnumSet.of(CaseOfAStatement.Step.NOWHERE_AT_A_LEAF,

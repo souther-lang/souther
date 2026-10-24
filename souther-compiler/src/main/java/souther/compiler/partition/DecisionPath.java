@@ -91,11 +91,21 @@ final class DecisionPath {
      *               column — and all of them about the one condition
      * @param said   which copies of the model's code each of {@code states} was read off, told
      *               where the condition was read, at every place it was consulted
+     * @param cases  what a row has to be, beside the way, to be evidence of a case the condition's
+     *               statement draws inside itself. One column asks one thing, so these are the
+     *               first consultation's
      */
     record Consulted(DecidedCondition answer, List<ShownBy> seen, List<OnTheWay> states,
-                     SaidOnTheWay said) {
+                     SaidOnTheWay said, List<CaseWay> cases) {
+
+        /** A condition that draws no case inside itself. */
+        Consulted(DecidedCondition answer, List<ShownBy> seen, List<OnTheWay> states,
+                  SaidOnTheWay said) {
+            this(answer, seen, states, said, List.of());
+        }
 
         Consulted {
+            cases = List.copyOf(cases);
             if (answer == null || seen == null || seen.isEmpty() || states == null
                     || states.isEmpty() || said == null) {
                 throw new IllegalArgumentException("a condition a path consulted is an answer,"
@@ -108,7 +118,13 @@ final class DecisionPath {
         /** The condition consulted once, seen at {@code shown}. */
         Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
                   SaidOnTheWay said) {
-            this(answer, List.of(shown), states, said);
+            this(answer, List.of(shown), states, said, List.of());
+        }
+
+        /** The condition consulted once, seen at {@code shown}, drawing the cases {@code cases}. */
+        Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
+                  SaidOnTheWay said, List<CaseWay> cases) {
+            this(answer, List.of(shown), states, said, cases);
         }
 
         /** Where the column is witnessed: the first place the way met it. */
@@ -133,7 +149,7 @@ final class DecisionPath {
             List<ShownBy> places = new ArrayList<>(seen);
             more.seen.stream().filter(each -> !places.contains(each)).forEach(places::add);
             return new Consulted(answer, places, states,
-                    said.retold(states, more.states, more.said));
+                    said.retold(states, more.states, more.said), cases);
         }
 
         /** Where a report about the condition asks for its place, which every entry for it
@@ -146,8 +162,14 @@ final class DecisionPath {
     /** This path with {@code answer} on it, or null where the path already answers that column the
      *  other way. */
     DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
+                     SaidOnTheWay said, List<CaseWay> cases) {
+        return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said, cases))));
+    }
+
+    /** The same, for a condition that draws no case inside itself. */
+    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
                      SaidOnTheWay said) {
-        return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said))));
+        return and(answer, shown, states, said, List.of());
     }
 
     /**
@@ -186,7 +208,7 @@ final class DecisionPath {
         for (Consulted each : consulted) {
             AnswersDemanded demands = demands(each);
             out.add(new RuleStep(each.seen(), each.states(), demands,
-                    each.said().asking(demands)));
+                    each.said().asking(demands), each.cases()));
         }
         return List.copyOf(out);
     }
@@ -440,7 +462,7 @@ final class DecisionPath {
         List<Consulted> out = new ArrayList<>();
         for (Consulted each : consulted) {
             out.add(new Consulted(each.answer(), each.seen().stream().map(seen).toList(),
-                    each.states(), each.said()));
+                    each.states(), each.said(), each.cases()));
         }
         return new DecisionPath(out);
     }

@@ -2,7 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.meaning.Proposition;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 /**
  * One case a statement of a decision tells apart inside itself.
@@ -48,6 +51,32 @@ public sealed interface CaseOfAStatement {
         public Search {
             Objects.requireNonNull(statement, "a step is of some search");
             Objects.requireNonNull(step, "a case is one of the steps");
+        }
+
+        /**
+         * What the step says of the node the search starts at, as statements about that node, or
+         * none where a row cannot be asked for the step by what it writes at the node.
+         *
+         * <p>Finding one below is no statement about the node: it is about what is under it at
+         * any depth, which a row is composed for by the nodes it writes and not by a distinction at
+         * the start. The other three are the node meeting what the search asks, and the node not
+         * meeting it with and without anything below.
+         *
+         * @param denying what holds exactly where a statement does not, which is the reading's own
+         */
+        public Optional<List<Proposition>> askedOfTheNode(UnaryOperator<Proposition> denying) {
+            if (!statement.at().equals(statement.writtenAt())) {
+                return Optional.empty();
+            }
+            Proposition notAtTheNode = denying.apply(statement.atANode());
+            return switch (step) {
+                case AT_THE_NODE -> Optional.of(List.of(statement.atANode()));
+                case BELOW_IT -> Optional.empty();
+                case NOWHERE_AT_A_LEAF -> statement.noneBelow()
+                        .map(none -> List.of(notAtTheNode, none));
+                case NOWHERE_BELOW -> statement.noneBelow()
+                        .map(none -> List.of(notAtTheNode, denying.apply(none)));
+            };
         }
     }
 

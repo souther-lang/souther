@@ -23,11 +23,20 @@ import java.util.Objects;
  *                told where the condition was read, at every place it was. Not where the step is
  *                seen: a comparison over a value another call worked out states what that call's
  *                fork decided, and the halves of a joined condition may stand in two calls
+ * @param cases   what a row has to be, beside the way, to be evidence of one case the condition's
+ *                statement draws inside itself, for each case this reading can say that of
  */
 public record RuleStep(List<ShownBy> seen, List<OnTheWay> states, AnswersDemanded demands,
-                       SaidOnTheWay said) {
+                       SaidOnTheWay said, List<CaseWay> cases) {
+
+    /** A step that draws no case inside itself a row is looked for in. */
+    public RuleStep(List<ShownBy> seen, List<OnTheWay> states, AnswersDemanded demands,
+                    SaidOnTheWay said) {
+        this(seen, states, demands, said, List.of());
+    }
 
     public RuleStep {
+        cases = List.copyOf(cases);
         if (seen == null || seen.isEmpty()) {
             throw new IllegalArgumentException(
                     "a step of a way is seen somewhere, or said to be seen nowhere");
