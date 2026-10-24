@@ -269,17 +269,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A rule working something out beside the part it takes is not shown to leave the field a
-     * value, whatever it comes to: what the bounds read of {@code Date.day(value) + M > 0} is a day
-     * above nought less the greatest {@code Int}, and no date gets through working it out. Cancelled
-     * away, as in {@code + M - M}, it is still worked out. A part held against a number as it is
-     * written — the length of a string, the year of a date — leaves one.
+     * value, whatever it comes to. Under {@code Date.day(value) + 1 == 2} the first of a month is
+     * a date the sum gets through, and the rule is not shown to be that alone. What the bounds read
+     * of {@code Date.day(value) + M > 0} is a day above nought less the greatest {@code Int}, and
+     * no date gets through working it out, so the field holds nothing and nothing is said of the
+     * amount beside it. Cancelled away, as in {@code + M - M}, it is still worked out. A part held
+     * against a number as it is written — the length of a string, the year of a date — leaves one.
      */
     @Test
     void aRuleWorkingSomethingOutBesideThePartIsNotShownToLeaveAValue() {
+        assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.day(value) + 1 == 2"), "g.value >= r.d.value", 24));
         for (String rule : List.of("Date.day(value) + 9223372036854775807 > 0",
-                "Date.day(value) + 9223372036854775807 - 9223372036854775807 == 1",
-                "Date.day(value) + 1 == 2")) {
-            assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                "Date.day(value) + 9223372036854775807 - 9223372036854775807 == 1")) {
+            assertEquals(Map.of(), leftAt("g: Yen, r: Rec",
                     besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
         }
         assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",

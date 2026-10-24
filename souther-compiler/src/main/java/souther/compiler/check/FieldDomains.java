@@ -2212,6 +2212,8 @@ public final class FieldDomains {
                     "2 " + orderOf(it.rule()) + " " + it.path();
             case ProjectionEvidence.Cause.Lossy it ->
                     "3 " + orderOf(it.rule()) + " " + it.atom() + " " + it.unstated();
+            case ProjectionEvidence.Cause.OperatorsNotShownToAnswer it ->
+                    "3 " + orderOf(it.rule());
             case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
             case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
@@ -3090,7 +3092,31 @@ public final class FieldDomains {
                 }
             }
         })));
+        // And what a run needs of the numbers to work each rule out, which the bounds are the rule
+        // over the whole numbers and so say nothing of. Asked of the same state as above: what is
+        // needed and is not held is a relation the range cannot carry, and what could not be
+        // said is a cause of its own.
+        Set<ProjectionEvidence.Cause> unsaid = new LinkedHashSet<>();
+        readings.forEach(reading -> reading.workedOut().forEach((part, needs) -> {
+            for (NumericConstraint each : needs.asked()) {
+                if (constraints.numbers()
+                        .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
+                    continue;
+                }
+                for (FactSubject atom : each.atoms()) {
+                    lossy.add(new ProjectionEvidence.Cause.Lossy(part.rule(), atom,
+                            Set.of(each.rel() == Rel.NE
+                                    ? ProjectionEvidence.Cause.Unstated.A_HOLE
+                                    : ProjectionEvidence.Cause.Unstated.A_RELATION)));
+                }
+            }
+            if (!needs.read()) {
+                unsaid.add(new ProjectionEvidence.Cause.OperatorsNotShownToAnswer(
+                        part.rule()));
+            }
+        }));
         causes.addAll(lossy);
+        causes.addAll(unsaid);
         // And whether the ends handed over are the ends the rules drew. Asked of every subject the
         // algebra speaks of, because this is not about any one rule: the reasoning reached the edge
         // exactly and the writing could not carry it.
