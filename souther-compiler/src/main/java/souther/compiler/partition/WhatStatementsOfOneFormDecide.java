@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -78,6 +79,60 @@ final class WhatStatementsOfOneFormDecide {
             }
         }
         return new Verdict(false, decided);
+    }
+
+    /**
+     * The statements of {@code stated} that hold the form of {@code asked} to an interval a row
+     * can stand anywhere near the line of {@code asked} in, or none where one of them cannot.
+     *
+     * <p>A row that puts one term at a value beside the relation's line and every other term where
+     * the declarations leave it has the form within the greatest weight of the line, whatever
+     * the others are: one step of the term moves the form by its weight. Where the statements
+     * hold the form on both sides of the line over that far, such a row meets them, and they tie
+     * the terms to one another by nothing that row needs. Statements are orders only: an
+     * interval is what an order holds a form to, and two of them leave one.
+     *
+     * <p>What follows from it is only of a reading that moves one term while the others stand
+     * where they may: a value of that term is then settled one way or the other, or left either
+     * way, as it is without the statements. A reading that moves two terms together moves the
+     * form by more than the greatest weight, and the interval need not reach as far as that.
+     *
+     * @param asked the relation asked as a statement
+     */
+    static List<TakenConstraint.Affine> leavingRoomAroundTheLine(
+            List<TakenConstraint.Affine> stated, TakenConstraint.Affine asked) {
+        ExactRatio reach = asked.form().coefs().values().stream().map(ExactRatio::abs)
+                .max(ExactRatio::compareTo).orElse(null);
+        if (reach == null) {
+            return List.of();
+        }
+        List<Bound> bounds = new ArrayList<>();
+        for (TakenConstraint.Affine each : stated) {
+            if (each.form().coefs().isEmpty() || !outsideEveryContainer(each)) {
+                continue;
+            }
+            ExactRatio factor = factorBetween(asked.form().coefs(), each.form().coefs());
+            if (factor == null) {
+                continue;
+            }
+            if (each.rel() == Rel.EQ || each.rel() == Rel.NE) {
+                return List.of();
+            }
+            bounds.add(new Bound(factor, each));
+        }
+        ExactRatio line = asked.form().constant().negated();
+        ExactRatio below = line.minus(reach).orNull();
+        ExactRatio above = line.plus(reach).orNull();
+        if (bounds.isEmpty() || below == null || above == null) {
+            return List.of();
+        }
+        for (Bound each : bounds) {
+            if (!Boolean.TRUE.equals(each.holdsAt(below))
+                    || !Boolean.TRUE.equals(each.holdsAt(above))) {
+                return List.of();
+            }
+        }
+        return bounds.stream().map(Bound::statement).toList();
     }
 
     /**
