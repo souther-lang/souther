@@ -265,19 +265,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   takes every value beside how many its container holds: kept only for a
      *                   count every row made of the witness gets past what a run works out before
      *                   the comparison for ({@link WhatARunWorksOutBeforeACount})
+     * @param getsPast   what every operator a run works out up to the comparison, the comparison's
+     *                   own included, answering asks of a row: what a region can carry of it, and
+     *                   the places the rest ties together. A row that stops there is no row at the
+     *                   comparison, and the way's entries say nothing of it: they are what its
+     *                   conditions state, and an operator answering is none of them. Nothing
+     *                   where the comparison stands in a closure or a helper read at a call,
+     *                   whose applications are not one run
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
-                   SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses) {
+                   SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
+                   DemandReading.Answered getsPast) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null
                     || metOn == null || runsAs == null || context == null
-                    || saidOnTheWay == null || witnesses == null) {
+                    || saidOnTheWay == null || witnesses == null || getsPast == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -527,6 +535,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
+     * What a region can carry of every operator a run works out up to {@code comparison}
+     * answering ({@link Reading#getsPast}), read of each part the run always works out, with the
+     * names as they stand at the comparison.
+     */
+    private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
+        DemandReading.Answered out = DemandReading.Answered.NOTHING;
+        for (Core part : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison)) {
+            Pullback.OperatorsAnswer operators =
+                    in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
+            DemandReading.Answered ofIt = operators.answers().isPresent()
+                    ? DemandReading.regionAnswered(operators.answers().get(), in.read())
+                    : DemandReading.Answered.NOTHING;
+            if (part == comparison) {
+                out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
+            } else {
+                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators)));
+            }
+        }
+        return out;
+    }
+
+    /**
      * @param applying the applications of the closures this position stands inside, moved by the
      *                 same steps as {@code reads}
      * @param assumed  what evaluating everything before this position established
@@ -587,7 +617,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     statedAsACondition(e, standing, stopsWhere, reads, in, numbering), stopsWhere,
                     applying.elementsMetOn(), stated.written(), in.context(),
-                    numbering.saidOnTheWay(List.of(assumed)), witnesses));
+                    numbering.saidOnTheWay(List.of(assumed)), witnesses,
+                    standing instanceof BoundaryPolicy.Standing.Admitted
+                            && stated.statement() instanceof Stated.AComparison
+                            && in.context().equals(CallContext.OF_THE_BODY)
+                            ? gotPast(e, in, reads) : DemandReading.Answered.NOTHING));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

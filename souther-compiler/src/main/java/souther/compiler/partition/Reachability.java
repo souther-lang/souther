@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -7,7 +8,9 @@ import souther.compiler.inputs.TermPath;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -93,6 +96,12 @@ public sealed interface Reachability {
                                 new ReadFrom(way, declarations)));
             }
         };
+    }
+
+    /** {@code way} with what a run to the border got past working out
+     *  ({@link Reaching#gettingPast}) taken in, where it is a way a row reaches. */
+    static Reachability gettingPast(Reachability way, DemandReading.Answered answered) {
+        return way instanceof Reaching reaching ? reaching.gettingPast(answered) : way;
     }
 
     /** {@code way}, one the walk found holds together, as a composer reads it. */
@@ -276,22 +285,41 @@ public sealed interface Reachability {
      *                        region was made some other way. Two ways of one reading narrowed by
      *                        the same are over one region, which the region's own value does not
      *                        say
+     * @param gotPast         what the run to the border got past working out narrowed the region
+     *                        by, which no condition of the way states
+     * @param tied            the places that run ties together, or may stop on where nothing says
+     *                        when, which a region does not say
+     * @param unsaid          whether that run may stop on something no place names, so that no
+     *                        number is known free of what it works out
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
-                    Optional<List<TakenConstraint>> narrowedBy)
+                    Optional<List<TakenConstraint>> narrowedBy,
+                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied, boolean unsaid)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
-                    || declined == null || narrowedBy == null) {
+                    || declined == null || narrowedBy == null || gotPast == null
+                    || tied == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
             declined = List.copyOf(declined);
             narrowedBy = narrowedBy.map(List::copyOf);
+            gotPast = List.copyOf(gotPast);
+            tied = List.copyOf(tied);
+        }
+
+        /** A way a run has got past nothing on that a region says or that ties places. */
+        public Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
+                        List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
+                        List<OnTheWay.Declined> declined,
+                        Optional<List<TakenConstraint>> narrowedBy) {
+            this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
+                    List.of(), List.of(), false);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -323,7 +351,91 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy);
+                    narrowedBy, gotPast, tied, unsaid);
+        }
+
+        /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
+         *  denial; a condition of a shape that has none is not shown to be met. */
+        private static boolean heldAtEveryRow(TakenConstraint each, SearchRegion before,
+                                              SearchRegion region) {
+            return each instanceof TakenConstraint.Affine(var form, var rel)
+                    && (TakenConstraint.holdsOverTheRunsOf(form, rel, before)
+                            || TakenConstraint.nothingMeetsAll(
+                                    List.of(new TakenConstraint.Affine(form, rel.denied())),
+                                    region));
+        }
+
+        /** Whether taking {@code each} in moves where a number it names runs or what is held
+         *  apart from it, going from {@code before} to {@code after}. */
+        private static boolean movesAny(TakenConstraint each, SearchRegion before,
+                                        SearchRegion after) {
+            for (NumericTerm term : each.terms()) {
+                if (term instanceof NumericTerm.FromOnePosition one
+                        && (!Objects.equals(after.wholeRunOf(one), before.wholeRunOf(one))
+                                || !after.apartAt(one).equals(before.apartAt(one)))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * This with {@code these}, what the run to the border got past working out, taken into the
+         * region of it and of each way it is split into. A way they leave no input is kept as it
+         * is, with what they tie and what they leave unsaid: the walk proves that no row arrives
+         * there, from the same operators, and says so; a region narrowed to nothing here would
+         * be one more reader's account of it.
+         */
+        Reaching gettingPast(DemandReading.Answered answered) {
+            if (answered.equals(DemandReading.Answered.NOTHING)) {
+                return this;
+            }
+            List<Set<TermPath>> ties = new ArrayList<>(tied);
+            ties.addAll(answered.tied());
+            // Only what narrows: a bound the region already holds is nothing a reader of this
+            // way is to be told of.
+            List<TakenConstraint> narrowing = new ArrayList<>();
+            SearchRegion narrowed = region;
+            for (TakenConstraint each : answered.narrowing()) {
+                SearchRegion next = each.narrowing(narrowed);
+                // One number that no run of moves is one the region already holds. Several say
+                // how they go together, which no run of one of them shows: a sum held below a
+                // greatest value leaves each its values and the pair fewer. Unless every row of
+                // the region meets it, which leaves them as they are.
+                boolean keeps = each.terms().size() > 1
+                        ? !heldAtEveryRow(each, region, narrowed) : movesAny(each, narrowed, next);
+                if (keeps) {
+                    narrowing.add(each);
+                    narrowed = next;
+                }
+            }
+            Optional<List<TakenConstraint>> by = narrowedBy.map(was -> {
+                List<TakenConstraint> both = new ArrayList<>(was);
+                both.addAll(narrowing);
+                return both;
+            });
+            Ways split = switch (ways) {
+                case Ways.One one -> one;
+                case Ways.Each each -> new Ways.Each(each.along().stream()
+                        .map(one -> one.gettingPast(answered)).toList());
+                // Read again from the declarations narrowed by what the run got past, so that a
+                // reader reading the way again is as narrow as this one.
+                case Ways.Whole whole -> new Ways.Whole(whole.unsplit(), whole.figure(),
+                        whole.along().stream().map(one -> one.gettingPast(answered)).toList(),
+                        new ReadFrom(whole.from().way(),
+                                TakenConstraint.narrowedBy(narrowing,
+                                        whole.from().declarations())));
+            };
+            boolean unsaidNow = unsaid || answered.unsaid();
+            // A region nothing moved is the one the way already had, which is asked nothing again.
+            if (!narrowing.isEmpty() && narrowed.emptiness().isPresent()) {
+                return new Reaching(region, requirements, truths, boundedOnTheWay, split,
+                        declined, narrowedBy, gotPast, ties, unsaidNow);
+            }
+            List<TakenConstraint> past = new ArrayList<>(gotPast);
+            past.addAll(narrowing);
+            return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
+                    by, past, ties, unsaidNow);
         }
 
         /**

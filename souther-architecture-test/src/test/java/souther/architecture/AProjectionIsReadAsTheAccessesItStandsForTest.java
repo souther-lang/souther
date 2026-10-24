@@ -571,6 +571,23 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/Pullback", "comparisonHolding",
                 "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",
+                "(" + core + reads + "L" + c + "partition/Pullback$Bound;)V", Reading.STRUCTURE,
+                "asks each node what it ends a run for, of the owner of that: a name read off a"
+                        + " value ends none, so what a projection may end one for is what its"
+                        + " base may");
+        row(out, c + "partition/Pullback", "boundInside",
+                "(" + core + "L" + c + "core/Core$Block;" + reads + "L" + c
+                        + "partition/Pullback$Bound;)L" + c + "partition/Pullback$Bound;",
+                Reading.STRUCTURE,
+                "asks the parts of a call what the closure it is handed to is applied to: a"
+                        + " name read off a value is read off what its base is, so a projection"
+                        + " is what its base is");
+        row(out, c + "partition/Pullback", "leaveUnsaidOverWhereItStands",
+                "(" + core + reads + "L" + c + "partition/Pullback$Bound;)V", Reading.STRUCTURE,
+                "asks a node where it stands, and goes down to its parts where it stands nowhere:"
+                        + " a projection stands where its base does, and a base that stands"
+                        + " nowhere is a name no place is named for");
         row(out, c + "check/OrderOfElements", "walk", "(" + core + "Ljava/util/Map;[Z[I)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/WhatARunMayEndFor", "of", "(" + core + ")L" + c

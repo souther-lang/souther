@@ -198,7 +198,7 @@ sealed interface ClosureApplications {
                     List<Proposition> regions = new ArrayList<>();
                     each.forEach(one -> regions.add(WhatConditionsState.of(read)
                             .whereItsOperatorsAnswer(block.body(), one.reads(), read)
-                            .orElse(null)));
+                            .answers().orElse(null)));
                     List<Proposition> answers = null;
                     if (aTruth || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
                             || regions.stream().anyMatch(Objects::nonNull)) {

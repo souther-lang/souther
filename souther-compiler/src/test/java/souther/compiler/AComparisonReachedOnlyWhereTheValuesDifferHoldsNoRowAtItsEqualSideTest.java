@@ -91,15 +91,22 @@ class AComparisonReachedOnlyWhereTheValuesDifferHoldsNoRowAtItsEqualSideTest {
         assertFalse(human.contains("not accounted for"), human);
     }
 
-    /** A value held apart from a third is not held apart from {@code y}, so nothing is worked out. */
+    /**
+     * A value held apart from a third is not held apart from {@code y}. The third is read nowhere
+     * else, so it takes another value whatever {@code x} is, and the comparison after it is worked
+     * out over every {@code x} and {@code y} — its equal side a point a row is owed at, and not one
+     * no row stands at.
+     */
     @Test
-    void aComparisonAfterTheElseOfAnEqualityWithAThirdValueIsNotWorkedOut() {
+    void aComparisonAfterTheElseOfAnEqualityWithAThirdValueOwesItsEqualSide() {
         String human = report(AFTER_THE_ELSE_OF_AN_EQUALITY
                 .replace("(x: Int, y: Int)", "(x: Int, y: Int, z: Int)")
                 .replace("(x, y)", "(x, y, z)")
                 .replace("x == y", "x == z"));
 
-        assertTrue(human.contains("not accounted for"), human);
+        assertFalse(human.contains("not accounted for"), human);
+        assertTrue(human.contains("a row is at the OFF point (comparison@6:47)"), human);
+        assertFalse(human.contains("no row can stand at the OFF point (comparison@6:47)"), human);
     }
 
     /** Without it a proof of every OFF point of a comparison would pass the case above. */

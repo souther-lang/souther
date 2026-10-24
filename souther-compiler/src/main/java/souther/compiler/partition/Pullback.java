@@ -128,6 +128,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -1001,19 +1002,32 @@ final class Pullback {
      * said of it, as is one under a part the arithmetic composes nothing out of — which says less
      * than what has to hold, and never more.
      */
-    static Proposition whereItsOperatorsAnswer(Core body, InputReads reads, InputReading read) {
+    static OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
+                                                   InputReading read) {
         return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
                 null);
     }
 
-    /** The same, leaving out the comparison {@code apart} is read in, where it is not null, and
-     *  the values of the names it reads: that arithmetic is the relation it states. */
-    private Proposition whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
-                                                        Core.Read apart) {
+    /**
+     * The same, leaving out the comparison {@code apart} is read in, where it is not null, and
+     * the values of the names it reads: that arithmetic is the relation it states.
+     *
+     * <p>And which operators it works out may stop a run where nothing here says it: a quotient,
+     * a join, a sum whose number has no representation here, or one over operands no form says.
+     * Left out of {@code answers}, they are told apart from an operator that never stops, since a
+     * reader that takes a run to get past them everywhere is wrong about the rows that arrive.
+     */
+    private OperatorsAnswer whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
+                                                            Core.Read apart) {
         Set<BindingId> ofTheRelation = apart == null ? Set.of()
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
+        Operators[] told = new Operators[1];
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
+            if (apart == null) {
+                leaveUnsaidWhatMayEndARunUnder(body, reads, null);
+            }
+            told[0] = operated;
             return whereEachOperatorAnswers(operated);
         });
         Derivation answered = null;
@@ -1021,7 +1035,9 @@ final class Pullback {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
-        return answered == null ? null : pulled(answered).proposition();
+        return new OperatorsAnswer(
+                answered == null ? Optional.empty() : Optional.of(pulled(answered).proposition()),
+                told[0].unsaidGroups, told[0].unsaidElsewhere);
     }
 
     /** Every operator {@code e} works out on every run that works {@code e} out, told to
@@ -1047,6 +1063,157 @@ final class Pullback {
                     if (step instanceof Evaluated.Step.Always(Core part)) {
                         operatorsIn(part, reads, apart, ofTheRelation);
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * What may end a run anywhere under {@code standing}, whether or not it is worked out on every
+     * run, left unsaid over what it reads — but the operators already told of, which
+     * {@link #whereEachOperatorAnswers} says or leaves unsaid itself.
+     *
+     * <p>Asked of the owner of what a node ends a run for ({@link WhatARunMayEndFor}) at every
+     * node, so that no kind of node is enumerated here: a quotient, a kernel call, a library
+     * operation, a construction and a call this does not know the callee of are all one question,
+     * and a kind added to the IR is answered there. And under every part and not only those that
+     * always run: a part worked out on some runs ends those runs, and the rows that arrive are the
+     * rows of the others — which is no narrowing, since it is not known which, and is a place the
+     * run may stop on.
+     */
+    private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
+        Core e = Core.withoutStanding(standing);
+        if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
+                && !WhatARunMayEndFor.itself(e).endsNone()) {
+            operated.beginGroup();
+            boolean[] hasOperands = {false};
+            // A quotient stops where its divisor is nought, and what it divides is no part of it.
+            Core.forEachChild(e, operand -> {
+                if (isWhatADivisorAloneStopsOnDividing(e, operand)) {
+                    return;
+                }
+                hasOperands[0] = true;
+                leaveUnsaidOverWhatItReads(operand, reads, bound);
+            });
+            if (!hasOperands[0]) {
+                operated.leaveUnsaidOverUnreadOperands();
+            }
+        }
+        if (e instanceof Core.LetIn li) {
+            leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
+            leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
+        } else {
+            Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
+                    Core.withoutStanding(child) instanceof Core.Block block
+                            ? boundInside(e, block, reads, bound) : bound));
+        }
+    }
+
+    /**
+     * Whether {@code e} stops a run on its divisor alone and {@code operand} is what it divides,
+     * as the operator's own account says ({@link WhereAnOperatorAnswers}): a quotient that stops
+     * where its divisor is nought, and not one that may stop on its operands' sizes.
+     */
+    private static boolean isWhatADivisorAloneStopsOnDividing(Core e, Core operand) {
+        return Core.withoutStanding(e) instanceof Core.Binary quotient
+                && quotient.op() == BinOp.DIV && operand != quotient.right()
+                && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
+                        List.of(quotient.left().type(), quotient.right().type()))
+                        instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought;
+    }
+
+    /**
+     * The names {@code block}, an argument of {@code applied}, binds, and the places they stand
+     * for: what an operation of the library applies a closure to is what its other arguments hold,
+     * so a name the closure binds is read off the places those read — and none this can name where
+     * the closure is not an argument of such a call, which is applied to what its applications
+     * say.
+     */
+    private Bound boundInside(Core applied, Core.Block block, InputReads reads, Bound outer) {
+        Set<BindingId> names = new HashSet<>(outer == null ? Set.of() : outer.names());
+        block.params().forEach(binder -> names.add(binder.binding()));
+        Set<TermPath> standFor = null;
+        Core call = Core.withoutStanding(applied);
+        if (call instanceof Core.Call || call instanceof Core.PreservedCall
+                || call instanceof Core.Apply) {
+            Operators held = operated;
+            Operators others = new Operators();
+            operated = others;
+            try {
+                Core.forEachChild(applied, part -> {
+                    if (!(Core.withoutStanding(part) instanceof Core.Block)) {
+                        leaveUnsaidOverWhatItReads(part, reads, outer);
+                    }
+                });
+            } finally {
+                operated = held;
+            }
+            if (!others.unsaidElsewhere && (outer == null || outer.standFor() != null)) {
+                standFor = others.everyPlaceUnsaid();
+                if (outer != null) {
+                    standFor.addAll(outer.standFor());
+                }
+            }
+        }
+        return new Bound(names, standFor);
+    }
+
+    /**
+     * The names the closures around a part bind, and the places they stand for, or null where
+     * they stand for nothing this can name.
+     */
+    private record Bound(Set<BindingId> names, Set<TermPath> standFor) {}
+
+    /** The places {@code operand} reads, as the ones what is worked out over it may stop a run
+     *  on: those of the numbers its form is over, or else those it stands at, and no place this
+     *  can name where it is neither. */
+    private void leaveUnsaidOverWhatItReads(Core operand, InputReads reads, Bound bound) {
+        // Reading a form tells the operators in it, which are worked out on some runs only here.
+        Operators held = operated;
+        operated = null;
+        AffineForms.Outcome<Quantity, InputReads> outcome;
+        try {
+            outcome = AffineForms.outcome(operand, reads, quantities());
+        } finally {
+            operated = held;
+        }
+        if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
+            operated.leaveUnsaid(form.coefs().keySet(), bound);
+        } else {
+            leaveUnsaidOverWhereItStands(operand, reads, bound);
+        }
+    }
+
+    private void leaveUnsaidOverWhereItStands(Core operand, InputReads reads, Bound bound) {
+        if (Core.withoutStanding(operand) instanceof Core.Block) {
+            // A closure is made here and applied elsewhere: what its body may stop on is asked
+            // of the body, under the names it binds ({@link #boundInside}).
+            return;
+        }
+        switch (reads.pathOf(operand, read.rules().newtypes())) {
+            case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
+            case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
+            default -> {
+                // A value made from positions stands at none, and is as much theirs: it stops a
+                // run on what they hold.
+                PathResolution made = reads.cameFrom(operand, read.rules().newtypes());
+                if (made instanceof PathResolution.At(TermPath path)) {
+                    operated.unsaidAt.add(path);
+                    return;
+                } else if (made instanceof PathResolution.MayStandAt(List<TermPath> among)) {
+                    operated.unsaidAt.addAll(among);
+                    return;
+                } else if (made instanceof PathResolution.MadeOf places) {
+                    operated.unsaidAt.addAll(places.places());
+                    return;
+                }
+                boolean[] hasParts = {false};
+                Core.forEachChild(Core.withoutStanding(operand), part -> {
+                    hasParts[0] = true;
+                    leaveUnsaidOverWhereItStands(part, reads, bound);
+                });
+                if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read name) {
+                    operated.leaveUnsaidOver(name.binding(), bound);
                 }
             }
         }
@@ -5252,11 +5419,79 @@ final class Pullback {
     private static final class Operators {
         private final List<Operated> told = new ArrayList<>();
         private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
+        private Set<TermPath> unsaidAt = new LinkedHashSet<>();
+        private boolean unsaidElsewhere;
+
+        Operators() {
+            unsaidGroups.add(unsaidAt);
+        }
 
         void tell(Core operation, LinearForm<Quantity> form) {
             if (nodes.add(operation)) {
                 told.add(new Operated(operation, form));
             }
+        }
+
+        /** What the next operator not said of may stop a run on is one group of places: it ties
+         *  them to one another, which what another operator stops a run on does not. */
+        void beginGroup() {
+            unsaidAt = new LinkedHashSet<>();
+            unsaidGroups.add(unsaidAt);
+        }
+
+        /** Every place any operator not said of may stop a run on. */
+        Set<TermPath> everyPlaceUnsaid() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            unsaidGroups.forEach(out::addAll);
+            return out;
+        }
+
+        /** An operator that may stop a run where nothing is said, over {@code reads}: the places
+         *  of the numbers among them are the ones it may stop on, and a quantity that is no
+         *  number of a place leaves it stopping on no place this can name. */
+        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
+            for (Quantity each : reads) {
+                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                    unsaidAt.add(term.subjectPath());
+                } else if (each instanceof Quantity.OfABinding named) {
+                    leaveUnsaidOver(named.binding(), bound);
+                } else {
+                    unsaidElsewhere = true;
+                }
+            }
+        }
+
+        /** The same, over a name: the places of what a closure around binds it to where it is a
+         *  name of one, and no place this can name where it is not. */
+        void leaveUnsaidOver(BindingId name, Bound bound) {
+            if (bound != null && bound.standFor() != null && bound.names().contains(name)) {
+                unsaidAt.addAll(bound.standFor());
+            } else {
+                unsaidElsewhere = true;
+            }
+        }
+
+        /** An operator that may stop a run where nothing is said, over operands no form says. */
+        void leaveUnsaidOverUnreadOperands() {
+            unsaidElsewhere = true;
+        }
+    }
+
+    /**
+     * What the operators a run works out answer, and which of them answer nothing here.
+     *
+     * @param answers         where each of the operators said answers, or empty where none is
+     * @param unsaidAt        the places the numbers are of that each operator not said may stop a
+     *                        run on, a group to an operator
+     * @param unsaidElsewhere whether an operator not said may stop a run on something that is no
+     *                        number of a place, or on operands no form says
+     */
+    record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
+                           boolean unsaidElsewhere) {
+
+        OperatorsAnswer {
+            unsaidAt = unsaidAt.stream().filter(each -> !each.isEmpty()).map(Set::copyOf).toList();
         }
     }
 
@@ -5285,8 +5520,18 @@ final class Pullback {
                 default -> throw new IllegalStateException(
                         "the walk tells of an operator and nothing else: " + operation);
             };
-            if (form.coefs().isEmpty() || !(where instanceof
-                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))) {
+            // A count is read with how it was read, which an operator's form does not carry, so a
+            // form naming one says nothing of where the operator answers here.
+            if (form.coefs().isEmpty() || where instanceof WhereAnOperatorAnswers.Everywhere) {
+                continue;
+            }
+            if (!(where instanceof
+                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
+                    || form.coefs().keySet().stream().anyMatch(quantity ->
+                            quantity instanceof Quantity.HowManyMeet
+                                    || quantity instanceof Quantity.HowManyDifferentMeet)) {
+                operated.beginGroup();
+                operated.leaveUnsaid(form.coefs().keySet(), null);
                 continue;
             }
             if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
@@ -5298,6 +5543,9 @@ final class Pullback {
                                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
                         aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
                                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
+            } else {
+                operated.beginGroup();
+                operated.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
         return out;
@@ -6780,8 +7028,8 @@ final class Pullback {
         inside.askingWhereAStepAnswers = true;
         Core.Block step = at.usesOfTheClosureTaking(name.binding()).applications().getFirst()
                 .step();
-        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name) == null ? handed
-                : Optional.empty();
+        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name).answers().isEmpty()
+                ? handed : Optional.empty();
     }
 
     /**

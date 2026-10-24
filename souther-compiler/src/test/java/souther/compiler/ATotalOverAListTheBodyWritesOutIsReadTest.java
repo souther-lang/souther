@@ -37,11 +37,23 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
             }
             """;
 
+    /** The same, with a pay no sum written out can carry past the greatest {@code Int}: a row that
+     *  stops in {@code a.pay + a.pay} is no row at the comparison, and the total over the list is
+     *  not read as one that stops. */
+    private static final String SMALL_PAYS = MODEL.replace(
+            "data Month = { pay: Int, days: Int }",
+            "data Month = { pay: Int, days: Int }\n"
+                    + "    invariant pay >= -1000000 && pay <= 1000000");
+
     private static final String SUM = "a.pay + b.pay + c.pay";
 
     /** The report, with where in the guard each comparison is written left out. */
     private static String measured(String total) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(total), "Main");
+        return measured(MODEL, total);
+    }
+
+    private static String measured(String model, String total) {
+        Compilation compilation = Compilation.ofSource(model.formatted(total), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
@@ -102,8 +114,8 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
 
     @Test
     void aTotalOfAnElementWrittenTwiceCountsItTwice() {
-        String report = measured("List.sum([a.pay, a.pay, b.pay])");
-        assertEquals(measured("a.pay + a.pay + b.pay"), report);
+        String report = measured(SMALL_PAYS, "List.sum([a.pay, a.pay, b.pay])");
+        assertEquals(measured(SMALL_PAYS, "a.pay + a.pay + b.pay"), report);
     }
 
     @Test

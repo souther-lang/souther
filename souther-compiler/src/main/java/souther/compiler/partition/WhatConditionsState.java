@@ -70,7 +70,7 @@ final class WhatConditionsState {
     private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
     private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
-    private final Map<ANode, Optional<Proposition>> operatorsAnswer = new HashMap<>();
+    private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
     private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
 
     private WhatConditionsState(InputReading read) {
@@ -125,13 +125,14 @@ final class WhatConditionsState {
     }
 
     /** Where every operator {@code body} works out answers with its names as {@code reads} has
-     *  them, under {@code read} ({@link Pullback#whereItsOperatorsAnswer}) — empty where nothing
-     *  says it answers only somewhere. */
-    Optional<Proposition> whereItsOperatorsAnswer(Core body, InputReads reads,
-                                                  InputReading read) {
+     *  them, under {@code read} ({@link Pullback#whereItsOperatorsAnswer}) — no answers where
+     *  nothing says it answers only somewhere — and which of them may stop a run where nothing
+     *  says. */
+    Pullback.OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
+                                                     InputReading read) {
         heldTo(read);
-        return kept(operatorsAnswer, new ANode(body, reads), () -> Optional.ofNullable(
-                Pullback.whereItsOperatorsAnswer(body, reads, read)));
+        return kept(operatorsAnswer, new ANode(body, reads),
+                () -> Pullback.whereItsOperatorsAnswer(body, reads, read));
     }
 
     /** What {@code truth} holding states with its names as {@code reads} has them, under
