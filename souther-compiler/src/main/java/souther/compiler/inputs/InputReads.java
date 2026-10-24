@@ -2529,7 +2529,7 @@ public final class InputReads {
             // end to end, so each is one of theirs and no value made of one.
             boolean kept = !keptBy.isEmpty();
             Flattened flattened = kept && madeNewBeneath ? null
-                    : flattenedKeysAt(standing, sought, kept, symbols, newtypes);
+                    : flattenedKeysAt(standing, sought, kept, keeping, keptBy, symbols, newtypes);
             return flattened == null ? null
                     : new Occurrences.AcrossContainers(flattened.outer(), flattened.reads(),
                             keptBy);
@@ -2981,7 +2981,7 @@ public final class InputReads {
     public TermPath containerFlattenedInto(Core list, Symbols symbols,
                                            DeclarationNewtypes newtypes) {
         Flattened elements = flattenedKeysAt(standing(list, symbols, newtypes),
-                List.of(ReadOff.ITSELF), true, symbols, newtypes);
+                List.of(ReadOff.ITSELF), true, null, new ArrayList<>(), symbols, newtypes);
         if (elements == null || !(elements.reads().getFirst() instanceof Occurrences.Read.At(
                 TermPath keys, var _))) {
             return null;
@@ -3374,13 +3374,23 @@ public final class InputReads {
      * elements the closure was handed, at the place the closure's answer is read down to — or
      * null where that is no list inside each of those elements, one container further in.
      *
+     * <p>A list the closure answers some of the elements of, by an operation keeping them by a
+     * statement, is crossed where {@code keeping} says so, and the call is added to
+     * {@code keptBy}: what it keeps by is about an element of a list inside the one element the
+     * closure was handed, which is one of the elements put end to end.
+     *
      * @param ofTheListsThemselves whether the elements must be those of the lists the closure
      *                             answers, the answer being read down no steps that make a value
      *                             of one
+     * @param keeping              the list a call keeps some of the elements of by a statement, or
+     *                             null where the call is no such operation — or null itself,
+     *                             where no such call is crossed
+     * @param keptBy               where each call crossed so is added, as it stands
      */
     private Flattened flattenedKeysAt(Denotation standing, List<ReadOff> reads,
-                                      boolean ofTheListsThemselves, Symbols symbols,
-                                      DeclarationNewtypes newtypes) {
+                                      boolean ofTheListsThemselves,
+                                      Function<Core, Core> keeping, List<Denotation> keptBy,
+                                      Symbols symbols, DeclarationNewtypes newtypes) {
         AFlattening flattening = aFlattening(standing, symbols, newtypes);
         if (flattening == null) {
             return null;
@@ -3400,8 +3410,15 @@ public final class InputReads {
             if (!met.add(answer)) {
                 return null;
             }
-            MapStep mapped = throughAMap(where.standing(answer, symbols, newtypes), sought,
-                    symbols, newtypes);
+            Denotation here = where.standing(answer, symbols, newtypes);
+            Core beneathKept = keeping == null ? null : keeping.apply(here.value());
+            if (beneathKept != null) {
+                keptBy.add(here);
+                answer = beneathKept;
+                listAt = ElementProjection.read(answer, element, where.heldByTheBody(), newtypes);
+                continue;
+            }
+            MapStep mapped = throughAMap(here, sought, symbols, newtypes);
             if (mapped != null) {
                 if (ofTheListsThemselves && mapped.madeNew(newtypes)) {
                     return null;

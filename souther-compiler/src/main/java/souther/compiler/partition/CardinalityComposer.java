@@ -154,6 +154,16 @@ final class CardinalityComposer {
             }
             size = holds.walking();
         }
+        Optional<TermPath> across = counts.isEmpty() ? Optional.empty()
+                : counts.getFirst().count().across();
+        if (counts.stream().anyMatch(each -> !each.count().across().equals(across))) {
+            return notChosen("the elements of `" + container + "` are counted in one container"
+                    + " and across all of them, and are chosen for one of the two");
+        }
+        if (across.isPresent()) {
+            return composeAcross(asked, standingAt, demands, container, across.get(), size,
+                    together, sourceType, keptApart, apartAt, measuring, within, reading);
+        }
         TypeView view = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (!(view.shape() instanceof Shape.Sequence holding)
@@ -168,7 +178,8 @@ final class CardinalityComposer {
         }
         if (!stated.isEmpty()) {
             return amongItsValues(asked, stated, standingAt, demands, container, size, sourceType,
-                    view, holding, keptApart, apartAt, measuring, within, reading);
+                    view, holding, keptApart, apartAt, measuring, within, reading,
+                    new Standing.WhereItIsWritten(sourceType, reading));
         }
         // What another container is made to hold for the elements chooses none of their values,
         // so none are chosen apart that way.
@@ -191,7 +202,8 @@ final class CardinalityComposer {
         // each.
         if (element == null || inside || apartAt != null) {
             return amongItsValues(asked, List.of(), standingAt, demands, container, size,
-                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading);
+                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
+                    new Standing.WhereItIsWritten(sourceType, reading));
         }
         for (RealizationTarget.OfANumber each : standingAt) {
             AskedAt at = demands.get(each);
@@ -309,6 +321,106 @@ final class CardinalityComposer {
         String alone = chosenAlone(asked, container, null);
         return alone != null ? notChosen(alone)
                 : none("no container of `" + container + "` this composed meets every count asked");
+    }
+
+    /**
+     * Containers inside the elements of the container at {@code across}, every element of all of
+     * them together meeting the counts asked of their different values.
+     *
+     * <p>In two steps. The elements are chosen as one container of them would be
+     * ({@link #amongItsValues}), which is every element there is, read as held by the one element
+     * of the outer container ({@link ElementValues#asTheOneElementOf}): how many different values
+     * the elements meeting a statement hold, and what the elements under one value come to, are
+     * the same however they are shared out over the containers, so long as what each is asked
+     * reads nothing of the element holding its container — which that one element, holding
+     * nothing but the container, does not walk to. Then each choice is shared out over the
+     * containers ({@link NestedContainersAddingUp#holdingThe}), the elements under one value
+     * falling into different ones where the counts of the containers leave room.
+     *
+     * <p>Not where something is asked of how many elements one of the containers holds, nor of a
+     * statement its elements meet together: either is a question about one container, and the
+     * elements are chosen for all of them.
+     */
+    private static TermRealizations.Realization composeAcross(
+            List<Asked> asked, List<RealizationTarget.OfANumber> standingAt,
+            SequencedMap<RealizationTarget, AskedAt> demands, TermPath container, TermPath across,
+            NumericSet size, List<RealizationTarget.ElementsMeetingTogether> together,
+            Type sourceType, List<List<String>> keptApart, TermPath apartAt,
+            Quantities measuring, SearchRegion within, RuleReadingContext reading) {
+        if (size != null || !together.isEmpty()) {
+            return notChosen("`" + container + "` is asked something of one of the containers,"
+                    + " and its elements are chosen across all of them");
+        }
+        RuleReadingSource ruleSource = reading.source();
+        NestedContainersAddingUp.Inside inner =
+                NestedContainersAddingUp.ofTheContainerAt(sourceType, container, reading);
+        if (inner == null || !across.equals(container.element().outermostContainer())) {
+            return notChosen("`" + container + "` is no list or set inside the elements of a list"
+                    + " or set written where it stands");
+        }
+        TypeView view = TypeView.of(inner.type(), ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        if (!(view.shape() instanceof Shape.Sequence holding)) {
+            return notChosen("`" + container + "` is no list or set");
+        }
+        return amongItsValues(asked, List.of(), standingAt, demands, container, null,
+                inner.type(), view, holding, inner.keptApart(), apartAt, measuring, within, reading,
+                new Standing.AcrossTheElementsOf(across, container, sourceType, keptApart, within,
+                        reading));
+    }
+
+    /**
+     * Where the elements chosen for a container stand in the input: the row a container of them
+     * is read as, and the rows written holding them.
+     */
+    private sealed interface Standing {
+
+        /** {@code holding}, a row holding a container of the elements chosen, as it is read. */
+        BorderQuantity.Observation read(BorderQuantity.Observation holding);
+
+        /** The rows holding {@code values}, with what writing them met — or null where they are
+         *  written as nothing. */
+        TermRealizations.Realization written(List<ObservedValue> values);
+
+        /** The container where it stands, of {@code type}. */
+        record WhereItIsWritten(Type type, RuleReadingContext reading) implements Standing {
+
+            @Override
+            public BorderQuantity.Observation read(BorderQuantity.Observation holding) {
+                return holding;
+            }
+
+            @Override
+            public TermRealizations.Realization written(List<ObservedValue> values) {
+                return ObservedFixtures.of(new ObservedValue.Sequence(values), type, reading)
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate one)
+                        ? new TermRealizations.Realization.Built(List.of(one),
+                                CompositionShortfall.NONE)
+                        : null;
+            }
+        }
+
+        /**
+         * The containers at {@code container} inside the elements of the one at {@code across},
+         * of {@code type}, all of them put end to end: read as the one element of it holding them
+         * all, and written shared out over them ({@link #composeAcross}).
+         */
+        record AcrossTheElementsOf(TermPath across, TermPath container, Type type,
+                                   List<List<String>> keptApart, SearchRegion within,
+                                   RuleReadingContext reading) implements Standing {
+
+            @Override
+            public BorderQuantity.Observation read(BorderQuantity.Observation holding) {
+                return ElementValues.asTheOneElementOf(across, holding);
+            }
+
+            @Override
+            public TermRealizations.Realization written(List<ObservedValue> values) {
+                return new NestedContainersAddingUp(container.element()).holdingThe(type,
+                        keptApart, values, within, reading);
+            }
+        }
     }
 
     /**
@@ -449,7 +561,9 @@ final class CardinalityComposer {
      * @param together   statements the elements meet together, each about {@code container} alone
      * @param standingAt numbers inside an element, each asked to stand in a set: a value the row
      *                   places there, which some element of the container holds
-     * @param holding    what the container is, a list or a set written where it stands
+     * @param holding    what the container is, a list or a set
+     * @param standing   where the elements chosen stand in the input: how a container of them is
+     *                   read, and the rows written holding them
      */
     private static TermRealizations.Realization amongItsValues(List<Asked> counted,
                                                                List<AStatementAtARow> together,
@@ -465,7 +579,8 @@ final class CardinalityComposer {
                                                                TermPath apartAt,
                                                                Quantities measuring,
                                                                SearchRegion within,
-                                                               RuleReadingContext reading) {
+                                                               RuleReadingContext reading,
+                                                               Standing standing) {
         List<Asked> asked = new ArrayList<>(counted);
         for (RealizationTarget.OfANumber each : standingAt) {
             AskedAt at = demands.get(each);
@@ -543,7 +658,8 @@ final class CardinalityComposer {
             refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
         }
         Function<List<ObservedValue>, BorderQuantity.Observation> holdingThem =
-                values -> withNumbersBeside(ofTheElement.holding(sourceType, values), written);
+                values -> standing.read(withNumbersBeside(ofTheElement.holding(sourceType, values),
+                        written));
         // Where the different values at a place are counted, what is shared out is the elements
         // holding one value there together, each group with a value of its own: how many values
         // a count has is how many such groups it has, whatever each holds. Elsewhere, each
@@ -576,15 +692,15 @@ final class CardinalityComposer {
                 break;
             }
             boolean walkedThem = sharing.each(elements, share -> {
-                if (built.size() == MOST_OFFERED) {
+                // At or past it: one choice of the elements may be written as several rows.
+                if (built.size() >= MOST_OFFERED) {
                     return false;
                 }
                 List<ObservedValue> values = drawing.apply(share);
                 if (values == null) {
                     return true;
                 }
-                BorderQuantity.Observation whole = withNumbersBeside(
-                        ofTheElement.holding(sourceType, values), written);
+                BorderQuantity.Observation whole = holdingThem.apply(values);
                 for (Asked each : asked) {
                     // A count reads the container through the row and not the values handed it.
                     if (!(each.over(container, List.of(), whole)
@@ -595,11 +711,17 @@ final class CardinalityComposer {
                 if (!sharing.holdsTogether() && !heldTogether(together, container, whole)) {
                     return true;
                 }
-                if (ObservedFixtures.of(new ObservedValue.Sequence(values), sourceType, reading)
-                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                FixtureTemplate one)) {
-                    built.add(one);
+                TermRealizations.Realization rows = standing.written(values);
+                if (rows == null) {
+                    return true;
                 }
+                if (rows instanceof TermRealizations.Realization.Built made) {
+                    made.values().forEach(built::add);
+                }
+                CompositionShortfall met = rows.shortfall();
+                refused.addAll(met.figures());
+                unnamed.addAll(met.populations());
+                unheld.addAll(met.unheld());
                 return true;
             });
             if (!walkedThem) {
@@ -1601,7 +1723,6 @@ final class CardinalityComposer {
         /** Whether what an element of {@code container} answers of this may turn on which value
          *  stands at {@code at} inside it ({@link AStatementAtARow#readsTheValueAt}). */
         boolean readsTheValueAt(TermPath container, TermPath at);
-
         /** What an element of {@code container} answers of this turns on, the elements held as
          *  groups under one value at {@code under}, or each on its own where it is null
          *  ({@link AStatementAtARow#turnsOnAmong}). */
@@ -1628,18 +1749,19 @@ final class CardinalityComposer {
             }
 
             /** The elements meeting the statement, or the different values they hold where that
-             *  is what is counted. */
+             *  is what is counted — of the one container composed, which is every element there
+             *  is where a count is of all the containers inside the elements of another put end
+             *  to end ({@link #composeAcross}). */
             @Override
             public AStatementAtARow.HowManyAtARow among(TermPath container,
                                                         BorderQuantity.Observation row) {
-                return perElement.howManyIn(container, differentAt, row);
+                return perElement.howManyIn(container, differentAt, Optional.empty(), row);
             }
 
             @Override
             public boolean readsTheValueAt(TermPath container, TermPath at) {
                 return perElement.readsTheValueAt(container, at);
             }
-
             @Override
             public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
                 return perElement.turnsOnAmong(container, under);
@@ -1742,7 +1864,6 @@ final class CardinalityComposer {
             public boolean readsTheValueAt(TermPath container, TermPath place) {
                 return at.isAtOrUnder(place) || place.isAtOrUnder(at);
             }
-
             /** A number at one place inside the element. */
             @Override
             public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {
@@ -1800,7 +1921,6 @@ final class CardinalityComposer {
             public boolean readsTheValueAt(TermPath container, TermPath at) {
                 return true;
             }
-
             /** The element itself. */
             @Override
             public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container, TermPath under) {

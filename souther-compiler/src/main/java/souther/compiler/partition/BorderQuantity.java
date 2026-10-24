@@ -975,8 +975,7 @@ public sealed interface BorderQuantity
          */
         @Override
         public void lookAt(Observation row) {
-            row.eachElementOf(container);
-            perElement.lookAt(row, Set.of(container));
+            counted.lookAt(row);
             OverAForm added = addedForm();
             if (added != null) {
                 added.lookAt(row);
@@ -1001,7 +1000,7 @@ public sealed interface BorderQuantity
         @Override
         public String left() {
             String count = CountedElements.spelled(container, counted.differentAt(),
-                    said(meeting));
+                    counted.across(), said(meeting));
             if (against.coefs().isEmpty()) {
                 return count;
             }
@@ -1033,6 +1032,7 @@ public sealed interface BorderQuantity
                             Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
                             yield CountedElements.spelled(elements.container().inputPosition(),
                                     AStatementAtARow.differentAt(count),
+                                    AStatementAtARow.acrossOf(count),
                                     said(elements.ofTheElement())) + " " + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();

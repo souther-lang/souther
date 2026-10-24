@@ -203,6 +203,46 @@ final class AStatementAtARow {
                 ? Optional.of(different.ofTheElement().inputPosition()) : Optional.empty();
     }
 
+    /**
+     * The container inside each element of which the containers {@code count}, one
+     * {@link #countIn} answers, counts the elements of stand, where it counts every element of
+     * those put end to end ({@link Quantity.HowManyDifferentMeet#across}) rather than the elements
+     * of one.
+     */
+    static Optional<TermPath> acrossOf(Quantity count) {
+        return count instanceof Quantity.HowManyDifferentMeet different && different.across()
+                ? Optional.of(different.container().inputPosition()) : Optional.empty();
+    }
+
+    /**
+     * Every element the row wrote in the container at {@code container}, each read with it chosen
+     * — or, where {@code across} names the container whose elements hold one each, every element
+     * of every one of those ({@link WhatATermRead#everyElementAbove}). That container stands
+     * inside no other, so those are every occurrence's.
+     *
+     * @return could not walk where the walk could not reach a container on the way
+     */
+    static WalkResult<List<BorderQuantity.Observation>> elementsIn(BorderQuantity.Observation row,
+                                                                 TermPath container,
+                                                                 Optional<TermPath> across) {
+        return across.isEmpty() ? row.eachElementOf(container)
+                : WhatATermRead.everyElementAbove(row, container.element());
+    }
+
+    /** Asks {@code row} for the containers {@link #elementsIn} reads, as the walk finding which
+     *  containers a row chooses an element of asks. */
+    static void lookAtTheElementsIn(BorderQuantity.Observation row, TermPath container,
+                                    Optional<TermPath> across) {
+        if (across.isEmpty()) {
+            row.eachElementOf(container);
+            return;
+        }
+        if (row.eachElementOf(across.get())
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>>(var outer)) {
+            outer.forEach(each -> each.eachElementOf(container));
+        }
+    }
+
     /** The one remainder by an input's number {@code affine} weighs where it weighs one and
      *  nothing else, or null. */
     static Quantity.RemainderByAnInput remainderByAnInputIn(Relation.Affine affine) {
@@ -309,13 +349,15 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
-                            of(some.ofTheElement(), behavior, quantities), Optional.empty()));
+                            of(some.ofTheElement(), behavior, quantities), Optional.empty(),
+                            Optional.empty()));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
                             elementsOf(count).container().inputPosition(),
-                            of(meetingOf(count), behavior, quantities), differentAt(count)));
+                            of(meetingOf(count), behavior, quantities), differentAt(count),
+                            acrossOf(count)));
             case Proposition.Compared compared when askable(compared) ->
                     into.computeIfAbsent(compared.relation(),
                             relation -> OneRelation.of(relation, behavior, quantities));
@@ -393,6 +435,7 @@ final class AStatementAtARow {
     private static String keyOf(Quantity count) {
         Quantity.HowManyMeet elements = elementsOf(count);
         return differentAt(count).map(at -> "different " + at + " of ").orElse("")
+                + acrossOf(count).map(outer -> "across " + outer + " ").orElse("")
                 + elements.container() + " [" + elements.ofTheElement().key() + "]";
     }
 
@@ -642,10 +685,11 @@ final class AStatementAtARow {
         }
         for (OverTheElements each : elements.values()) {
             if (!under(each.container(), taken)) {
-                row.eachElementOf(each.container());
+                lookAtTheElementsIn(row, each.container(), each.across());
             }
             Set<TermPath> wider = new HashSet<>(taken);
             wider.add(each.container());
+            each.across().ifPresent(wider::add);
             each.ofTheElement().lookAt(row, wider);
         }
     }
@@ -717,25 +761,32 @@ final class AStatementAtARow {
      *
      * <p>A value one meeting element holds is counted once however many others hold it. An element
      * nothing could say of adds one more at most, and none where its value is one a meeting element
-     * already holds.
+     * already holds. Where {@code across} names the container whose elements each hold one of
+     * {@code container}, the values are those of every element of all of them.
      *
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyIn(TermPath container, Optional<TermPath> differentAt,
-                            BorderQuantity.Observation row) {
+                            Optional<TermPath> across, BorderQuantity.Observation row) {
+        if (across.isPresent() && differentAt.isEmpty()) {
+            throw new IllegalArgumentException("every element of the containers at " + container
+                    + " is counted for its value, and no place of one is named");
+        }
         return differentAt.isPresent()
-                ? row.keptOf(new DifferentMeetingIn(this, container, differentAt.get()))
+                ? row.keptOf(new DifferentMeetingIn(this, container, differentAt.get(), across))
                 : howManyMeetIn(container, row);
     }
 
     /** How many different values the elements of a container meeting one statement hold, by the
-     *  statement, the container and where the value stands. */
-    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container, TermPath at)
+     *  statement, the container, where the value stands and the container holding the
+     *  containers, where every one of them is counted. */
+    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container, TermPath at,
+                                      Optional<TermPath> across)
             implements BorderQuantity.ReadAlike<HowManyAtARow> {
 
         @Override
         public HowManyAtARow readAt(BorderQuantity.Observation row) {
-            if (!(row.eachElementOf(container)
+            if (!(elementsIn(row, container, across)
                     instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
                 return null;
             }
@@ -1588,15 +1639,15 @@ final class AStatementAtARow {
     /**
      * A statement about the elements of a container: the container, what each is asked, and,
      * where how many different values those meeting it hold is what is counted, where the values
-     * stand.
+     * stand — and the container whose elements hold one each, where every one of them is counted.
      */
     private record OverTheElements(TermPath container, AStatementAtARow ofTheElement,
-                                   Optional<TermPath> differentAt) {
+                                   Optional<TermPath> differentAt, Optional<TermPath> across) {
 
         /** How many elements meet what each is asked at {@code row}, or how many different values
          *  they hold; null where the walk could not reach the container. */
         HowManyAtARow howManyIn(BorderQuantity.Observation row) {
-            return ofTheElement.howManyIn(container, differentAt, row);
+            return ofTheElement.howManyIn(container, differentAt, across, row);
         }
     }
 

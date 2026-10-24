@@ -13,6 +13,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -201,6 +202,93 @@ final class NestedContainersAddingUp {
                 "no grouping of the leaves that this writes met the counts of every container on"
                         + " the way to `" + run + "`");
     }
+
+    /**
+     * Containers inside the elements of a container, the innermost of them holding
+     * {@code elements} between them in the order they are listed: one row for each grouping of
+     * them the counts of the levels allow, the widest first.
+     *
+     * <p>The elements are whole values, each written as it is, so what is chosen of them is the
+     * caller's; here only which container each falls in. Widest, so that elements next to one
+     * another in the listing — the ones holding one value, say — fall in different containers,
+     * and a number across the containers is told apart from a number inside one.
+     */
+    TermRealizations.Realization holdingThe(Type container, List<List<String>> keptApart,
+                                            List<ObservedValue> elements, SearchRegion within,
+                                            RuleReadingContext reading) {
+        ContainersAddingUp.WhatWasLeft left = new ContainersAddingUp.WhatWasLeft();
+        Levels made = levelsOf(container, keptApart, within, reading, null, DemandsInside.NOTHING,
+                left);
+        if (made.refused() != null) {
+            return made.refused();
+        }
+        List<Level> levels = made.levels();
+        List<DeclaredBounds.CountRange> counts = levels.stream().map(Level::howMany).toList();
+        CompositionBudget figure = CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER;
+        Groupings groupings = groupingsOf(counts, elements.size(), null, figure.maximum());
+        if (groupings.refused()) {
+            left.refused(figure);
+        }
+        List<Layout> layouts = new ArrayList<>();
+        Layout widest = widest(counts, 0, elements.size(), figure.maximum());
+        if (widest != null) {
+            layouts.add(widest);
+        }
+        groupings.made().stream().filter(each -> !layouts.contains(each)).forEach(layouts::add);
+        int ways = levels.stream().mapToInt(each -> each.ways().filled().size()).max().orElse(0);
+        List<FixtureTemplate> rows = new ArrayList<>();
+        for (Layout layout : layouts) {
+            for (int way = 0; way < ways; way++) {
+                Deque<ObservedValue> next = new ArrayDeque<>(elements);
+                Proposals one = built(levels, 0, layout, (level, filling, innermost) -> {
+                    List<ObservedValue> mine = new ArrayList<>();
+                    for (int i = 0; i < innermost.leaves(); i++) {
+                        mine.add(next.removeFirst());
+                    }
+                    return ObservedFixtures.of(new ObservedValue.Sequence(mine),
+                            level.view().declared(), reading)
+                            instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                    FixtureTemplate written)
+                            ? Proposals.ofNullable(written) : Proposals.NONE;
+                }, way, reading);
+                left.met(one.met());
+                one.values().forEach(rows::add);
+            }
+        }
+        left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
+        if (!rows.isEmpty()) {
+            return new TermRealizations.Realization.Built(rows, left.shortfall());
+        }
+        CompositionShortfall met = left.shortfall();
+        if (!met.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(met);
+        }
+        return new TermRealizations.Realization.Unexhausted(met,
+                "no grouping of the elements that this writes met the counts of every container"
+                        + " on the way to `" + run + "`");
+    }
+
+    /**
+     * The container at {@code inner}, inside the elements of the container {@code container} is
+     * the type of — or null where the way there is not fields all the way.
+     */
+    static Inside ofTheContainerAt(Type container, TermPath inner, RuleReadingContext reading) {
+        List<TermPath> chain = inner.containersHoldingIt();
+        if (chain.size() != 1 || !(TypeView.shapeOf(container, reading.source().inners(),
+                reading.source().symbols(), reading.source().kinds(), reading.source().sums())
+                instanceof Shape.Sequence holding)) {
+            return null;
+        }
+        Type type = typeAlong(holding.element(), chain.getFirst(), inner, reading);
+        return type == null ? null : new Inside(type, ElementsKeptApart.heldUnder(
+                holding.element(), inner.ruleKeyUnder(chain.getFirst().element()), reading));
+    }
+
+    /**
+     * A container inside the elements of another: its type, and what the rules of the element
+     * holding it keep its elements apart at, as a level here reads them.
+     */
+    record Inside(Type type, List<List<String>> keptApart) {}
 
     private TermRealizations.Realization written(Place answer, Type container,
                                                  List<List<String>> keptApart, TermOrders orders,

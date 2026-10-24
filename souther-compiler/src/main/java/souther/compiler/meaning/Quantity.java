@@ -713,8 +713,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * element and the total of the amounts under a value above nought are two numbers, and
      * {@code 10} and {@code -10} under one value tell them apart.
      *
-     * @param container    where the elements stand
-     * @param ofTheElement one value of each element, as {@link HowManyDifferent#oneOfEach} has it
+     * <p>The elements counted are the container's own, or every element of the containers inside
+     * its elements put end to end ({@link #across}), as a flattening has them: two of those holding
+     * one value are one value whichever containers hold them, so the number is no sum of a number
+     * of each inner container. Which of the two it is, is where {@code ofTheElement} stands.
+     *
+     * @param container    where the elements stand, or the elements holding the containers they
+     *                     stand in
+     * @param ofTheElement one value of each element, as {@link HowManyDifferent#oneOfEach} has it,
+     *                     of the container's elements or of the elements of a container inside
+     *                     each of them
      * @param meeting      what keeps an element or a value, and which of the two it is asked of
      */
     record HowManyDifferentMeet(DecisionSubject container, DecisionSubject ofTheElement,
@@ -751,15 +759,19 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         private static String whyNot(DecisionSubject container, DecisionSubject ofTheElement,
                                      Selection meeting) {
             Proposition stated = meeting.statement();
-            if (!HowManyDifferent.oneOfEach(container, ofTheElement)) {
-                return ofTheElement + " is no one value of each element of " + container;
+            DecisionSubject counted = HowManyDifferent.oneOfEach(container, ofTheElement)
+                    ? container : inside(container, ofTheElement);
+            if (counted == null) {
+                return ofTheElement + " is no one value of each element of " + container
+                        + ", or of a container inside each";
             }
-            if (!stated.mayTurnOnAnElementOf(container)) {
-                return "what keeps the elements of " + container + " is the same for each of"
+            if (!stated.mayTurnOnAnElementOf(counted)) {
+                return "what keeps the elements of " + counted + " is the same for each of"
                         + " them: " + stated;
             }
-            if (Proposition.Some.quantifiesOver(container, stated)) {
-                return "what keeps an element of " + container + " quantifies them again, which"
+            if (Proposition.Some.quantifiesOver(counted, stated)
+                    || Proposition.Some.quantifiesOver(container, stated)) {
+                return "what keeps an element of " + counted + " quantifies them again, which"
                         + " would read two elements as one: " + stated;
             }
             if (Proposition.mayAnswerNothing(stated)) {
@@ -780,12 +792,45 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         }
 
         /**
+         * The container inside each element of the input's container at {@code container} that
+         * {@code ofTheElement} is one value of each element of, or null where it is none such.
+         */
+        private static DecisionSubject inside(DecisionSubject container,
+                                              DecisionSubject ofTheElement) {
+            if (!(container instanceof DecisionSubject.AnInput)
+                    || !(ofTheElement instanceof DecisionSubject.AnInput(TermPath at))
+                    || !HowManyDifferentAcross.ofAContainerInside(container, ofTheElement)) {
+                return null;
+            }
+            DecisionSubject inner = new DecisionSubject.AnInput(
+                    at.containersHoldingIt().getLast());
+            return HowManyDifferent.oneOfEach(inner, ofTheElement) ? inner : null;
+        }
+
+        /**
+         * Whether the elements counted are those of the containers inside the elements of
+         * {@link #container}, all of them put end to end, rather than its own.
+         */
+        public boolean across() {
+            return !HowManyDifferent.oneOfEach(container, ofTheElement);
+        }
+
+        /**
+         * Where the elements the statement is asked of stand: the container's own, or, where the
+         * count is {@link #across} them, the container inside each of its elements.
+         */
+        public DecisionSubject occurrences() {
+            return across() ? inside(container, ofTheElement) : container;
+        }
+
+        /**
          * How many of the elements meet what keeps them, each counted however many hold its
          * value: the count whose elements this counts the values of, and what one element meeting
-         * the statement is asked whatever is counted of them.
+         * the statement is asked whatever is counted of them. Across the containers inside the
+         * elements, of the elements of one of them.
          */
         public HowManyMeet elementsMeetingIt() {
-            return new HowManyMeet(container, meeting.statement());
+            return new HowManyMeet(occurrences(), meeting.statement());
         }
 
         /**
@@ -835,6 +880,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  * under it, of every element ({@link NumericTerm.GatheredUnderItsKey}), and every
                  * place inside an element it reads is the value's or one such a number is read
                  * from.
+                 *
+                 * <p>Where the value is of the elements of a container inside each element of
+                 * {@code container}, a number gathered under it is of every element of all of those
+                 * ({@link NumericTerm.GatheredUnderItsKey} is a number of the run), and a place of
+                 * the element of {@code container} holding one is no place the others holding the
+                 * value share: it is outside the elements only where it is outside that one too.
                  */
                 public static boolean answersAlike(DecisionSubject container,
                                                    DecisionSubject ofTheElement,
@@ -843,8 +894,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                             || !(ofTheElement instanceof DecisionSubject.AnInput(TermPath key))) {
                         return false;
                     }
-                    return alike(stated, held.element(), key);
+                    List<TermPath> holding = key.containersHoldingIt();
+                    return alike(stated, new Apart(holding.getLast().element(), held.element()),
+                            key);
                 }
+
+                /**
+                 * The element a value is of, and the element of the container counted over that
+                 * holds it — the same element where the value is of the container's own.
+                 */
+                private record Apart(TermPath element, TermPath outermost) {}
 
                 /**
                  * Whether {@code stated} answers alike for every element holding one value at
@@ -853,22 +912,22 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  * element holding a value is the last to, as {@link Proposition.LastToHold}
                  * states, reads no place but the value's and turns on which element it is.
                  */
-                private static boolean alike(Proposition stated, TermPath element, TermPath key) {
+                private static boolean alike(Proposition stated, Apart apart, TermPath key) {
                     return switch (stated) {
                         case Proposition.Always _ -> true;
                         case Proposition.Compared compared -> switch (compared.relation()) {
                             case Relation.Affine affine -> affine.form().coefs().keySet()
-                                    .stream().allMatch(each -> alike(each, element, key));
-                            case Relation.Ordered ordered -> alike(ordered.term(), element, key);
+                                    .stream().allMatch(each -> alike(each, apart, key));
+                            case Relation.Ordered ordered -> alike(ordered.term(), apart, key);
                         };
                         case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                              Proposition.SoManyHold _ -> stated.partsHeld().stream()
-                                .allMatch(part -> alike(part, element, key));
-                        case Proposition.Truth truth -> alike(truth.of(), element, key);
-                        case Proposition.Present present -> alike(present.of(), element, key);
-                        case Proposition.InCases cases -> alike(cases.of(), element, key);
+                                .allMatch(part -> alike(part, apart, key));
+                        case Proposition.Truth truth -> alike(truth.of(), apart, key);
+                        case Proposition.Present present -> alike(present.of(), apart, key);
+                        case Proposition.InCases cases -> alike(cases.of(), apart, key);
                         case Proposition.SameValue same ->
-                                alike(same.one(), element, key) && alike(same.other(), element, key);
+                                alike(same.one(), apart, key) && alike(same.other(), apart, key);
                         // Which element holding the value is the last to, what some element of a
                         // container meets, what an operation answered of something: each turns on
                         // which element it is asked of, or on what nothing here reads.
@@ -880,30 +939,31 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
                 /** Whether {@code subject} is the value itself or a place of the input outside
                  *  the elements. */
-                private static boolean alike(DecisionSubject subject, TermPath element,
-                                             TermPath key) {
+                private static boolean alike(DecisionSubject subject, Apart apart, TermPath key) {
                     return subject instanceof DecisionSubject.AnInput(TermPath at)
-                            && (at.equals(key) || !at.isAtOrUnder(element));
+                            && (at.equals(key) || !at.isAtOrUnder(apart.outermost()));
                 }
 
-                /** Whether {@code number} is the value itself, how often it occurs, one gathered
-                 *  under it of every element, or a number of the input outside the elements. */
-                private static boolean alike(Quantity number, TermPath element, TermPath key) {
+                /** Whether {@code number} is the value itself, how often it occurs among the
+                 *  elements of one container, one gathered under it of every element, or a number
+                 *  of the input outside the elements. */
+                private static boolean alike(Quantity number, Apart apart, TermPath key) {
                     if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
                         return false;
                     }
                     if (term instanceof NumericTerm.Multiplicity often) {
-                        return often.container().element().equals(element)
+                        return apart.element().equals(apart.outermost())
+                                && often.container().element().equals(apart.element())
                                 && often.place().equals(key);
                     }
                     if (term instanceof NumericTerm.GatheredUnderItsKey gathered) {
-                        return gathered.elements().equals(element)
+                        return gathered.elements().equals(apart.element())
                                 && gathered.selection() == null
                                 && gathered.key() instanceof ElementKey.At(ElementProjection way)
-                                && way.from(element).equals(key);
+                                && way.from(apart.element()).equals(key);
                     }
                     return term.equals(new NumericTerm.ValueOf(key))
-                            || !term.subjectPath().isAtOrUnder(element);
+                            || !term.subjectPath().isAtOrUnder(apart.outermost());
                 }
             }
         }
