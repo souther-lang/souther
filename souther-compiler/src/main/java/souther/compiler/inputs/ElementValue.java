@@ -1,7 +1,11 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.Choice;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Location;
+import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -18,6 +22,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
@@ -1194,6 +1199,116 @@ public sealed interface ElementValue {
         }
 
         /**
+         * What a {@code match} on an option that holds an element of a list written out comes to:
+         * the arm that takes a present option, read with its name standing for that element — or
+         * null where the option is no such lookup.
+         *
+         * <p>Which element it is is {@link WhatAnOptionHolds}'s, which the discharge of a rule and
+         * the reading of an input follow as well; and it is there on every run, so the option is
+         * present on every run and the arm taking an absent one is taken by none. The same value
+         * for every element, so the arm's answer is read as any other part of the answer is.
+         */
+        private ElementValue byAWrittenOption(Core.Match match) {
+            Core picked = WhatAnOptionHolds.of(match.scrutinee(), held, new WrittenOut());
+            if (picked == null) {
+                return null;
+            }
+            for (Core.Case arm : match.cases()) {
+                boolean takesIt = arm.pattern() == null
+                        || (arm.pattern() instanceof Core.ResolvedPattern.Single one
+                                && one.selected().refinement() instanceof Refinement.OptionPresent);
+                if (!takesIt) {
+                    continue;
+                }
+                Map<BindingId, Core> named = new LinkedHashMap<>(held);
+                if (arm.binder() != null && arm.binder().binding() != null) {
+                    named.put(arm.binder().binding(), switch (arm.binding()) {
+                        case Core.ArmBinding.Payload _ -> picked;
+                        case Core.ArmBinding.Selected _, Core.ArmBinding.Unbound _ ->
+                                match.scrutinee();
+                    });
+                }
+                return new Reader(element, position, standing, Map.copyOf(named), source, elements,
+                        invariantAt).value(arm.body());
+            }
+            return null;
+        }
+
+        /**
+         * How {@link WhatAnOptionHolds} reads names here: through what the body bound them to,
+         * never through the element or its position, and with nothing but a value written down
+         * answered — an option made of the element is a place of it, which {@link #placeOf} reads.
+         */
+        private final class WrittenOut implements WhatAnOptionHolds.Reading<Map<BindingId, Core>,
+                Core> {
+
+            @Override
+            public Symbols symbols() {
+                return source.symbols();
+            }
+
+            @Override
+            public ElementsWrittenOut.Stood<Map<BindingId, Core>> standing(Core e,
+                    Map<BindingId, Core> at) {
+                Core here = Core.withoutStanding(e);
+                Set<BindingId> seen = new HashSet<>();
+                while (here instanceof Core.Read read && seen.add(read.binding())
+                        && !read.binding().equals(element) && !read.binding().equals(position)
+                        && at.get(read.binding()) != null) {
+                    here = Core.withoutStanding(at.get(read.binding()));
+                }
+                return new ElementsWrittenOut.Stood<>(here, at);
+            }
+
+            @Override
+            public Map<BindingId, Core> handing(Map<BindingId, Core> at, BindingId parameter,
+                    ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
+                Map<BindingId, Core> wider = new LinkedHashMap<>(at);
+                wider.put(parameter, value.value());
+                return wider;
+            }
+
+            @Override
+            public Map<BindingId, Core> choosing(Map<BindingId, Core> at,
+                                                 Choice.Decides decidedBy) {
+                return at;
+            }
+
+            @Override
+            public Optional<Object> folded(ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Core anElement(ElementsWrittenOut.Stood<Map<BindingId, Core>> one) {
+                return one.value();
+            }
+
+            @Override
+            public Core madeByAClosure(ElementsWrittenOut.Stood<Map<BindingId, Core>> answered,
+                                       Core handed) {
+                return null;
+            }
+
+            @Override
+            public Map<BindingId, Core> holding(Map<BindingId, Core> at, BindingId parameter,
+                                                Core handed) {
+                return at;
+            }
+
+            @Override
+            public Core otherwise(ElementsWrittenOut.Stood<Map<BindingId, Core>> option,
+                                  AnOperationApplied applied) {
+                return null;
+            }
+
+            @Override
+            public Core unsaid() {
+                return null;
+            }
+        }
+
+        /**
          * What a {@code match} on a place of the element comes to: each arm read with its name
          * standing at the place the arm narrowed, or null where any arm is not read.
          *
@@ -1208,7 +1323,10 @@ public sealed interface ElementValue {
          */
         private ElementValue byCase(Core.Match match) {
             ElementProjection subject = placeOf(match.scrutinee(), held);
-            if (subject == null || elements == null) {
+            if (subject == null) {
+                return byAWrittenOption(match);
+            }
+            if (elements == null) {
                 return null;
             }
             TermPath at = subject.from(elements.at());

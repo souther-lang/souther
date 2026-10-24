@@ -255,6 +255,42 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
         assertFalse(report.contains("not read:"), () -> report);
     }
 
+    /**
+     * A digit's value read off the code point of {@code "0"}, as a lookup in the code points of a
+     * written string, is the same weighing as the number written down: the arm taking a present
+     * option is the one every element takes, whichever order the arms are in and whether the
+     * match is in a helper or in the closure.
+     */
+    @Test
+    void aLookupInWrittenCodePointsIsTheNumberItPicks() {
+        for (String closure : List.of(
+                "(x) -> x - 48",
+                """
+                (x) -> match List.get(0, String.codePoints("0")) with
+                        | Some zero -> x - zero
+                        | None -> 0""",
+                """
+                (x) -> match List.get(0, String.codePoints("0")) with
+                        | None -> 0
+                        | Some zero -> x - zero""",
+                "(x) -> digit(x)")) {
+            String report = report(measured("""
+                    module p
+                    behavior pick : (s: String) -> Int
+                    let digit (c: Int): Int =
+                        match List.get(0, String.codePoints("0")) with
+                            | Some zero -> c - zero
+                            | None -> unreachable "a one-character string has a first code point"
+                    let pick (s) = {
+                        guard List.sum(List.map(%s, String.codePoints(s))) >= 10 else 0
+                        1
+                    }
+                    """.formatted(closure)));
+            assertTrue(report.contains("read as pick/List.sum(String.codePoints(s))"
+                    + " - 48 * String.length(s): = 10"), () -> closure + "\n" + report);
+        }
+    }
+
     /** A walk whose answer is no term of the total is no weighing of it. {@code sortBy} hands its
      *  closure each code point and keeps the code points: what the closure computes is a key. A
      *  walk that keeps some of them adds up some of them. */
