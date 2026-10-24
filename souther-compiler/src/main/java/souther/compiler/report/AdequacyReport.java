@@ -12,6 +12,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.WholeRounding;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.CoverageObligation;
@@ -6595,6 +6596,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
+    /** The case of the library's rounding policy a way of rounding is, as the library names it.
+     *  Written out for the reason {@link #wire(TraversalDirection)} is. */
+    private static String wire(WholeRounding way) {
+        return switch (way) {
+            case HALF_UP -> "HALF_UP";
+            case HALF_EVEN -> "HALF_EVEN";
+            case HALF_DOWN -> "HALF_DOWN";
+            case UP -> "UP";
+            case DOWN -> "DOWN";
+            case CEILING -> "CEILING";
+            case FLOOR -> "FLOOR";
+        };
+    }
+
     /**
      * What is made of one element, by the fields it reads and what weighs each.
      *
@@ -6614,6 +6629,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .forEach(each -> {
                             ObjectNode term = terms.addObject();
                             term.put("field", each.getKey().spelled());
+                            term.put("weight", each.getValue().spelled());
+                        });
+            }
+            case ElementValue.Multilinear it -> {
+                into.put("kind", "products");
+                into.put("constant", it.form().constant().spelled());
+                ArrayNode terms = into.putArray("terms");
+                it.form().coefs().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey(
+                                Comparator.comparing(ElementValue.Monomial::toString)))
+                        .forEach(each -> {
+                            ObjectNode term = terms.addObject();
+                            ElementValue.Rounding rounding = each.getKey().rounding();
+                            if (rounding == null) {
+                                ArrayNode fields = term.putArray("fields");
+                                each.getKey().fields().stream().map(ElementProjection::spelled)
+                                        .sorted().forEach(fields::add);
+                            } else {
+                                ObjectNode rounds = term.putObject("rounding");
+                                rounds.put("scale", rounding.scale().toString());
+                                rounds.put("mode", wire(rounding.way()));
+                                elementComputation(rounds.putObject("value"), rounding.inner());
+                            }
                             term.put("weight", each.getValue().spelled());
                         });
             }

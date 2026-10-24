@@ -106,22 +106,31 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
             implements OneAboutAnOperation {}
 
     /**
-     * The operation answers {@code value} rounded to a whole number the way {@code mode} says, and
+     * The operation answers {@code value} rounded to a whole multiple of ten to the minus
+     * {@code scale} the way {@code mode} says — to a whole number where it takes no scale — and
      * {@code ways} is what each case of the policy at {@code mode} does.
      *
      * <p>Keyed by the case's declaration, which is what a written mode is once it is read: the cases
      * were matched to the ways of rounding once, here, against what the library declares.
+     *
+     * @param scale the scale's argument, an {@code Int}, or null where the operation takes none
      */
-    record RoundsToAWholeNumber(DeclaredOperation operation, DeclaredArgument mode,
-                                DeclaredArgument value, Map<TypeSymbol, WholeRounding> ways)
+    record RoundsToAStep(DeclaredOperation operation, DeclaredArgument scale,
+                         DeclaredArgument mode, DeclaredArgument value,
+                         Map<TypeSymbol, WholeRounding> ways)
             implements OneAboutAnOperation {
 
-        public RoundsToAWholeNumber {
+        public RoundsToAStep {
             ways = Map.copyOf(ways);
         }
 
+        /** Whether this rounds to a whole number, taking no scale. */
+        public boolean toAWholeNumber() {
+            return scale == null;
+        }
+
         /** The way {@code written} rounds, where it is a case of the policy, and null otherwise. */
-        WholeRounding wayOf(Core written) {
+        public WholeRounding wayOf(Core written) {
             return Core.withoutStanding(written) instanceof Core.UnitValue unit
                     ? ways.get(unit.data()) : null;
         }

@@ -7,6 +7,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 import souther.runtime.CEILING;
 import souther.runtime.DOWN;
+import souther.runtime.DecimalMath;
 import souther.runtime.FLOOR;
 import souther.runtime.HALF_DOWN;
 import souther.runtime.HALF_EVEN;
@@ -16,6 +17,7 @@ import souther.runtime.RationalMath;
 import souther.runtime.RoundingMode;
 import souther.runtime.UP;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.EnumSet;
 import java.util.Set;
@@ -44,7 +46,7 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
     void theOperationsRoundingToAWholeNumberAreTheTwoNarrowings() {
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         for (String module : Set.of("Decimal", "Rational")) {
-            BoundOperationFact.RoundsToAWholeNumber rounds = facts.roundsToAWholeNumber(
+            BoundOperationFact.RoundsToAStep rounds = facts.roundsToAWholeNumber(
                     new ValueName.Stdlib.Operation(module, "toInt"));
             assertNotNull(rounds, module + ".toInt rounds to a whole number");
             assertEquals(EnumSet.allOf(WholeRounding.class), EnumSet.copyOf(rounds.ways().values()),
@@ -75,6 +77,54 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
                                         BigInteger.valueOf(QUARTERS))), asked);
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * A rounding at a scale is the rounding of the number taken in steps: every way of rounding,
+     * every relation, scales on both sides of nought, thresholds on the steps and between them,
+     * and numbers on a grid finer than any step asked about — what the statement says of the
+     * number is whether the run time's {@code Decimal.round} of it stands that way to the
+     * threshold.
+     */
+    @Test
+    void aRoundingAtAScaleStatesWhatTheRunTimesRoundingDoes() {
+        for (WholeRounding way : WholeRounding.values()) {
+            for (Rel rel : Rel.values()) {
+                for (int scale = -1; scale <= 2; scale++) {
+                    for (int thousandths = -1250; thousandths <= 1250; thousandths += 125) {
+                        BigDecimal threshold = BigDecimal.valueOf(thousandths, 3)
+                                .movePointRight(Math.max(0, -scale) * 2);
+                        ConstantComparison stated = RoundedToAWholeNumber.statementAtAScale(way,
+                                rel, ExactRatio.of(threshold), BigInteger.valueOf(scale));
+                        for (int fine = -1600; fine <= 1600; fine += 5) {
+                            BigDecimal number = BigDecimal.valueOf(fine, 3)
+                                    .movePointRight(Math.max(0, -scale) * 2);
+                            BigDecimal rounded = DecimalMath.round(scale, runTimes(way), number);
+                            String asked = way + " " + rel + " " + threshold + " at scale "
+                                    + scale + ", " + number + " rounds to " + rounded;
+                            assertEquals(rel.holds(rounded.compareTo(threshold)),
+                                    holds(stated, ExactRatio.of(number)), asked);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** And the rounding itself, which a number made of an element is evaluated with, is the run
+     *  time's: every way, every quarter. */
+    @Test
+    void aWayOfRoundingRoundsAsTheRunTimeDoes() {
+        for (WholeRounding way : WholeRounding.values()) {
+            for (int quarters = -24; quarters <= 24; quarters++) {
+                ExactRatio number = ExactRatio.of(BigInteger.valueOf(quarters),
+                        BigInteger.valueOf(QUARTERS));
+                long rounded = RationalMath.toInt(runTimes(way),
+                        Rational.of(BigInteger.valueOf(quarters), BigInteger.valueOf(QUARTERS)));
+                assertEquals(BigInteger.valueOf(rounded), way.of(number),
+                        way + " of " + quarters + "/4");
             }
         }
     }

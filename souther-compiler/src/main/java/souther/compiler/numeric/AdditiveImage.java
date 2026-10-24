@@ -119,7 +119,7 @@ public sealed interface AdditiveImage {
      * coefficients — nothing constrains a divisor of nothing, and the caller that asks reads the
      * zero rather than being refused, which is the difference between this and {@link #of}.
      */
-    static ExactRatio divisorOf(Iterable<ExactRatio> coefs) {
+    public static ExactRatio divisorOf(Iterable<ExactRatio> coefs) {
         ExactRatio divisor = ExactRatio.ZERO;
         for (ExactRatio each : coefs) {
             divisor = ExactRatio.gcd(divisor, each);
