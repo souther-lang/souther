@@ -143,7 +143,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),
-            new Held("souther.compiler.check.PathCompletion.operated",
+            new Held("souther.compiler.check.PathCompletion.whereItAnswers",
                     "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
                             + " answers a value, once for every question asked of the evaluation"),
             new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
@@ -152,6 +152,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.PathCompletion.operationAt",
                     "whether the operator is one a recipe is recorded against, which a product and"
                             + " a quotient are and a sum and a difference are not"),
+            new Held("souther.compiler.check.PathCompletion.workedOut",
+                    "which side of a connective inside an operand a run works out whenever the part"
+                            + " is: the left, and not the right"),
             new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
                     "hands each operator a closure's body was worked out through to"
                             + " WhereAnOperatorAnswers, for where an application of it answers"),

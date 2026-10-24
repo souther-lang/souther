@@ -146,6 +146,25 @@ interface ClauseReading<S, E> {
     }
 
     /**
+     * What a binding adds to what the clause under it came to.
+     *
+     * <p>The value the binding is given is worked out where the binding stands, before the clause
+     * under it, and whether or not the clause reads the name. A reading that only enters the scope
+     * sees what the name means and not that something was computed to give it — so a reading of
+     * what working the clause out takes is handed the binding, with the environment it stands in
+     * and not the one under it.
+     *
+     * <p>Nothing by default: a reading of what the clause states has no use for how its names were
+     * computed, and the environment the binding makes is {@link ClauseScope}'s.
+     *
+     * @param outside the environment the binding stands in, which its value is worked out in
+     * @param body    what the clause under the binding came to
+     */
+    default S crossing(ClauseExpr.Scoped binding, E outside, S body) {
+        return body;
+    }
+
+    /**
      * The same reading over the shape a clause has, which is read out of the tree once
      * ({@link ClauseExpr}).
      *
@@ -183,7 +202,8 @@ interface ClauseReading<S, E> {
             // The one place the environment changes, and it changes for what is under the binding
             // alone. What the binding means is not worked out here and not by the reading either.
             case ClauseExpr.Scoped it ->
-                    over(it.body(), scope.inside(it.binding(), at), scope, per, view);
+                    crossing(it, at, over(it.body(), scope.inside(it.binding(), at), scope, per,
+                            view));
         };
         // Every node that was written as this shape, so a reader asking about the node it is
         // holding finds what this made of it — the denial as well as what is under it, since the
