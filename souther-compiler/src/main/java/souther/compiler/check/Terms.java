@@ -2404,7 +2404,7 @@ final class Terms {
      */
     private Computed aWholeNumberOfAQuotient(Core e, Denotations at) {
         AnOperationApplied applied = AnOperationApplied.of(e);
-        BoundOperationFact.RoundsToAWholeNumber rounds = applied == null ? null
+        BoundOperationFact.RoundsToAStep rounds = applied == null ? null
                 : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
         Core value = rounds == null ? null : applied.argument(rounds.value());
         Given rounded = value == null ? null : given(value, at);

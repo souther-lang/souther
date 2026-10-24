@@ -310,9 +310,24 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
     }
 
-    /** How {@code operation} rounds a number to a whole one, or null where it rounds none. */
-    public BoundOperationFact.RoundsToAWholeNumber roundsToAWholeNumber(ValueName operation) {
-        return one(BoundOperationFact.RoundsToAWholeNumber.class, operation);
+    /** How {@code operation} rounds a number to a whole one, or null where it rounds none to a
+     *  whole number. */
+    public BoundOperationFact.RoundsToAStep roundsToAWholeNumber(ValueName operation) {
+        BoundOperationFact.RoundsToAStep rounds = roundsToAStep(operation);
+        return rounds != null && rounds.toAWholeNumber() ? rounds : null;
+    }
+
+    /** How {@code operation} rounds a number to a step, at a scale or to a whole number, or null
+     *  where it rounds none. */
+    public BoundOperationFact.RoundsToAStep roundsToAStep(ValueName operation) {
+        return one(BoundOperationFact.RoundsToAStep.class, operation);
+    }
+
+    /** {@code applied} as a rounding of a number to a step, or null where the operation it
+     *  applies rounds none or it hands nothing where the law reads. */
+    public ARounding rounding(AnOperationApplied applied) {
+        BoundOperationFact.RoundsToAStep rounds = roundsToAStep(applied.operation());
+        return rounds == null ? null : ARounding.of(applied, rounds);
     }
 
     /** What holds of the number {@code operation} answers, wherever it is called, in the order

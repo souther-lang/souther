@@ -155,19 +155,32 @@ public enum CompositionRepertoire {
      * compiler solves for.
      *
      * <p>A total of what a walk computed of each element is written by choosing one field of every
-     * element and solving for it, where the computation is a form of that one field alone. A form of
-     * several fields, or a choice between two by a flag, has more than one value to choose in an
-     * element, and nothing here chooses the others so that the first can be solved for. A choice by
-     * the element's case none of whose arms is a form of one field of its case is the same, and so
-     * is a weight made of the position or a choice by it between two forms of the field, which
-     * weigh the positions apart. Raising
-     * anything reaches none of them; what would is a way of choosing the rest of an element.
+     * element and solving for it, where the computation is a form of that one field once the
+     * others it reads are held still. A choice between two by a flag has two numbers to choose
+     * between in an element, and nothing here chooses which. A choice by the element's case none of
+     * whose arms is a form of one field of its case is the same, and so is a weight made of the
+     * position or a choice by it between two forms of the field, which weigh the positions apart.
+     * Raising anything reaches none of them; what would is a way of choosing the rest of an
+     * element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
      * told to raise a number that changes nothing; read as an answer about the model, they are told
      * the rules admit no row when what happened is that this compiler wrote none.
      */
     ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+
+    /**
+     * The containers a total of what was computed of each element is spread over, where the
+     * elements differ at a field the computation reads besides the one solved for.
+     *
+     * <p>A computation of several fields, a form of them or their products, is solved for one field
+     * with every other one it reads held at one value, the same in every element. A container whose
+     * elements hold different values there comes to totals none of these do — a product of two
+     * fields held at one is the other field's total, and every other total of products is written
+     * by none of these. What would reach them is a way of sharing a total out over several fields,
+     * and raising no figure does.
+     */
+    ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
 
     /**
      * The containers a total of what was computed of each element by its case is spread over,
@@ -223,7 +236,7 @@ public enum CompositionRepertoire {
                  ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                  TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
-                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
         };
     }
