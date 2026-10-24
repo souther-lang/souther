@@ -3922,9 +3922,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         container.addAll(rest.subList(0, fields));
         TermPath at = new TermPath(here.head(), container);
         Position held = read.domain().at(at.position());
-        boolean standsWhereAMemberDoes = held != null && switch (held.type()) {
-            case Type.MapOf _ -> rest.get(fields) instanceof TermPath.Step.Key;
-            case Type.SetOf _, Type.ListOf _ -> rest.get(fields) instanceof TermPath.Step.Element;
+        boolean standsWhereAMemberDoes = held != null && switch (held.view().shape()) {
+            case Shape.Mapping _ -> rest.get(fields) instanceof TermPath.Step.Key;
+            case Shape.Sequence _ -> rest.get(fields) instanceof TermPath.Step.Element;
             default -> false;
         };
         return standsWhereAMemberDoes && holdsWithoutLimit(at, read) ? Named.NOT : Named.UNSEEN;
