@@ -1062,11 +1062,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
+        List<TakenConstraint.Affine> met = metByARowAtTheLine(conditions, past.narrowing());
+        List<OnAWay> tying = conditions.stream().filter(each -> each.affine() == null
+                || !met.contains(each.affine())).toList();
+        List<TakenConstraint> narrowing = past.narrowing().stream().filter(each ->
+                !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
+                .toList();
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<FilingCoordinate> byTheFormat = heldWhole ? leftByTheFormat(read, conditions, stopped)
                 : null;        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, sources, carriers, along, declared, conditions, remainders,
-                        stating, heldWhole, past.narrowing(), byTheFormat != null);
+                        tying.size() == conditions.size() ? stating
+                                : stating(sources, tying, heldWhole),
+                        heldWhole, narrowing, byTheFormat != null);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -1081,10 +1089,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
-        TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
+        TiedOnTheWay tied = TiedOnTheWay.of(tying, read);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, conditions, sources, read));
+            tiedTo.add(tiedTo(i, tied, tying, sources, read));
         }
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
@@ -1614,6 +1622,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return run != null && run.holdsAValue() && run.holdsOneWholeNumber() == null
                 && (run.min() == null || run.max() == null
                         || !run.min().at().equals(run.max().at()));
+    }
+
+    /**
+     * What the way states that ties the sides to one another, which is every statement but those
+     * holding the relation's own form to an interval a row at its line is in
+     * ({@link WhatStatementsOfOneFormDecide#leavingRoomAroundTheLine}). Such a row puts one side
+     * at the line and the others where the declarations leave them, and the statement holds there
+     * whatever they are.
+     */
+    private List<TakenConstraint.Affine> metByARowAtTheLine(List<OnAWay> conditions,
+                                                            List<TakenConstraint> narrowing) {
+        TakenConstraint.Affine asked = askedAsAStatement();
+        if (asked == null) {
+            return List.of();
+        }
+        ExactRatio reach = asked.form().coefs().values().stream().map(ExactRatio::abs)
+                .max(ExactRatio::compareTo).orElse(ExactRatio.ONE);
+        List<TakenConstraint.Affine> stated = new ArrayList<>();
+        conditions.forEach(each -> stated.add(each.affine()));
+        narrowing.forEach(each -> stated.add(
+                each instanceof TakenConstraint.Affine affine ? affine : null));
+        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(stated, asked, reach);
     }
 
     /** The relation as a statement is held, the sides weighed and added to the constant and held
