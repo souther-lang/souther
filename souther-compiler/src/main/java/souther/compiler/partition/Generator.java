@@ -9629,9 +9629,9 @@ public final class Generator {
             return null;
         }
 
-        /** Composing the rows the search looked through stopped at {@code budget}. */
-        void composingStoppedAt(CompositionBudget budget) {
-            composingStopped(List.of(budget.figure()));
+        /** Composing the rows the search looked through stopped at {@code figure}. */
+        void composingStoppedAt(Figure figure) {
+            composingStopped(List.of(figure));
         }
 
         /** The inputs of the row a composing took, or null ({@link #tookFrom}). */

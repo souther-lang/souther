@@ -256,6 +256,68 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
     }
 
     /**
+     * The string is parted where it is made into the separator, which is not where it is written as
+     * one: the body makes it small before it parts it at `a`, so the capital `A` is a place it is
+     * parted at, and a string seen as `XABBACC` is three pieces.
+     */
+    @Test
+    void aStringIsPartedWhereTheConversionMakesItIntoTheSeparator() {
+        Replacements.Searched came = searched("""
+                module example.catalog
+
+                data Source = String
+                    invariant String.matches("(X|ZZ)ABBACC", value)
+                data Part = String
+                    invariant String.matches("[a-z]{2}", value)
+
+                behavior partsOf : (source: Source) -> List<Part>
+                    constructs Part
+
+                let partsOf (source) =
+                    List.flatMap(p -> if Part(p) as part then [ part ] else [],
+                                 List.drop(1, String.split("a", String.lowercase(source.value))))
+
+                example partsOf
+                    | "the row" : (Source("XABBACC")) -> [Part("bb"), Part("cc")]
+                """, "example.catalog", "partsOf");
+
+        assertInstanceOf(ReplacementDisposition.Witnessed.class, came.disposition(),
+                () -> "`ZZABBACC` is three pieces once small, and the first is a part: " + came);
+        assertEquals(List.of("Source(\"ZZABBACC\")"), came.inputs());
+    }
+
+    /**
+     * Where a machine for the strings cannot be made, the rewrite is left undecided and the figure
+     * the making was refused at is said, as it is for any other figure a search stops at: no string
+     * meeting the rules is not the same news as a string nobody could look for.
+     */
+    @Test
+    void aMachineThatCannotBeMadeSaysTheFigureItWasRefusedAt() {
+        Collection<Replacements.Searched> came = searchedAll("""
+                module example.catalog
+
+                data TagList = String
+                    invariant String.matches("[^;]{1,5};[^;]{1,5}", value)
+                data Tag = String
+                    invariant String.matches("a{30000}", value)
+
+                behavior tagsOf : (list: TagList) -> List<Tag>
+                    constructs Tag
+
+                let tagsOf (list) =
+                    List.flatMap(t -> if Tag(t) as tag then [ tag ] else [],
+                                 List.drop(1, String.split(";", list.value)))
+
+                example tagsOf
+                    | "the row" : (TagList("x;y")) -> []
+                """, "example.catalog", "tagsOf");
+        String said = came.stream().map(each -> each.disposition().toString()).toList().toString();
+
+        assertEquals(true, said.contains("STRINGS_PARTED_ONE_MACHINE"),
+                () -> "the machine limit the making was refused at is said: " + said);
+    }
+
+    /**
      * What a string is put together of and the strings the row offers it are counted apart: a string
      * of two pieces in a row of many strings is cut at the second and not at the first.
      */

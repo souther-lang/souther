@@ -5,11 +5,13 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.PieceDemand;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -21,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 import java.util.function.Predicate;
 
 /**
@@ -76,7 +79,10 @@ final class NearbyValues {
     static Iterator<ObservedValue> demanded(ObservedValue value, Type type,
                                             RuleReadingContext reading, String parameter,
                                             List<PieceDemand> demands, List<ObservedValue> row,
-                                            Consumer<CompositionBudget> stoppedAt) {
+                                            Consumer<Figure> stoppedAt) {
+        // What the row holds that a piece is taken from is the same wherever a demand is met, so
+        // it is read the first time it is asked for and not again.
+        Map<PieceDemand, List<String>> held = new HashMap<>();
         return of(value, type, reading, TermPath.of(parameter), List.of(),
                 (prim, leaf, at, along, view) -> {
             if (prim != Type.Prim.STRING || !(leaf instanceof ObservedValue.Text text)) {
@@ -86,11 +92,57 @@ final class NearbyValues {
                     .filter(each -> standsAt(each.position(), at, along)).toList();
             Set<String> offered = new HashSet<>(List.of(text.value()));
             Iterator<String> strings = flat(here.iterator(), demand -> flat(
-                    shapesOf(text.value(), demand, reading, row, stoppedAt).iterator(),
-                    shape -> Partitions.stringsPartedInto(view, reading, demand.attempted(),
-                            demand.separator(), demand.through(), shape).iterator()));
+                    shapesOf(text.value(), demand, held.computeIfAbsent(demand,
+                            each -> heldBy(each, reading, row, stoppedAt)), stoppedAt)
+                            .iterator(),
+                    shape -> made(Partitions.stringsPartedInto(view, reading, demand.attempted(),
+                            demand.separator(), demand.through(), shape), stoppedAt)));
             return mapped(filtered(strings, offered::add), ObservedValue.Text::new);
         });
+    }
+
+    /** The strings made, and the figure the making was refused at where it was. */
+    private static Iterator<String> made(Partitions.StringsPartedInto.Parted parted,
+                                         Consumer<Figure> stoppedAt) {
+        return switch (parted) {
+            case Partitions.StringsPartedInto.StringsMade made -> made.strings().iterator();
+            case Partitions.StringsPartedInto.StringsNotMade refused -> {
+                stoppedAt.accept(Partitions.figureOf(refused.stopped()));
+                yield none();
+            }
+        };
+    }
+
+    /**
+     * The strings of {@code row} a piece for {@code demand} may be taken from: the ones that stand
+     * as a piece, which hold nowhere the string is parted, and that the newtype admits once the
+     * string they are a piece of has been made into what is parted.
+     *
+     * <p>Read only as far as it takes to know the figure is reached: one string past it says so, and
+     * the rest of the row is not asked.
+     */
+    private static List<String> heldBy(PieceDemand demand, RuleReadingContext reading,
+                                       List<ObservedValue> row, Consumer<Figure> stoppedAt) {
+        CompositionBudget taken = CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM;
+        int most = taken.maximum();
+        IntPredicate parts = Partitions.partsAt(demand.separator(), demand.through());
+        Set<String> held = new LinkedHashSet<>();
+        for (ObservedValue each : row) {
+            boolean more = eachText(each, text -> {
+                if (text.codePoints().noneMatch(parts) && Partitions.pieceAdmits(
+                        demand.attempted(), reading, demand.through(), text, stoppedAt)) {
+                    held.add(text);
+                }
+                return held.size() <= most;
+            });
+            if (!more) {
+                break;
+            }
+        }
+        if (held.size() > most) {
+            stoppedAt.accept(taken.figure());
+        }
+        return held.stream().limit(most).toList();
     }
 
     /**
@@ -107,26 +159,19 @@ final class NearbyValues {
      * as many.
      */
     private static List<List<Optional<String>>> shapesOf(String seen, PieceDemand demand,
-                                                         RuleReadingContext reading,
-                                                         List<ObservedValue> row,
-                                                         Consumer<CompositionBudget> stoppedAt) {
+                                                         List<String> held,
+                                                         Consumer<Figure> stoppedAt) {
         CompositionBudget budget = CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF;
-        List<String> pieces = partsOf(seen, demand.separator());
+        // The pieces of the string as it is parted, which is where it is made into the separator
+        // and not where it is written as one.
+        List<String> pieces = partsOf(seen, Partitions.partsAt(demand.separator(),
+                demand.through()));
         List<List<Optional<String>>> out = new ArrayList<>();
         if (pieces.size() <= budget.maximum()) {
             for (int changed = 0; changed < pieces.size(); changed++) {
                 out.add(changing(pieces, changed, Optional.empty()));
             }
-            Set<String> held = new LinkedHashSet<>();
-            row.forEach(each -> textsIn(each, held));
-            held.removeIf(text -> text.codePoints().anyMatch(each -> each == demand.separator())
-                    || !Partitions.pieceAdmits(demand.attempted(), reading, demand.through(),
-                            text));
-            CompositionBudget taken = CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM;
-            if (held.size() > taken.maximum()) {
-                stoppedAt.accept(taken);
-            }
-            for (String text : held.stream().limit(taken.maximum()).toList()) {
+            for (String text : held) {
                 for (int changed = 0; changed < pieces.size(); changed++) {
                     if (!pieces.get(changed).equals(text)) {
                         out.add(changing(pieces, changed, Optional.of(text)));
@@ -134,10 +179,10 @@ final class NearbyValues {
                 }
             }
         } else {
-            stoppedAt.accept(budget);
+            stoppedAt.accept(budget.figure());
         }
         if (pieces.size() + 1 > budget.maximum()) {
-            stoppedAt.accept(budget);
+            stoppedAt.accept(budget.figure());
         }
         for (int count = 1; count <= Math.min(pieces.size() + 1, budget.maximum()); count++) {
             out.add(Collections.nCopies(count, Optional.<String>empty()));
@@ -155,27 +200,47 @@ final class NearbyValues {
         return shape;
     }
 
-    /** Every string {@code value} holds, wherever in it. */
-    private static void textsIn(ObservedValue value, Set<String> out) {
+    /**
+     * Every string {@code value} holds, wherever in it, handed to {@code goOn} one at a time until
+     * it says to stop — and whether it did not.
+     */
+    private static boolean eachText(ObservedValue value, Predicate<String> goOn) {
         switch (value) {
-            case ObservedValue.Text text -> out.add(text.value());
-            case ObservedValue.Constructed made -> made.fields().values()
-                    .forEach(each -> textsIn(each, out));
-            case ObservedValue.Sequence held -> held.elements()
-                    .forEach(each -> textsIn(each, out));
-            case ObservedValue.Mapping held -> held.entries().forEach(entry -> {
-                textsIn(entry.key(), out);
-                textsIn(entry.value(), out);
-            });
+            case ObservedValue.Text text -> {
+                return goOn.test(text.value());
+            }
+            case ObservedValue.Constructed made -> {
+                for (ObservedValue each : made.fields().values()) {
+                    if (!eachText(each, goOn)) {
+                        return false;
+                    }
+                }
+            }
+            case ObservedValue.Sequence held -> {
+                for (ObservedValue each : held.elements()) {
+                    if (!eachText(each, goOn)) {
+                        return false;
+                    }
+                }
+            }
+            case ObservedValue.Mapping held -> {
+                for (ObservedValue.Entry entry : held.entries()) {
+                    if (!eachText(entry.key(), goOn) || !eachText(entry.value(), goOn)) {
+                        return false;
+                    }
+                }
+            }
             default -> { }
         }
+        return true;
     }
 
-    private static List<String> partsOf(String text, int separator) {
+    /** {@code text} cut at every code point {@code parts} says it is parted at. */
+    private static List<String> partsOf(String text, IntPredicate parts) {
         List<String> pieces = new ArrayList<>();
         StringBuilder piece = new StringBuilder();
         text.codePoints().forEach(each -> {
-            if (each == separator) {
+            if (parts.test(each)) {
                 pieces.add(piece.toString());
                 piece.setLength(0);
             } else {

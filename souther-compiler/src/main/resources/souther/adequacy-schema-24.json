@@ -199,6 +199,8 @@
         "behavior_distinctions_in_all",
         "rule_sets_one_machine",
         "rule_sets_in_all",
+        "strings_parted_one_machine",
+        "strings_parted_in_all",
         "evaluation_steps",
         "recursion_depth",
         "compiler_time",
