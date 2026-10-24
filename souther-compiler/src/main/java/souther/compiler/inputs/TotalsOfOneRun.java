@@ -208,10 +208,9 @@ public final class TotalsOfOneRun {
                 ? RunSource.overTheOccurrencesAt(at)
                 : RunSource.computedOverTheElementsAt(run.elements(), perElement, each,
                         run.order());
-        NumericTerm.TakenOver total = over == null ? null
-                : NumericTerm.TakenOver.of(run.operation(), over, each, source.inners(),
-                        source.symbols());
-        return total == null ? null : new Weighed(total, shared);
+        // The parts are takings of one operation over values of one type, so the total is that
+        // taking again, over the run their sum is.
+        return over == null ? null : new Weighed(parts.getFirst().term().over(over), shared);
     }
 
     /**

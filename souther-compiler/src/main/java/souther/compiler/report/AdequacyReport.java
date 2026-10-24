@@ -6596,17 +6596,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    /** The case of the library's rounding policy a way of rounding is, as the library names it.
-     *  Written out for the reason {@link #wire(TraversalDirection)} is. */
+    /** A way of rounding, in the one word this document names it by. Written out for the reason
+     *  {@link #wire(TraversalDirection)} is, and in the document's own words: what the library
+     *  calls its cases is the library's to say. */
     private static String wire(WholeRounding way) {
         return switch (way) {
-            case HALF_UP -> "HALF_UP";
-            case HALF_EVEN -> "HALF_EVEN";
-            case HALF_DOWN -> "HALF_DOWN";
-            case UP -> "UP";
-            case DOWN -> "DOWN";
-            case CEILING -> "CEILING";
-            case FLOOR -> "FLOOR";
+            case HALF_UP -> "half_up";
+            case HALF_EVEN -> "half_even";
+            case HALF_DOWN -> "half_down";
+            case UP -> "away_from_nought";
+            case DOWN -> "toward_nought";
+            case CEILING -> "toward_the_greater";
+            case FLOOR -> "toward_the_lesser";
         };
     }
 

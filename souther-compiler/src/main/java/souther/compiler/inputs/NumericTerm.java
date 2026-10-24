@@ -1546,6 +1546,15 @@ public sealed interface NumericTerm
             return at == null ? null : new TakenOver(operation, at);
         }
 
+        /**
+         * The same taking over the values at {@code other}, which are values of the type this one's
+         * run holds: the account the operation declares was put to that type when this one was
+         * made, so it is not asked again.
+         */
+        TakenOver over(RunSource other) {
+            return new TakenOver(operation, Objects.requireNonNull(other, "taken over a run"));
+        }
+
         /** What this operation takes of what it is given. Never null: one of these cannot be made
          *  for an operation that declares none. */
         public TakenAs takenAs() {
