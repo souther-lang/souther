@@ -1112,8 +1112,8 @@ final class Pullback {
     /** Whether {@code operand} is what the quotient {@code e} divides, which it stops a run on no
      *  more than on the number it divides by. */
     private static boolean isWhatAQuotientDivides(Core e, Core operand) {
-        return e instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
-                && operand != quotient.right();
+        return Core.withoutStanding(e) instanceof Core.Binary quotient
+                && quotient.op() == BinOp.DIV && operand != quotient.right();
     }
 
     /**
@@ -1127,8 +1127,9 @@ final class Pullback {
         Set<BindingId> names = new HashSet<>(outer == null ? Set.of() : outer.names());
         block.params().forEach(binder -> names.add(binder.binding()));
         Set<TermPath> standFor = null;
-        if (applied instanceof Core.Call || applied instanceof Core.PreservedCall
-                || applied instanceof Core.Apply) {
+        Core call = Core.withoutStanding(applied);
+        if (call instanceof Core.Call || call instanceof Core.PreservedCall
+                || call instanceof Core.Apply) {
             Operators held = operated;
             Operators others = new Operators();
             operated = others;
