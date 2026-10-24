@@ -111,14 +111,14 @@ class ANumberReadOffSeveralPlacesIsNotApartFromWhatSharesOneOfThemTest {
     void nothingIsShownUndividedOfANumberReadOffSeveralPlaces() {
         UndividedByARelation beside = UndividedByARelation.ofARemainderOfAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_KEY, ExactRatio.ONE)),
-                BigInteger.valueOf(11),
+                BigInteger.ZERO, BigInteger.valueOf(11),
                 new LinearForm<>(ExactRatio.ZERO, Map.of(occurrencesOf(KEY), ExactRatio.ONE)),
                 ExactRatio.ZERO, Rel.EQ);
         assertSame(UndividedByARelation.SHOWING_NOTHING, beside);
 
         UndividedByARelation apart = UndividedByARelation.ofARemainderOfAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_KEY, ExactRatio.ONE)),
-                BigInteger.valueOf(11),
+                BigInteger.ZERO, BigInteger.valueOf(11),
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_OTHER, ExactRatio.ONE)),
                 ExactRatio.ZERO, Rel.EQ);
         assertNotSame(UndividedByARelation.SHOWING_NOTHING, apart);

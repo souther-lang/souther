@@ -210,6 +210,26 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
         }
     }
 
+    /**
+     * A rule on what a division leaves of what the code points of a formatted string come to has a
+     * row on each side: a string of the format whose sum leaves the remainder asked for, and one
+     * whose sum does not. Thirteen digits come to no less than 624, so a sum of the class nearest
+     * nought is no sum any of them comes to.
+     */
+    @Test
+    void aRemainderOfWhatTheCodePointsComeToIsComposedAStringOfTheFormat() {
+        composedAndAnswered("""
+                module p
+                data Code = String
+                    invariant String.matches("[0-9]{13}", value)
+                behavior pick : (c: Code) -> Int
+                let pick (c) = {
+                    guard Int.floorMod(List.sum(String.codePoints(c.value)), 10) == 0 else 0
+                    1
+                }
+                """, text -> Math.floorMod(sumOf(text), 10) == 0 ? 1 : 0, Set.of(0, 1));
+    }
+
     /** The rows composed for {@code model}'s rules, answered as {@code by} works them out and run:
      *  {@code expected} are the answers some row is composed for. */
     private static void composedAndAnswered(String model, Function<String, Integer> by,

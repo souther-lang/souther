@@ -25,6 +25,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
@@ -33,6 +34,7 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1584,6 +1586,13 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT))
                             : AnElementsWay.ofTheRow(each));
+            // A remainder, asked of the row where its numbers are none of the element's. Of the
+            // element's numbers it is no relation an element is written to meet here.
+            case Read.Demands(RowDemand.OnARemainder remainder) ->
+                    List.of(everyElement || anyInside(remainder.positions(), element)
+                            ? AnElementsWay.ofTheRow(forTheRun(whole,
+                                    RowDemand.NoComposer.A_REMAINDER_OF_A_FORM))
+                            : AnElementsWay.ofTheRow(each));
             // Two values being one, asked of the row where neither is inside the element. Inside
             // it, the element is written alike with every other and no value is written into it
             // from another position here.
@@ -1924,6 +1933,11 @@ final class DemandReading {
             // and not a count against a number that is not yet there.
             case Relation.Affine affine when countAndNumbers(affine, read) != null ->
                     soManyAgainstNumbers(compared, affine, met, read);
+            // What a division leaves of a form of numbers a row writes, alone against a number:
+            // the remainders that meet it, which a composer places a value of the form at.
+            case Relation.Affine affine
+                    when onARemainderAlone(affine, met, read) instanceof RowDemand.OnARemainder on ->
+                    new Read.Demands(on);
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
@@ -2015,6 +2029,43 @@ final class DemandReading {
                 scale.signum() < 0 ? met.turned() : met, scaled.constant().negated(),
                 new LinearForm<>(ExactRatio.ZERO, added),
                 anElementMeeting(AStatementAtARow.elementsOf(count), read)));
+    }
+
+    /**
+     * The remainders {@code affine} coming out {@code met} leaves, where it holds what a division
+     * leaves of a form against a number and nothing else — or null where it is no such relation,
+     * where a number of the form is none a row writes at one place and counts, or where no
+     * remainder meets it.
+     *
+     * <p>Read off the relation as {@code w·r + c met 0} over the remainders a division by the
+     * divisor leaves, which is a run of them, its bounds turned over where the weight is below
+     * nought.
+     */
+    private static RowDemand.OnARemainder onARemainderAlone(Relation.Affine affine, Rel met,
+                                                            InputReading read) {
+        if (affine.form().coefs().size() != 1
+                || !(affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.RemainderOfADividend remainder)
+                || !(remainder.dividend().constant().floor() instanceof ExactAnswer.Held<?>)) {
+            return null;
+        }
+        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (term.atOnePosition() == null || orders == null || orders.answered() == null
+                    || !orders.answered().counts()) {
+                return null;
+            }
+        }
+        ExactRatio weight = affine.form().coefs().get(remainder);
+        if (!(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+            return null;
+        }
+        WholeNumberRuns leaves = WholeNumberRuns.standing(
+                weight.signum() < 0 ? met.turned() : met, threshold)
+                .and(WholeNumberRuns.one(BigInteger.ZERO,
+                        remainder.divisor().subtract(BigInteger.ONE)));
+        return leaves.isNone() ? null : new RowDemand.OnARemainder(remainder, leaves);
     }
 
     /**

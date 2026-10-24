@@ -16,6 +16,7 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClassMembers;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
@@ -32,6 +33,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -42,6 +44,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
@@ -55,6 +58,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -6526,6 +6530,36 @@ public final class Generator {
                         CountsAsked::and);
                 continue;
             }
+            // What a division leaves of a form, placed at a value of the form that leaves one of
+            // the remainders asked for.
+            if (cut.demand() instanceof RowDemand.OnARemainder remainder) {
+                // On what each number of the form counts, which is what the form adds up: what the
+                // code points of a string come to is a whole number, and not the string.
+                Function<NumericTerm, Carrier> on = term -> {
+                    TermOrders orders = subject.quantities().ordersOf(term);
+                    return orders == null ? null : orders.answered();
+                };
+                switch (standingOnARemainder(here, remainder, on, looking)) {
+                    case NumericWitness.Standing.Found standing -> {
+                        for (NumericWitness.Standing.Found.Placed placed
+                                : standing.inFixingOrder()) {
+                            RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                            if (out.putIfAbsent(at, placed.place()) == null) {
+                                routed.put(placed.term(), at);
+                                chosen.add(at);
+                                here = here.given(placed.term(), placed.place());
+                            }
+                        }
+                    }
+                    case NumericWitness.Standing.ProvedImpossible _ -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                    case NumericWitness.Standing.NotFound(CompositionShortfall met) -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
+                }
+                continue;
+            }
             // What an element meets one of several ways, with none chosen: a row whose elements
             // are written alike writes one of them into every element, and which one is chosen
             // before the row is composed ({@link ElementsWrittenAlike}). Composed with none chosen,
@@ -6749,6 +6783,11 @@ public final class Generator {
                         writtenBesides.add(RealizationTarget.of(term).writeRoot());
                     }
                 }
+                case RowDemand.OnARemainder remainder -> {
+                    for (NumericTerm term : remainder.terms()) {
+                        writtenBesides.add(RealizationTarget.of(term).writeRoot());
+                    }
+                }
                 case RowDemand.SoMany many -> writtenBesides.add(new RealizationTarget.ACount(
                         CountedElements.of(subject.behavior(), many.count(), subject.quantities(),
                                 many.anElementMeeting())).writeRoot());
@@ -6945,6 +6984,95 @@ public final class Generator {
     }
 
     /**
+     * Where the numbers of the form {@code remainder} is of stand inside {@code here} so that it
+     * leaves one of the remainders asked for, or what this found out about there being none.
+     *
+     * <p>The values of the form that leave a remainder are a class, those the divisor leaves it at
+     * among the multiples of the step the form's coefficients take, and the class is walked inside
+     * the run {@code here} leaves the form from its nearer end, as the border's own search walks it
+     * ({@link LevelRealizer}): at each value, the form held to it and its numbers put to the
+     * region. As many values in all as one position on the way is tried at, whichever remainders
+     * they are of.
+     *
+     * <p>Proof that none stands only where every member of every class was walked and the region
+     * left none of them a place: a run with an end nothing bounds has members past the last one
+     * tried.
+     */
+    private static NumericWitness.Standing standingOnARemainder(SearchRegion here,
+            RowDemand.OnARemainder remainder, Function<NumericTerm, Carrier> on,
+            WitnessSearch looking) {
+        LinearForm<NumericTerm> dividend = remainder.remainder().dividend();
+        LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, dividend.coefs());
+        BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
+        BigInteger divisor = remainder.remainder().divisor();
+        BigInteger step = BigInteger.ZERO;
+        for (ExactRatio each : dividend.coefs().values()) {
+            if (!(each.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                    || !each.isWhole()) {
+                return new NumericWitness.Standing.NotFound(CompositionShortfall.NONE);
+            }
+            step = step.gcd(whole);
+        }
+        Congruences reached = new Congruences(BigInteger.ZERO,
+                step.signum() == 0 ? BigInteger.ONE : step);
+        NumericDomain.Bounds reach = switch (here.projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (reach == null) {
+            return new NumericWitness.Standing.ProvedImpossible();
+        }
+        List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
+        for (NumericTerm term : NumericTerms.inOrder(dividend.coefs().keySet())) {
+            terms.add(term.atOnePosition());
+        }
+        int left = CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
+        boolean proved = true;
+        CompositionShortfall met = CompositionShortfall.NONE;
+        for (WholeNumberRuns.Run run : remainder.leaves().runs()) {
+            for (BigInteger r = run.from(); r.compareTo(run.to()) <= 0; r = r.add(BigInteger.ONE)) {
+                if (left <= 0) {
+                    return new NumericWitness.Standing.NotFound(met.and(CompositionShortfall.of(
+                            Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
+                }
+                Congruences wanted = new Congruences(r.subtract(moved), divisor).meet(reached);
+                if (wanted == null) {
+                    continue;
+                }
+                ClassMembers members = ClassMembers.within(wanted, reach, null, left);
+                if (members.stoppedShort()) {
+                    proved = false;
+                    met = met.and(CompositionShortfall.of(
+                            Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT)));
+                }
+                for (BigInteger value : members.values()) {
+                    left--;
+                    if (!(here.assuming(new LinearForm<>(ExactRatio.of(value).negated(),
+                            form.coefs()), Rel.EQ)
+                            instanceof SearchRegion.Assumption.Taken(SearchRegion at))) {
+                        proved = false;
+                        continue;
+                    }
+                    switch (NumericWitness.of(at, terms, on, looking)) {
+                        case NumericWitness.Standing.Found found -> {
+                            return found;
+                        }
+                        case NumericWitness.Standing.ProvedImpossible _ -> { }
+                        case NumericWitness.Standing.NotFound(CompositionShortfall shortOf) -> {
+                            proved = false;
+                            met = met.and(shortOf);
+                        }
+                    }
+                }
+            }
+        }
+        return proved ? new NumericWitness.Standing.ProvedImpossible()
+                : new NumericWitness.Standing.NotFound(met);
+    }
+
+    /**
      * What one cut of the way comes to, arrived at whole.
      *
      * <p><b>A value and not a sequence of changes to the row.</b> A cut is placed at every position
@@ -7007,6 +7135,9 @@ public final class Generator {
             // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
+            // Placed beside the counts, at a value of its form ({@link #alsoOnTheWay}).
+            case RowDemand.OnARemainder remainder -> throw new IllegalArgumentException(
+                    "a remainder is placed at a value of its form and not here: " + remainder);
             // Passed over before it is asked, with what the way is owed about it.
             case RowDemand.ForTheRun run -> throw new IllegalArgumentException(
                     "a statement no composer writes toward is placed nowhere: " + run);
@@ -7038,7 +7169,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.counted();
             case RowDemand.ForAll every -> every.counted();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> Optional.empty();
+                 RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                    Optional.empty();
         };
     }
 
@@ -7048,7 +7180,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.container();
             case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> null;
+                 RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                    null;
         };
     }
 
@@ -7077,6 +7210,8 @@ public final class Generator {
             case RowDemand.OneValueAtBoth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
+            // The numbers of the form a remainder is of.
+            case RowDemand.OnARemainder _ -> false;
             // A statement no composer writes toward, which places nothing.
             case RowDemand.ForTheRun _ -> true;
         };

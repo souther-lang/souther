@@ -870,6 +870,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " written to come to a sum may hold, and how many steps the search"
                             + " may take: each is handed over as what stopped it where nothing was"
                             + " found"),
+            Map.entry("souther.compiler.partition.Generator#standingOnARemainder("
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/RowDemand$OnARemainder;"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;)"
+                            + "Lsouther/compiler/partition/NumericWitness$Standing;",
+                    "how many values of a form are tried for the remainders a condition leaves,"
+                            + " handed over as what stopped it where nothing was found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/numeric/Today;)"

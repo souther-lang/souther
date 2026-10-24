@@ -49,7 +49,8 @@ record ElementWrites(List<RowDemand.ATruth> truths, List<RowDemand.InCases> case
                 case RowDemand.Exists exists -> exists.ofAnElement().theWay();
                 case RowDemand.ForAll every -> every.ofEachElement().theWay();
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> List.of();
+                     RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _,
+                     RowDemand.ForTheRun _ -> List.of();
             };
             for (RowDemand.OfAnElement one : asked) {
                 switch (one) {

@@ -40,6 +40,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
@@ -400,7 +401,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link RemainderSide}).
      */
     static UndividedByARelation ofARemainderOfAForm(LinearForm<NumericTerm> dividend,
-                                                    BigInteger divisor,
+                                                    BigInteger shift, BigInteger divisor,
                                                     LinearForm<NumericTerm> added,
                                                     ExactRatio level, Rel relation) {
         // Which numbers are apart is read off the places each side is made of, so a number read
@@ -415,7 +416,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ExactRatio.ONE, null, null));
         added.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
         return new UndividedByARelation(sides, level.negated(), relation, List.of(), Kind.AFFINE,
-                new RemainderSide(dividend, divisor));
+                new RemainderSide(dividend, shift, divisor));
     }
 
     /**
@@ -424,16 +425,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param dividend the form the division is of, with no constant: its numbers and what each is
      *                 weighed by
+     * @param shift    the whole number the form is moved by before it is divided
      * @param divisor  the number it is divided by, above nought
      */
-    record RemainderSide(LinearForm<NumericTerm> dividend, BigInteger divisor) {
+    record RemainderSide(LinearForm<NumericTerm> dividend, BigInteger shift, BigInteger divisor) {
 
         RemainderSide {
-            if (dividend == null || divisor == null || divisor.signum() <= 0
+            if (dividend == null || shift == null || divisor == null || divisor.signum() <= 0
                     || dividend.coefs().isEmpty()) {
                 throw new IllegalArgumentException("a remainder is of a form of numbers, by a"
-                        + " divisor above nought: " + dividend + " by " + divisor);
+                        + " divisor above nought: " + dividend + " + " + shift + " by " + divisor);
             }
+        }
+
+        /** Whether {@code on} is a condition on this remainder: of the same form, moved by the
+         *  same number and divided by the same divisor. */
+        boolean isAskedBy(RowDemand.OnARemainder on) {
+            Quantity.RemainderOfADividend asked = on.remainder();
+            return asked.divisor().equals(divisor)
+                    && asked.dividend().coefs().equals(dividend.coefs())
+                    && asked.dividend().constant().equals(ExactRatio.of(shift));
         }
     }
 
@@ -516,7 +527,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (ways.isEmpty()) {
             return leftAlong(read, sources, carriers, read.quantities().region(), List.of(),
-                    true, Optional.of(Set.of()), DemandReading.Answered.NOTHING, witnesses);
+                    null, true, Optional.of(Set.of()), DemandReading.Answered.NOTHING, witnesses);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         Set<CompositionBudget> stopped = new LinkedHashSet<>();
@@ -538,29 +549,57 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<Carrier> carried = carriers;
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
-            List<OnAWay> conditions = conditionsOf(each);
+            WholeNumberRuns remainders = remaindersLeftAlong(each);
+            if (remainders != null && remainders.isNone()) {
+                WhatItLeaves none = WhatItLeaves.ofAWayNoRowComesAlong(places());
+                out = out == null ? none : out.alongBoth(none);
+                continue;
+            }
+            List<OnAWay> conditions = conditionsOf(each, remainder);
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
                     each.unsaid());
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
-                            heldWhole, declined, past), _ -> leftAlong(read, sources,
-                                    carried, each.region(), conditions, heldWhole, declined,
-                                    past, witnesses))
-                    : leftAlong(read, sources, carried, each.region(), conditions, heldWhole,
-                            declined, past, witnesses);
+                            remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
+                                    carried, each.region(), conditions, remainders, heldWhole,
+                                    declined, past, witnesses))
+                    : leftAlong(read, sources, carried, each.region(), conditions, remainders,
+                            heldWhole, declined, past, witnesses);
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
     }
 
-    /** What a way is read by: what narrowed its region, what it states, whether nothing unread
-     *  bears on the relation, which parameters what it declined may name and what the run works
-     *  out asks of a row. */
+    /**
+     * The remainders the conditions of {@code way} on this relation's remainder leave it, all of
+     * them met; null where the relation is over no remainder or the way states nothing of it.
+     *
+     * <p>A condition on the remainder says which remainders the form leaves along the way and
+     * nothing else of the form's numbers: whatever one of them stands at, the others still bring
+     * the form to each remainder it leaves. So it narrows where the remainder lies and is not a
+     * condition tying the numbers ({@link #conditionsOf}).
+     */
+    private WholeNumberRuns remaindersLeftAlong(Reachability.Reaching way) {
+        if (remainder == null) {
+            return null;
+        }
+        WholeNumberRuns out = null;
+        for (OnTheWay.TakenIn taken : way.boundedOnTheWay()) {
+            if (taken.demand() instanceof RowDemand.OnARemainder on && remainder.isAskedBy(on)) {
+                out = out == null ? on.leaves() : out.and(on.leaves());
+            }
+        }
+        return out;
+    }
+
+    /** What a way is read by: what narrowed its region, what it states, the remainders it leaves
+     *  this relation's remainder, whether nothing unread bears on the relation, which parameters
+     *  what it declined may name and what the run works out asks of a row. */
     private record Along(List<TakenConstraint> region, List<OnAWay> conditions,
-                         boolean heldWhole, Optional<Set<String>> declined,
-                         DemandReading.Answered past) {}
+                         WholeNumberRuns remainders, boolean heldWhole,
+                         Optional<Set<String>> declined, DemandReading.Answered past) {}
 
     /**
      * The parameters what {@code way} declined may name a position under — or empty where some of
@@ -845,9 +884,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What a way states, as what each statement turns on: what it took in, each as the demand it
      * is, and each case it requires.
      */
-    private static List<OnAWay> conditionsOf(Reachability.Reaching way) {
+    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
+            // Where the relation's remainder lies, which is read apart ({@link
+            // #remaindersLeftAlong}).
+            if (remainder != null && taken.demand() instanceof RowDemand.OnARemainder on
+                    && remainder.isAskedBy(on)) {
+                return;
+            }
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
             out.add(new OnAWay(taken.demand().positions(),
@@ -872,7 +917,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case RowDemand.Exists exists -> exists.container();
             case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.OneValueAtBoth _,
-                 RowDemand.SoMany _, RowDemand.ForTheRun _ -> null;
+                 RowDemand.SoMany _, RowDemand.OnARemainder _, RowDemand.ForTheRun _ -> null;
         };
     }
 
@@ -973,6 +1018,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                 order of the sides
      * @param carriers the order each side is counted on, or null where it has none
      * @param read     the reading of the input, whose rules say which places they may name
+     * @param remainders the remainders the way leaves this relation's remainder, or null where it
+     *                 states nothing of it ({@link #remaindersLeftAlong})
      * @param declined the parameters what the way declined may name a position under, or empty
      *                 where it may name any ({@link #parametersDeclined})
      * @param past     what the run works out asks of a row: the numbers it narrows, which the
@@ -981,7 +1028,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
                                    List<Carrier> carriers, SearchRegion region,
-                                   List<OnAWay> written, boolean heldWhole,
+                                   List<OnAWay> written, WholeNumberRuns remainders,
+                                   boolean heldWhole,
                                    Optional<Set<String>> declined, DemandReading.Answered past,
                                    CountWitnesses.Lookup witnesses) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
@@ -1008,8 +1056,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
-                termsAlong(read, sources, carriers, along, declared, conditions, stating,
-                        heldWhole, past.narrowing());
+                termsAlong(read, sources, carriers, along, declared, conditions, remainders,
+                        stating, heldWhole, past.narrowing());
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -1821,13 +1869,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> termsAlong(
             InputReading read, List<Source> sources, List<Carrier> carriers, SearchRegion region,
-            SearchRegion declared, List<OnAWay> conditions, List<List<OnAWay>> stating,
-            boolean heldWhole, List<TakenConstraint> narrowedByTheRun) {
+            SearchRegion declared, List<OnAWay> conditions, WholeNumberRuns remainders,
+            List<List<OnAWay>> stating, boolean heldWhole,
+            List<TakenConstraint> narrowedByTheRun) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
             if (remainder != null && i == 0) {
-                terms.add(remainderAlong(read, conditions, heldWhole));
+                terms.add(remainderAlong(read, conditions, remainders, heldWhole));
                 continue;
             }
             if (each.kept() != null) {
@@ -1875,18 +1924,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The remainder side as a term: it lies between nought and one below the divisor, and takes
-     * every remainder where its form is shown to reach one of each.
+     * The remainder side as a term: it lies between nought and one below the divisor, or among the
+     * remainders the way leaves it, and takes every one of those where its form is shown to reach
+     * one of each.
+     *
+     * <p>What it takes is said only where the remainders left are one run: a term takes the
+     * values between its ends, and two runs apart are values between that it does not take.
      */
     private WhatARelationLeavesUndivided.Term<FilingCoordinate> remainderAlong(
-            InputReading read, List<OnAWay> conditions, boolean heldWhole) {
-        NumericDomain.Bounds runs = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
-                Endpoint.inclusive(new Count(new BigDecimal(
-                        remainder.divisor().subtract(BigInteger.ONE)))));
+            InputReading read, List<OnAWay> conditions, WholeNumberRuns remainders,
+            boolean heldWhole) {
+        WholeNumberRuns left = WholeNumberRuns.one(BigInteger.ZERO,
+                remainder.divisor().subtract(BigInteger.ONE));
+        if (remainders != null) {
+            left = left.and(remainders);
+        }
+        List<WholeNumberRuns.Run> runsOf = left.runs();
+        NumericDomain.Bounds runs = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(new BigDecimal(runsOf.getFirst().from()))),
+                Endpoint.inclusive(new Count(new BigDecimal(runsOf.getLast().to()))));
         Side side = sides.getFirst();
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(), runs,
-                reachesEveryRemainder(null, read, conditions, heldWhole) ? runs : null, null,
-                false, Granularity.DISCRETE, null);
+                runsOf.size() == 1 && reachesEveryRemainder(null, read, conditions, heldWhole)
+                        ? runs : null, null, false, Granularity.DISCRETE, null);
     }
 
     /**
