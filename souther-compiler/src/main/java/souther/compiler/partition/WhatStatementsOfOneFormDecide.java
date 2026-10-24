@@ -85,17 +85,22 @@ final class WhatStatementsOfOneFormDecide {
      * The statements of {@code stated} that hold the form of {@code asked} to an interval a row
      * can stand anywhere near the line of {@code asked} in, or none where one of them cannot.
      *
-     * <p>A row that puts one term at a value of the relation's line and every other term where
-     * the declarations leave it has the form within {@code reach} of nought, whatever the others
-     * are. Where the statements hold the form on both sides of that line over that far, such a row
-     * meets them, and they tie the terms to one another by nothing that row needs. Statements are
-     * orders only: an interval is what an order holds a form to, and two of them leave one.
+     * <p>A row that puts one term at a value beside the relation's line and every other term where
+     * the declarations leave it has the form within the greatest weight of the line, whatever
+     * the others are: one step of the term moves the form by its weight. Where the statements
+     * hold the form on both sides of the line over that far, such a row meets them, and they tie
+     * the terms to one another by nothing that row needs. Statements are orders only: an
+     * interval is what an order holds a form to, and two of them leave one.
      *
      * @param asked the relation asked as a statement
-     * @param reach how far from nought a row at the line has the form: the greatest weight
      */
     static List<TakenConstraint.Affine> leavingRoomAroundTheLine(
-            List<TakenConstraint.Affine> stated, TakenConstraint.Affine asked, ExactRatio reach) {
+            List<TakenConstraint.Affine> stated, TakenConstraint.Affine asked) {
+        ExactRatio reach = asked.form().coefs().values().stream().map(ExactRatio::abs)
+                .max(ExactRatio::compareTo).orElse(null);
+        if (reach == null) {
+            return List.of();
+        }
         List<Bound> bounds = new ArrayList<>();
         for (TakenConstraint.Affine each : stated) {
             if (each == null || each.form().coefs().isEmpty() || !outsideEveryContainer(each)) {

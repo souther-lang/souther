@@ -1049,37 +1049,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TakenConstraint.Affine asStated = remainder == null ? askedAsAStatement() : null;
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
-        List<OnAWay> stated = offItsLine ? List.of()
+        List<OnAWay> unfree = offItsLine ? List.of()
                 : withoutWhatAFreeNumberMeets(written, declined, past, read);
+        // What the way states of the form asked is decided, or leaves no row, by every statement
+        // of it, so it is asked before any is taken away.
+        WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
+                unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
+        // A statement a row at this relation's line meets leaves the sides as they stand to one
+        // another there, so it is taken away from the way as one a free number meets is, and from
+        // what the run narrows.
+        List<TakenConstraint.Affine> met = offItsLine ? List.of()
+                : metByARowAtTheLine(unfree, past.narrowing());
+        List<OnAWay> stated = unfree.stream().filter(each -> each.affine() == null
+                || !met.contains(each.affine())).toList();
+        DemandReading.Answered answered = met.isEmpty() ? past : new DemandReading.Answered(
+                past.narrowing().stream().filter(each ->
+                        !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
+                        .toList(), past.tied(), past.unsaid());
         // Without a statement taken away, the region is the one its rows were found in; with one,
         // the one the rest of them leave, where the rest can be taken in again.
-        SearchRegion rest = stated.size() == written.size() ? null : narrowedBy(stated, read);
+        boolean tookAway = stated.size() != written.size()
+                || answered.narrowing().size() != past.narrowing().size();
+        SearchRegion rest = tookAway ? narrowedBy(stated, read) : null;
         // And the run is what it got past working out as much without the statement: taking one
         // off the way takes no operator off the run.
-        rest = rest == null ? null : TakenConstraint.narrowedBy(past.narrowing(), rest);
-        SearchRegion declared = past.leaving(read.quantities().region());
+        rest = rest == null ? null : TakenConstraint.narrowedBy(answered.narrowing(), rest);
+        SearchRegion declared = answered.leaving(read.quantities().region());
         SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
-        List<TakenConstraint.Affine> met = metByARowAtTheLine(conditions, past.narrowing());
-        List<OnAWay> tying = conditions.stream().filter(each -> each.affine() == null
-                || !met.contains(each.affine())).toList();
-        List<TakenConstraint> narrowing = past.narrowing().stream().filter(each ->
-                !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
-                .toList();
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<FilingCoordinate> byTheFormat = heldWhole ? leftByTheFormat(read, conditions, stopped)
                 : null;        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, sources, carriers, along, declared, conditions, remainders,
-                        tying.size() == conditions.size() ? stating
-                                : stating(sources, tying, heldWhole),
-                        heldWhole, narrowing, byTheFormat != null);
+                        stating, heldWhole, answered.narrowing(), byTheFormat != null);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
-        WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
-                conditions.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         if (decided.noRowArrives()) {
             return WhatItLeaves.ofAWayNoRowComesAlong(places());
         }
@@ -1089,10 +1096,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
-        TiedOnTheWay tied = TiedOnTheWay.of(tying, read);
+        TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, tying, sources, read));
+            tiedTo.add(tiedTo(i, tied, conditions, sources, read));
         }
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
@@ -1625,11 +1632,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * What the way states that ties the sides to one another, which is every statement but those
-     * holding the relation's own form to an interval a row at its line is in
-     * ({@link WhatStatementsOfOneFormDecide#leavingRoomAroundTheLine}). Such a row puts one side
-     * at the line and the others where the declarations leave them, and the statement holds there
-     * whatever they are.
+     * The statements of the way, and of what the run narrows, that hold the relation's own form to
+     * an interval a row at its line is in
+     * ({@link WhatStatementsOfOneFormDecide#leavingRoomAroundTheLine}).
+     *
+     * <p>Such a row puts one side at the line and the others where the declarations leave them,
+     * and the statement holds there whatever they are. So which values of a side settle the
+     * relation, and which leave it either way, is what it is without the statement: it takes
+     * away no row there that the others could have supplied, and makes none the others could not.
      */
     private List<TakenConstraint.Affine> metByARowAtTheLine(List<OnAWay> conditions,
                                                             List<TakenConstraint> narrowing) {
@@ -1637,13 +1647,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (asked == null) {
             return List.of();
         }
-        ExactRatio reach = asked.form().coefs().values().stream().map(ExactRatio::abs)
-                .max(ExactRatio::compareTo).orElse(ExactRatio.ONE);
         List<TakenConstraint.Affine> stated = new ArrayList<>();
         conditions.forEach(each -> stated.add(each.affine()));
         narrowing.forEach(each -> stated.add(
                 each instanceof TakenConstraint.Affine affine ? affine : null));
-        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(stated, asked, reach);
+        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(stated, asked);
     }
 
     /** The relation as a statement is held, the sides weighed and added to the constant and held
