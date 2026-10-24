@@ -63,9 +63,17 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
         }
     }
 
-    private static String source(String data, String parameters, String body) {
-        return "module probe\n\n" + data + "\nbehavior f : (" + parameters + ") -> Int\n"
-                + "let f (" + parameters.replaceAll(": [^,]*", "") + ") = " + body + "\n";
+    /** The parameters of the behavior, as declared and as named where it is defined. */
+    private record Parameters(String declared, String named) {}
+
+    private static final Parameters FS = new Parameters("fs: List<Forecast>", "fs");
+
+    private static final Parameters K_AND_FS =
+            new Parameters("k: Int, fs: List<Forecast>", "k, fs");
+
+    private static String source(String data, Parameters parameters, String body) {
+        return "module probe\n\n" + data + "\nbehavior f : (" + parameters.declared()
+                + ") -> Int\nlet f (" + parameters.named() + ") = " + body + "\n";
     }
 
     private static String listCount(String statement) {
@@ -166,10 +174,10 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
                 .map(Forecast::currency).distinct().count();
     }
 
-    private static final String ONE_ABOVE_HALF = source(PLAIN, "fs: List<Forecast>",
+    private static final String ONE_ABOVE_HALF = source(PLAIN, FS,
             "if " + listCount(HALF) + " == 1 then 1 else 0");
 
-    private static final String CURRENCIES_ABOVE_HALF = source(PLAIN, "fs: List<Forecast>",
+    private static final String CURRENCIES_ABOVE_HALF = source(PLAIN, FS,
             "if Set.size(Set.fromList(List.map(.currency, List.filter(f -> " + HALF
                     + ", fs)))) == 1 then 1 else 0");
 
@@ -221,7 +229,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      *  composed all the same: it is the total of the container that the element is above. */
     @Test
     void anElementAboveTheRestByTenIsComposedThoughNoneIsAboveItselfByTen() {
-        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(
+        String source = source(PLAIN, FS, "if " + listCount(
                 "f.amount > List.sum(List.map(.amount, fs)) + 10") + " == 1 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source, row -> row.countOf(
                 each -> each.amount() > row.total() + 10) == 1 ? 1 : 0,
@@ -230,18 +238,21 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     }
 
     /**
-     * What the elements may be is what their type leaves them, and has nothing to do with how
-     * many a container holds: every element is a hundred or more, and one of them above half of
-     * the total is still composed.
+     * No row composed holds a value its type does not leave an element, however far that is from
+     * the values near nought a count of one is first met at: every element is between a hundred
+     * and a hundred and two. (That the values are chosen within what the type leaves is what
+     * {@link #theElementsOfOneKindAreNotAllOneValue} asks for; this asks that no row goes past
+     * it.)
      */
     @Test
-    void theValuesAnElementMayBeAreWhatItsTypeLeavesIt() {
+    void noRowComposedHoldsAValueTheTypeDoesNotLeaveAnElement() {
         String source = source("data Forecast = { currency: String, amount: Int }"
-                + " invariant amount >= 100\n", "fs: List<Forecast>",
+                + " invariant amount >= 100 invariant amount <= 102\n", FS,
                 "if " + listCount(HALF) + " == 1 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source, row -> elementsAboveHalf(row) == 1 ? 1 : 0,
                 row -> elementsAboveHalf(row),
-                row -> row.elements().forEach(each -> assertTrue(each.amount() >= 100,
+                row -> row.elements().forEach(each -> assertTrue(
+                        each.amount() >= 100 && each.amount() <= 102,
                         () -> "an element of the type: " + each)));
         assertTrue(counts.contains(1L), counts::toString);
         assertTrue(counts.contains(0L), counts::toString);
@@ -251,7 +262,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      *  statement and not the container's size. */
     @Test
     void anElementAboveTheRestByAThousandIsComposed() {
-        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(
+        String source = source(PLAIN, FS, "if " + listCount(
                 "f.amount > List.sum(List.map(.amount, fs)) + 1000") + " == 1 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source, row -> row.countOf(
                 each -> each.amount() > row.total() + 1000) == 1 ? 1 : 0,
@@ -267,7 +278,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     @Test
     void aTruthOfTheElementIsChosenBothWays() {
         String source = source("data Forecast = { currency: String, amount: Int, active: Bool }\n",
-                "fs: List<Forecast>", "if " + listCount(HALF + " && f.active") + " == 1 then 1 else 0");
+                FS, "if " + listCount(HALF + " && f.active") + " == 1 then 1 else 0");
         boolean[] aboveHalfButInactive = {false};
         boolean[] aboveHalfAndActive = {false};
         Set<Long> counts = rowsComposedHold(source,
@@ -291,7 +302,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     @Test
     void theElementsOfOneKindAreNotAllOneValue() {
         String source = source("data Forecast = { currency: String, amount: Int }"
-                + " invariant amount >= 0 invariant amount <= 2\n", "fs: List<Forecast>",
+                + " invariant amount >= 0 invariant amount <= 2\n", FS,
                 "if " + listCount("f.amount < 2 && List.sum(List.map(.amount, fs)) == 3")
                         + " == 2 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source,
@@ -308,7 +319,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      */
     @Test
     void theSizeOfTheContainerIsAskedAsWell() {
-        String source = source(PLAIN, "fs: List<Forecast>", "if List.length(fs) == 9 && "
+        String source = source(PLAIN, FS, "if List.length(fs) == 9 && "
                 + listCount(HALF) + " == 3 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source,
                 row -> row.elements().size() == 9 && elementsAboveHalf(row) == 3 ? 1 : 0,
@@ -320,7 +331,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      *  nought here: the rows keep to above three. */
     @Test
     void aNumberBesideTheContainerIsReadAtTheValueTheRowHolds() {
-        String source = source(PLAIN, "k: Int, fs: List<Forecast>", "if k > 3 && " + listCount(
+        String source = source(PLAIN, K_AND_FS, "if k > 3 && " + listCount(
                 "f.amount * 2 > List.sum(List.map(.amount, fs)) + k") + " == 1 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source, row -> row.k() > 3 && row.countOf(
                 each -> each.amount() * 2 > row.total() + row.k()) == 1 ? 1 : 0,
@@ -331,7 +342,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     /** Two counts asked together are composed together. */
     @Test
     void twoCountsAskedTogetherAreComposedTogether() {
-        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(HALF)
+        String source = source(PLAIN, FS, "if " + listCount(HALF)
                 + " == 1 && " + listCount("f.amount < 0") + " == 1 then 1 else 0");
         Set<Long> counts = rowsComposedHold(source,
                 row -> elementsAboveHalf(row) == 1 && row.countOf(each -> each.amount() < 0) == 1
@@ -342,13 +353,13 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
 
     /**
      * A statement that asks of its own value the place whose different values are counted is
-     * chosen for as it was, and said to be so: the values that place is offered are chosen apart
-     * from what the statement reads, which here it reads.
+     * left to the composition that does not read the total, and said to be: the values that place
+     * is offered are chosen apart from what the statement reads, which here it reads.
      */
     @Test
-    void aStatementThatReadsThePlaceCountedIsChosenForAsItWas() {
+    void aStatementThatReadsThePlaceCountedIsLeftToTheCompositionThatDoesNotReadTheTotal() {
         String source = source("data Forecast = { currency: String, amount: Int, active: Bool }\n",
-                "fs: List<Forecast>", "if Set.size(Set.fromList(List.map(.active, "
+                FS, "if Set.size(Set.fromList(List.map(.active, "
                         + "List.filter(f -> f.active && " + HALF + ", fs)))) == 1 then 1 else 0");
         Compilation compilation = measured(source);
         String report = AdequacyReport.of(compilation)
@@ -364,7 +375,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
      */
     @Test
     void aCountPastTheElementsAContainerIsComposedWithIsNotShownToBeOutOfReach() {
-        String source = source(PLAIN, "fs: List<Forecast>", "if " + listCount(HALF)
+        String source = source(PLAIN, FS, "if " + listCount(HALF)
                 + " == 20 then 1 else 0");
         List<JsonNode> lines = countLines(measured(source));
         assertFalse(lines.isEmpty());

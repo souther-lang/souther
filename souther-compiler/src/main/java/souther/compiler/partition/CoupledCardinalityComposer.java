@@ -60,17 +60,22 @@ import java.util.Set;
  * what an element answers in the container it was proposed for, are never the answer.
  *
  * <p>Not for a statement that is not forms of the element's number, its total and numbers outside
- * every container against nought ({@link AStatementAtARow#affineRelations}), nor for a carrier
- * that is not whole numbers: those are chosen as they were.
+ * every container against nought ({@link AStatementAtARow#affineRelations}), nor for a number
+ * that is not a whole number: those are left to the composition that does not read the total
+ * ({@link CardinalityComposer}).
  */
 final class CoupledCardinalityComposer {
 
     private static final ValueName.Stdlib.Operation SUM = ValueName.Stdlib.operation("List", "sum");
 
-    /** The most statements counted together, and the most relations of them whose ways of
-     *  standing are taken together. */
+    /** The most statements counted together. Past it the counts are composed one at a time, as
+     *  they are where nothing reads the total. */
     private static final int MOST_STATEMENTS = 3;
 
+    /** The most relations, of all the statements, whose ways of standing are taken together. Each
+     *  stands in two or three ways and the ways are all looked at before any sharing is, so this
+     *  is what keeps them to a few dozen; the sharings after them are held to a figure of their
+     *  own. */
     private static final int MOST_RELATIONS = 4;
 
     private static final int MOST_ELEMENTS =
@@ -164,7 +169,8 @@ final class CoupledCardinalityComposer {
                 return null;
             }
             // The number and the place counted are chosen here, apart from what the statements
-            // read; a statement that asks either of its own value is chosen for as it was.
+            // read; a statement that asks either of its own value is left to the composition that
+            // does not read the total.
             for (CardinalityComposer.Asked.SoManyMeeting many : counts) {
                 for (TermPath read : many.perElement().positionsAsked()) {
                     if (overlap(read, own.position()) || (kept != null && overlap(read, kept))) {
@@ -188,8 +194,7 @@ final class CoupledCardinalityComposer {
             }
             TermOrders orders = measuring.ordersOf(own);
             Carrier carrier = orders == null ? null : orders.observed();
-            if (carrier == null || !carrier.counts()
-                    || carrier.onTheGrid(new Count(BigDecimal.valueOf(5, 1))) != null) {
+            if (!(carrier instanceof Carrier.Whole)) {
                 return null;
             }
             return new Coupled(List.copyOf(counts), own, total, List.copyOf(relations), carrier,
