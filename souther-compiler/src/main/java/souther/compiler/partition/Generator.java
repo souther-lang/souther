@@ -2161,7 +2161,7 @@ public final class Generator {
                     }
                     yield seen;
                 }
-                case ReplacementOwed.ByOneAnswer _ -> {
+                case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
                     // answering one value is told apart by any row it answers differently, and a
                     // behavior whose positions nothing divides has no class to look in.
@@ -2182,6 +2182,17 @@ public final class Generator {
                                 break;
                             }
                         }
+                    }
+                    // And beside the rows it answered, which is where a run is known to come back
+                    // where the values the classes offer are ones the body gives no answer on. Last,
+                    // because the runs are one budget: asked first, these could spend what a row the
+                    // classes reach is found with, and a rewrite the classes tell apart would be
+                    // left undecided. Not once the runs are spent, which every row would find out
+                    // again.
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
+                        seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
+                                answers);
                     }
                     yield seen;
                 }
@@ -2260,6 +2271,61 @@ public final class Generator {
                     witnessedBy(looking, purposes, answers)));
             if (inputs != null) {
                 return new GeneratedRow(purposes, inputs, answers);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found one step from the
+     * inputs of a row a run was seen coming back on — or null where none is.
+     *
+     * <p>Where the classes offer values the body does not answer on, they leave nothing to compare
+     * the rewrite against; the run that came back is the one place known to. One whole number in the
+     * inputs is moved by one at a time and the rest is kept as it was, each candidate written
+     * through the same check a composed value goes through. Which candidate answers, and whether it
+     * answers differently, is what running it says, as it is for every candidate the rewrite is
+     * asked about.
+     */
+    private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
+                                       List<Purpose> purposes, ReplacementWitness looking,
+                                       CandidateCheck check, List<StoodInAnswer> answers) {
+        MeasuredInput subject = axes.subject();
+        // As the run had them, written once: a candidate moves one position and leaves the others
+        // as they were.
+        List<FixtureTemplate> kept = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate value))) {
+                return null;
+            }
+            kept.add(value);
+        }
+        for (int moved = 0; moved < seen.size(); moved++) {
+            Iterator<ObservedValue> nearer = NearbyValues.of(seen.get(moved),
+                    subject.types().get(moved), subject.ruleReading());
+            while (nearer.hasNext()) {
+                ObservedValue near = nearer.next();
+                if (!(ObservedFixtures.of(near, subject.types().get(moved),
+                        subject.ruleReading())
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate value))
+                        || check.refuse(moved, value).isPresent()) {
+                    continue;
+                }
+                List<FixtureTemplate> inputs = new ArrayList<>(kept);
+                inputs.set(moved, value);
+                GeneratedRow row = new GeneratedRow(purposes, inputs, answers);
+                switch (looking.of(row, null)) {
+                    case TAKEN -> {
+                        return row;
+                    }
+                    case STOPPED -> {
+                        return null;
+                    }
+                    case PASSED -> { }
+                }
             }
         }
         return null;
@@ -9412,6 +9478,11 @@ public final class Generator {
         /** The body run on {@code row}, once per line, or null where no run is left. */
         private ObservedRun run(GeneratedRow row) {
             return trial.run(row.toRun(), this::spend);
+        }
+
+        /** Whether this search has no run left to make. */
+        boolean spent() {
+            return runs >= mostRuns;
         }
 
         /** One more run of this search's own, where one is left. */
