@@ -86,6 +86,8 @@ public sealed interface Owed {
                         "#(" + count.counted() + ")(" + count.through().writtenAround(where) + ")";
                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                         "List.sum(String.codePoints(" + where + "))";
+                case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                        "List.get(" + point.index() + ", String.codePoints(" + where + "))";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + where + ")";

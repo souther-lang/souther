@@ -13319,7 +13319,8 @@ public final class Generator {
                 // come to, or how often a value occurs among the elements beside it, or the end of
                 // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                     NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
                      NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;

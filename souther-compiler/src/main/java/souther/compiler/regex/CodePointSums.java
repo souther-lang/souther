@@ -3,6 +3,7 @@ package souther.compiler.regex;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.IntPredicate;
 import java.util.function.ToLongFunction;
 
@@ -44,17 +45,23 @@ final class CodePointSums {
             .less(CodePoints.between(0x7F, 0x9F));
 
     private final Automaton machine;
-    private final long sum;
+    /** What the code points are to come to, or null where nothing is asked of it. */
+    private final Long sum;
+    /** The code points a string may hold at an index, where it is held to some. */
+    private final Map<Integer, CodePoints> at;
     private final CodePoints preferred;
     /** For each length, at each state, the sums a walk of that length reaches it with: the first of
      *  each run at an even place and its last at the odd one after it, the runs apart and in order,
-     *  none past the sum asked for. */
+     *  none past the sum asked for. Where no sum is asked, a state a walk reaches holds the one
+     *  run of nought, and what is held is only that it is reached. */
     private final List<long[][]> layers = new ArrayList<>();
     private int work;
 
-    private CodePointSums(Automaton machine, long sum, CodePoints preferred, int work) {
+    private CodePointSums(Automaton machine, Long sum, Map<Integer, CodePoints> at,
+                          CodePoints preferred, int work) {
         this.machine = machine;
         this.sum = sum;
+        this.at = at;
         this.preferred = preferred;
         this.work = work;
     }
@@ -66,10 +73,20 @@ final class CodePointSums {
      */
     static Language.ComingTo comingTo(Automaton machine, long sum, IntPredicate lengths,
                                       int longest, CodePoints preferred, int work) {
-        if (sum < 0) {
+        return holding(machine, Map.of(), sum, lengths, longest, preferred, work);
+    }
+
+    /**
+     * The same, with the code point at each index {@code at} names one of those it names, and
+     * with no sum asked where {@code sum} is null.
+     */
+    static Language.ComingTo holding(Automaton machine, Map<Integer, CodePoints> at, Long sum,
+                                     IntPredicate lengths, int longest, CodePoints preferred,
+                                     int work) {
+        if (sum != null && sum < 0) {
             return new Language.ComingTo.NoneDoes();
         }
-        CodePointSums walking = new CodePointSums(machine, sum, preferred, work);
+        CodePointSums walking = new CodePointSums(machine, sum, Map.copyOf(at), preferred, work);
         String found = walking.walk(lengths, longest);
         if (found != null) {
             return new Language.ComingTo.Written(found);
@@ -128,6 +145,54 @@ final class CodePointSums {
         return new Language.Ends(fewest, greatest(machine, reaches, mostOf));
     }
 
+    /**
+     * The least and the greatest code point a string {@code machine} accepts holds at
+     * {@code index}, or null where it accepts no string that long: of the steps taken from a
+     * state a walk of {@code index} code points reaches, to one a walk may still stop after.
+     */
+    static Language.Ends atIndex(Automaton machine, int index) {
+        boolean[] reaches = machine.reachingSomewhereItStops();
+        if (!reaches[Automaton.START]) {
+            return null;
+        }
+        int states = machine.size();
+        boolean[] here = new boolean[states];
+        here[Automaton.START] = true;
+        for (int length = 0; length < index; length++) {
+            boolean[] next = new boolean[states];
+            boolean any = false;
+            for (int state = 0; state < states; state++) {
+                if (!here[state]) {
+                    continue;
+                }
+                for (Automaton.Step step : machine.stepsFrom(state)) {
+                    if (reaches[step.to()] && !step.over().isEmpty()) {
+                        next[step.to()] = true;
+                        any = true;
+                    }
+                }
+            }
+            if (!any) {
+                return null;
+            }
+            here = next;
+        }
+        long least = Long.MAX_VALUE;
+        long most = -1;
+        for (int state = 0; state < states; state++) {
+            if (!here[state]) {
+                continue;
+            }
+            for (Automaton.Step step : machine.stepsFrom(state)) {
+                if (reaches[step.to()] && !step.over().isEmpty()) {
+                    least = Math.min(least, step.over().least());
+                    most = Math.max(most, step.over().ranges().getLast().to());
+                }
+            }
+        }
+        return most < 0 ? null : new Language.Ends(least, most);
+    }
+
     /** The greatest, or null where a walk that can still stop goes round a loop. */
     private static Long greatest(Automaton machine, boolean[] reaches,
                                  ToLongFunction<CodePoints> mostOf) {
@@ -175,9 +240,11 @@ final class CodePointSums {
         layers.add(first);
         for (int length = 0; length <= longest; length++) {
             long[][] layer = layers.get(length);
-            if (lengths.test(length)) {
+            // A string shorter than an index asked of holds nothing there, so it holds no code
+            // point asked at it.
+            if (lengths.test(length) && length > furthestAsked()) {
                 for (int state = 0; state < states; state++) {
-                    if (machine.stopsAt(state) && holds(layer[state], sum)) {
+                    if (machine.stopsAt(state) && holds(layer[state], sum == null ? 0 : sum)) {
                         return readBack(length, state);
                     }
                 }
@@ -196,7 +263,8 @@ final class CodePointSums {
                     if (!reaches[step.to()]) {
                         continue;
                     }
-                    long[] added = added(layer[state], step.over().and(WRITTEN));
+                    long[] added = added(layer[state],
+                            step.over().and(WRITTEN).and(allowedAt(length)));
                     if (added == null) {
                         return null;
                     }
@@ -214,10 +282,20 @@ final class CodePointSums {
         return null;
     }
 
+    /** The last index a code point is asked at, or below nought where none is. */
+    private int furthestAsked() {
+        return at.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1);
+    }
+
+    /** The code points a string may hold at {@code index}: those {@link #at} names there, or any. */
+    private CodePoints allowedAt(int index) {
+        return at.getOrDefault(index, CodePoints.EVERYTHING);
+    }
+
     /** The code points read backwards from {@code state} at the {@code length}-th layer. */
     private String readBack(int length, int state) {
         int[] codePoints = new int[length];
-        long left = sum;
+        long left = sum == null ? 0 : sum;
         int here = state;
         for (int at = length; at > 0; at--) {
             long[][] before = layers.get(at - 1);
@@ -231,7 +309,8 @@ final class CodePointSums {
                     if (step.to() != here) {
                         continue;
                     }
-                    int codePoint = leading(step.over(), before[each], left);
+                    int codePoint = leading(step.over().and(allowedAt(at - 1)), before[each],
+                            left);
                     if (codePoint >= 0) {
                         chosen = codePoint;
                         from = each;
@@ -244,7 +323,9 @@ final class CodePointSums {
                         + " the layer before it");
             }
             codePoints[at - 1] = chosen;
-            left -= chosen;
+            if (sum != null) {
+                left -= chosen;
+            }
             here = from;
         }
         return new String(codePoints, 0, codePoints.length);
@@ -255,8 +336,8 @@ final class CodePointSums {
      * preferred ones first; negative where none does.
      */
     private int leading(CodePoints over, long[] before, long left) {
-        CodePoints leaving = CodePoints.NONE;
-        for (int at = 0; at < before.length; at += 2) {
+        CodePoints leaving = sum == null ? CodePoints.EVERYTHING : CodePoints.NONE;
+        for (int at = 0; at < before.length && sum != null; at += 2) {
             long low = left - before[at + 1];
             long high = left - before[at];
             if (high < 0 || low > CodePoints.LAST) {
@@ -276,6 +357,12 @@ final class CodePointSums {
     /** The sums {@code runs} come to with a code point of {@code over} added, up to the one asked
      *  for; null past the work allowed. */
     private long[] added(long[] runs, CodePoints over) {
+        if (sum == null) {
+            if (--work < 0) {
+                return null;
+            }
+            return over.isEmpty() ? NONE : new long[] {0, 0};
+        }
         List<long[]> out = new ArrayList<>();
         for (int at = 0; at < runs.length; at += 2) {
             for (CodePoints.Range range : over.ranges()) {

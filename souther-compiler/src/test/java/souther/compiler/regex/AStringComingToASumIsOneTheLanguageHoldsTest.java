@@ -189,6 +189,79 @@ class AStringComingToASumIsOneTheLanguageHoldsTest {
         assertNull(language("a").and(language("b"), roomy()).lengths());
     }
 
+    /**
+     * A string holding a code point asked at each of several indices is one string holding all of
+     * them, coming to the sum where one is asked, and found exactly where the oracle has one:
+     * every string over a few code points up to a length, asked of the language.
+     */
+    @Test
+    void aStringHoldingCodePointsAtTheirIndicesIsOneStringHoldingThemAll() {
+        Language language = language("[ab]{1,2}c?[ab]");
+        int[] alphabet = {'a', 'b', 'c'};
+        List<Map<Integer, CodePoints>> asked = List.of(
+                Map.of(0, CodePoints.of('b')),
+                Map.of(0, CodePoints.of('a'), 2, CodePoints.of('c')),
+                Map.of(1, CodePoints.of('c'), 2, CodePoints.of('a')),
+                Map.of(0, CodePoints.of('c')),
+                Map.of(3, CodePoints.of('b')),
+                Map.of(1, CodePoints.between('a', 'b'), 3, CodePoints.of('a')));
+        for (Map<Integer, CodePoints> at : asked) {
+            for (Long sum : Arrays.asList(null, 3L * 'a', 2L * 'a' + 'b' + 'c',
+                    3L * 'a' + 'c', 4L * 'b')) {
+                String expected = null;
+                List<int[]> layer = new ArrayList<>(List.of(new int[0]));
+                for (int length = 0; length <= 4 && expected == null; length++) {
+                    List<int[]> next = new ArrayList<>();
+                    for (int[] each : layer) {
+                        String text = new String(each, 0, each.length);
+                        boolean holds = language.has(text)
+                                && (sum == null || text.codePoints().sum() == sum)
+                                && at.entrySet().stream().allMatch(one -> one.getKey() < each.length
+                                        && one.getValue().has(each[one.getKey()]));
+                        if (holds && expected == null) {
+                            expected = text;
+                        }
+                        for (int symbol : alphabet) {
+                            int[] longer = Arrays.copyOf(each, each.length + 1);
+                            longer[each.length] = symbol;
+                            next.add(longer);
+                        }
+                    }
+                    layer = next;
+                }
+                Language.ComingTo found = language.holding(at, sum, length -> true, 4,
+                        CodePoints.NONE, WORK);
+                String said = at + " coming to " + sum;
+                if (expected == null) {
+                    assertInstanceOf(Language.ComingTo.NoneDoes.class, found, said);
+                    continue;
+                }
+                String text = assertInstanceOf(Language.ComingTo.Written.class, found, said).text();
+                assertTrue(language.has(text), said + ": " + text);
+                assertEquals(expected.length(), text.length(), said + ": the shortest");
+                if (sum != null) {
+                    assertEquals((long) sum, text.codePoints().sum(), said);
+                }
+                int[] points = text.codePoints().toArray();
+                at.forEach((index, held) -> assertTrue(index < points.length
+                        && held.has(points[index]), said + ": " + text));
+            }
+        }
+    }
+
+    /** The code points a language holds at an index are those its strings that long hold there. */
+    @Test
+    void theCodePointsAtAnIndexAreThoseItsStringsHoldThere() {
+        Language language = language("[ab]{1,2}c?[ab]");
+        assertEquals(new Language.Ends('a', (long) 'b'), language.codePointsAt(0));
+        assertEquals(new Language.Ends('a', (long) 'c'), language.codePointsAt(1));
+        assertEquals(new Language.Ends('a', (long) 'c'), language.codePointsAt(2));
+        assertEquals(new Language.Ends('a', (long) 'b'), language.codePointsAt(3));
+        assertNull(language.codePointsAt(4));
+        assertEquals(new Language.Ends('0', (long) '9'), language("[0-9]{13}").codePointsAt(12));
+        assertNull(language("[0-9]{13}").codePointsAt(13));
+    }
+
     /** Past the work allowed nothing is offered, and that is said apart from there being none. */
     @Test
     void pastTheWorkAllowedIsSaidApartFromThereBeingNone() {

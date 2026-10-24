@@ -1,5 +1,6 @@
 package souther.compiler.regex;
 
+import java.util.Map;
 import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.pattern.Automaton;
@@ -220,6 +221,22 @@ public final class Language {
     public ComingTo comingTo(long sum, IntPredicate lengths, int longest, CodePoints preferred,
                              int work) {
         return CodePointSums.comingTo(machine, sum, lengths, longest, preferred, work);
+    }
+
+    /**
+     * The same, of a string holding at each index {@code at} names one of the code points it names
+     * there, and with nothing asked of what its code points come to where {@code sum} is null: one
+     * string for every index, and not a string for each.
+     */
+    public ComingTo holding(Map<Integer, CodePoints> at, Long sum, IntPredicate lengths,
+                            int longest, CodePoints preferred, int work) {
+        return CodePointSums.holding(machine, at, sum, lengths, longest, preferred, work);
+    }
+
+    /** Where the code point a string it holds has at {@code index} lies, or null where it holds
+     *  no string that long. */
+    public Ends codePointsAt(int index) {
+        return CodePointSums.atIndex(machine, index);
     }
 
     /** What looking for a string coming to a sum came to. */

@@ -6,6 +6,7 @@ import souther.compiler.check.DateShifts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
@@ -18,15 +19,19 @@ import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.regex.Language;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.ValueSet;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -314,15 +319,15 @@ public final class InputNumber {
         BindingId element = WalkElements.elementBindingOf(walked.value(), where, source.symbols(),
                 source.newtypes());
         Core listed = element == null ? null : where.containerOfTheElementHandedTo(element);
-        TermPath at = listed == null ? null : stringWhoseCodePointsAre(listed, where, source);
-        ElementAnswer closure = at == null ? null : where.answerAt(element);
-        if (closure == null) {
+        ElementAnswer closure = listed == null ? null : where.answerAt(element);
+        ElementValue computed = closure == null ? null
+                : ElementValue.readWithoutAPlace(closure, where.heldByTheBody(), source);
+        if (computed == null) {
             return null;
         }
-        ElementValue computed =
-                ElementValue.readWithoutAPlace(closure, where.heldByTheBody(), source);
-        if (!(computed instanceof ElementValue.Affine(var form))) {
-            return null;
+        TermPath at = stringWhoseCodePointsAre(listed, where, source);
+        if (at == null || !(computed instanceof ElementValue.Affine(var form))) {
+            return codePointByCodePoint(computed, listed, where, inputs, source);
         }
         ElementProjection codePoint = new ElementProjection(List.of());
         if (!form.coefs().keySet().stream().allMatch(codePoint::equals)) {
@@ -345,6 +350,175 @@ public final class InputNumber {
             weights.put(length, form.constant());
         }
         return new LinearForm<>(ExactRatio.ZERO, weights);
+    }
+
+    /**
+     * What a total of what a closure computed of each code point of a string comes to, written out
+     * code point by code point: {@code Σ a_k·cp(i_k) + b_k}, where the walk's {@code k}-th element
+     * is the code point at {@code i_k} of the string and the closure comes to {@code a_k·c + b_k} of
+     * an element {@code c} standing at {@code k} ({@link ElementValue#atPosition}).
+     *
+     * <p>Where how many code points the string holds is settled by its rules and no more than a
+     * walk writes out ({@link ElementsWrittenOut#MOST_WALKED}), and which of them the walk is handed
+     * at each place is read off what the operations between say of their elements' indices
+     * ({@link #indicesOf}). Null otherwise, and where the closure at some place is no form of the
+     * code point alone: a code point read through a choice of the element, or a product of two, is
+     * a total this does not read rather than one it reads as numbers apart.
+     */
+    private static LinearForm<NumericTerm> codePointByCodePoint(ElementValue computed,
+                                                                Core listed, InputReads where,
+                                                                InputDomain inputs,
+                                                                RuleReadingSource source) {
+        CodePointsWalked walked = indicesOf(listed, where, inputs, source);
+        if (walked == null) {
+            return null;
+        }
+        Type string = inputs.typeAt(walked.at(), source);
+        ElementProjection codePoint = new ElementProjection(List.of());
+        ExactRatio constant = ExactRatio.ZERO;
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        for (int k = 0; k < walked.indices().size(); k++) {
+            LinearForm<ElementProjection> here = computed.atPosition(k);
+            if (here == null || !here.coefs().keySet().stream().allMatch(codePoint::equals)
+                    || !(constant.plus(here.constant())
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio added))) {
+                return null;
+            }
+            constant = added;
+            ExactRatio weight = here.coefs().getOrDefault(codePoint, ExactRatio.ZERO);
+            if (weight.isZero()) {
+                continue;
+            }
+            NumericTerm.CodePointAt at = NumericTerm.CodePointAt.of(walked.at(),
+                    walked.indices().get(k), string, source.inners());
+            if (at == null) {
+                return null;
+            }
+            ExactRatio before = weights.getOrDefault(at, ExactRatio.ZERO);
+            if (!(before.plus(weight) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio summed))) {
+                return null;
+            }
+            if (summed.isZero()) {
+                weights.remove(at);
+            } else {
+                weights.put(at, summed);
+            }
+        }
+        return new LinearForm<>(constant, weights);
+    }
+
+    /**
+     * The string a list of code points is of, and which of its code points stands at each place of
+     * the list — or null where the list is no such list, or the string holds no number of code
+     * points its rules settle.
+     *
+     * <p>Followed through the operations whose answers' elements the library says the indices of:
+     * the code points of a string are its code points in order; an operation holding the elements
+     * of a list by their index holds them in the order they stand there, each once, so those before
+     * a written count are the first that many and those from it on are the rest
+     * ({@code HoldsTheElementsByIndex}); and one answering a list's elements in the opposite order
+     * holds as many, the last first. Nothing else is followed.
+     */
+    private static CodePointsWalked indicesOf(Core listed, InputReads where, InputDomain inputs,
+                                              RuleReadingSource source) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        Denotation standing = where.standing(listed, source.symbols(), source.newtypes());
+        AnOperationApplied applied = AnOperationApplied.of(standing.value());
+        if (applied == null) {
+            return null;
+        }
+        DeclaredArgument string = facts.codePointsListedOf(applied.operation());
+        if (string != null) {
+            Core argument = applied.argument(string);
+            if (argument == null || !(standing.at().pathOf(argument, source.newtypes())
+                    instanceof PathResolution.At(var at))) {
+                return null;
+            }
+            Integer length = howManyCodePointsAt(at, inputs, source);
+            if (length == null || length > ElementsWrittenOut.MOST_WALKED) {
+                return null;
+            }
+            List<Integer> indices = new ArrayList<>();
+            for (int i = 0; i < length; i++) {
+                indices.add(i);
+            }
+            return new CodePointsWalked(at, indices);
+        }
+        BoundOperationFacts.KeptByIndex kept = facts.holdsTheElementsByIndex(applied.operation());
+        if (kept != null) {
+            Core count = applied.argument(kept.count());
+            Core list = applied.argument(kept.list());
+            CodePointsWalked inner = count == null || list == null ? null
+                    : indicesOf(list, standing.at(), inputs, source);
+            if (inner == null || !(standing.at().folded(count, source.symbols(),
+                    source.newtypes()).orElse(null) instanceof Long written)) {
+                return null;
+            }
+            int size = inner.indices().size();
+            int cut = Math.clamp(written, 0, size);
+            return new CodePointsWalked(inner.at(), kept.kept() == Rel.LT
+                    ? inner.indices().subList(0, cut) : inner.indices().subList(cut, size));
+        }
+        int reversed = DefaultBoundOperationFacts.positionOfTheArgumentReversed(
+                applied.operation());
+        if (reversed >= 0 && reversed < applied.args().size()) {
+            CodePointsWalked inner = indicesOf(applied.args().get(reversed), standing.at(), inputs,
+                    source);
+            return inner == null ? null
+                    : new CodePointsWalked(inner.at(), inner.indices().reversed());
+        }
+        return null;
+    }
+
+    /**
+     * How many code points the string at {@code at} holds, where its rules settle one number:
+     * what they say of its length met with the shortest and the longest string its format holds.
+     * Null where they leave it more than one, or no number at all.
+     */
+    private static Integer howManyCodePointsAt(TermPath at, InputDomain inputs,
+                                               RuleReadingSource source) {
+        Position position = inputs.at(at);
+        Type string = inputs.typeAt(at, source);
+        NumericTerm.TakenOf length = string == null ? null : NumericTerm.TakenOf.howManyHeldAt(
+                ValueName.Stdlib.operation("String", "length"), at, string, source.inners(),
+                source.symbols());
+        if (position == null || length == null) {
+            return null;
+        }
+        long least = 0;
+        long most = Long.MAX_VALUE;
+        PositionBounds stated = position.boundsFor(length);
+        NumericDomain.Bounds held = stated == null ? null : stated.admissible();
+        if (held != null) {
+            if (held.min() != null && held.min().wholeAdmitted(true) instanceof BigInteger low) {
+                least = Math.max(least, low.longValueExact());
+            }
+            if (held.max() != null && held.max().wholeAdmitted(false) instanceof BigInteger high) {
+                most = Math.min(most, high.longValueExact());
+            }
+        }
+        if (position.admitted().approximation() instanceof ValueSet.Matching(var language)) {
+            Language.Ends lengths = language.lengths();
+            if (lengths == null) {
+                return null;
+            }
+            least = Math.max(least, lengths.least());
+            if (lengths.most() != null) {
+                most = Math.min(most, lengths.most());
+            }
+        }
+        return least == most && least <= Integer.MAX_VALUE ? (int) least : null;
+    }
+
+    /**
+     * The string a list of code points is of, and the index of its code point at each place of
+     * the list.
+     */
+    private record CodePointsWalked(TermPath at, List<Integer> indices) {
+
+        private CodePointsWalked {
+            indices = List.copyOf(indices);
+        }
     }
 
     /**

@@ -2254,7 +2254,7 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.ValueOf) {
             return admittedAt(term);
         }
-        Language.Ends sums = sumsOfAFormatsCodePoints(term);
+        Language.Ends sums = whereAFormatLeaves(term);
         if (sums != null) {
             return ValueSet.wholeNumbers(WholeNumberRuns.one(BigInteger.valueOf(sums.least()),
                     sums.most() == null ? null : BigInteger.valueOf(sums.most())));
@@ -2473,25 +2473,32 @@ final class ReadQuantities implements Quantities {
         if (bounds != null) {
             return bounds.admissible();
         }
-        Language.Ends sums = sumsOfAFormatsCodePoints(term);
+        Language.Ends sums = whereAFormatLeaves(term);
         return sums == null ? null : new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(sums.least())),
                 sums.most() == null ? null : Endpoint.inclusive(Count.of(sums.most())));
     }
 
     /**
-     * Where what the code points of a string of a format come to lies, where {@code term} is that
-     * number of a position whose values are a format's strings; null for any other number.
+     * Where a number of the code points of a string of a format lies — what they come to, or the
+     * one at an index — where {@code term} is such a number of a position whose values are a
+     * format's strings; null for any other number.
      *
-     * <p>Between the least and the greatest the format's strings come to, which is every such
-     * number and may be some more: a format of {@code a} and {@code c} holds no string coming to
-     * 98. No clause states it, so no position's bounds hold it; it is what the strings the rules
-     * admit are.
+     * <p>Between the least and the greatest the format's strings come to, or hold there, which is
+     * every such number and may be some more: a format of {@code a} and {@code c} holds no string
+     * coming to 98. No clause states it, so no position's bounds hold it; it is what the strings
+     * the rules admit are.
      */
-    private Language.Ends sumsOfAFormatsCodePoints(NumericTerm.FromOnePosition term) {
-        return term instanceof NumericTerm.CodePointValueSum
-                && admittedAt(term) instanceof ValueSet.Matching(var language)
-                ? language.sumsOfCodePoints() : null;
+    private Language.Ends whereAFormatLeaves(NumericTerm.FromOnePosition term) {
+        if (!(admittedAt(term) instanceof ValueSet.Matching(var language))) {
+            return null;
+        }
+        return switch (term) {
+            case NumericTerm.CodePointValueSum _ -> language.sumsOfCodePoints();
+            case NumericTerm.CodePointAt at -> language.codePointsAt(at.index());
+            case NumericTerm.ValueOf _, NumericTerm.TakenOf _,
+                 NumericTerm.CodePointClassCount _ -> null;
+        };
     }
 
     /**

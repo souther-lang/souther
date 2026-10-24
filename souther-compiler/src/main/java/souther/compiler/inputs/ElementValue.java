@@ -96,6 +96,37 @@ public sealed interface ElementValue {
     }
 
     /**
+     * What this comes to for the element standing at {@code position}, as a form of its fields —
+     * or null where it is no form there: where it turns on a flag of the element or the case of a
+     * value of it, which no form of the fields says, or where the exact arithmetic cannot hold it.
+     *
+     * <p>The position is fixed, so every choice made by it is made and every number made of it is
+     * one number: {@code (if i mod 2 = 0 then 1 else 3)·c} is {@code c} at nought and {@code 3·c}
+     * at one, and {@code (i + 2)·c} is {@code 2·c} at nought.
+     */
+    default LinearForm<ElementProjection> atPosition(long position) {
+        return switch (this) {
+            case Affine form -> form.form();
+            case Indexed form -> form.perPosition().form().times(ExactRatio.of(position))
+                    .flatMap(moved -> moved.plus(form.base().form())).orNull();
+            case ByPosition choice -> (choice.test().holdsOf(position) ? choice.whenHolds()
+                    : choice.otherwise()).atPosition(position);
+            case Choose _, OfItsCase _ -> null;
+            case SumOfChoices sum -> {
+                LinearForm<ElementProjection> total = sum.besides().atPosition(position);
+                for (Map.Entry<ElementValue, ExactRatio> each : sum.chosen().entrySet()) {
+                    LinearForm<ElementProjection> sofar = total;
+                    LinearForm<ElementProjection> one = sofar == null ? null
+                            : each.getKey().atPosition(position);
+                    total = one == null ? null : one.times(each.getValue())
+                            .flatMap(sofar::plus).orNull();
+                }
+                yield total;
+            }
+        };
+    }
+
+    /**
      * What this comes to for one element, given the number each field of it holds, which flags
      * are set and which case each value it matches on is; or null where a place it needs is one the
      * element has no number, flag or case at.
