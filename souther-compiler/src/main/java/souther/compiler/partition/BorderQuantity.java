@@ -1312,7 +1312,8 @@ public sealed interface BorderQuantity
                     ? new Standing.OfARemainder(wholeDividend(),
                             LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where)
                     : new Standing.OfARemainderAndAForm(wholeDividend(),
-                            LinearQuantity.answeredOn(dividend.on()), divisor, added,
+                            LinearQuantity.answeredOn(dividend.on()), divisor,
+                            Standing.OfARemainderAndAForm.every(divisor), added,
                             LinearQuantity.answeredOn(addedOn), levels(), where);
         }
 

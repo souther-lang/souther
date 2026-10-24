@@ -223,6 +223,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;",
                     "says the figures a way it is shown nothing of was looked along whole past,"
                             + " or read again up to, as what the relation stopped at"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leftByTheFormat("
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/List;"
+                            + "Ljava/util/Set;)Ljava/util/Set;",
+                    "shares the work out among the walks of a format's strings, and says the"
+                            + " figure as what the relation stopped at where a divisor is past it"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leavesEveryRemainder("
+                            + "Lsouther/compiler/partition/UndividedByARelation$CodePointsOfTheForm;"
+                            + "Ljava/lang/Integer;ILjava/util/Set;)Z",
+                    "says the figure as what the relation stopped at where a walk of the strings"
+                            + " would move more remainders than its share"),
             Map.entry("souther.compiler.partition.WayToTheBorder#walked("
                             + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;)"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",

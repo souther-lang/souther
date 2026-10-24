@@ -1,5 +1,7 @@
 package souther.compiler.regex;
 
+import java.util.BitSet;
+import java.util.List;
 import java.util.Map;
 import java.util.function.IntPredicate;
 
@@ -237,6 +239,33 @@ public final class Language {
      *  no string that long. */
     public Ends codePointsAt(int index) {
         return CodePointSums.atIndex(machine, index);
+    }
+
+    /** The code points that stand at {@code index} of a string it holds of {@code length} code
+     *  points. */
+    public CodePoints codePointsAt(int length, int index) {
+        return CodePointRemainders.standingAt(machine, length, index);
+    }
+
+    /**
+     * {@code among} taken apart into sets of code points that stand alike at {@code index} of its
+     * strings of {@code length} code points: a string holding one of a set there is a string
+     * holding any other of the set there, the rest of it as it was.
+     */
+    public List<CodePoints> alikeAt(int length, int index, CodePoints among) {
+        return CodePointRemainders.alikeAt(machine, length, index, among);
+    }
+
+    /**
+     * The remainders {@code shift} and the code points of a string it holds of {@code length}
+     * code points, each weighed by what {@code weights} has for its index and nought where it has
+     * nothing, leave divided by {@code divisor}, with the code point at each index {@code at}
+     * names one of those it names. Null where working that out would move more than {@code work}
+     * remainders.
+     */
+    public BitSet remaindersLeft(int length, Map<Integer, Long> weights, long shift, int divisor,
+                                 Map<Integer, CodePoints> at, int work) {
+        return CodePointRemainders.left(machine, length, weights, shift, divisor, at, work);
     }
 
     /** What looking for a string coming to a sum came to. */

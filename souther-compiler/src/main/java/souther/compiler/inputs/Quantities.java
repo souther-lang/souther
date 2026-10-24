@@ -3,8 +3,10 @@ package souther.compiler.inputs;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.regex.Language;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -229,4 +231,24 @@ public sealed interface Quantities permits ReadQuantities {
      * branch it has not finished.
      */
     Optional<EmptyInput> emptiness();
+
+    /**
+     * The format the strings at {@code at} are written in, and the one number of code points the
+     * rules leave them — or null where no format holds them or the rules leave more than one
+     * number.
+     */
+    StringsOfOneLength stringsOfOneLength(TermPath at);
+
+    /**
+     * The strings a position holds, as a format and how many code points each holds.
+     *
+     * @param format the format
+     * @param length how many code points each holds
+     */
+    record StringsOfOneLength(Language format, int length) {
+
+        public StringsOfOneLength {
+            Objects.requireNonNull(format, "strings of some format");
+        }
+    }
 }

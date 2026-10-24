@@ -1151,9 +1151,15 @@ public final class LevelRealizer {
                 bounded = false;
                 continue;
             }
+            int triedAt = 0;
             for (BigInteger remainder = between[0]; remainder.compareTo(between[1]) <= 0;
                  remainder = remainder.add(BigInteger.ONE)) {
-                if (remainder.subtract(between[0]).compareTo(BigInteger.valueOf(most)) >= 0) {
+                // A remainder the way to the item turns away is one no row along it is at, and
+                // costs nothing to pass.
+                if (!over.remainders().holds(remainder)) {
+                    continue;
+                }
+                if (triedAt++ >= most) {
                     stoppedBy.add(CompositionBudget.REMAINDERS_A_SUM_IS_TRIED_AT);
                     bounded = false;
                     break;

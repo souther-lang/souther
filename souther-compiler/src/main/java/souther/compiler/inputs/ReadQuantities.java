@@ -1839,6 +1839,27 @@ final class ReadQuantities implements Quantities {
      * apart by where they sit rather than by when they were found.
      */
     @Override
+    public StringsOfOneLength stringsOfOneLength(TermPath at) {
+        // Refused where no value this reading holds is around the place, the way a term under
+        // nothing this behavior takes is refused: "no format holds it" would be said of a place
+        // this reading has never been.
+        if (rootOf(at) == null) {
+            throw new IllegalArgumentException("`" + at + "` is under nothing this input takes,"
+                    + " so there is nothing here to say what strings it holds");
+        }
+        Position position = byPath.get(at);
+        Type string = typeAt.apply(at);
+        NumericTerm.TakenOf length = position == null || string == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(ValueName.Stdlib.operation("String", "length"),
+                        at, string, ruleReading.source().inners(),
+                        ruleReading.source().symbols());
+        Integer held = length == null ? null : position.codePointsHeld(length);
+        return held != null
+                && position.admitted().approximation() instanceof ValueSet.Matching(var format)
+                ? new StringsOfOneLength(format, held) : null;
+    }
+
+    @Override
     public Optional<EmptyInput> emptiness() {
         Optional<EmptyInput> had = emptiness;
         if (had != null) {

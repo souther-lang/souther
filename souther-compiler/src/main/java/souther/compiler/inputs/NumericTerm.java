@@ -581,6 +581,19 @@ public sealed interface NumericTerm
             return new CodePointAt(moved.put(position), index);
         }
 
+        /**
+         * Read off the string and, of it, the one index: a code point at another index of the
+         * string is read off another place of it, and one read off the whole string — its length,
+         * what its code points come to — is read off this one too. Which values the two places
+         * take together is still the string's format's to say, and a row holding both is the one
+         * string written with each where it stands.
+         */
+        @Override
+        public boolean sharesAPlaceWith(NumericTerm other) {
+            return other instanceof CodePointAt at && position.equals(at.position)
+                    ? index == at.index : FromOnePosition.super.sharesAPlaceWith(other);
+        }
+
         @Override
         public boolean equals(Object other) {
             return other instanceof CodePointAt at && position.equals(at.position)

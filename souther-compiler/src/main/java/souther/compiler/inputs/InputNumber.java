@@ -19,19 +19,15 @@ import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
-import souther.compiler.regex.Language;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-import souther.compiler.values.ValueSet;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -133,6 +129,13 @@ public final class InputNumber {
             // a walk's answer, and a number over the values it walked is a term of its own where
             // those values are read from a place.
             return overARun(measured, inputs, reads, source);
+        }
+        // An element an index picks of a list of a string's code points is the code point at the
+        // index of the string that stands there.
+        InputReads.PickedAtAnIndex picked = reads.pickedAtAnIndex(e);
+        NumericTerm codePoint = picked == null ? null : codePointPicked(picked, inputs, source);
+        if (codePoint != null) {
+            return LinearForm.atom(codePoint);
         }
         // And a number of the input is the value at a position, so an expression naming none names
         // no number here.
@@ -408,6 +411,22 @@ public final class InputNumber {
     }
 
     /**
+     * The code point of a string that the element {@code picked} is, where the list is one of the
+     * string's code points that {@link #indicesOf} follows and the index is within it — or null.
+     */
+    private static NumericTerm codePointPicked(InputReads.PickedAtAnIndex picked,
+                                               InputDomain inputs, RuleReadingSource source) {
+        CodePointsWalked walked = indicesOf(picked.list().value(), picked.list().at(), inputs,
+                source);
+        if (walked == null || picked.index() >= walked.indices().size()) {
+            return null;
+        }
+        return NumericTerm.CodePointAt.of(walked.at(),
+                walked.indices().get((int) picked.index()), inputs.typeAt(walked.at(), source),
+                source.inners());
+    }
+
+    /**
      * The string a list of code points is of, and which of its code points stands at each place of
      * the list — or null where the list is no such list, or the string holds no number of code
      * points its rules settle.
@@ -482,32 +501,7 @@ public final class InputNumber {
         NumericTerm.TakenOf length = string == null ? null : NumericTerm.TakenOf.howManyHeldAt(
                 ValueName.Stdlib.operation("String", "length"), at, string, source.inners(),
                 source.symbols());
-        if (position == null || length == null) {
-            return null;
-        }
-        long least = 0;
-        long most = Long.MAX_VALUE;
-        PositionBounds stated = position.boundsFor(length);
-        NumericDomain.Bounds held = stated == null ? null : stated.admissible();
-        if (held != null) {
-            if (held.min() != null && held.min().wholeAdmitted(true) instanceof BigInteger low) {
-                least = Math.max(least, low.longValueExact());
-            }
-            if (held.max() != null && held.max().wholeAdmitted(false) instanceof BigInteger high) {
-                most = Math.min(most, high.longValueExact());
-            }
-        }
-        if (position.admitted().approximation() instanceof ValueSet.Matching(var language)) {
-            Language.Ends lengths = language.lengths();
-            if (lengths == null) {
-                return null;
-            }
-            least = Math.max(least, lengths.least());
-            if (lengths.most() != null) {
-                most = Math.min(most, lengths.most());
-            }
-        }
-        return least == most && least <= Integer.MAX_VALUE ? (int) least : null;
+        return position == null || length == null ? null : position.codePointsHeld(length);
     }
 
     /**
