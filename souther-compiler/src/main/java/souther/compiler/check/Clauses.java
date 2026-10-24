@@ -455,11 +455,13 @@ final class Clauses {
         }
 
         void walk(Core e) {
-            if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null
-                    && locationOf(let.value()) != null) {
-                aliases.put(let.binder().binding(), locationOf(let.value()));
-                walk(let.body());
-                return;
+            if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null) {
+                Location given = locationOf(let.value());
+                if (given != null) {
+                    aliases.put(let.binder().binding(), given);
+                    walk(let.body());
+                    return;
+                }
             }
             Location at = locationOf(e);
             if (at != null) {
