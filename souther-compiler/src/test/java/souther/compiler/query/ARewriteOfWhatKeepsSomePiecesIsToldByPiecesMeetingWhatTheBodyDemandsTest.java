@@ -145,6 +145,156 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
     }
 
     /**
+     * A body that makes the string into something else before it parts it.
+     *
+     * @param conversion  the case conversion the body applies
+     * @param source      the pattern the input is held to
+     * @param piece       the pattern the newtype built of a piece is held to
+     * @param row         the one example row
+     */
+    private static String converted(String conversion, String source, String piece, String row) {
+        return """
+                module example.catalog
+
+                data Source = String
+                    invariant String.matches("%s", value)
+                data Part = String
+                    invariant String.matches("%s", value)
+
+                behavior partsOf : (source: Source) -> List<Part>
+                    constructs Part
+
+                let partsOf (source) =
+                    List.flatMap(p -> if Part(p) as part then [ part ] else [],
+                                 List.drop(1, String.split("@", String.%s(source.value))))
+
+                example partsOf
+                    | "the row" : %s
+                """.formatted(source, piece, conversion, row);
+    }
+
+    /**
+     * The input admits capitals only and the newtype small letters only, and the body makes the
+     * input small before it parts it: the pieces the newtype is built of are the pieces of the small
+     * string, so the string that tells the rewrite apart is capitals whose small form is a part.
+     */
+    @Test
+    void aStringIsLookedForAmongThoseTheConversionMakesIntoPiecesTheNewtypeAdmits() {
+        Replacements.Searched came = searched(
+                converted("lowercase", "[A-Z]{1,2}@[A-Z]{2}", "[a-z]{2}",
+                        "(Source(\"X@CD\")) -> [Part(\"cd\")]"),
+                "example.catalog", "partsOf");
+
+        assertInstanceOf(ReplacementDisposition.Witnessed.class, came.disposition(),
+                () -> "two capitals before the separator are two small letters once made small: "
+                        + came);
+        assertEquals(true, came.inputs().getFirst().matches("Source\\(\"[A-Z]{2}@CD\"\\)"),
+                () -> "the piece before the separator is two capitals: " + came.inputs());
+    }
+
+    @Test
+    void theConversionIsReadInTheOtherDirectionToo() {
+        Replacements.Searched came = searched(
+                converted("uppercase", "[a-z]{1,2}@[a-z]{2}", "[A-Z]{2}",
+                        "(Source(\"x@cd\")) -> [Part(\"CD\")]"),
+                "example.catalog", "partsOf");
+
+        assertInstanceOf(ReplacementDisposition.Witnessed.class, came.disposition(),
+                () -> "two small letters are two capitals once made capitals: " + came);
+        assertEquals(true, came.inputs().getFirst().matches("Source\\(\"[a-z]{2}@cd\"\\)"),
+                () -> "the piece before the separator is two small letters: " + came.inputs());
+    }
+
+    /**
+     * Where the conversion cannot be undone for the strings the input admits, nothing is offered:
+     * the input admits only small letters, which a body that makes them small does not change, and
+     * the newtype asks for capitals, which no small string becomes.
+     */
+    @Test
+    void whereNoStringBecomesAPieceTheNewtypeAdmitsTheRewriteIsLeftUndecided() {
+        Collection<Replacements.Searched> came = searchedAll(
+                converted("lowercase", "[a-z]{1,2}@[a-z]{2}", "[A-Z]{2}",
+                        "(Source(\"x@cd\")) -> []"),
+                "example.catalog", "partsOf");
+
+        assertEquals(List.of(), came.stream()
+                .filter(each -> each.disposition() instanceof ReplacementDisposition.Witnessed)
+                .toList(), "capitals are not what small letters are made into");
+    }
+
+    /**
+     * A newtype held to two patterns is held to both in the place of each piece, so the string that
+     * tells the rewrite apart is in the meet of the two.
+     */
+    @Test
+    void aNewtypeHeldToTwoPatternsIsHeldToBothInThePlaceOfAPiece() {
+        String model = """
+                module example.catalog
+
+                data TagList = String
+                    invariant String.matches("[^;]+;[^;]+", value)
+                data Tag = String
+                    invariant String.matches("[A-Z]{2}[0-9]", value)
+                    invariant String.matches("Z.*", value)
+
+                behavior tagsOf : (list: TagList) -> List<Tag>
+                    constructs Tag
+
+                let tagsOf (list) =
+                    List.flatMap(t -> if Tag(t) as tag then [ tag ] else [],
+                                 List.drop(1, String.split(";", list.value)))
+
+                example tagsOf
+                    | "the row" : (TagList("x;ZB1")) -> [Tag("ZB1")]
+                """;
+        Replacements.Searched came = searched(model, "example.catalog", "tagsOf");
+
+        assertInstanceOf(ReplacementDisposition.Witnessed.class, came.disposition(),
+                () -> "the piece before the separator is a tag that starts with `Z`: " + came);
+        assertEquals(true, came.inputs().getFirst().matches("TagList\\(\"Z[A-Z][0-9];ZB1\"\\)"),
+                () -> "both patterns hold of the piece: " + came.inputs());
+    }
+
+    /**
+     * What a string is put together of and the strings the row offers it are counted apart: a string
+     * of two pieces in a row of many strings is cut at the second and not at the first.
+     */
+    @Test
+    void theStringsOfTheRowAreACountOfTheirOwn() {
+        String books = String.join(", ", java.util.stream.IntStream.range(0, 9)
+                .mapToObj(each -> "DomainName(\"d" + each + ".example.com\")").toList());
+        String model = """
+                module example.crm
+
+                data EmailAddress = String
+                    invariant String.matches("[a-z]+@[a-z0-9.]+\\\\.[a-z0-9]+", value)
+                data DomainName = String
+                    invariant String.matches("[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?(\\\\.[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?)+", value)
+
+                behavior known : (email: EmailAddress, books: List<DomainName>) -> List<DomainName>
+                    constructs DomainName
+
+                let domainsOf (email: EmailAddress): List<DomainName> =
+                    List.flatMap(d -> if DomainName(d) as name then [ name ] else [],
+                                 List.drop(1, String.split("@", String.lowercase(email.value))))
+
+                let known (email, books) =
+                    List.filter(d -> List.any(b -> b == d, books), domainsOf(email))
+
+                example known
+                    | "a domain the books hold" :
+                        (EmailAddress("cto@d0.example.com"), [%s]) -> [DomainName("d0.example.com")]
+                """.formatted(books);
+        Collection<Replacements.Searched> came = searchedAll(model, "example.crm", "known");
+        String said = came.stream().map(each -> each.disposition().toString()).toList().toString();
+
+        assertEquals(true, said.contains("STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM"),
+                () -> "the strings of the row were cut: " + said);
+        assertEquals(false, said.contains("PIECES_A_STRING_IS_PUT_TOGETHER_OF"),
+                () -> "the places of the string were not: " + said);
+    }
+
+    /**
      * The string stands inside one case of a sum, as an address does inside a contact point. The
      * body reaches it by the case it is, and the value a run had is that case: the two are the same
      * place.

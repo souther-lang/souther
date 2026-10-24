@@ -783,6 +783,7 @@ public final class Generator {
                              // The strings past this many pieces were never offered, so what the
                              // search came to is about the strings it tried.
                              PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                             STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
                              // The divisors past this one were never asked for, so what the search

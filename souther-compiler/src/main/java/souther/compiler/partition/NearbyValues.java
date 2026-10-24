@@ -39,21 +39,28 @@ import java.util.function.Predicate;
  */
 final class NearbyValues {
 
-    /** What a step from a scalar leaf is, given where the leaf stands and the position it is at. */
+    /**
+     * A value that stood at a sum on the way to a leaf, and how far into the position that was: the
+     * case the value is, which a path to the leaf as a body reads it names as a narrowing.
+     */
+    private record Narrowing(int depth, ObservedValue value) {}
+
+    /** What a step from a scalar leaf is, given where the leaf stands, the sums on the way to it
+     *  and the position it is at. */
     @FunctionalInterface
     private interface Leaves {
 
         Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
-                                       TypeView view);
+                                       List<Narrowing> along, TypeView view);
     }
 
-    private static final Leaves WHOLE_NUMBERS = (prim, leaf, _, _) ->
+    private static final Leaves WHOLE_NUMBERS = (prim, leaf, _, _, _) ->
             prim == Type.Prim.INT && leaf instanceof ObservedValue.Integer whole
                     ? stepsOf(whole) : none();
 
     /** The values one step from {@code value}, standing at a position of {@code type}. */
     static Iterator<ObservedValue> of(ObservedValue value, Type type, RuleReadingContext reading) {
-        return of(value, type, reading, null, WHOLE_NUMBERS);
+        return of(value, type, reading, null, List.of(), WHOLE_NUMBERS);
     }
 
     /**
@@ -70,17 +77,18 @@ final class NearbyValues {
                                             RuleReadingContext reading, String parameter,
                                             List<PieceDemand> demands, List<ObservedValue> row,
                                             Consumer<CompositionBudget> stoppedAt) {
-        return of(value, type, reading, TermPath.of(parameter), (prim, leaf, at, view) -> {
+        return of(value, type, reading, TermPath.of(parameter), List.of(),
+                (prim, leaf, at, along, view) -> {
             if (prim != Type.Prim.STRING || !(leaf instanceof ObservedValue.Text text)) {
                 return none();
             }
             List<PieceDemand> here = demands.stream()
-                    .filter(each -> withoutNarrowing(each.position()).equals(at)).toList();
+                    .filter(each -> standsAt(each.position(), at, along)).toList();
             Set<String> offered = new HashSet<>(List.of(text.value()));
             Iterator<String> strings = flat(here.iterator(), demand -> flat(
                     shapesOf(text.value(), demand, reading, row, stoppedAt).iterator(),
                     shape -> Partitions.stringsPartedInto(view, reading, demand.attempted(),
-                            demand.separator(), shape).iterator()));
+                            demand.separator(), demand.through(), shape).iterator()));
             return mapped(filtered(strings, offered::add), ObservedValue.Text::new);
         });
     }
@@ -112,11 +120,13 @@ final class NearbyValues {
             Set<String> held = new LinkedHashSet<>();
             row.forEach(each -> textsIn(each, held));
             held.removeIf(text -> text.codePoints().anyMatch(each -> each == demand.separator())
-                    || !Partitions.pieceAdmits(demand.attempted(), reading, text));
-            if (held.size() > budget.maximum()) {
-                stoppedAt.accept(budget);
+                    || !Partitions.pieceAdmits(demand.attempted(), reading, demand.through(),
+                            text));
+            CompositionBudget taken = CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM;
+            if (held.size() > taken.maximum()) {
+                stoppedAt.accept(taken);
             }
-            for (String text : held.stream().limit(budget.maximum()).toList()) {
+            for (String text : held.stream().limit(taken.maximum()).toList()) {
                 for (int changed = 0; changed < pieces.size(); changed++) {
                     if (!pieces.get(changed).equals(text)) {
                         out.add(changing(pieces, changed, Optional.of(text)));
@@ -177,18 +187,32 @@ final class NearbyValues {
     }
 
     /**
-     * {@code position} without the cases of a sum it narrows to, which are how the way to a value
-     * stands in the body and not where the value is in the one a run had: the walk over that value
-     * goes through the case it is, and has no step for it.
+     * Whether the leaf at {@code at} is the place {@code position} names, reached through the sums
+     * {@code along}.
+     *
+     * <p>The place is the same without the narrowings, and each narrowing is one the value the walk
+     * went through there meets: a place under the case of a sum is a place of the value only when
+     * the value is that case, and another case with a field of the same name is another place.
      */
-    private static TermPath withoutNarrowing(TermPath position) {
-        return new TermPath(position.head(), position.steps().stream()
-                .filter(step -> !(step instanceof TermPath.Step.Refine)).toList());
+    private static boolean standsAt(TermPath position, TermPath at, List<Narrowing> along) {
+        List<TermPath.Step> plain = new ArrayList<>();
+        for (TermPath.Step step : position.steps()) {
+            if (step instanceof TermPath.Step.Refine refine) {
+                int depth = plain.size();
+                if (along.stream().noneMatch(each -> each.depth() == depth
+                        && refine.cases().leaves(each.value()))) {
+                    return false;
+                }
+            } else {
+                plain.add(step);
+            }
+        }
+        return new TermPath(position.head(), plain).equals(at);
     }
 
     private static Iterator<ObservedValue> of(ObservedValue value, Type type,
                                               RuleReadingContext reading, TermPath at,
-                                              Leaves leaves) {
+                                              List<Narrowing> along, Leaves leaves) {
         if (value.unread() != null) {
             return none();
         }
@@ -199,26 +223,27 @@ final class NearbyValues {
         if (inside == null || inside.unread() != null) {
             return none();
         }
-        return mapped(within(inside, view, reading, at, leaves),
+        return mapped(within(inside, view, reading, at, along, leaves),
                 near -> ObservedValue.wrapped(view.wrappers(), near));
     }
 
     private static Iterator<ObservedValue> within(ObservedValue value, TypeView view,
                                                   RuleReadingContext reading, TermPath at,
-                                                  Leaves leaves) {
+                                                  List<Narrowing> along, Leaves leaves) {
         return switch (view.shape()) {
-            case Shape.Scalar scalar -> leaves.beside(scalar.prim(), value, at, view);
+            case Shape.Scalar scalar -> leaves.beside(scalar.prim(), value, at, along, view);
             case Shape.Product product -> value instanceof ObservedValue.Constructed made
                     && made.type().equals(product.name())
-                    ? fieldsOf(made, product, reading, at, leaves) : none();
+                    ? fieldsOf(made, product, reading, at, along, leaves) : none();
             case Shape.Sequence sequence -> value instanceof ObservedValue.Sequence held
-                    ? elementsOf(held, sequence, reading, at, leaves) : none();
+                    ? elementsOf(held, sequence, reading, at, along, leaves) : none();
             // The case the value is, as a fixture writes a sum.
             case Shape.Sum sum -> value instanceof ObservedValue.Constructed made
                     && sum.reaches().cases().contains(made.type())
-                    ? of(value, Type.ref(made.type()), reading, at, leaves) : none();
+                    ? of(value, Type.ref(made.type()), reading, at, narrowed(along, at, value),
+                            leaves) : none();
             case Shape.Optional optional -> value instanceof ObservedValue.Absent ? none()
-                    : of(value, optional.element(), reading, at, leaves);
+                    : of(value, optional.element(), reading, at, along, leaves);
             // Nothing is beside these: a map's keys and a unit case are not a number, and a
             // position nothing writes a value at has no neighbour to write.
             case Shape.Mapping _, Shape.Unit _, Shape.Unresolved _, Shape.Cases _, Shape.Tuple _,
@@ -242,14 +267,14 @@ final class NearbyValues {
     private static Iterator<ObservedValue> fieldsOf(ObservedValue.Constructed made,
                                                     Shape.Product product,
                                                     RuleReadingContext reading, TermPath at,
-                                                    Leaves leaves) {
+                                                    List<Narrowing> along, Leaves leaves) {
         return flat(List.copyOf(product.fields().entrySet()).iterator(), field -> {
             ObservedValue held = made.field(field.getKey());
             if (held == null) {
                 return none();
             }
             return mapped(of(held, field.getValue(), reading,
-                    at == null ? null : at.then(field.getKey()), leaves), near -> {
+                    at == null ? null : at.then(field.getKey()), along, leaves), near -> {
                 Map<String, ObservedValue> fields = new LinkedHashMap<>(made.fields());
                 fields.put(field.getKey(), near);
                 return new ObservedValue.Constructed(made.type(), fields);
@@ -260,15 +285,26 @@ final class NearbyValues {
     private static Iterator<ObservedValue> elementsOf(ObservedValue.Sequence held,
                                                       Shape.Sequence sequence,
                                                       RuleReadingContext reading, TermPath at,
-                                                      Leaves leaves) {
+                                                      List<Narrowing> along, Leaves leaves) {
         TermPath each = at == null ? null : at.element();
         return flat(indexes(held.elements().size()), index ->
-                mapped(of(held.elements().get(index), sequence.element(), reading, each, leaves),
-                        near -> {
+                mapped(of(held.elements().get(index), sequence.element(), reading, each, along,
+                        leaves), near -> {
                     List<ObservedValue> elements = new ArrayList<>(held.elements());
                     elements.set(index, near);
                     return new ObservedValue.Sequence(elements);
                 }));
+    }
+
+    /** {@code along}, and the sum {@code value} is the case of at {@code at}. */
+    private static List<Narrowing> narrowed(List<Narrowing> along, TermPath at,
+                                            ObservedValue value) {
+        if (at == null) {
+            return along;
+        }
+        List<Narrowing> out = new ArrayList<>(along);
+        out.add(new Narrowing(at.steps().size(), value));
+        return out;
     }
 
     private static Iterator<Integer> indexes(int count) {

@@ -51,6 +51,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.CodePoints;
+import souther.compiler.semantics.CaseMapping;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.revision.RevisionKnowledge;
@@ -72,6 +73,7 @@ import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
 import java.util.Map;
 import java.util.Objects;
@@ -2927,52 +2929,133 @@ public final class Partitions {
                           StringPredicates.StatedPattern accepts) {}
 
     /**
-     * Whether {@code text} is a string {@code piece} is written to admit, so far as its rules are
-     * one pattern — and false where they are not, which says nothing of whether the type admits it.
+     * Whether {@code text}, once {@code through} has made it into what is parted, is a string every
+     * pattern the rules on {@code piece} state admits — and false where there is no such pattern, or
+     * where one could not be built, which says nothing of whether the type admits it.
      */
-    static boolean pieceAdmits(Type piece, RuleReadingContext reading, String text) {
+    static boolean pieceAdmits(Type piece, RuleReadingContext reading, CaseMapping through,
+                               String text) {
+        List<StringPredicates.StatedPattern> patterns = patternsOfAPiece(piece, reading);
+        if (patterns.isEmpty()) {
+            return false;
+        }
+        for (StringPredicates.StatedPattern each : patterns) {
+            if (!(reading.revision().settled(new PatternBeforeAConversion(each, through))
+                    instanceof PatternBeforeAConversion.Made.Built(Language language)
+                    && language.has(text))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Every pattern the rules on {@code piece} state, in the order they are written. */
+    private static List<StringPredicates.StatedPattern> patternsOfAPiece(
+            Type piece, RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
-        PatternsStated stated = patternsStatedOn(TypeView.of(piece, ruleSource.inners(),
-                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums()), ruleSource);
-        return stated.read().size() == 1
-                && reading.revision().settled(
-                        new PatternForAWitness(stated.read().getFirst().accepts()))
-                        instanceof PatternForAWitness.Made.Built(Language language, var _)
-                && language.has(text);
+        return patternsStatedOn(TypeView.of(piece, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums()), ruleSource).patterns();
     }
 
     /**
-     * A string the rules on {@code position} admit that parts at {@code separator} into pieces of
-     * which each one that is empty in {@code pieces} is a string {@code piece} is written to admit
-     * and each other is the string it holds — or nothing where the rules on {@code piece} are not
-     * one pattern, or leave no such string.
+     * The machine of the strings that, once {@code through} has made them into something else, a
+     * pattern a rule states admits — as far as that can be said of every string, which is the
+     * strings of the ASCII range ({@link #beforeConversion}).
      *
-     * <p>The two rules met and not one chosen from the other's strings: a piece that is a string
-     * the type admits may be refused as part of the position's string, and the one the position
-     * admits may part into pieces the type refuses, so a string meeting both is looked for in the
-     * language of their meet. A position whose rules say nothing about its strings admits every
-     * string, and the pieces alone decide.
+     * <p>Made here with the allowance of one witness, as the other machines a question composes
+     * are: it is a machine nobody wrote a rule for.
+     */
+    record PatternBeforeAConversion(StringPredicates.StatedPattern pattern, CaseMapping through)
+            implements RevisionWork<PatternBeforeAConversion.Made> {
+
+        /** What building the machine came to. */
+        sealed interface Made {
+
+            record Built(Language language) implements Made {}
+
+            record NotBuilt() implements Made {}
+        }
+
+        @Override
+        public Made workedOut(RevisionKnowledge revision) {
+            Language made = PatternPlan.of(beforeConversion(pattern.meaning(), through))
+                    .compile(PatternPlan.Budget.OF_A_WITNESS.meter());
+            return made == null ? new Made.NotBuilt() : new Made.Built(made);
+        }
+    }
+
+    /**
+     * The strings that {@code through} makes into a string {@code meaning} accepts, so far as every
+     * one of them is known to be: the strings of the ASCII range, where a case conversion maps one
+     * code point to one and the same one however it stands among the others.
      *
-     * <p>One pattern of the piece and no more: a piece held to several patterns is not a language
-     * a sequence of pieces can be written in, and what is not read is left to the decoder, as a rule
-     * not read is anywhere.
+     * <p>Not the strings of the whole range. What a conversion makes of a text is the run time's full
+     * Unicode mapping and then NFC ({@link CaseMapping}), which a code point does not carry alone:
+     * a letter followed by a mark composes into another. So the symbols past the ASCII range are
+     * left out, which loses strings and never admits one that is not, and a pattern whose strings
+     * are all outside it is the empty language — the question has no answer there, and says so by
+     * offering nothing.
+     */
+    private static PatternMeaning beforeConversion(PatternMeaning meaning, CaseMapping through) {
+        return switch (through) {
+            case CaseMapping.None _ -> meaning;
+            case CaseMapping.Lowercase lowercase -> beforeConversion(preimage(meaning,
+                    each -> each >= 'A' && each <= 'Z' ? each + ('a' - 'A') : each),
+                    lowercase.of());
+            case CaseMapping.Uppercase uppercase -> beforeConversion(preimage(meaning,
+                    each -> each >= 'a' && each <= 'z' ? each - ('a' - 'A') : each),
+                    uppercase.of());
+        };
+    }
+
+    private static PatternMeaning preimage(PatternMeaning meaning, IntUnaryOperator convert) {
+        return switch (meaning) {
+            case PatternMeaning.Nothing _, PatternMeaning.Never _ -> meaning;
+            case PatternMeaning.Symbols symbols -> {
+                CodePoints before = CodePoints.NONE;
+                for (int each = 0; each < 128; each++) {
+                    if (symbols.held().has(convert.applyAsInt(each))) {
+                        before = before.or(CodePoints.of(each));
+                    }
+                }
+                yield new PatternMeaning.Symbols(before);
+            }
+            case PatternMeaning.InTurn turn -> new PatternMeaning.InTurn(turn.parts().stream()
+                    .map(each -> preimage(each, convert)).toList());
+            case PatternMeaning.EitherOf either -> new PatternMeaning.EitherOf(either.arms()
+                    .stream().map(each -> preimage(each, convert)).toList());
+            case PatternMeaning.Repeated repeated -> new PatternMeaning.Repeated(
+                    preimage(repeated.what(), convert), repeated.least(), repeated.most());
+        };
+    }
+
+    /**
+     * A string the rules on {@code position} admit that, once {@code through} has made it into
+     * what is parted, parts at {@code separator} into pieces of which each one that is empty in
+     * {@code pieces} is a string every pattern the rules on {@code piece} state admits and each
+     * other is the string it holds — or nothing where those rules state no pattern, or leave no
+     * such string.
+     *
+     * <p>The rules met and not one chosen from the other's strings: a piece that is a string the
+     * type admits may be refused as part of the position's string, and the one the position admits
+     * may part into pieces the type refuses, so a string meeting both is looked for in the language
+     * of their meet. A position whose rules say nothing about its strings admits every string, and
+     * the pieces alone decide. A piece held to several patterns is held to each of them in its
+     * place, and the languages of the places met.
      */
     static List<String> stringsPartedInto(TypeView position, RuleReadingContext reading,
-                                          Type piece, int separator,
+                                          Type piece, int separator, CaseMapping through,
                                           List<Optional<String>> pieces) {
         if (pieces.isEmpty() || !(position.shape() instanceof Shape.Scalar scalar)
                 || scalar.prim() != Type.Prim.STRING) {
             return List.of();
         }
-        RuleReadingSource ruleSource = reading.source();
-        PatternsStated ofAPiece = patternsStatedOn(TypeView.of(piece, ruleSource.inners(),
-                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums()), ruleSource);
-        if (ofAPiece.read().size() != 1) {
+        List<StringPredicates.StatedPattern> patterns = patternsOfAPiece(piece, reading);
+        if (patterns.isEmpty()) {
             return List.of();
         }
         return reading.revision().settled(new StringsPartedInto(
-                rulesReadOn(position, reading), ofAPiece.read().getFirst().accepts(),
-                separator, pieces));
+                rulesReadOn(position, reading), patterns, separator, through, pieces));
     }
 
     /**
@@ -2985,8 +3068,14 @@ public final class Partitions {
      *
      * @param rules the rules on the position, or null where they say nothing about its strings
      */
-    record StringsPartedInto(RulesRead rules, StringPredicates.StatedPattern piece, int separator,
-                             List<Optional<String>> pieces) implements RevisionWork<List<String>> {
+    record StringsPartedInto(RulesRead rules, List<StringPredicates.StatedPattern> patterns,
+                             int separator, CaseMapping through, List<Optional<String>> pieces)
+            implements RevisionWork<List<String>> {
+
+        public StringsPartedInto {
+            patterns = List.copyOf(patterns);
+            pieces = List.copyOf(pieces);
+        }
 
         @Override
         public List<String> workedOut(RevisionKnowledge revision) {
@@ -2994,23 +3083,36 @@ public final class Partitions {
             PatternMeaning any = new PatternMeaning.Repeated(
                     new PatternMeaning.Symbols(CodePoints.EVERYTHING), 0,
                     PatternMeaning.Repeated.NO_CEILING);
-            PatternMeaning at = new PatternMeaning.Symbols(CodePoints.of(separator));
-            List<PatternMeaning> parted = new ArrayList<>();
+            // The string is parted as it is made into: what stands where the separator does is
+            // whatever the conversion makes into it.
+            PatternMeaning at = beforeConversion(
+                    new PatternMeaning.Symbols(CodePoints.of(separator)), through);
+            // One language for each pattern, the places of the pieces the same in all of them, so
+            // that a piece is held to every pattern in its place. The separators the string holds
+            // are as many as its pieces leave, so the places do not move between the languages.
+            PatternPlan whole = null;
+            for (StringPredicates.StatedPattern each : patterns) {
+                List<PatternMeaning> parted = new ArrayList<>();
+                for (int place = 0; place < pieces.size(); place++) {
+                    if (place > 0) {
+                        parted.add(at);
+                    }
+                    parted.add(pieces.get(place).map(StringsPartedInto::written)
+                            .orElseGet(() -> beforeConversion(each.meaning(), through)));
+                }
+                PatternPlan one = PatternPlan.of(new PatternMeaning.InTurn(parted));
+                whole = whole == null ? one : whole.and(one);
+            }
             List<PatternMeaning> tooMany = new ArrayList<>();
             for (int each = 0; each < pieces.size(); each++) {
-                if (each > 0) {
-                    parted.add(at);
-                }
-                parted.add(pieces.get(each).map(StringsPartedInto::written)
-                        .orElse(piece.meaning()));
                 tooMany.add(any);
                 tooMany.add(at);
             }
             tooMany.add(any);
             // A separator in a piece is another piece, so the strings with as many separators as
             // pieces, or more, are left out.
-            Language made = PatternPlan.of(new PatternMeaning.InTurn(parted))
-                    .less(PatternPlan.of(new PatternMeaning.InTurn(tooMany))).compile(meter);
+            Language made = whole.less(PatternPlan.of(new PatternMeaning.InTurn(tooMany)))
+                    .compile(meter);
             if (made != null && rules != null) {
                 Language admitted = admittedBy(rules.stated(), rules.characters(), meter,
                         revision).language();

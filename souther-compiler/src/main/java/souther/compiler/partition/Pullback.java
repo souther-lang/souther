@@ -1698,7 +1698,8 @@ final class Pullback {
         }
         Quantity string = valueOfTheInput(
                 piece.split().args().get(piece.parted().string().position()), piece.at());
-        if (string == null || !isThePositionOrItsCase(string)) {
+        CaseMapping through = string == null ? null : conversionOf(string);
+        if (through == null) {
             return List.of();
         }
         List<NumericTerm> made = switch (string) {
@@ -1709,18 +1710,24 @@ final class Pullback {
         if (made.size() != 1 || made.getFirst().placesReadOff().size() != 1) {
             return List.of();
         }
-        return List.of(new PieceDemand(made.getFirst().placesReadOff().getFirst(),
+        return List.of(new PieceDemand(made.getFirst().placesReadOff().getFirst(), through,
                 piece.separator().getAsInt(), built.type()));
     }
 
-    /** Whether {@code string} is a position of the input, or what case conversions answer of one. */
-    private static boolean isThePositionOrItsCase(Quantity string) {
+    /**
+     * What case conversions make of the position {@code string} is made of — none where it is the
+     * position itself — or null where it is made of anything else, which is no string whose pieces
+     * the position's strings are parted into.
+     */
+    private static CaseMapping conversionOf(Quantity string) {
         return switch (string) {
-            case DecisionAtom.OfTheInput _ -> true;
-            case Quantity.WhatAnOperationAnswers answers -> answers.of().size() == 1
-                    && CaseMapping.isAConversion(answers.operation())
-                    && isThePositionOrItsCase(answers.of().getFirst());
-            default -> false;
+            case DecisionAtom.OfTheInput _ -> CaseMapping.NONE;
+            case Quantity.WhatAnOperationAnswers answers -> {
+                CaseMapping inner = answers.of().size() == 1
+                        ? conversionOf(answers.of().getFirst()) : null;
+                yield inner == null ? null : CaseMapping.applying(answers.operation(), inner);
+            }
+            default -> null;
         };
     }
 
