@@ -169,6 +169,80 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
     }
 
+    /**
+     * A list whose rules keep its elements apart at the key holds no key twice, so every element
+     * is the entry of its key and the order of a repeated key is no case of the model. Beside
+     * {@link #MODEL}, which differs by the invariant alone.
+     */
+    @Test
+    void aListWhoseRulesKeepTheKeysApartHasNoOrderToMeasure() throws Exception {
+        Compilation compilation = measured("""
+                module p
+                data LI = { sku: String, q: Int }
+                data Row = { sku: String, qty: Int }
+                data Rows = { rows: List<Row> }
+                    invariant List.allDistinctBy(.sku, rows)
+                data Empty = { n: Int }
+                behavior f : (items: List<LI>, snap: Rows) -> Int | Empty
+                let f (items, snap) = {
+                    let stock = List.indexBy(.sku, snap.rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.qty >= i.q
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                """);
+        String json = AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        List<String> words = new ArrayList<>();
+        collectWeakening(JSON.readTree(json), words);
+
+        assertFalse(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
+        assertFalse(json.contains("last snap.rows"), json);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report(compilation)),
+                () -> report(compilation));
+    }
+
+    /**
+     * The same of a list a dependency answers: the rules of what it answers hold of every answer.
+     * Beside it, the same dependency answering a list nothing keeps apart is still said to leave the
+     * order unmeasured.
+     */
+    @Test
+    void aDependencysListWhoseRulesKeepTheKeysApartHasNoOrderToMeasure() throws Exception {
+        String model = """
+                module p
+                data LI = { sku: String, q: Int }
+                data Row = { sku: String, qty: Int }
+                data Rows = { rows: List<Row> }
+                    %s
+                data Empty = { n: Int }
+                behavior readRows : (items: List<LI>) -> Rows
+                    constructs Rows, Row
+                behavior f : (items: List<LI>) -> Int | Empty
+                    depends on readRows
+                let f (items, readRows) = {
+                    let stock = List.indexBy(.sku, readRows(items).rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.qty >= i.q
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                """;
+        List<String> apart = new ArrayList<>();
+        Compilation kept = measured(model.formatted("invariant List.allDistinctBy(.sku, rows)"));
+        collectWeakening(JSON.readTree(AdequacyReport.of(kept)
+                .json(SourceRendering.namedByIdentity(kept.texts()))), apart);
+        List<String> mayRepeat = new ArrayList<>();
+        Compilation open = measured(model.formatted("invariant List.length(rows) >= 0"));
+        collectWeakening(JSON.readTree(AdequacyReport.of(open)
+                .json(SourceRendering.namedByIdentity(open.texts()))), mayRepeat);
+
+        assertEquals(List.of(), errors(kept));
+        assertFalse(apart.contains("keyed_overwrite_cases_unmeasured"), apart::toString);
+        assertTrue(mayRepeat.contains("keyed_overwrite_cases_unmeasured"), mayRepeat::toString);
+    }
+
     private static void collectWeakening(JsonNode node, List<String> into) {
         if (node.isObject()) {
             node.properties().forEach(entry -> {
