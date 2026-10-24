@@ -6,7 +6,7 @@ import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -245,15 +245,15 @@ final class Predicates {
      * One case of a clause read over an operation that answers one of the values it was given: the
      * clause with that value standing where the call did, and what holds of the arguments there.
      *
-     * @param kinds how the values of every atom either of them names are spaced, so that a case can
-     *              be taken into a domain without asking anything further of the caller
+     * @param spaces what the type of every atom either of them names says of its values, so that a
+     *               case can be taken into a domain without asking anything further of the caller
      */
-    record Case(NumericConstraint numeric, List<NumericConstraint> given, Map<FactSubject, Granularity> kinds) {
+    record Case(NumericConstraint numeric, List<NumericConstraint> given, Map<FactSubject, NumberSpace> spaces) {
 
         /**
          * Every atom this case is decided by.
          *
-         * <p>Read off {@code kinds}, which is where the atoms of this case are registered as its
+         * <p>Read off {@code spaces}, which is where the atoms of this case are registered as its
          * forms are built — the substituted clause, the equality saying the call answered this
          * argument, and each condition on the arguments. A reader listing those three would be a
          * second answer to keep in step with the building, and the one that would fall behind: what
@@ -261,14 +261,14 @@ final class Predicates {
          * operation in the table has such an argument.
          */
         Set<FactSubject> atomsItIsDecidedBy() {
-            return kinds.keySet();
+            return spaces.keySet();
         }
 
         /** {@code d} with this case's conditions on the arguments taken as holding. */
         private NumericDomain<FactSubject> in(NumericDomain<FactSubject> d) {
             NumericDomain<FactSubject> out = d;
             for (NumericConstraint one : given) {
-                out = out.assume(one.form(), one.rel(), kinds);
+                out = out.assumeWithin(one.form(), one.rel(), spaces);
             }
             return out;
         }
@@ -1463,7 +1463,7 @@ final class Predicates {
         LinearForm<FactSubject> compared = Terms.add(la, ra, true);
         if (compared != null) {
             out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
-                    terms.kindsOf(compared));
+                    terms.spacesOf(compared));
             taken = true;
             shapeRead |= readsItsShape(stated.left(), at) && readsItsShape(stated.right(), at);
         }
@@ -1492,7 +1492,7 @@ final class Predicates {
     private Known carrying(Known k, List<NumericConstraint> known) {
         Known out = k;
         for (NumericConstraint c : known) {
-            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
+            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.spacesOf(c.form()));
         }
         return out;
     }
@@ -1626,11 +1626,11 @@ final class Predicates {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.
                 out = out.taking(known.form(), known.rel(), Known.Held.OF_THE_VALUE,
-                        terms.kindsOf(known.form()));
+                        terms.spacesOf(known.form()));
             }
             if (c.numeric() != null) {
                 out = out.taking(c.numeric().form(), c.numeric().rel(), held,
-                        terms.kindsOf(c.numeric().form()));
+                        terms.spacesOf(c.numeric().form()));
             }
             if (c.fact() != null) {
                 // What is guaranteed is guaranteed of the term as written; a container built from it
@@ -1714,7 +1714,7 @@ final class Predicates {
                 return null;
             }
             List<NumericConstraint> given = new ArrayList<>();
-            Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
+            Map<FactSubject, NumberSpace> spaces = new HashMap<>(terms.spacesOf(instead));
             // What the call answers here, said of the call itself: in this case the two are one
             // value. Without it a guard written about the call would stand outside the cases, and a
             // clause could come out established by these and refused by that. It belongs to this
@@ -1726,13 +1726,13 @@ final class Predicates {
                 return null;
             }
             given.add(new NumericConstraint(answeredHere, Rel.EQ));
-            kinds.putAll(terms.kindsOf(answeredHere));
+            spaces.putAll(terms.spacesOf(answeredHere));
             for (NumericConstraint stands : arm.settles()) {
                 given.add(stands);
-                kinds.putAll(terms.kindsOf(stands.form()));
+                spaces.putAll(terms.spacesOf(stands.form()));
             }
             cases.add(new Case(new NumericConstraint(instead, owed.rel()), List.copyOf(given),
-                    Map.copyOf(kinds)));
+                    Map.copyOf(spaces)));
         }
         return new Piecewise(List.copyOf(cases));
     }

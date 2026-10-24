@@ -10,6 +10,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
@@ -279,10 +280,10 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     void aComponentHoldingNothingLeavesNoEnvelopeEvenWithNoPositionToAskAbout() {
         ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.asTheyAreSpelled())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
-                        Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
+                        Map.of("x", new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)))
                 .taking(SmallForm.small(LinearForm.<String>constant(ExactRatio.of(-1)))
                                 .minus(LinearForm.atom("x")).form(), Rel.GE,
-                        Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
+                        Map.of("x", new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
         assertEquals(Map.of(), nowhere.confinement().carriers(), "and no position is read at all");
         assertInstanceOf(PositionEnvelope.NothingIsLeft.class, nowhere.positionEnvelope());

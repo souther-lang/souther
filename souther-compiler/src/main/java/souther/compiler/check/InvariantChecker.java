@@ -989,7 +989,7 @@ public final class InvariantChecker {
                 needs.put(part.id(), asked);
                 for (NumericConstraint one : asked.asked()) {
                     workedOut = workedOut.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
-                            c.terms.kindsOf(one.form()));
+                            c.terms.spacesOf(one.form()));
                 }
             }
             written.set(each.reading(), written.get(each.reading()).alsoWorkedOut(needs));

@@ -9,10 +9,10 @@ import souther.compiler.types.ReferenceDerivationCause;
 import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
@@ -2286,29 +2286,34 @@ final class Terms {
         return carrier;
     }
 
-    /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of
-     * them was named here, so one that is not is a form built somewhere this cannot answer for. */
-    Map<FactSubject, Granularity> kindsOf(LinearForm<FactSubject> f) {
-        return kindsOfAtoms(f.coefs().keySet());
+    /** What the type of every atom {@code f} is written over says of its values — its spacing and
+     * where its order stops — for the domain to record as one. Every one of them was named here, so
+     * one that is not is a form built somewhere this cannot answer for. */
+    Map<FactSubject, NumberSpace> spacesOf(LinearForm<FactSubject> f) {
+        return spacesOfAtoms(f.coefs().keySet());
     }
 
-    /** The spacing of {@code atom}, or nothing where no form was ever written over it: a place a
+    /** The space of {@code atom}, or nothing where no form was ever written over it: a place a
      *  closure was handed and never read is one no form names. */
-    Map<FactSubject, Granularity> kindsOfIfNamed(FactSubject atom) {
+    Map<FactSubject, NumberSpace> spacesOfIfNamed(FactSubject atom) {
         Carrier carrier = atomCarriers.get(atom);
-        return carrier == null ? Map.of() : Map.of(atom, carrier.spacing());
+        return carrier == null ? Map.of() : Map.of(atom, spaceOf(carrier));
     }
 
-    private Map<FactSubject, Granularity> kindsOfAtoms(Set<FactSubject> atoms) {
-        Map<FactSubject, Granularity> out = new HashMap<>();
+    private Map<FactSubject, NumberSpace> spacesOfAtoms(Set<FactSubject> atoms) {
+        Map<FactSubject, NumberSpace> out = new HashMap<>();
         for (FactSubject atom : atoms) {
             Carrier carrier = atomCarriers.get(atom);
             if (carrier == null) {
                 throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
-            out.put(atom, carrier.spacing());
+            out.put(atom, spaceOf(carrier));
         }
         return out;
+    }
+
+    private static NumberSpace spaceOf(Carrier carrier) {
+        return new NumberSpace(carrier.spacing(), carrier.whereItStops());
     }
 
     /** An expression's canonical key: a location names itself, and everything else is read

@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
@@ -51,11 +51,11 @@ import java.util.Set;
  * one element of a list says nothing about the element the walk is at, and putting it here would
  * make the induction prove something no walk establishes.
  */
-record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity> kinds) {
+record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, NumberSpace> spaces) {
 
     StepInputFacts {
         at = Map.copyOf(at);
-        kinds = Map.copyOf(kinds);
+        spaces = Map.copyOf(spaces);
     }
 
     static StepInputFacts none() {
@@ -150,7 +150,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
     NumericDomain<FactSubject> taking(NumericDomain<FactSubject> domain) {
         NumericDomain<FactSubject> out = domain;
         for (Map.Entry<FactSubject, Bounds> one : at.entrySet()) {
-            out = out.assuming(one.getKey(), one.getValue(), kinds);
+            out = out.assumingWithin(one.getKey(), one.getValue(), spaces);
         }
         return out;
     }
@@ -166,7 +166,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
     static final class Gathering {
 
         private final Map<FactSubject, Bounds> at = new LinkedHashMap<>();
-        private final Map<FactSubject, Granularity> kinds = new LinkedHashMap<>();
+        private final Map<FactSubject, NumberSpace> spaces = new LinkedHashMap<>();
         private final Terms terms;
         private final Set<FactSubject> namedByTheStep;
 
@@ -190,11 +190,11 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
             }
             Bounds had = at.get(atom);
             at.put(atom, had == null ? bounds : had.meet(bounds));
-            kinds.putAll(terms.kindsOf(LinearForm.atom(atom)));
+            spaces.putAll(terms.spacesOf(LinearForm.atom(atom)));
         }
 
         StepInputFacts gathered() {
-            return at.isEmpty() ? none() : new StepInputFacts(at, kinds);
+            return at.isEmpty() ? none() : new StepInputFacts(at, spaces);
         }
     }
 

@@ -1103,7 +1103,7 @@ final class ReadQuantities implements Quantities {
         // the state is not narrowed by — an unheld sum is a step short, and the sound answer with
         // less is not to take a step at all.
         LinearForm<InputAtom> over = over(each.form(), under);
-        return over == null ? made : insideItsOrder(made.taking(over, each.rel(), spacing),
+        return over == null ? made : insideItsOrder(made.takingSpaced(over, each.rel(), spacing),
                 each.form().coefs().keySet(), under);
     }
 
@@ -1241,7 +1241,7 @@ final class ReadQuantities implements Quantities {
                 InputAtom atom = called(counted, under);
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(rules.numbers(), counted, atom);
-                return spaced == null ? rules : rules.taking(
+                return spaced == null ? rules : rules.takingSpaced(
                         LinearForm.<InputAtom>atomMinusConstant(atom, ExactRatio.ONE),
                         Rel.GE, Map.of(atom, spaced));
             }
@@ -1501,7 +1501,7 @@ final class ReadQuantities implements Quantities {
         if (spaced == null) {
             return rules;
         }
-        return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, spaced)),
+        return insideItsOrder(rules.takingSpaced(atom, numbersOf(runs), Map.of(atom, spaced)),
                 Set.of(term), under);
     }
 

@@ -9,6 +9,8 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
@@ -270,7 +272,8 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     /** {@code known} with the position at or above {@code low} and below {@code high}, as far as
      *  {@code held} reaches. */
     private static Known range(Known known, long low, long high, Known.Held held) {
-        Map<FactSubject, Granularity> whole = Map.of(A_POSITION, Granularity.DISCRETE);
+        Map<FactSubject, NumberSpace> whole = Map.of(A_POSITION,
+                new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN));
         return known
                 .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(low)), Rel.GE,
                         held, whole)

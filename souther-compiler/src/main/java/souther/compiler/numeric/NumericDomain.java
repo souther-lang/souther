@@ -337,6 +337,41 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * The domain with {@code f rel 0} taken in, and with the space of each atom of {@code f}
+     * recorded: its spacing and where its order stops, together, so that no route tells the domain
+     * one without the other.
+     *
+     * @param spaces what the type of each atom of {@code f} says of its values
+     */
+    public NumericDomain<A> assumeWithin(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
+        return knowingSpaces(f.coefs().keySet(), spaces).assume(f, rel, spacingsOf(spaces));
+    }
+
+    /** The domain with {@code atom} taken to lie between {@code bounds}, its space recorded as
+     *  {@link #assumeWithin} does. */
+    public NumericDomain<A> assumingWithin(A atom, Bounds bounds, Map<A, NumberSpace> spaces) {
+        return knowingSpaces(Set.of(atom), spaces).assuming(atom, bounds, spacingsOf(spaces));
+    }
+
+    private NumericDomain<A> knowingSpaces(Set<A> atoms, Map<A, NumberSpace> spaces) {
+        Map<A, Bounds> stops = new LinkedHashMap<>();
+        for (A atom : atoms) {
+            NumberSpace space = spaces.get(atom);
+            if (space == null) {
+                throw new IllegalStateException("no space given for atom `" + atom + "`");
+            }
+            stops.put(atom, space.extent());
+        }
+        return heldInsideTheirOrders(stops);
+    }
+
+    private static <A> Map<A, Granularity> spacingsOf(Map<A, NumberSpace> spaces) {
+        Map<A, Granularity> out = new LinkedHashMap<>();
+        spaces.forEach((atom, space) -> out.put(atom, space.spacing()));
+        return out;
+    }
+
+    /**
      * The domain with {@code f rel 0} taken in.
      *
      * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than

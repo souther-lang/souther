@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
@@ -131,6 +132,23 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *  a machine. */
     public boolean isBottom(StringMachineAnswers machines) {
         return shownByAnother() || admitted(machines).holdsNothing();
+    }
+
+    /**
+     * Whether no value of the types standing here satisfies this: nothing at all does, or nothing
+     * inside where the order of each number stops ({@link NumericDomain#leavesNoRow}).
+     *
+     * <p>Not {@link #isBottom}, which asks of the rules alone and stays the question for a reader
+     * that draws a model's lines. A path nothing reaches is asked here, since a value the type
+     * cannot hold is one the program never builds.
+     */
+    public boolean leavesNoRow() {
+        return leavesNoRow(StringMachineAnswers.NONE);
+    }
+
+    /** The same, borrowing what {@code machines} has already made. */
+    public boolean leavesNoRow(StringMachineAnswers machines) {
+        return shown || numbers.leavesNoRow() || facts.isBottom() || admitted(machines).holdsNothing();
     }
 
     /**
@@ -382,9 +400,28 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         return held == numbers ? this : new ConstraintState<>(held, facts, confinement, shown);
     }
 
-    /** This, with {@code f rel 0} taken as holding. */
-    public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
+    /**
+     * This, with {@code f rel 0} taken as holding over atoms whose spacing is all that is known.
+     *
+     * <p>For a reader whose atom may have no type to ask where its order stops, which then has
+     * none recorded and is not shown to leave a row. Where the type is there, {@code taking} with
+     * the space is the door.
+     */
+    public ConstraintState<A> takingSpaced(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
         return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
+    }
+
+    /** The same for an atom taken to lie between {@code bounds}. */
+    public ConstraintState<A> takingSpaced(A atom, NumericDomain.Bounds bounds,
+                                           Map<A, Granularity> kinds) {
+        return new ConstraintState<>(numbers.assuming(atom, bounds, kinds), facts, confinement,
+                shown);
+    }
+
+    /** This, with {@code f rel 0} taken as holding. */
+    public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
+        return new ConstraintState<>(numbers.assumeWithin(f, rel, spaces), facts, confinement,
+                shown);
     }
 
     /**
@@ -397,9 +434,9 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * word.
      */
     public ConstraintState<A> taking(A atom, NumericDomain.Bounds bounds,
-                                     Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assuming(atom, bounds, kinds), facts, confinement,
-                shown);
+                                     Map<A, NumberSpace> spaces) {
+        return new ConstraintState<>(numbers.assumingWithin(atom, bounds, spaces), facts,
+                confinement, shown);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
@@ -457,9 +494,10 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      */
     static <A> ConstraintState<A> settling(ConstraintState<A> state, A atom,
                                            souther.compiler.numeric.Count at,
-                                           souther.compiler.numeric.Granularity spacing) {
-        return state.taking(
-                LinearForm.<A>atomMinusConstant(atom, at.exactly()),
-                Rel.EQ, java.util.Map.of(atom, spacing));
+                                           Granularity spacing) {
+        return new ConstraintState<>(
+                state.numbers.assume(LinearForm.<A>atomMinusConstant(atom, at.exactly()), Rel.EQ,
+                        java.util.Map.of(atom, spacing)),
+                state.facts, state.confinement, state.shown);
     }
 }
