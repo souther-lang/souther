@@ -30,6 +30,8 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
+import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Text;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
@@ -2266,12 +2268,46 @@ final class TermRealizations {
         NumericTerm.GatheredUnderItsKey gathered =
                 orders.term() instanceof NumericTerm.GatheredUnderAKey ofAKey ? ofAKey.gathered()
                         : (NumericTerm.GatheredUnderItsKey) orders.term();
-        // The elements written are written for their number alone, and a statement keeping some of
-        // them is one more thing each would have to be written to meet.
-        if (orders.answered() == null || gathered.selection() != null) {
+        if (orders.answered() == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
+        // Of the elements a statement keeps: written inside the region the statement narrows an
+        // element to, every element written is kept, and what the kept ones come to is what they
+        // all do. A statement no region carries is one more thing each element would have to be
+        // written to meet.
+        SearchRegion region = within;
+        DemandsInside demanded = inside;
+        if (gathered.selection() != null) {
+            List<TakenConstraint> kept = gathered.selection().heldTo().orElse(null);
+            if (kept == null) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            region = TakenConstraint.narrowedBy(kept, within);
+            if (TakenConstraint.nothingIsLeftFor(kept, region)) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+            }
+            // A text held at one value is written there in every element, as a value asked
+            // inside it: an element's text is chosen by what is asked of it, and not by a region.
+            Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+            for (TakenConstraint each : kept) {
+                if (each instanceof TakenConstraint.Ordered(var term, Text at, Rel rel)
+                        && rel == Rel.EQ) {
+                    List<FixtureTemplate> held = List.of(FixtureTemplate.string(at.at()));
+                    List<FixtureTemplate> had = among.put(term.position(), held);
+                    if (had != null && !had.equals(held)) {
+                        return new Realization.Unexhausted(CompositionShortfall.writing(
+                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                "`" + term.position() + "` is asked to hold two values");
+                    }
+                }
+            }
+            demanded = new DemandsInside(among, inside.required());
+        }
+        SearchRegion keptIn = region;
+        DemandsInside heldInside = demanded;
         // Some element, since a key is filed where one has it: a container of none comes to
         // nought added up and files no key at all. An end is one element, which is its own end
         // by either; and how many elements the key has is asked of them as well where a count of
@@ -2301,8 +2337,8 @@ final class TermRealizations {
         Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within,
                         UsualPlaces.of(orders.term(), orders.answered(), reading.today())),
-                number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, within,
-                        reading, elements, inside));
+                number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, keptIn,
+                        reading, elements, heldInside));
         // And one that is not written is not one no row has: the container may be one its type
         // makes hold more of the key's elements than one, which it is made of.
         return oneElement != null ? someOf(made, oneElement) : made;

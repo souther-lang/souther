@@ -66,6 +66,21 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
     private static final String OF_EACH_VALUE =
             "#different fs [fs[*].currency] where [total(fs[*].amount by currency) > 0]";
 
+    /** The forecasts of every desk, which a flattening puts end to end. */
+    private static final String ACROSS = "module probe\n\n" + DECLARED + """
+            data Desk = { forecasts: List<Forecast> }
+
+            behavior f : (ds: List<Desk>) -> Int
+            let f (ds) = if %s then 1 else 0
+            """;
+
+    private static final String ACROSS_OF_EACH_ELEMENT = "#different ds"
+            + " [ds[*].forecasts[*].currency] where [ds[*].forecasts[*].amount > 0]";
+
+    private static final String ACROSS_OF_EACH_VALUE = "#different ds"
+            + " [ds[*].forecasts[*].currency] where"
+            + " [total(ds[*].forecasts[*].amount by currency) > 0]";
+
     /** However the different values of the elements a filter kept are counted, one count. */
     @Test
     void everyWayOfCountingTheValuesAFilterKeptIsOneCount() {
@@ -325,12 +340,38 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         Quantity.HowManyDifferentMeet.Selection last =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
                         new Proposition.LastToHold(fs, currency, true, "last"));
+        Quantity.TheValue value = new Quantity.TheValue.AtAPlace(currency);
         assertThrows(IllegalArgumentException.class,
-                () -> new Quantity.HowManyDifferentMeet(fs, currency, last));
-        assertNull(Quantity.HowManyDifferentMeet.of(fs, currency, last));
-        assertNotNull(Quantity.HowManyDifferentMeet.of(fs, currency,
+                () -> new Quantity.HowManyDifferentMeet(fs, value, last));
+        assertNull(Quantity.HowManyDifferentMeet.of(fs, value, last));
+        assertNotNull(Quantity.HowManyDifferentMeet.of(fs, value,
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
                         new Proposition.Present(currency, true, "present"))));
+    }
+
+    /**
+     * Across the lists inside the elements of a list, the elements holding one value stand in
+     * different elements of the outer list, so a statement of each value reading a place of the
+     * outer element answers for each of them apart and is refused; one reading only the value is
+     * not.
+     */
+    @Test
+    void aStatementOfEachValueAcrossTheListsReadsNothingOfTheElementHoldingOne() {
+        TermPath desk = TermPath.of("ds").element();
+        DecisionSubject.AnInput ds = new DecisionSubject.AnInput(TermPath.of("ds"));
+        DecisionSubject.AnInput currency = new DecisionSubject.AnInput(
+                desk.then("forecasts").element().then("currency"));
+        Proposition present = new Proposition.Present(currency, true, "present");
+        Quantity.HowManyDifferentMeet.Selection.OfEachValue alone =
+                new Quantity.HowManyDifferentMeet.Selection.OfEachValue(present);
+        Quantity.TheValue value = new Quantity.TheValue.AtAPlace(currency);
+        assertNotNull(Quantity.HowManyDifferentMeet.of(ds, value, alone));
+        assertTrue(Quantity.HowManyDifferentMeet.of(ds, value, alone).across());
+        Quantity.HowManyDifferentMeet.Selection.OfEachValue withTheDesk =
+                new Quantity.HowManyDifferentMeet.Selection.OfEachValue(new Proposition.All(
+                        List.of(present, new Proposition.Present(new DecisionSubject.AnInput(
+                                desk.then("floor")), true, "floor")), "both"));
+        assertNull(Quantity.HowManyDifferentMeet.of(ds, value, withTheDesk));
     }
 
     /**
@@ -405,6 +446,376 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         behavior.at("/partition/notRead").forEach(each -> unread.add(each.path("position")
                 .asString() + " " + each.path("reason").asString()));
         assertEquals(List.of("fs[*].amount rule_about_a_run"), unread);
+    }
+
+    /**
+     * Over the lists inside the elements of a list put end to end, the different values of the
+     * elements a filter kept are one count however it is written: the filter above the flattening
+     * or inside its closure, a map above it, a fold gathering the values. And a fold filing the
+     * elements of all of the lists under their keys is the values whose total meets what keeps an
+     * entry.
+     */
+    @Test
+    void everyWayOfCountingTheValuesKeptAcrossTheListsOfAFlatteningIsOneCount() {
+        for (String count : List.of(
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.flatMap(d -> d.forecasts, ds)))))",
+                "Set.size(Set.fromList(List.map(.currency, List.flatMap(d ->"
+                        + " List.filter(f -> f.amount > 0, d.forecasts), ds))))",
+                "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
+                        + " List.filter(f -> f.amount > 0, List.flatMap(d -> d.forecasts, ds))))",
+                "Map.size(filed(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.flatMap(d -> d.forecasts, ds)))))")) {
+            JsonNode line = only(differentCounts(reportOf(ACROSS.formatted(count + " == 1"))));
+            assertEquals(ACROSS_OF_EACH_ELEMENT,
+                    line.at("/lineId/target/quantity/counted").asString(), count);
+        }
+        JsonNode line = only(differentCounts(reportOf(ACROSS.formatted(
+                "Map.size(Map.filterEntries((_, n) -> n > 0,"
+                        + " totalsOf(List.flatMap(d -> d.forecasts, ds)))) == 1"))));
+        assertEquals(ACROSS_OF_EACH_VALUE, line.at("/lineId/target/quantity/counted").asString());
+    }
+
+    /**
+     * A value two lists hold is one value: a currency in two desks is counted once, whichever
+     * desk holds which of its forecasts, and not once for each desk.
+     */
+    @Test
+    void aValueTwoOfTheListsHoldIsCountedOnce() {
+        String kept = "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                + " List.flatMap(d -> d.forecasts, ds))))) == 1";
+        JsonNode once = only(differentCounts(reportOf(ACROSS.formatted(kept) + """
+                example f
+                    | "one currency in two desks" : ([
+                        Desk { forecasts = [Forecast { currency = "USD", amount = 10 }] },
+                        Desk { forecasts = [Forecast { currency = "USD", amount = 20 },
+                            Forecast { currency = "EUR", amount = -5 }] }]) -> 1
+                """)));
+        assertTrue(pointAt(once, "on").path("hit").asBoolean(), once::toString);
+
+        JsonNode two = only(differentCounts(reportOf(ACROSS.formatted(kept) + """
+                example f
+                    | "two currencies, one in each desk" : ([
+                        Desk { forecasts = [Forecast { currency = "USD", amount = 10 }] },
+                        Desk { forecasts = [Forecast { currency = "EUR", amount = 20 }] }]) -> 0
+                """)));
+        assertFalse(pointAt(two, "on").path("hit").asBoolean(), two::toString);
+        assertTrue(pointsAt(two, "off").stream().anyMatch(off -> off.path("hit").asBoolean()
+                && "2".equals(off.path("against").asString())), two::toString);
+    }
+
+    /**
+     * Asked of what the elements under a value come to, they are those of every list: {@code 10}
+     * in one desk and {@code -10} in another total nought, and keep nothing.
+     */
+    @Test
+    void aValueIsCountedWhereWhatItsElementsInEveryListComeToMeetsTheStatement() {
+        JsonNode cancelled = only(differentCounts(reportOf(ACROSS.formatted(
+                "Map.size(Map.filterEntries((_, n) -> n > 0,"
+                        + " totalsOf(List.flatMap(d -> d.forecasts, ds)))) == 1") + """
+                example f
+                    | "one above nought in each of two desks" : ([
+                        Desk { forecasts = [Forecast { currency = "USD", amount = 10 }] },
+                        Desk { forecasts = [Forecast { currency = "USD", amount = -10 }] }]) -> 0
+                """)));
+        assertFalse(pointAt(cancelled, "on").path("hit").asBoolean(), cancelled::toString);
+        assertTrue(pointsAt(cancelled, "off").stream().anyMatch(off -> off.path("hit").asBoolean()
+                && "0".equals(off.path("against").asString())), cancelled::toString);
+    }
+
+    /**
+     * The rows composed for a line on the values across the lists share the elements out over
+     * them, and answer as their points say: two forecasts of one currency meeting the statement
+     * two ways, on either side of five, the forecasts under one currency totalling a number, and
+     * a total of a hundred and fifty where no forecast in any desk is above a hundred.
+     */
+    @Test
+    void everyRowComposedAcrossTheListsAnswersAsItsPointSays() {
+        String desk = DECLARED + "data Desk = { forecasts: List<Forecast> }\n\n";
+        everyRowComposedAnswersAsItsPointSays(desk + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if Set.size(Set.fromList(List.map(.currency,
+                    List.filter(f -> f.amount > 0 && f.amount /= 5,
+                        List.flatMap(d -> d.forecasts, ds))))) == 2 then 1 else 0
+                """, "f/#different ds [ds[*].forecasts[*].currency] where"
+                + " [ds[*].forecasts[*].amount /= 5 && ds[*].forecasts[*].amount > 0]");
+        for (String total : List.of("n > 0", "n == 0")) {
+            everyRowComposedAnswersAsItsPointSays(desk + """
+                    behavior f : (ds: List<Desk>) -> Int
+                    let f (ds) = if Map.size(Map.filterEntries((_, n) -> %s,
+                        totalsOf(List.flatMap(d -> d.forecasts, ds)))) == 1 then 1 else 0
+                    """.formatted(total), "f/#different ds [ds[*].forecasts[*].currency] where"
+                    + " [total(ds[*].forecasts[*].amount by currency) "
+                    + total.substring("n ".length()) + "]");
+        }
+        everyRowComposedAnswersAsItsPointSays(desk + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if List.all(d -> List.all(f -> f.amount <= 100, d.forecasts), ds)
+                    then if Map.size(Map.filterEntries((_, n) -> n == 150,
+                        totalsOf(List.flatMap(d -> d.forecasts, ds)))) == 1 then 1 else 0
+                    else 2
+                """, "f/#different ds [ds[*].forecasts[*].currency] where"
+                + " [total(ds[*].forecasts[*].amount by currency) == 150]");
+    }
+
+    /**
+     * What keeps an element may read the list holding it, and then it turns on which list each
+     * element is put in, as it does when it reads the element holding the list.
+     */
+    @Test
+    void aStatementReadingTheListHoldingTheElementHasNoRowsChosenAcrossThem() {
+        JsonNode line = only(differentCounts(reportOf(ACROSS.formatted(
+                "Set.size(Set.fromList(List.map(.currency, List.flatMap(d ->"
+                        + " List.filter(f -> f.amount > List.length(d.forecasts), d.forecasts),"
+                        + " ds)))) == 1"))));
+        for (JsonNode item : line.path("items")) {
+            assertFalse(item.path("knownWritable").asBoolean(), item::toString);
+        }
+    }
+
+    /** Forecasts with a region, kept by it on the way to the count. */
+    private static final String REGIONED = """
+            module probe
+
+            data Forecast = { currency: String, amount: Int, region: String }
+            data Desk = { forecasts: List<Forecast> }
+
+            let totalsOf (fs: List<Forecast>): Map<String, Int> =
+                List.fold((acc, f) -> Map.updateOrInsert(f.currency, f.amount,
+                    n -> n + f.amount, acc), Map.empty, fs)
+
+            """;
+
+    /**
+     * Two filters on the way are one statement, both of them: one above the other, over one list
+     * or over the lists a flattening puts end to end, or one above the flattening and one inside
+     * its closure — and a fold gathering the values reads them as the law does.
+     */
+    @Test
+    void twoFiltersOnTheWayAreOneStatementOfBoth() {
+        String direct = REGIONED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if %s == 1 then 1 else 0
+                """;
+        String across = REGIONED + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if %s == 1 then 1 else 0
+                """;
+        for (String count : List.of(
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.filter(f -> f.region == \"EU\", fs)))))",
+                "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
+                        + " List.filter(f -> f.amount > 0, List.filter(f -> f.region == \"EU\","
+                        + " fs))))")) {
+            JsonNode line = only(differentCounts(reportOf(direct.formatted(count))));
+            assertEquals("#different fs [fs[*].currency] where [fs[*].amount > 0"
+                    + " && fs[*].region == EU]",
+                    line.at("/lineId/target/quantity/counted").asString(), count);
+        }
+        for (String count : List.of(
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.filter(f -> f.region == \"EU\","
+                        + " List.flatMap(d -> d.forecasts, ds))))))",
+                "Set.size(Set.fromList(List.map(.currency, List.filter(f -> f.amount > 0,"
+                        + " List.flatMap(d -> List.filter(f -> f.region == \"EU\", d.forecasts),"
+                        + " ds)))))")) {
+            JsonNode line = only(differentCounts(reportOf(across.formatted(count))));
+            assertEquals("#different ds [ds[*].forecasts[*].currency] where"
+                    + " [ds[*].forecasts[*].amount > 0 && ds[*].forecasts[*].region == EU]",
+                    line.at("/lineId/target/quantity/counted").asString(), count);
+        }
+    }
+
+    /**
+     * An element the closure of a flattening kept is an element of the list inside the outer
+     * element, and a statement about it reads that element's places — not the outer element's,
+     * which holds no such field.
+     */
+    @Test
+    void aStatementAboutAnElementAFlatteningsClosureKeptReadsThatElement() {
+        JsonNode behavior = behaviorOf(reportOf(REGIONED + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if List.any(f -> f.amount > 0, List.flatMap(d ->
+                    List.filter(g -> g.region == "EU", d.forecasts), ds)) then 1 else 0
+                """));
+        List<String> axes = new ArrayList<>();
+        behavior.at("/partition/boundaries").forEach(each -> axes.add(each.path("axis")
+                .asString()));
+        assertTrue(axes.contains("f/ds[*].forecasts[*].amount"), axes::toString);
+        List<String> read = new ArrayList<>();
+        behavior.at("/partition/notRead").forEach(each -> read.add(each.path("position")
+                .asString()));
+        assertFalse(read.contains("ds[*].amount"), read::toString);
+    }
+
+    /**
+     * Where a filter kept some elements before a fold filed them under their keys, a key is
+     * counted where some kept element holds it and what the kept ones under it total meets the
+     * statement: the elements of other regions add nothing to the total, and a currency only they
+     * hold is no entry. Over one list and over the lists a flattening puts end to end.
+     */
+    @Test
+    void theEntriesOfWhatAFilterKeptAreTheValuesItKeptWhoseTotalMeetsTheStatement() {
+        String direct = REGIONED + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.region == "EU", fs)))) == 1 then 1 else 0
+                """;
+        String kept = "#different fs [fs[*].currency] where [total(fs[*].amount kept by fs"
+                + " meeting Ordered[term=fs[*].region, at=EU, proposition=EQ] by currency) > 0"
+                + " && fs[*].region == EU]";
+        JsonNode line = only(differentCounts(reportOf(direct + """
+                example f
+                    | "one EU currency above nought" : ([
+                        Forecast { currency = "USD", amount = 10, region = "EU" },
+                        Forecast { currency = "USD", amount = -20, region = "US" },
+                        Forecast { currency = "JPY", amount = 5, region = "US" }]) -> 1
+                """)));
+        assertEquals(kept, line.at("/lineId/target/quantity/counted").asString());
+        assertTrue(pointAt(line, "on").path("hit").asBoolean(), line::toString);
+        everyRowComposedAnswersAsItsPointSays(direct.substring("module probe\n\n".length()),
+                "f/" + kept);
+
+        JsonNode across = only(differentCounts(reportOf(REGIONED + """
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.region == "EU",
+                        List.flatMap(d -> d.forecasts, ds))))) == 1 then 1 else 0
+                """)));
+        assertEquals("#different ds [ds[*].forecasts[*].currency] where"
+                + " [total(ds[*].forecasts[*].amount kept by ds[*].forecasts meeting"
+                + " Ordered[term=ds[*].forecasts[*].region, at=EU, proposition=EQ] by currency)"
+                + " > 0 && ds[*].forecasts[*].region == EU]",
+                across.at("/lineId/target/quantity/counted").asString());
+    }
+
+    /** Movements filed under the field each case of them names its stock by. */
+    private static final String MOVEMENTS = """
+            data Receipt = { sku: String, quantity: Int }
+            data Issue = { sku: String, quantity: Int }
+            data Stocktake = { sku: String, counted: Int }
+            data Movement = Receipt | Issue | Stocktake
+
+            let summed (ms: List<Movement>): Map<String, Int> =
+                List.fold((acc, m) -> match m with
+                        | Receipt { sku, quantity } ->
+                            Map.updateOrInsert(sku, quantity, on -> on + quantity, acc)
+                        | Issue { sku, quantity } ->
+                            Map.updateOrInsert(sku, 0 - quantity, on -> on - quantity, acc)
+                        | Stocktake { sku, counted } ->
+                            Map.updateOrInsert(sku, counted, on -> on + counted, acc),
+                    Map.empty, ms)
+
+            let onHand (ms: List<Movement>): Map<String, Int> =
+                List.fold((acc, m) -> match m with
+                        | Receipt { sku, quantity } ->
+                            Map.updateOrInsert(sku, quantity, on -> on + quantity, acc)
+                        | Issue { sku, quantity } ->
+                            Map.updateOrInsert(sku, 0 - quantity, on -> on - quantity, acc)
+                        | Stocktake { sku, counted } -> Map.insert(sku, counted, acc),
+                    Map.empty, ms)
+
+            behavior f : (ms: List<Movement>) -> Int
+            """;
+
+    /** The value a movement is filed under, the field its case names. */
+    private static final String SKU = "when ms[*]@Receipt[sum-case] then"
+            + " ms[*]@Receipt[sum-case].sku when ms[*]@Issue[sum-case] then"
+            + " ms[*]@Issue[sum-case].sku when ms[*]@Stocktake[sum-case] then"
+            + " ms[*]@Stocktake[sum-case].sku";
+
+    /**
+     * A fold filing each element under the field its case names is a count of the different
+     * values those fields hold: a receipt and a stocktake of one sku are one entry. Its entries a
+     * statement keeps are the values whose total meets it — added up over every case, or from the
+     * last stocktake put — and a row at each point of the line answers as its point says.
+     */
+    @Test
+    void theEntriesOfAFoldFilingEachCaseUnderAFieldOfItsOwnAreCountedByTheValue() {
+        String summed = "module probe\n\n" + MOVEMENTS + """
+                let f (ms) = if Map.size(Map.filterEntries((_, on) -> on > 0, summed(ms))) == 1
+                    then 1 else 0
+                """;
+        JsonNode once = only(differentCounts(reportOf(summed + """
+                example f
+                    | "a receipt and a stocktake of one sku" : ([
+                        Receipt { sku = "A", quantity = 5 },
+                        Stocktake { sku = "A", counted = 3 }]) -> 1
+                    | "two skus" : ([Receipt { sku = "A", quantity = 5 },
+                        Stocktake { sku = "B", counted = 3 }]) -> 0
+                """)));
+        assertTrue(once.at("/lineId/target/quantity/counted").asString()
+                .startsWith("#different ms [" + SKU + "] where [total("), once::toString);
+        assertTrue(pointAt(once, "on").path("hit").asBoolean(), once::toString);
+        assertTrue(pointsAt(once, "off").stream().anyMatch(off -> off.path("hit").asBoolean()
+                && "2".equals(off.path("against").asString())), once::toString);
+        everyRowComposedAnswersAsItsPointSays(summed.substring("module probe\n\n".length()),
+                "f/" + once.at("/lineId/target/quantity/counted").asString());
+
+        String onHand = "module probe\n\n" + MOVEMENTS + """
+                let f (ms) = if Map.size(Map.filterEntries((_, on) -> on > 0, onHand(ms))) == 1
+                    then 1 else 0
+                """;
+        // A stocktake puts what it counted in place of what was on hand: counted last, nought is
+        // what the sku has.
+        JsonNode put = only(differentCounts(reportOf(onHand + """
+                example f
+                    | "a receipt, then nothing counted" : ([
+                        Receipt { sku = "A", quantity = 5 },
+                        Stocktake { sku = "A", counted = 0 }]) -> 0
+                    | "nothing counted, then a receipt" : ([
+                        Stocktake { sku = "A", counted = 0 },
+                        Receipt { sku = "A", quantity = 5 }]) -> 1
+                """)));
+        assertTrue(pointAt(put, "on").path("hit").asBoolean(), put::toString);
+        assertTrue(pointsAt(put, "off").stream().anyMatch(off -> off.path("hit").asBoolean()
+                && "0".equals(off.path("against").asString())), put::toString);
+        everyRowComposedAnswersAsItsPointSays(onHand.substring("module probe\n\n".length()),
+                "f/" + put.at("/lineId/target/quantity/counted").asString());
+    }
+
+    /**
+     * A line on what the kept elements under a key total has rows composed for it: each element
+     * written inside what keeps it — a number away from five, a region held at one text — so
+     * every element written is kept and the total is theirs.
+     */
+    @Test
+    void aLineOnWhatTheKeptElementsUnderAKeyTotalHasRowsComposedForIt() {
+        String declared = REGIONED.substring("module probe\n\n".length());
+        everyRowComposedAnswersAsItsPointSays(declared + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.amount /= 5, fs)))) >= 1 then 1 else 0
+                """, "f/total(fs[*].amount kept by fs meeting !Affine[form=LinearForm["
+                + "constant=-5, coefs={fs[*].amount=1}], proposition=EQ] by currency)");
+        everyRowComposedAnswersAsItsPointSays(declared + """
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if Map.size(Map.filterEntries((_, n) -> n > 0,
+                    totalsOf(List.filter(f -> f.region == "EU", fs)))) >= 1 then 1 else 0
+                """, "f/total(fs[*].amount kept by fs meeting Ordered[term=fs[*].region, at=EU,"
+                + " proposition=EQ] by currency)");
+    }
+
+    /**
+     * What keeps an element may read the element of the outer list holding its list, and then it
+     * turns on which list each element is put in: no row is composed by choosing the elements as
+     * one container, and none is said to be.
+     */
+    @Test
+    void aStatementReadingTheElementHoldingTheListHasNoRowsChosenAcrossThem() {
+        JsonNode line = only(differentCounts(reportOf("module probe\n\n" + DECLARED + """
+                data Desk = { floor: Int, forecasts: List<Forecast> }
+
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if Set.size(Set.fromList(List.map(.currency, List.flatMap(d ->
+                    List.filter(f -> f.amount > d.floor, d.forecasts), ds)))) == 1 then 1 else 0
+                """)));
+        assertEquals("#different ds [ds[*].forecasts[*].currency] where"
+                        + " [ds[*].floor - ds[*].forecasts[*].amount < 0]",
+                line.at("/lineId/target/quantity/counted").asString());
+        for (JsonNode item : line.path("items")) {
+            assertFalse(item.path("knownWritable").asBoolean(), item::toString);
+        }
     }
 
     /**

@@ -332,10 +332,10 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     void aReadingOfANumberOfAnotherKindThanTheLawsIsRefused() {
         Derivation.TheCall call = callOfGet();
         Quantity differentInTheList = new Quantity.HowManyDifferent(new DecisionSubject.AnInput(B),
-                new DecisionSubject.AnInput(B.element()));
+                new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(B.element())));
         Quantity metInTheList = new Quantity.HowManyMeet(new DecisionSubject.AnInput(B), truth(B.element()));
         Quantity differentAtTheIndex = new Quantity.HowManyDifferent(new DecisionSubject.AnInput(A),
-                new DecisionSubject.AnInput(A.element()));
+                new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(A.element())));
         for (Derivation ofAnotherKind : List.of(readingOfGet(INDEX, differentInTheList),
                 readingOfGet(INDEX, metInTheList), readingOfGet(differentAtTheIndex, LENGTH))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,

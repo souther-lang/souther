@@ -857,7 +857,7 @@ public sealed interface RowDemand {
             Set<TermPath> out = new LinkedHashSet<>();
             out.add(AStatementAtARow.elementsOf(count).container().inputPosition());
             if (count instanceof Quantity.HowManyDifferentMeet different) {
-                out.add(different.ofTheElement().inputPosition());
+                out.addAll(different.ofTheElement().places());
             }
             terms().forEach(term -> out.add(term.subjectPath()));
             return Collections.unmodifiableSet(out);

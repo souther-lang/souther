@@ -41,7 +41,7 @@ class TheCountsOfSeveralKeysTriedAreHeldToAFigureOfTheirOwnTest {
         AtomicInteger composed = new AtomicInteger();
         CardinalityComposer.ValuesCountedFor search = new CardinalityComposer.ValuesCountedFor(
                 values, wanted, NumericDomain.Bounds.OPEN, List.of(Count.of(100)),
-                (counted, others) -> {
+                (counted, others, room) -> {
                     composed.incrementAndGet();
                     return nothingComposes();
                 });
@@ -68,7 +68,7 @@ class TheCountsOfSeveralKeysTriedAreHeldToAFigureOfTheirOwnTest {
         AtomicInteger composed = new AtomicInteger();
         CardinalityComposer.ValuesCountedFor search = new CardinalityComposer.ValuesCountedFor(
                 values, wanted, NumericDomain.Bounds.OPEN, List.of(),
-                (counted, others) -> {
+                (counted, others, room) -> {
                     composed.incrementAndGet();
                     return nothingComposes();
                 });
@@ -89,7 +89,7 @@ class TheCountsOfSeveralKeysTriedAreHeldToAFigureOfTheirOwnTest {
         AtomicInteger composed = new AtomicInteger();
         CardinalityComposer.ValuesCountedFor search = new CardinalityComposer.ValuesCountedFor(
                 values, wanted, NumericDomain.Bounds.OPEN, List.of(),
-                (counted, others) -> {
+                (counted, others, room) -> {
                     composed.incrementAndGet();
                     return nothingComposes();
                 });
