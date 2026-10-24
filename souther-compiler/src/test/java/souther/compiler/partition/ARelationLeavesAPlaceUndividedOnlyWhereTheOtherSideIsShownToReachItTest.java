@@ -379,6 +379,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * What the comparison works out itself narrows its numbers by one another as much as by
+     * themselves: {@code a + b + M - M} is an {@code Int} at every step only where {@code a + b}
+     * is nought, so the only row that reaches {@code >= 1} is the one at nought, and it fails.
+     * No line is drawn on either number, which would be drawn at the rows that stop.
+     */
+    @Test
+    void aSumTheComparisonWorksOutItselfNarrowsItsNumbersByEachOther() {
+        String bit = "data Small = Int invariant value >= 0 && value <= 1";
+        String body = "a.value + b.value + 9223372036854775807 - 9223372036854775807 >= 1";
+        assertEquals(List.of(), classesAt("a: Small, b: Small", bit, body, "a"));
+        assertEquals(List.of(), classesAt("a: Small, b: Small", bit, body, "b"));
+    }
+
+    /**
      * A sum the run worked out narrows both its numbers by the other: {@code a + b} is an
      * {@code Int} only where {@code b} is nought or one, for an {@code a} one below the greatest,
      * so a {@code b} above it is no row of the comparison {@code a < b} and no line is drawn
@@ -521,15 +535,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * above nought stops at the first sum: the way holds that as a statement of {@code a}, so the
      * comparison past it is not divided as it would be for all the {@code a}. And
      * {@code p + a + (M - 10) - (M - 10) != 0} stops wherever {@code p + a} is above ten, though
-     * the form fits for amounts up to a million: no row has {@code a} above ten, so it is not
-     * divided at thirty as it would be for all the {@code a}, and {@code b} is.
+     * the form fits for amounts up to a million: no row has {@code a} above ten, so {@code a} is
+     * related to {@code b} and not divided at thirty as it would be for all the {@code a}, and
+     * {@code b} is not shown to take every value.
      */
     @Test
     void aStatementTheSourceMayNotWorkOutIsNotTakenOffTheWay() {
         String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
         assertEquals(Map.of("a", RELATES), pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
                 "a.value + 9223372036854775807 - 9223372036854775807 == p.value"));
-        assertEquals(Map.of("b", DIVIDED),
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
                 pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
                         "p.value + a.value + 9223372036854775797 - 9223372036854775797 == 0"));
     }

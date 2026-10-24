@@ -824,14 +824,41 @@ final class DemandReading {
         }
 
         /**
-         * What the arithmetic of the comparison itself asks of a row, as far as the relation does
-         * not read it: the numbers it narrows one at a time, and no tie among the places it is
-         * over. Those places are the sides of the relation, which the reading of the relation
-         * ties to one another as it ties them, and not a run's working out something before it.
+         * What the arithmetic of the comparison itself asks of a row, as far as a region carries
+         * it without refusing the runs of the numbers it names.
+         *
+         * <p>A condition on several numbers makes each of them run as far as the others let it,
+         * which a region says by not answering for the whole run of any: a sum of two numbers
+         * that run to the ends of the type holds back only where the type ends, which the
+         * relation reads as the arithmetic's line, and carrying it would leave every such sum
+         * unread. So the numbers of the comparison alone are told when it binds inside the
+         * declarations — every number it names is held at both ends, and some row of them
+         * breaks it. The ties and the operators not said are the run's before the comparison,
+         * and the comparison's are its relation's.
          */
-        Answered ofTheRelationItself() {
-            return new Answered(narrowing.stream().filter(each -> each.terms().size() == 1)
+        Answered ofTheRelationItself(SearchRegion declarations) {
+            return new Answered(narrowing.stream()
+                    .filter(each -> each.terms().size() == 1
+                            || bindsInsideTheDeclaredRuns(each, declarations))
                     .toList(), List.of(), false);
+        }
+
+        /**
+         * Whether {@code each} is bound by the declarations alone: every number it names is held
+         * at both ends, and some row of those runs breaks it.
+         */
+        private static boolean bindsInsideTheDeclaredRuns(TakenConstraint each,
+                                                          SearchRegion declarations) {
+            if (!(each instanceof TakenConstraint.Affine(var form, var rel))) {
+                return false;
+            }
+            boolean everyNumberIsHeld = form.coefs().keySet().stream().allMatch(term ->
+                    term instanceof NumericTerm.FromOnePosition one
+                            && declarations.wholeRunOf(one) != null
+                            && declarations.wholeRunOf(one).min() != null
+                            && declarations.wholeRunOf(one).max() != null);
+            return everyNumberIsHeld
+                    && !TakenConstraint.holdsOverTheRunsOf(form, rel, declarations);
         }
 
         /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */

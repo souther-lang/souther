@@ -354,6 +354,17 @@ public sealed interface Reachability {
                     narrowedBy, gotPast, tied, unsaid);
         }
 
+        /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
+         *  denial; a condition of a shape that has none is not shown to be met. */
+        private static boolean heldAtEveryRow(TakenConstraint each, SearchRegion before,
+                                              SearchRegion region) {
+            return each instanceof TakenConstraint.Affine(var form, var rel)
+                    && (TakenConstraint.holdsOverTheRunsOf(form, rel, before)
+                            || TakenConstraint.nothingMeetsAll(
+                                    List.of(new TakenConstraint.Affine(form, rel.denied())),
+                                    region));
+        }
+
         /** Whether taking {@code each} in moves where a number it names runs or what is held
          *  apart from it, going from {@code before} to {@code after}. */
         private static boolean movesAny(TakenConstraint each, SearchRegion before,
@@ -387,7 +398,13 @@ public sealed interface Reachability {
             SearchRegion narrowed = region;
             for (TakenConstraint each : answered.narrowing()) {
                 SearchRegion next = each.narrowing(narrowed);
-                if (movesAny(each, narrowed, next)) {
+                // One number that no run of moves is one the region already holds. Several say
+                // how they go together, which no run of one of them shows: a sum held below a
+                // greatest value leaves each its values and the pair fewer. Unless every row of
+                // the region meets it, which leaves them as they are.
+                boolean keeps = each.terms().size() > 1
+                        ? !heldAtEveryRow(each, region, narrowed) : movesAny(each, narrowed, next);
+                if (keeps) {
                     narrowing.add(each);
                     narrowed = next;
                 }

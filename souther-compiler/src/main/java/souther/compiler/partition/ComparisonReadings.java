@@ -547,11 +547,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             DemandReading.Answered ofIt = operators.answers().isPresent()
                     ? DemandReading.regionAnswered(operators.answers().get(), in.read())
                     : DemandReading.Answered.NOTHING;
-            ofIt = ofIt.and(DemandReading.Answered.leavingUnsaid(operators));
             if (part == comparison) {
-                ofIt = ofIt.ofTheRelationItself();
+                out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
+            } else {
+                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators)));
             }
-            out = out.and(ofIt);
         }
         return out;
     }

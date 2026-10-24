@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -9,6 +11,7 @@ import souther.compiler.numeric.Rel;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -68,6 +71,47 @@ public sealed interface TakenConstraint {
      */
     static boolean nothingMeetsAll(List<TakenConstraint> these, SearchRegion rules) {
         return nothingIsLeftFor(these, narrowedBy(these, rules));
+    }
+
+    /**
+     * Whether {@code form rel 0} holds at every point of the runs {@code region} holds each
+     * number it names to, shown by the form's least and greatest value over them: each weight at
+     * the end of its number's run it is furthest from nought. False where a number has no run
+     * held at both ends, which says nothing of whether the condition holds.
+     */
+    static boolean holdsOverTheRunsOf(LinearForm<NumericTerm> form, Rel rel,
+                                      SearchRegion region) {
+        ExactRatio low = form.constant();
+        ExactRatio high = form.constant();
+        for (Map.Entry<NumericTerm, ExactRatio> weighed : form.coefs().entrySet()) {
+            if (!(weighed.getKey() instanceof NumericTerm.FromOnePosition one)) {
+                return false;
+            }
+            NumericDomain.Bounds run = region.wholeRunOf(one);
+            if (run == null || !(run.min() != null && run.min().at() instanceof Count least)
+                    || !(run.max() != null && run.max().at() instanceof Count most)) {
+                return false;
+            }
+            ExactRatio atLeast = least.exactly().times(weighed.getValue()).orNull();
+            ExactRatio atMost = most.exactly().times(weighed.getValue()).orNull();
+            if (atLeast == null || atMost == null) {
+                return false;
+            }
+            boolean flipped = atLeast.compareTo(atMost) > 0;
+            low = low.plus(flipped ? atMost : atLeast).orNull();
+            high = high.plus(flipped ? atLeast : atMost).orNull();
+            if (low == null || high == null) {
+                return false;
+            }
+        }
+        return switch (rel) {
+            case LE -> high.signum() <= 0;
+            case LT -> high.signum() < 0;
+            case GE -> low.signum() >= 0;
+            case GT -> low.signum() > 0;
+            case EQ -> low.signum() == 0 && high.signum() == 0;
+            case NE -> low.signum() > 0 || high.signum() < 0;
+        };
     }
 
     /** {@code region} with each of {@code these} taken in. */
