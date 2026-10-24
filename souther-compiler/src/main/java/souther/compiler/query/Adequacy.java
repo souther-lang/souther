@@ -1759,38 +1759,17 @@ public final class Adequacy {
                         unanswered.regions().isEmpty() ? null : subjectOf(db, name, behavior);
                 RunPlacement against = placementOf(db, readInputs, source, placed, behavior);
                 RowReading observed = RowReadings.readingFor(byTarget, behavior);
+                InputDomain domain = readInputs.get(behavior);
+                CasesTheRowsTook cases = against == null || domain == null
+                        ? CasesTheRowsTook.none()
+                        : CasesTheRowsTook.of(rules, against.inputs(),
+                                readingOf(db, domain, source).quantities());
                 out.put(behavior, new DecisionEvidence(rules,
-                        whatTheRowsTook(behavior, rules, against, observed, numbering),
+                        whatTheRowsTook(behavior, rules, against, observed, numbering, cases),
                         subject == null ? Map.of()
-                                : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes()),
-                        DecisionEvidence.unmeasuredOf(behavior, casesUnseen(db, rules, against,
-                                observed, numbering, readInputs.get(behavior), source))));
+                                : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes())));
             });
             return Answer.of(Ordered.map(out));
-        }
-
-        /**
-         * The kinds of case a statement of the decision draws inside itself that none of the rows
-         * was seen in. Nothing where the decision draws none, or where the rows could not be put
-         * against its rules: then nothing was measured for this to weaken.
-         */
-        private static Set<CasesTheRowsTook.Kind> casesUnseen(Db db,
-                souther.compiler.partition.DecisionReading rules, RunPlacement against,
-                RowReading observed, Optional<SiteNumbering> numbering, InputDomain domain,
-                RuleReadingSource source) {
-            if (!rules.consultsWhichElementOfAKeyIsLast()
-                    && !rules.consultsASearchBelowTheNodesARowWrites()) {
-                return Set.of();
-            }
-            if (against == null || domain == null || !observed.recordedArms()) {
-                return Set.of();
-            }
-            List<ObservedInputs> rows = new ArrayList<>();
-            for (RowOutcome row : observed.rowsSeen()) {
-                rows.add(WitnessedRow.of(row, numbering).observed());
-            }
-            return CasesTheRowsTook.unseen(rules, against,
-                    readingOf(db, domain, source).quantities(), rows);
         }
 
         /**
@@ -1810,7 +1789,8 @@ public final class Adequacy {
         private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String behavior,
                 souther.compiler.partition.DecisionReading rules,
                 RunPlacement against,
-                RowReading observed, Optional<SiteNumbering> numbering) {
+                RowReading observed, Optional<SiteNumbering> numbering,
+                CasesTheRowsTook cases) {
             if (!observed.recordedArms()) {
                 return new Measurement.NotMeasured<>(DecisionEvidence.NotAsked.NOT_ASKED);
             }
@@ -1850,7 +1830,7 @@ public final class Adequacy {
                 watched.add(WitnessedRow.of(row, numbering));
             }
             return DecisionEvidence.of(rules.behavior(), against, watched,
-                    observed.measured().weakening());
+                    observed.measured().weakening(), cases);
         }
     }
 

@@ -10128,7 +10128,7 @@
     }, {
       "name" : "restockAnyZone",
       "implementation" : "implemented",
-      "rows" : 3,
+      "rows" : 4,
       "pending" : 0,
       "rowObligations" : [ {
         "obligationId" : {
@@ -10169,6 +10169,21 @@
         "at" : {
           "sourceId" : "4",
           "line" : 73,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockAnyZone",
+          "source" : "4",
+          "name" : "a zone at the floor with nothing inside it is fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 75,
           "column" : 7,
           "writtenAt" : {
             "kind" : "here"
@@ -10343,28 +10358,13 @@
     }, {
       "name" : "everyZoneStocked",
       "implementation" : "implemented",
-      "rows" : 3,
+      "rows" : 4,
       "pending" : 0,
       "rowObligations" : [ {
         "obligationId" : {
           "behavior" : "everyZoneStocked",
           "source" : "4",
           "name" : "zones at the floor everywhere are fine"
-        },
-        "at" : {
-          "sourceId" : "4",
-          "line" : 84,
-          "column" : 7,
-          "writtenAt" : {
-            "kind" : "here"
-          }
-        },
-        "disposition" : "met"
-      }, {
-        "obligationId" : {
-          "behavior" : "everyZoneStocked",
-          "source" : "4",
-          "name" : "a zone inside one below the floor is restocked"
         },
         "at" : {
           "sourceId" : "4",
@@ -10379,11 +10379,41 @@
         "obligationId" : {
           "behavior" : "everyZoneStocked",
           "source" : "4",
-          "name" : "a zone below the floor is restocked"
+          "name" : "a zone at the floor with nothing inside it is fine"
         },
         "at" : {
           "sourceId" : "4",
           "line" : 88,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "everyZoneStocked",
+          "source" : "4",
+          "name" : "a zone inside one below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 90,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "everyZoneStocked",
+          "source" : "4",
+          "name" : "a zone below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 92,
           "column" : 7,
           "writtenAt" : {
             "kind" : "here"
@@ -10461,7 +10491,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "4",
-            "line" : 81,
+            "line" : 83,
             "column" : 31,
             "writtenAt" : {
               "kind" : "here"
@@ -10482,7 +10512,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "4",
-            "line" : 81,
+            "line" : 83,
             "column" : 31,
             "writtenAt" : {
               "kind" : "here"

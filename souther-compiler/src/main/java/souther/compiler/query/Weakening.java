@@ -779,9 +779,11 @@ public sealed interface Weakening {
      * decides was not measured.
      *
      * <p>The search is read as it is: what it asks of the node it starts at, and of that node having
-     * nothing below. Its cases are the node it starts at meeting what it asks, that node not
-     * meeting it and one below doing so, and no node doing so; this says some case the decision
-     * can come out in was not seen in any row ({@link CasesTheRowsTook}).
+     * nothing below. Its cases are the steps of the recursion: the node it starts at meeting what
+     * it asks; that node not meeting it and one below doing so; that node not meeting it with
+     * nothing below; and that node not meeting it with every child searched coming back empty.
+     * This says some case the decision can come out in was not seen in any row
+     * ({@link CasesTheRowsTook}).
      * About the behavior and not about a rule: every decision downstream of the search rests on
      * it.
      */

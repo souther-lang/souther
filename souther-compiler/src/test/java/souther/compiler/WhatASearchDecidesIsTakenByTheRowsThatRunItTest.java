@@ -130,28 +130,86 @@ class WhatASearchDecidesIsTakenByTheRowsThatRunItTest {
         }
     }
 
+    private static final String THE_TOP = """
+                | "the top" : (Node { v = 9, below = [] }) -> %s
+            """;
+
+    private static final String A_GRANDCHILD = """
+                | "a grandchild" :
+                    (Node { v = 0, below = [ Node { v = 0, below = [ Node { v = 9, below = [] } ] } ] })
+                    -> %s
+            """;
+
+    private static final String A_LEAF = """
+                | "a leaf" : (Node { v = 0, below = [] }) -> %s
+            """;
+
+    private static final String NOWHERE_THROUGH_THE_CHILDREN = """
+                | "nowhere through its children" :
+                    (Node { v = 0, below = [ Node { v = 1, below = [] } ] }) -> %s
+            """;
+
     /**
-     * Rows in every case of the search — found at the top, found only below it, found nowhere
-     * though there was something below — leave none of its cases unmeasured. The same for a
-     * search stated the other way round, every node meeting the denial.
+     * The cases of the search, in the rows that write them: the top meeting it, a node below doing
+     * so where the top does not, a node that fails with nothing below it, and one that fails after
+     * its children were searched and failed too. The two failures are two steps of the recursion,
+     * the base and the continuation, and the same outcome.
+     */
+    private static JsonNode behaviorWith(String model, String top, String grandchild, String leaf,
+                                         String children, String... outcomes) {
+        StringBuilder rows = new StringBuilder("example f\n");
+        String[] each = {top, grandchild, leaf, children};
+        int at = 0;
+        for (String row : each) {
+            if (row != null) {
+                rows.append(row.formatted(outcomes[at++]));
+            }
+        }
+        return behavior(model + rows);
+    }
+
+    /**
+     * Rows in every case of the search leave none of its cases unmeasured. The same for a search
+     * stated the other way round, every node meeting the denial.
      */
     @Test
     void rowsInEveryCaseOfTheSearchMeasureIt() {
-        String rows = """
-                example f
-                    | "the top" : (Node { v = 9, below = [] }) -> %s
-                    | "a grandchild" :
-                        (Node { v = 0, below = [ Node { v = 0, below = [ Node { v = 9, below = [] } ] } ] })
-                        -> %s
-                    | "nowhere below" : (Node { v = 0, below = [ Node { v = 1, below = [] } ] }) -> %s
-                """;
-        JsonNode some = behavior(SOME + rows.formatted("Yes", "Yes", "No"));
-        JsonNode every = behavior(EVERY + rows.formatted("No", "No", "Yes"));
+        JsonNode some = behaviorWith(SOME, THE_TOP, A_GRANDCHILD, A_LEAF,
+                NOWHERE_THROUGH_THE_CHILDREN, "Yes", "Yes", "No", "No");
+        JsonNode every = behaviorWith(EVERY, THE_TOP, A_GRANDCHILD, A_LEAF,
+                NOWHERE_THROUGH_THE_CHILDREN, "No", "No", "Yes", "Yes");
 
         assertFalse(weakening(some).contains("reachable_node_cases_unmeasured"),
                 () -> "weakened by " + weakening(some));
         assertFalse(weakening(every).contains("reachable_node_cases_unmeasured"),
                 () -> "weakened by " + weakening(every));
+    }
+
+    /**
+     * A search that failed only where there was nothing below the node is not measured where it
+     * fails after searching what is below: no row went through the step of the recursion that
+     * comes back empty.
+     */
+    @Test
+    void aSearchThatFailedOnlyAtALeafIsNotMeasuredWhereItFailsThroughItsChildren() {
+        JsonNode some = behaviorWith(SOME, THE_TOP, A_GRANDCHILD, A_LEAF, null, "Yes", "Yes", "No");
+        JsonNode every = behaviorWith(EVERY, THE_TOP, A_GRANDCHILD, A_LEAF, null,
+                "No", "No", "Yes");
+
+        assertWentWithoutWhatIsBelow(some, "t.below[*]");
+        assertWentWithoutWhatIsBelow(every, "t.below[*]");
+    }
+
+    /** And the other way round: failing only through its children leaves the base unmeasured. */
+    @Test
+    void aSearchThatFailedOnlyThroughItsChildrenIsNotMeasuredWhereItFailsAtALeaf() {
+        JsonNode some = behaviorWith(SOME, THE_TOP, A_GRANDCHILD, null,
+                NOWHERE_THROUGH_THE_CHILDREN, "Yes", "Yes", "No");
+        JsonNode every = behaviorWith(EVERY, THE_TOP, A_GRANDCHILD, null,
+                NOWHERE_THROUGH_THE_CHILDREN, "No", "No", "Yes");
+
+        assertWentWithoutWhatIsBelow(some, "t.below[*]");
+        assertWentWithoutWhatIsBelow(every, "t.below[*]");
     }
 
     /**

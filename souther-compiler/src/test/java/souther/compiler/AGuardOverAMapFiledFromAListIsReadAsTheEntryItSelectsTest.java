@@ -279,14 +279,9 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         assertEquals(List.of(), errors(compilation), () -> report(compilation));
     }
 
-    /** Weakening words of a model measured with {@code rows} written for it. */
+    /** Weakening words of {@link #MODEL} measured with {@code rows} written for it. */
     private static List<String> weakeningWith(String rows) throws Exception {
-        Compilation compilation = measured(MODEL + "\nexample f\n" + rows);
-        assertEquals(List.of(), errors(compilation), () -> report(compilation));
-        List<String> words = new ArrayList<>();
-        collectWeakening(JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts()))), words);
-        return words;
+        return weakeningOf(MODEL + "\nexample f\n" + rows);
     }
 
     /**

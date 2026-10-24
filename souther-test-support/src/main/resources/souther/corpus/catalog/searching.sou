@@ -72,6 +72,8 @@ example restockAnyZone
         (Zone { count = 5, zones = [ Zone { count = 0, zones = [] } ] }) -> Restock
     | "zones at the floor everywhere are fine" :
         (Zone { count = 3, zones = [ Zone { count = 4, zones = [] } ] }) -> Fine
+    | "a zone at the floor with nothing inside it is fine" :
+        (Zone { count = 3, zones = [] }) -> Fine
 
 // Whether every zone at or under this one is at the floor.
 let stocked (zone: Zone): Bool =
@@ -83,6 +85,8 @@ let everyZoneStocked (zone) = if stocked(zone) then Fine else Restock
 example everyZoneStocked
     | "zones at the floor everywhere are fine" :
         (Zone { count = 3, zones = [ Zone { count = 4, zones = [] } ] }) -> Fine
+    | "a zone at the floor with nothing inside it is fine" :
+        (Zone { count = 3, zones = [] }) -> Fine
     | "a zone inside one below the floor is restocked" :
         (Zone { count = 5, zones = [ Zone { count = 0, zones = [] } ] }) -> Restock
     | "a zone below the floor is restocked" :

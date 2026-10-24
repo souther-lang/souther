@@ -6,7 +6,6 @@ import souther.compiler.meaning.Proposition;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,10 +27,13 @@ import java.util.Set;
  * it — a row that switches the statement off and holds a key twice is an input the statement would
  * tell apart and was not asked.
  *
- * <p>The cases of a search are the inductive ones and not depths: the node it starts at meets what
- * it asks; that node does not and the search still finds one below; or it finds none. A row is in
- * the first two where the search came out finding one, and which of them is what the statement
- * asks of the node it starts at, read off the row.
+ * <p>The cases of a search are the steps of the recursion and not depths: the node it starts at
+ * meets what it asks; that node does not and the search finds one below; that node does not and has
+ * nothing below, where the recursion stops empty; or that node does not and every child searched
+ * came back empty, where it continues and comes back empty. A row is in the first two where the
+ * search came out finding one and in the last two where it did not, and which of the two is what
+ * the statement asks of the node it starts at — whether it meets it, or has nothing below —
+ * answered at the row.
  *
  * <p>The cases of a key held twice are of one order at a time. A statement resting on two maps,
  * each filed from a list of its own, rests on two orders, and what one decides is not what the
@@ -47,14 +49,21 @@ public final class CasesTheRowsTook {
 
     /** A kind of case some statement of the decision draws inside itself. */
     public enum Kind {
-        /** Where a search from a node finds what it asks: at the node, below it, or nowhere. */
+        /** The step of the recursion a search from a node took: where it found what it asks, and
+         *  where it came back empty. */
         A_NODE_A_SEARCH_REACHES,
         /** Which element of a key held twice a map filed from a list holds. */
         THE_ORDER_OF_A_REPEATED_KEY
     }
 
-    /** The cases of a search from a node. */
-    private enum OfASearch { AT_THE_NODE, BELOW_IT, NOWHERE }
+    /**
+     * The cases of a search from a node, which are the steps of the recursion it is and not depths:
+     * the node meets what it asks, and the search stops there; the node does not and the search
+     * goes on to its children and finds one below; the node does not and has nothing below, which
+     * is where the recursion stops empty; or the node does not and every child searched came back
+     * empty, which is the recursion continuing and coming back empty.
+     */
+    private enum OfASearch { AT_THE_NODE, BELOW_IT, NOWHERE_AT_A_LEAF, NOWHERE_BELOW }
 
     /** The two ways round the order of a repeated key decides a statement. */
     private enum OfAnOrder { HOLDS_BY_THE_LAST, FAILS_BY_THE_LAST }
@@ -63,6 +72,8 @@ public final class CasesTheRowsTook {
     private record Order(Proposition statement, StandingAtAPoint.OrderOfAKey of) {}
 
     private final DecisionReading read;
+    private final BehaviorInputs inputs;
+    private final Quantities quantities;
     private final Map<Proposition.SomeReachable, Set<OfASearch>> searchesOwe = new LinkedHashMap<>();
     private final Map<Proposition.SomeReachable, Set<OfASearch>> searchesSeen =
             new LinkedHashMap<>();
@@ -71,8 +82,17 @@ public final class CasesTheRowsTook {
     /** The kinds some statement draws a case of that no row can be asked about. */
     private final Set<Kind> unaskable = EnumSet.noneOf(Kind.class);
 
-    private CasesTheRowsTook(DecisionReading read) {
+    /** Owed nothing, so nothing of the reading is ever asked. */
+    private CasesTheRowsTook() {
+        this.read = null;
+        this.inputs = null;
+        this.quantities = null;
+    }
+
+    private CasesTheRowsTook(DecisionReading read, BehaviorInputs inputs, Quantities quantities) {
         this.read = read;
+        this.inputs = inputs;
+        this.quantities = quantities;
         for (DecisionReading.Ruled each : read.found()) {
             each.rule().consulted().forEach((condition, decided) -> {
                 if (!(condition instanceof DecisionCondition.AStatement(Proposition stated))
@@ -81,8 +101,13 @@ public final class CasesTheRowsTook {
                 }
                 if (Proposition.saysASearchReachesBelow(stated)) {
                     if (stated instanceof Proposition.SomeReachable search) {
-                        searchesOwe.computeIfAbsent(search, _ -> EnumSet.noneOf(OfASearch.class))
-                                .addAll(owedBy(search, held == search.holds()));
+                        Set<OfASearch> owed = owedBy(search, held == search.holds());
+                        if (owed.isEmpty()) {
+                            unaskable.add(Kind.A_NODE_A_SEARCH_REACHES);
+                        } else {
+                            searchesOwe.computeIfAbsent(search,
+                                    _ -> EnumSet.noneOf(OfASearch.class)).addAll(owed);
+                        }
                     } else {
                         unaskable.add(Kind.A_NODE_A_SEARCH_REACHES);
                     }
@@ -100,29 +125,42 @@ public final class CasesTheRowsTook {
     }
 
     /**
-     * Which cases {@code read} draws inside its statements that none of {@code rows} was seen in,
-     * by kind.
+     * What the cases {@code read} draws inside its statements are owed, to be taken in by the rows
+     * placed at its rules ({@link #see}) and asked what none was seen in ({@link #unseen}).
      *
-     * @param rows each row as it ran, placed at a rule of {@code read} where it can be
+     * @param inputs     what the behavior takes, as its rows are walked
+     * @param quantities the numbers of the input the statements are about
      */
-    public static Set<Kind> unseen(DecisionReading read, RunPlacement placement,
-                                   Quantities quantities, List<ObservedInputs> rows) {
-        CasesTheRowsTook cases = new CasesTheRowsTook(read);
-        if (cases.searchesOwe.isEmpty() && cases.ordersOwe.isEmpty()) {
-            return cases.unaskable;
-        }
-        for (ObservedInputs row : rows) {
-            if (row.watched() instanceof Generator.Watched.Ran) {
-                cases.see(row, placement, quantities);
-            }
-        }
-        return cases.unseen();
+    public static CasesTheRowsTook of(DecisionReading read, BehaviorInputs inputs,
+                                      Quantities quantities) {
+        return new CasesTheRowsTook(read, inputs, quantities);
     }
 
-    /** The cases of {@code search} owed where it comes out finding a node, or not. */
+    /** The cases of a decision no one reads, which are owed none and are seen in none. */
+    public static CasesTheRowsTook none() {
+        return new CasesTheRowsTook();
+    }
+
+    /**
+     * Whether a row can be asked which step of the recursion {@code search} took: where the node it
+     * starts at is the one its statement is written of, and the statement says what it is for that
+     * node to have nothing below. Anywhere else a search that came out empty went through a step
+     * no row can be told from the other.
+     */
+    private static boolean tellsTheStepsApart(Proposition.SomeReachable search) {
+        return search.at().equals(search.writtenAt()) && search.noneBelow().isPresent();
+    }
+
+    /**
+     * The cases of {@code search} owed where it comes out finding a node, or not; none where a
+     * case it comes out in cannot be told from another, and then it is owed one nothing is seen
+     * in.
+     */
     private static Set<OfASearch> owedBy(Proposition.SomeReachable search, boolean finds) {
         if (!finds) {
-            return EnumSet.of(OfASearch.NOWHERE);
+            return tellsTheStepsApart(search)
+                    ? EnumSet.of(OfASearch.NOWHERE_AT_A_LEAF, OfASearch.NOWHERE_BELOW)
+                    : EnumSet.noneOf(OfASearch.class);
         }
         // A search starting below where its statement is written reaches no node that statement is
         // asked of first, so finding one is finding one below.
@@ -132,26 +170,27 @@ public final class CasesTheRowsTook {
     }
 
     /**
-     * What one row is evidence of: the cases of the statements the rule it took consulted. A row
-     * placed at no rule went through none this can tell, and is evidence of no case.
+     * Takes in what {@code row} is evidence of: the cases of the statements the rule it was placed
+     * at consulted. A row placed at no rule went through none this can tell, and is evidence of no
+     * case — so a caller hands over the rows it placed and none it did not.
      */
-    private void see(ObservedInputs row, RunPlacement placement, Quantities quantities) {
-        if (!(placement.takenBy(row) instanceof RulesTaken.WhichRule.TookThis took)) {
+    public void see(ObservedInputs row, DecisionRule rule) {
+        if (searchesOwe.isEmpty() && ordersOwe.isEmpty()) {
             return;
         }
-        took.rule().consulted().forEach((condition, decided) -> {
+        rule.consulted().forEach((condition, decided) -> {
             if (!(condition instanceof DecisionCondition.AStatement(Proposition stated))
                     || !(decided instanceof DecidedCondition.Held(var _, boolean held))) {
                 return;
             }
             if (stated instanceof Proposition.SomeReachable search) {
-                OfASearch seen = caseOf(search, held == search.holds(), row, placement, quantities);
+                OfASearch seen = caseOf(search, held == search.holds(), row);
                 if (seen != null) {
                     searchesSeen.computeIfAbsent(search, _ -> EnumSet.noneOf(OfASearch.class))
                             .add(seen);
                 }
             }
-            seeOrders(stated, row, placement, quantities);
+            seeOrders(stated, row);
         });
     }
 
@@ -159,8 +198,7 @@ public final class CasesTheRowsTook {
      * The orders {@code stated} rests on that the row tells apart: read the other way round, with
      * every other order as it is, the statement comes out the other way.
      */
-    private void seeOrders(Proposition stated, ObservedInputs row, RunPlacement placement,
-                           Quantities quantities) {
+    private void seeOrders(Proposition stated, ObservedInputs row) {
         Set<StandingAtAPoint.OrderOfAKey> orders = new LinkedHashSet<>();
         for (Proposition.LastToHold last : stated.lastsToHold()) {
             StandingAtAPoint.OrderOfAKey order = StandingAtAPoint.OrderOfAKey.of(last);
@@ -172,10 +210,10 @@ public final class CasesTheRowsTook {
             return;
         }
         StandingAtAPoint.AtTheRow asItIs = StandingAtAPoint.atTheRow(stated, read.behavior(),
-                quantities, placement.inputs(), row, Set.of());
+                quantities, inputs, row, Set.of());
         for (StandingAtAPoint.OrderOfAKey order : orders) {
             StandingAtAPoint.AtTheRow otherWay = StandingAtAPoint.atTheRow(stated, read.behavior(),
-                    quantities, placement.inputs(), row, Set.of(order));
+                    quantities, inputs, row, Set.of(order));
             OfAnOrder seen = asItIs == StandingAtAPoint.AtTheRow.HOLDS
                     && otherWay == StandingAtAPoint.AtTheRow.FAILS ? OfAnOrder.HOLDS_BY_THE_LAST
                     : asItIs == StandingAtAPoint.AtTheRow.FAILS
@@ -192,23 +230,31 @@ public final class CasesTheRowsTook {
      * The case of {@code search} a row it came out {@code found} at was in, or null where what it
      * asks of the node it starts at could not be read off the row.
      */
-    private OfASearch caseOf(Proposition.SomeReachable search, boolean found, ObservedInputs row,
-                             RunPlacement placement, Quantities quantities) {
+    private OfASearch caseOf(Proposition.SomeReachable search, boolean found, ObservedInputs row) {
         if (!found) {
-            return OfASearch.NOWHERE;
+            // Empty at a leaf where the node has nothing below it, and through its children where
+            // it has some and none of them found one.
+            return !tellsTheStepsApart(search) ? null : switch (StandingAtAPoint.atTheRow(
+                    search.noneBelow().orElseThrow(), read.behavior(), quantities, inputs, row,
+                    Set.of())) {
+                case HOLDS -> OfASearch.NOWHERE_AT_A_LEAF;
+                case FAILS -> OfASearch.NOWHERE_BELOW;
+                case COULD_NOT_TELL -> null;
+            };
         }
         if (!search.at().equals(search.writtenAt())) {
             return OfASearch.BELOW_IT;
         }
         return switch (StandingAtAPoint.atTheRow(search.atANode(), read.behavior(), quantities,
-                placement.inputs(), row, Set.of())) {
+                inputs, row, Set.of())) {
             case HOLDS -> OfASearch.AT_THE_NODE;
             case FAILS -> OfASearch.BELOW_IT;
             case COULD_NOT_TELL -> null;
         };
     }
 
-    private Set<Kind> unseen() {
+    /** The kinds of case some statement draws that none of the rows seen was in. */
+    public Set<Kind> unseen() {
         Set<Kind> out = EnumSet.noneOf(Kind.class);
         out.addAll(unaskable);
         searchesOwe.forEach((search, owed) -> {

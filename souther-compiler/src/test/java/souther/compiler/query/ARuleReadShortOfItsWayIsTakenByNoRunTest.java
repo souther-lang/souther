@@ -5,6 +5,7 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
@@ -155,7 +156,8 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     private static DecisionEvidence evidenceWithNoRows(DecisionReading read) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         return new DecisionEvidence(read, DecisionEvidence.of("decides",
-                rulesOf(compilation, read), List.of(), WeakeningSet.none()), Map.of(), WeakeningSet.none());
+                rulesOf(compilation, read), List.of(), WeakeningSet.none(),
+                CasesTheRowsTook.none()), Map.of());
     }
 
     private static RunPlacement rulesOf(Compilation compilation, DecisionReading read) {
