@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AddsWhatItDoesNotHold;
 import souther.compiler.check.AffineForms;
@@ -1005,7 +1006,20 @@ final class Pullback {
     static OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
                                                    InputReading read) {
         return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
-                null);
+                null, null);
+    }
+
+    /**
+     * The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}: a
+     * comparison a closure the body applies holds, which is the relation's own working out and
+     * is read as the relation reads it, at the application it is reached in as at every one
+     * before.
+     */
+    static OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                             InputReads reads,
+                                                             InputReading read) {
+        return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
+                null, leftOut);
     }
 
     /**
@@ -1018,13 +1032,15 @@ final class Pullback {
      * reader that takes a run to get past them everywhere is wrong about the rows that arrive.
      */
     private OperatorsAnswer whereItsOperatorsAnswerApartFrom(Core body, InputReads reads,
-                                                            Core.Read apart) {
+                                                            Core.Read apart, Core leftOut) {
         Set<BindingId> ofTheRelation = apart == null ? Set.of()
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
+                operated.within = body;
+                operated.leftOut = leftOut == null ? null : Core.withoutStanding(leftOut);
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated;
@@ -1037,7 +1053,7 @@ final class Pullback {
         }
         return new OperatorsAnswer(
                 answered == null ? Optional.empty() : Optional.of(pulled(answered).proposition()),
-                told[0].unsaidGroups, told[0].unsaidElsewhere);
+                told[0].unsaidGroups, told[0].unsaidElsewhere, told[0].obligations);
     }
 
     /** Every operator {@code e} works out on every run that works {@code e} out, told to
@@ -1080,13 +1096,27 @@ final class Pullback {
      * always run: a part worked out on some runs ends those runs, and the rows that arrive are the
      * rows of the others — which is no narrowing, since it is not known which, and is a place the
      * run may stop on.
+     *
+     * <p>A call of an operation of the library handed closures written at it is asked apart from
+     * them ({@link WhatARunMayEndFor#itselfApartFromTheClosuresWrittenAtIt}): each is a child of
+     * the call, and its body is asked here below, under the places its names stand for.
+     *
+     * <p>One whose owner says where it answers — where the collection it answers fits — is owed
+     * as that ({@link StopObligation}) and ties nothing: a reader shows some run gets past it, or
+     * holds the places it reads as ones it may stop on.
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
+        if (e == operated.leftOut) {
+            return;
+        }
+        operated.readsAt.putIfAbsent(e, reads);
+        GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
-                && !WhatARunMayEndFor.itself(e).endsNone()) {
+                && !(completion instanceof GetsPast.Always)) {
             operated.beginGroup();
             boolean[] hasOperands = {false};
+            boolean elsewhereBefore = operated.unsaidElsewhere;
             // A quotient stops where its divisor is nought, and what it divides is no part of it.
             Core.forEachChild(e, operand -> {
                 if (isWhatADivisorAloneStopsOnDividing(e, operand)) {
@@ -1097,6 +1127,13 @@ final class Pullback {
             });
             if (!hasOperands[0]) {
                 operated.leaveUnsaidOverUnreadOperands();
+            }
+            if (operated.within != null && !(completion instanceof GetsPast.NotKnown)) {
+                operated.obligations.add(new StopObligation(e, operated.unsaidAt,
+                        operated.unsaidElsewhere != elsewhereBefore, completion, operated.within,
+                        operated.readsAt));
+                operated.unsaidAt.clear();
+                operated.unsaidElsewhere = elsewhereBefore;
             }
         }
         if (e instanceof Core.LetIn li) {
@@ -5591,6 +5628,10 @@ final class Pullback {
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
+        private final List<StopObligation> obligations = new ArrayList<>();
+        private final Map<Core, InputReads> readsAt = new IdentityHashMap<>();
+        private Core within;
+        private Core leftOut;
 
         Operators() {
             unsaidGroups.add(unsaidAt);
@@ -5657,10 +5698,100 @@ final class Pullback {
      *                        number of a place, or on operands no form says
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
-                           boolean unsaidElsewhere) {
+                           boolean unsaidElsewhere, List<StopObligation> obligations) {
 
         OperatorsAnswer {
             unsaidAt = unsaidAt.stream().filter(each -> !each.isEmpty()).map(Set::copyOf).toList();
+            obligations = List.copyOf(obligations);
+        }
+    }
+
+    /**
+     * An operator a run may stop at, whose owner says where it answers: wherever the collection
+     * it answers fits ({@link GetsPast.WhereTheAnswerFits}), or the total it answers
+     * ({@link GetsPast.WhereTheTotalFits}). Not a place it ties, since what is owed of it is a
+     * proof that some run gets past it, which a reader asks ({@link ContainerSizesUnderAWitness})
+     * and drops it on.
+     *
+     * <p>Told apart by which node it is and not by what it is made of: two obligations of one
+     * reading at two nodes are two, and comparing the trees under them would walk them.
+     */
+    static final class StopObligation {
+        private final Core operation;
+        private final Set<TermPath> places;
+        private final boolean onWhatNoPlaceHolds;
+        private final GetsPast completion;
+        private final Core within;
+        private final Core startedIn;
+        private final Map<Core, InputReads> readsAt;
+
+        /**
+         * @param operation          the operator
+         * @param places             the places what it is handed is read off, which it may stop on
+         * @param onWhatNoPlaceHolds whether some of what it is handed is read off no place this
+         *                           names, so that it may stop on any
+         * @param completion         where it answers
+         * @param within             the part the walk that met it read, which every name it is
+         *                           handed is bound in
+         * @param readsAt            how names read at each node of {@code within} are read there
+         */
+        StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
+                       GetsPast completion, Core within, Map<Core, InputReads> readsAt) {
+            this(operation, places, onWhatNoPlaceHolds, completion, within, within, readsAt);
+        }
+
+        private StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
+                               GetsPast completion, Core within, Core startedIn,
+                               Map<Core, InputReads> readsAt) {
+            if (completion instanceof GetsPast.Always
+                    || completion instanceof GetsPast.NotKnown) {
+                throw new IllegalArgumentException("an operator is owed where it answers somewhere"
+                        + " and only somewhere");
+            }
+            this.operation = Objects.requireNonNull(operation, "some operator is owed");
+            this.places = Set.copyOf(places);
+            this.onWhatNoPlaceHolds = onWhatNoPlaceHolds;
+            this.completion = Objects.requireNonNull(completion, "it answers somewhere");
+            this.within = Objects.requireNonNull(within, "it stands somewhere");
+            this.startedIn = Objects.requireNonNull(startedIn, "and was met somewhere");
+            this.readsAt = Objects.requireNonNull(readsAt, "names are read somehow");
+        }
+
+        Core operation() {
+            return operation;
+        }
+
+        Set<TermPath> places() {
+            return places;
+        }
+
+        boolean onWhatNoPlaceHolds() {
+            return onWhatNoPlaceHolds;
+        }
+
+        GetsPast completion() {
+            return completion;
+        }
+
+        Core within() {
+            return within;
+        }
+
+        /** The same, with its names read in {@code body}, a tree {@link #within} stands in: a
+         *  name it is handed may be bound in a part of the body read apart from this one. */
+        StopObligation readIn(Core body) {
+            return new StopObligation(operation, places, onWhatNoPlaceHolds, completion, body,
+                    startedIn, readsAt);
+        }
+
+        /**
+         * How names read at {@code node} are read there: as the walk that met this read them, or
+         * where it did not reach the node — a part of the body read apart from this one — as they
+         * are read where that walk started, which every name of the input is read under alike.
+         */
+        InputReads readsAt(Core node) {
+            InputReads met = readsAt.get(node);
+            return met != null ? met : readsAt.get(Core.withoutStanding(startedIn));
         }
     }
 
@@ -7248,7 +7379,8 @@ final class Pullback {
         inside.askingWhereAStepAnswers = true;
         Core.Block step = at.usesOfTheClosureTaking(name.binding()).applications().getFirst()
                 .step();
-        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name).answers().isEmpty()
+        return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name, null).answers()
+                .isEmpty()
                 ? handed : Optional.empty();
     }
 

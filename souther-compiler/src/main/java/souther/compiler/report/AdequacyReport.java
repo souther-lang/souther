@@ -3706,6 +3706,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE -> "what it states was read, and it relates"
                     + " the value here to another value not shown to reach every value here, so"
                     + " which values here settle it on their own is not worked out";
+            case RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE -> "what it states was read, and it"
+                    + " relates the value here to another value, but a run may stop on the way to"
+                    + " it on values this compiler does not say, so not every value here is shown"
+                    + " to get to it";
             case RULE_RELATING_TWO_VALUES ->
                     "it relates the value here to another value rather than dividing the values here";
             case RULE_RELATING_ELEMENTS -> "it says how the elements here stand to each other,"
