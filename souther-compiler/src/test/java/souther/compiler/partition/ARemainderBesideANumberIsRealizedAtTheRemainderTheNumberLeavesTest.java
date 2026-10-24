@@ -118,7 +118,8 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
         on.put(term("x"), Carrier.WHOLE);
         on.put(term("y"), Carrier.WHOLE);
         return new Standing.OfARemainderAndAForm(new LinearForm<>(ExactRatio.ZERO, dividend), on,
-                DIVISOR, new LinearForm<>(ExactRatio.ZERO,
+                DIVISOR, Standing.OfARemainderAndAForm.every(DIVISOR),
+                new LinearForm<>(ExactRatio.ZERO,
                         Map.of(term("z"), ExactRatio.ONE.negated())),
                 Map.of(term("z"), Carrier.WHOLE), LevelSpace.steppingBy(ExactRatio.ONE),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
@@ -131,6 +132,7 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
         return new Standing.OfARemainderAndAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(term("x"), ExactRatio.ONE)),
                 Map.of(term("x"), Carrier.WHOLE), DIVISOR,
+                Standing.OfARemainderAndAForm.every(DIVISOR),
                 new LinearForm<>(ExactRatio.ZERO, negated), Map.of(term("y"), Carrier.WHOLE),
                 LevelSpace.steppingBy(ExactRatio.ONE),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));

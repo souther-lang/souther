@@ -12,7 +12,9 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -567,7 +569,8 @@ public sealed interface RowDemand {
         return switch (demand) {
             case Exists exists -> exists.ofAnElement().oneWay();
             case ForAll every -> every.ofEachElement().oneWay();
-            case Relational _, ATruth _, OneValueAtBoth _, SoMany _, ForTheRun _ -> true;
+            case Relational _, ATruth _, OneValueAtBoth _, SoMany _, OnARemainder _,
+                 ForTheRun _ -> true;
         };
     }
 
@@ -865,6 +868,53 @@ public sealed interface RowDemand {
 
         /** None: a row held to this writes the container and whatever the statement reads beside
          *  an element. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
+     * That what a division by a written number leaves of a form of the input's numbers is one of
+     * {@code leaves}.
+     *
+     * <p>No relation a region places: the values of the form that leave one remainder come round
+     * every divisor, so they are a class and not a run. A composer places it by choosing a value of
+     * the form in the class of a remainder this leaves and placing the form's numbers to come to
+     * it, as a point of the remainder's border is placed ({@link LevelRealizer}).
+     *
+     * @param remainder the remainder, with the form it is of and what that is divided by
+     * @param leaves    the remainders a row passing the condition may leave, none below nought and
+     *                  none as large as the divisor
+     */
+    record OnARemainder(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves)
+            implements OfACondition {
+
+        public OnARemainder {
+            Objects.requireNonNull(remainder, "a remainder of some form");
+            Objects.requireNonNull(leaves, "the remainders the condition leaves");
+            WholeNumberRuns below = WholeNumberRuns.one(BigInteger.ZERO,
+                    remainder.divisor().subtract(BigInteger.ONE));
+            if (leaves.isNone() || !leaves.and(below).equals(leaves)) {
+                throw new IllegalArgumentException("a condition on a remainder leaves some of the"
+                        + " remainders a division by " + remainder.divisor() + " leaves: " + leaves);
+            }
+        }
+
+        /** The numbers of the form. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return remainder.dividend().coefs().keySet();
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            terms().forEach(term -> out.add(term.subjectPath()));
+            return Collections.unmodifiableSet(out);
+        }
+
+        /** None: a row held to this writes every number of the form. */
         @Override
         public Set<TermPath> valuesRead() {
             return Set.of();

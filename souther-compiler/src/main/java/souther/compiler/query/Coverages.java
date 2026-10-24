@@ -1851,8 +1851,9 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realizer.realize(quantity.standingAt(criterion),
-                        region, looking, tried)), first, Optional.empty());
+                return new Looked(endedBy(last, realizer.realize(
+                        quantity.standingAt(criterion).alongTheWay(able), region, looking,
+                        tried)), first, Optional.empty());
             }
 
             /**
@@ -1973,8 +1974,8 @@ final class Coverages {
             private Searching searchingWith(Criterion criterion, String label,
                     souther.compiler.partition.Reachability.Reaching able,
                     SearchRegion region, ValuesTried tried) {
-                Realization answered = realizer.realize(quantity.standingAt(criterion),
-                        region, looking, tried);
+                Realization answered = realizer.realize(
+                        quantity.standingAt(criterion).alongTheWay(able), region, looking, tried);
                 return switch (answered) {
                     case Realization.Found found -> {
                         // Asking nothing of what the dependencies answer. A point of a line is a

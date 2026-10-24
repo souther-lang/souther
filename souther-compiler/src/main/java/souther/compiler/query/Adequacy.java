@@ -6529,7 +6529,8 @@ public final class Adequacy {
                             continue;
                         }
                         BorderQuantity quantity = drawn.at(edge.border()).quantity();
-                        if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
+                        if (new LevelRealizer().realize(
+                                quantity.standingAt(owed.criterion()).alongTheWay(able),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
                             return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(

@@ -1316,7 +1316,8 @@ public sealed interface BorderQuantity
                     ? new Standing.OfARemainder(wholeDividend(),
                             LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where)
                     : new Standing.OfARemainderAndAForm(wholeDividend(),
-                            LinearQuantity.answeredOn(dividend.on()), divisor, added,
+                            LinearQuantity.answeredOn(dividend.on()), divisor,
+                            Standing.OfARemainderAndAForm.every(divisor), added,
                             LinearQuantity.answeredOn(addedOn), levels(), where);
         }
 
@@ -1731,7 +1732,8 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> !remainder.added().coefs().isEmpty()
                     && at instanceof Level.OfTheQuantity(ExactRatio level)
                     ? UndividedByARelation.ofARemainderOfAForm(remainder.dividend().form(),
-                            remainder.divisor(), remainder.added(), level, relation)
+                            remainder.shift(), remainder.divisor(), remainder.added(), level,
+                            relation)
                     : UndividedByARelation.SHOWING_NOTHING;
             // The count and the form beside it held against the level, the count a term of no
             // position: what it takes beside how many its container holds is the relation's to

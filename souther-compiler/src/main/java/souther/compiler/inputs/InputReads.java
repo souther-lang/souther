@@ -22,6 +22,7 @@ import souther.compiler.check.FoldedValue;
 import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnteredArm;
+import souther.compiler.core.Kernel;
 import souther.compiler.inputs.OnePerElement.ReadOff;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.BuiltFrom;
@@ -140,22 +141,27 @@ public final class InputReads {
      *                 own, read where it was handed: a parameter of a behavior a call entered on the
      *                 way down ({@link #calling}), and one an application handed a value written out
      *                 ({@link #handing})
+     * @param picked   the element of a list at an index written down that a name an arm opening
+     *                 the lookup bound stands for ({@link WhatItHolds.AtAnIndex})
      * @param entered  the behaviors whose bodies were entered on the way down
      */
     private record Applied(Set<BindingId> handed, long readings, Taken taken,
-                           Map<BindingId, Denotation> given, Set<ValueName.Behavior> entered) {
+                           Map<BindingId, Denotation> given,
+                           Map<BindingId, PickedAtAnIndex> picked,
+                           Set<ValueName.Behavior> entered) {
 
-        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Set.of());
+        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of());
 
         Applied {
             handed = Set.copyOf(handed);
             given = Map.copyOf(given);
+            picked = Map.copyOf(picked);
             entered = Set.copyOf(entered);
         }
 
         /** The same, as one of {@code readings} readings, with {@code taken} for what was taken. */
         Applied as(long readings, Taken taken) {
-            return new Applied(handed, readings, taken, given, entered);
+            return new Applied(handed, readings, taken, given, picked, entered);
         }
     }
 
@@ -452,17 +458,18 @@ public final class InputReads {
         if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
             return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
                     new Applied(handed, applied.readings(), applied.taken(), applied.given(),
-                            applied.entered()));
+                            applied.picked(), applied.entered()));
         }
         if (namesSomething(value.value())) {
             Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
             given.put(binding, value);
             return new InputReads(names, narrower, declared, dependencies, new Applied(handed,
-                    applied.readings(), applied.taken(), given, applied.entered()));
+                    applied.readings(), applied.taken(), given, applied.picked(),
+                    applied.entered()));
         }
         return new InputReads(names.handing(binding, value.value()), narrower, declared,
                 dependencies, new Applied(handed, applied.readings(), applied.taken(),
-                        applied.given(), applied.entered()));
+                        applied.given(), applied.picked(), applied.entered()));
     }
 
     /**
@@ -995,7 +1002,7 @@ public final class InputReads {
         return new InputReads(inside, alternatives, declared,
                 souther.compiler.carrier.Membership.none(),
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        entered));
+                        applied.picked(), entered));
     }
 
     /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
@@ -1496,11 +1503,25 @@ public final class InputReads {
             return this;
         }
         if (arm.binding() instanceof Core.ArmBinding.Payload) {
-            InputReads holding = holdingWhatItHolds(scrutinee, arm.binder(), symbols, newtypes);
+            WhatItHolds held = whatItHolds(scrutinee, symbols, newtypes);
+            // Which element an index picks is said beside whatever the arm narrows the name to:
+            // a list of the input's own elements has the name stand at them as well.
+            if (held instanceof WhatItHolds.AtAnIndex(PickedAtAnIndex element)) {
+                return picking(arm.binder().binding(), element)
+                        .narrowedByThePattern(scrutinee, arm, symbols, newtypes);
+            }
+            InputReads holding = holdingWhatItHolds(held, arm.binder(), newtypes);
             if (holding != null) {
                 return holding;
             }
         }
+        return narrowedByThePattern(scrutinee, arm, symbols, newtypes);
+    }
+
+    /** {@link #narrowedInsideArmOn}, where what the arm's name is is what its pattern narrows the
+     *  scrutinee to. */
+    private InputReads narrowedByThePattern(Core scrutinee, Core.Case arm, Symbols symbols,
+                                            DeclarationNewtypes newtypes) {
         // An arm over an optional's two carriers at once leaves a position nothing to narrow it to.
         CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
@@ -1666,6 +1687,23 @@ public final class InputReads {
             }
         }
 
+        /**
+         * The element at an index written down of a list no walk writes out: which element that is
+         * turns on what the list is, which a reader of numbers follows through the operations that
+         * made it. Made of no entry, as a list's element is not.
+         */
+        record AtAnIndex(PickedAtAnIndex picked) implements WhatItHolds {
+
+            public AtAnIndex {
+                Objects.requireNonNull(picked, "an element some index picks");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
+            }
+        }
+
         /** Nothing says. */
         record Unsaid() implements WhatItHolds {
 
@@ -1746,6 +1784,15 @@ public final class InputReads {
         public WhatItHolds otherwise(ElementsWrittenOut.Stood<InputReads> option,
                                      AnOperationApplied applied) {
             InputReads at = option.at();
+            if (applied != null && applied.operation() instanceof ValueName.Stdlib.Operation listed
+                    && symbols.kernelOf(listed) == Kernel.LIST_GET) {
+                return applied.args().size() == 2
+                        && at.folded(applied.args().get(0), symbols, newtypes).orElse(null)
+                                instanceof Long index && index >= 0
+                        ? new WhatItHolds.AtAnIndex(new PickedAtAnIndex(
+                                new Denotation(applied.args().get(1), at), index))
+                        : unsaid();
+            }
             if (applied != null) {
                 if (!GET.equals(applied.operation()) || applied.args().size() != 2) {
                     return unsaid();
@@ -1801,8 +1848,42 @@ public final class InputReads {
             case WhatItHolds.MadeByAClosure(Denotation answered, var _) ->
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
+            case WhatItHolds.AtAnIndex(PickedAtAnIndex element) -> picking(name, element);
             case WhatItHolds.Unsaid _ -> this;
         };
+    }
+
+    /** This reading, with {@code name} standing for the element an index picks of a list as
+     *  well as for whatever else it stands for. */
+    private InputReads picking(BindingId name, PickedAtAnIndex element) {
+        Map<BindingId, PickedAtAnIndex> picked = new LinkedHashMap<>(applied.picked());
+        picked.put(name, element);
+        return new InputReads(names, alternatives, declared, dependencies,
+                new Applied(applied.handed(), applied.readings(), applied.taken(),
+                        applied.given(), picked, applied.entered()));
+    }
+
+    /**
+     * The element an index written down picks of a list, which a name an arm opening the lookup
+     * bound stands for.
+     *
+     * @param list  the list, read where the lookup stands
+     * @param index the index written down
+     */
+    public record PickedAtAnIndex(Denotation list, long index) {
+
+        public PickedAtAnIndex {
+            Objects.requireNonNull(list, "an element of some list");
+        }
+    }
+
+    /**
+     * The element of a list at an index written down that {@code e} stands for, where it is a name
+     * an arm opening that lookup bound ({@link WhatItHolds.AtAnIndex}) — or null.
+     */
+    public PickedAtAnIndex pickedAtAnIndex(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Read read
+                ? applied.picked().get(read.binding()) : null;
     }
 
     /** This reading, with {@code name} standing for {@code value}: at its position where it stands
@@ -1817,7 +1898,7 @@ public final class InputReads {
         given.put(name, value);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.entered()));
+                        applied.picked(), applied.entered()));
     }
 
     /**
@@ -1832,14 +1913,13 @@ public final class InputReads {
      * {@code Option.map(x -> x + 1, Map.get(k, m))} the name is the entry's value and one more,
      * and which entry it was made of is said apart from it ({@link #holdsAnEntryLookedUp}).
      */
-    private InputReads holdingWhatItHolds(Core option, Core.Binder name, Symbols symbols,
+    private InputReads holdingWhatItHolds(WhatItHolds held, Core.Binder name,
                                           DeclarationNewtypes newtypes) {
-        WhatItHolds held = whatItHolds(option, symbols, newtypes);
         return switch (held) {
             case WhatItHolds.AnEntry _, WhatItHolds.AnEntryOfAnAnswer _,
                  WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
                     holding(name.binding(), held, newtypes);
-            case WhatItHolds.AtAPosition _, WhatItHolds.Unsaid _ -> null;
+            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.Unsaid _ -> null;
         };
     }
 

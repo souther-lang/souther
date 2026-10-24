@@ -23,6 +23,10 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.StringsHeldAsWritten;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -1837,6 +1841,33 @@ final class ReadQuantities implements Quantities {
      * apart by where they sit rather than by when they were found.
      */
     @Override
+    public StringsOfOneLength stringsOfOneLength(TermPath at) {
+        // Refused where no value this reading holds is around the place, the way a term under
+        // nothing this behavior takes is refused: "no format holds it" would be said of a place
+        // this reading has never been.
+        if (rootOf(at) == null) {
+            throw new IllegalArgumentException("`" + at + "` is under nothing this input takes,"
+                    + " so there is nothing here to say what strings it holds");
+        }
+        Position position = byPath.get(at);
+        Type string = typeAt.apply(at);
+        NumericTerm.TakenOf length = position == null || string == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(ValueName.Stdlib.operation("String", "length"),
+                        at, string, ruleReading.source().inners(),
+                        ruleReading.source().symbols());
+        Integer held = length == null ? null : position.codePointsHeld(length);
+        if (held == null
+                || !(position.admitted().approximation() instanceof ValueSet.Matching(var format))) {
+            return null;
+        }
+        // Each string of the format is one the rules leave only where the format is the whole of
+        // what they say, and a value only where the format's sequence is one a String holds.
+        StringsHeldAsWritten everyOneHeld = position.completeness()
+                instanceof AdmissibleSet.Completeness.Complete ? format.heldAsWritten() : null;
+        return new StringsOfOneLength(format, everyOneHeld, held);
+    }
+
+    @Override
     public Optional<EmptyInput> emptiness() {
         Optional<EmptyInput> had = emptiness;
         if (had != null) {
@@ -2252,6 +2283,11 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.ValueOf) {
             return admittedAt(term);
         }
+        Language.Ends sums = whereAFormatLeaves(term);
+        if (sums != null) {
+            return ValueSet.wholeNumbers(WholeNumberRuns.one(BigInteger.valueOf(sums.least()),
+                    sums.most() == null ? null : BigInteger.valueOf(sums.most())));
+        }
         if (!(admittedAt(term) instanceof ValueSet.Finite admitted)) {
             return ValueSet.ANY;
         }
@@ -2463,7 +2499,35 @@ final class ReadQuantities implements Quantities {
     private NumericDomain.Bounds ownOf(NumericTerm.FromOnePosition term) {
         Position at = byPath.get(term.position());
         PositionBounds bounds = at == null ? null : at.boundsFor(term);
-        return bounds == null ? null : bounds.admissible();
+        if (bounds != null) {
+            return bounds.admissible();
+        }
+        Language.Ends sums = whereAFormatLeaves(term);
+        return sums == null ? null : new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(sums.least())),
+                sums.most() == null ? null : Endpoint.inclusive(Count.of(sums.most())));
+    }
+
+    /**
+     * Where a number of the code points of a string of a format lies — what they come to, or the
+     * one at an index — where {@code term} is such a number of a position whose values are a
+     * format's strings; null for any other number.
+     *
+     * <p>Between the least and the greatest the format's strings come to, or hold there, which is
+     * every such number and may be some more: a format of {@code a} and {@code c} holds no string
+     * coming to 98. No clause states it, so no position's bounds hold it; it is what the strings
+     * the rules admit are.
+     */
+    private Language.Ends whereAFormatLeaves(NumericTerm.FromOnePosition term) {
+        if (!(admittedAt(term) instanceof ValueSet.Matching(var language))) {
+            return null;
+        }
+        return switch (term) {
+            case NumericTerm.CodePointValueSum _ -> language.sumsOfCodePoints();
+            case NumericTerm.CodePointAt at -> language.codePointsAt(at.index());
+            case NumericTerm.ValueOf _, NumericTerm.TakenOf _,
+                 NumericTerm.CodePointClassCount _ -> null;
+        };
     }
 
     /**

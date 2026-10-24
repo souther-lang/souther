@@ -35,6 +35,7 @@ import souther.compiler.numeric.Text;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Language;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
@@ -392,7 +393,8 @@ final class TermRealizations {
                 case NumericTerm.ValueOf _ -> itself = target;
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.
-                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> {
+                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                     NumericTerm.CodePointAt _ -> {
                     takenOfIt.add(target);
                     ofItsCodePoints.add(target);
                 }
@@ -1739,7 +1741,8 @@ final class TermRealizations {
                 // A string is chosen whole, and what its code points come to is read off it: no
                 // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                     NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
                      NumericTerm.GatheredUnderAKey _ -> false;
@@ -1962,7 +1965,7 @@ final class TermRealizations {
             }
             // A string written for its code points alone, which is the search that writes one for
             // several numbers of a string, asked one.
-            case NumericTerm.CodePointValueSum _ -> {
+            case NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _ -> {
                 nothingInside(inside);
                 SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
                 demands.put(target, asked);
@@ -3404,6 +3407,74 @@ final class TermRealizations {
     }
 
     /**
+     * For each of {@code sums}, a string the rules on {@code holder} leave whose code points come
+     * to it, of a length every length asked admits, and holding at each index a code point is
+     * asked at one of the code points tried there.
+     *
+     * <p>Looked for among the strings the rules leave rather than written and moved, since a string
+     * of a format is made of the code points the format places, and moving one of them to reach a
+     * sum writes one the format refuses. Every index asked is asked of the one string, so a string
+     * holding them is written once for all of them. Each is a proposal like the others, read back
+     * against every demand by whoever adopts it. Each sum is looked for in {@code steps}, and one
+     * that ran out of them is said, since a sum whose string was not found is not a sum with none.
+     */
+    private static LeftComingTo leftComingTo(TypeView holder, RuleReadingContext reading,
+                                             List<OfAString> wanted, List<Long> sums,
+                                             int steps) {
+        Map<Integer, CodePoints> at = new LinkedHashMap<>();
+        boolean asksASum = false;
+        for (OfAString each : wanted) {
+            switch (each.number()) {
+                case NumberOfAString.At point -> {
+                    CodePoints tried = CodePoints.NONE;
+                    for (Place one : each.tried().numbers()) {
+                        if (one instanceof Count count && count.whole()
+                                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
+                                        BigInteger value)
+                                && value.signum() >= 0
+                                && value.compareTo(BigInteger.valueOf(CodePoints.LAST)) <= 0
+                                && !CodePoints.isSurrogate(value.intValue())) {
+                            tried = tried.or(CodePoints.of(value.intValue()));
+                        }
+                    }
+                    at.merge(point.index(), tried, CodePoints::and);
+                }
+                case NumberOfAString.CodePointSum _ -> asksASum = true;
+                case NumberOfAString.Length _, NumberOfAString.InAClass _ -> { }
+            }
+        }
+        if (asksASum ? sums.isEmpty() : at.isEmpty()) {
+            return new LeftComingTo(List.of(), false);
+        }
+        Partitions.StringsTheRulesLeave left = Partitions.stringsTheRulesLeave(holder, reading);
+        if (left == null) {
+            return new LeftComingTo(List.of(), false);
+        }
+        IntPredicate lengths = length -> wanted.stream()
+                .filter(each -> each.number() instanceof NumberOfAString.Length)
+                .allMatch(each -> each.holds().test(Count.of(length)));
+        List<String> out = new ArrayList<>();
+        boolean pastTheWork = false;
+        List<Long> each = new ArrayList<>(asksASum ? sums : List.of());
+        if (!asksASum) {
+            each.add(null);
+        }
+        for (Long sum : each) {
+            switch (left.leaves().holding(at, sum, lengths, Integer.MAX_VALUE - 1, READABLE,
+                    steps)) {
+                case Language.ComingTo.Written(String text) -> out.add(text);
+                case Language.ComingTo.NoneDoes _ -> { }
+                case Language.ComingTo.PastTheWork _ -> pastTheWork = true;
+            }
+        }
+        return new LeftComingTo(out, pastTheWork);
+    }
+
+    /** The strings the rules leave that came to the sums, and whether looking for one ran out of
+     *  the steps it was given. */
+    private record LeftComingTo(List<String> found, boolean pastTheWork) {}
+
+    /**
      * Strings written for the number alone: {@code many} code points of the class, and the ones
      * that stand beside them where nothing is written — whitespace where the class does not count
      * it, and the separator the class leaves out. Each is a string some value holds, and none is
@@ -3583,22 +3654,27 @@ final class TermRealizations {
 
         record CodePointSum() implements NumberOfAString {}
 
-        /** This number of {@code text}, as the language holds it. */
+        /** The code point at {@code index} of the string's code points, counted from nought. */
+        record At(int index) implements NumberOfAString {}
+
+        /** This number of {@code text}, as the language holds it; for a code point at an index the
+         *  string does not reach, a number below nought, which no demand admits. */
         default long of(String text) {
             return switch (this) {
                 case Length _ -> text.codePointCount(0, text.length());
                 case InAClass in -> countIn(in.counted(), in.through(), text);
                 case CodePointSum _ -> text.codePoints().asLongStream().sum();
+                case At at -> text.codePoints().skip(at.index()).findFirst().orElse(-1);
             };
         }
 
         /** Whether this counts the code points of {@code kind}, which every length does and no
-         *  sum. */
+         *  sum or single code point. */
         default boolean counts(KindOfCodePoint kind) {
             return switch (this) {
                 case Length _ -> true;
                 case InAClass in -> in.counted().contains(kind.held().least());
-                case CodePointSum _ -> false;
+                case CodePointSum _, At _ -> false;
             };
         }
 
@@ -3611,6 +3687,7 @@ final class TermRealizations {
                 case NumericTerm.CodePointClassCount count ->
                         new InAClass(count.counted(), count.through());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
+                case NumericTerm.CodePointAt at -> new At(at.index());
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
@@ -3701,11 +3778,17 @@ final class TermRealizations {
             // A sum is held to its demand at every way of writing a string, by what the counts can
             // come to, so the sums tried are where the moving aims and not the whole question.
             everyNumberTried &= each.number() instanceof NumberOfAString.CodePointSum
+                    || each.number() instanceof NumberOfAString.At
                     || each.tried().rest() instanceof Remainder.Exhausted;
             if (each.tried().numbers().isEmpty() && each.tried().rest()
                     instanceof Remainder.Exhausted) {
                 return new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            // A code point at an index is no count of any kind and no sum: it is asked of the
+            // string the rules leave, at its index ({@link #leftComingTo}).
+            if (each.number() instanceof NumberOfAString.At) {
+                continue;
             }
             for (Place each2 : each.tried().numbers()) {
                 if (each.number() instanceof NumberOfAString.CodePointSum) {
@@ -3767,6 +3850,10 @@ final class TermRealizations {
         for (String each : admittedStrings(holder, reading, lengths)) {
             search.adopt(each);
         }
+        LeftComingTo left = leftComingTo(holder, reading, wanted, sums, steps);
+        for (String each : left.found()) {
+            search.adopt(each);
+        }
         if (search.found().isEmpty()) {
             search.over(0, new int[kindsOfCodePoint], kinds);
         }
@@ -3791,6 +3878,9 @@ final class TermRealizations {
                 && wanted.stream().noneMatch(each -> each.number()
                         instanceof NumberOfAString.InAClass in && in.ofAnAnswer())
                 && search.looked() < steps && !search.leftUnwritten()
+                // The ways of writing a string count its code points, and say nothing of which one
+                // stands at an index.
+                && wanted.stream().noneMatch(each -> each.number() instanceof NumberOfAString.At)
                 && (wanted.stream().noneMatch(
                         each -> each.number() instanceof NumberOfAString.CodePointSum)
                     || wanted.stream().anyMatch(
@@ -3810,7 +3900,7 @@ final class TermRealizations {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
         }
-        if (search.looked() >= steps || (inFull && kinds.size() <= largest)) {
+        if (search.looked() >= steps || (inFull && kinds.size() <= largest) || left.pastTheWork()) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
         }

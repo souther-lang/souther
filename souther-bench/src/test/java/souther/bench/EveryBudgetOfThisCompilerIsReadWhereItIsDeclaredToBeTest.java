@@ -225,6 +225,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;",
                     "says the figures a way it is shown nothing of was looked along whole past,"
                             + " or read again up to, as what the relation stopped at"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leftByTheFormat("
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/List;"
+                            + "Ljava/util/Set;)Ljava/util/Set;",
+                    "shares the work out among the walks of a format's strings, and says the"
+                            + " figure as what the relation stopped at where a divisor is past it"),
+            Map.entry("souther.compiler.partition.UndividedByARelation#leavesEveryRemainder("
+                            + "Lsouther/compiler/partition/UndividedByARelation$CodePointsOfTheForm;"
+                            + "Ljava/lang/Integer;ILjava/util/Set;)Z",
+                    "says the figure as what the relation stopped at where a walk of the strings"
+                            + " would move more remainders than its share"),
             Map.entry("souther.compiler.partition.WayToTheBorder#walked("
                             + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;)"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
@@ -461,6 +471,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Standing$OfARemainder;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, the levels it was offered and the"
@@ -532,6 +543,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/function/Function;"
                             + "Lsouther/compiler/partition/WitnessSearch;"
                             + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Lsouther/compiler/partition/NumericWitness$Congruent;"
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
@@ -881,6 +893,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " written to come to a sum may hold, and how many steps the search"
                             + " may take: each is handed over as what stopped it where nothing was"
                             + " found"),
+            Map.entry("souther.compiler.partition.Generator#standingOnARemainder("
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/RowDemand$OnARemainder;"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;)"
+                            + "Lsouther/compiler/partition/NumericWitness$Standing;",
+                    "how many values of a form are tried for the remainders a condition leaves,"
+                            + " handed over as what stopped it where nothing was found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/numeric/Today;)"

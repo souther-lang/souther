@@ -125,6 +125,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _),
                  OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _),
                  OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
                  OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
@@ -218,10 +219,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             // reading has no column for. Only a condition the body asks is read this way, so there
             // is one to ask.
             // And two values being one, whose column is the comparison the condition states:
-            // written either way round, it is read as one statement there.
+            // written either way round, it is read as one statement there. And a remainder of a
+            // form, whose values are a class and no column over the input's numbers.
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _),
                  OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _),
                  OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) ->
                     asOneColumn(condition, held);
             // Which of two values stands at a position: the truth of that position, whichever
