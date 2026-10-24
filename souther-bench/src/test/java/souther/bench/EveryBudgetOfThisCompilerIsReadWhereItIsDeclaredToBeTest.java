@@ -169,9 +169,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // with.
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer#<clinit>()V",
                     "how many elements a container is composed with, how many containers are"
-                            + " offered, how many ways of sharing its elements out are looked at,"
-                            + " how many totals each is tried at and how many pairs of bounds are"
-                            + " put together to find them"),
+                            + " offered, how many ways of sharing its elements out are looked at"
+                            + " and how many totals each is tried at"),
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition#run()"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "says the sizes walked to the end and the values an element is listed at in"
@@ -181,14 +180,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;",
                     "stops at the totals tried for a sharing, and puts that figure in what it"
                             + " comes back with"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#standingIn(Ljava/util/List;)[Ljava/math/BigInteger;",
-                    "stops putting bounds together for the ways a statement can stand, and puts"
-                            + " that figure in what it comes back with"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#totalsOf(Ljava/util/List;[ILjava/util/List;)Ljava/util/List;",
-                    "stops putting bounds together for the totals a sharing can come to, and puts"
-                            + " that figure in what it comes back with"),
             Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
                             + "#tried(Ljava/util/List;[I)Z",
                     "stops at the ways of sharing out looked at or at the containers offered, and"

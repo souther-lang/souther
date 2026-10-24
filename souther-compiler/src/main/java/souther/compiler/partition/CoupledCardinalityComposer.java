@@ -13,8 +13,6 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.LaterNumbersEliminated;
-import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -47,7 +45,7 @@ import java.util.function.Predicate;
  * the relations stand as they do are an interval, and the elements of the container are tied
  * together by one thing only: they come to the total. Whether a sharing of the elements out among
  * the ways the relations can stand has a container is therefore exact. The totals it can come to
- * are an interval over the rationals ({@link LaterNumbersEliminated}); at each whole number in it
+ * are an interval over the rationals ({@link TotalsASharingCanComeTo}); at each whole number in it
  * the elements' intervals ({@link WholeNumbersLeft}) are summed, and the total is met where it is
  * between the least and the greatest they come to. The elements are then spread over their
  * intervals to come to it, each to a value of its own.
@@ -84,15 +82,6 @@ final class CoupledCardinalityComposer {
     private static final int MOST_SHARES = CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT.maximum();
 
     private static final int MOST_TOTALS = CompositionBudget.TOTALS_A_SHARING_IS_TRIED_AT.maximum();
-
-    private static final int MOST_PAIRS =
-            CompositionBudget.PAIRS_OF_BOUNDS_A_TOTAL_IS_SOLVED_WITH.maximum();
-
-    /** The total, in the forms solved. */
-    private static final int TOTAL = 0;
-
-    /** The number of one element, in the forms that are of one element. */
-    private static final int ELEMENT = 1;
 
     private CoupledCardinalityComposer() {}
 
@@ -316,10 +305,8 @@ final class CoupledCardinalityComposer {
      * @param meets  for each statement, in the order of the counts, whether it holds of the element
      * @param listed which of the listings of the element's other positions the answers were read at
      */
-    private record Kind(List<Outcome> cell, boolean[] meets, int listed) {}
-
-    /** The totals a bound leaves, over the rationals: either end may be missing. */
-    private record Span(ExactRatio low, boolean lowStrict, ExactRatio high, boolean highStrict) {}
+    private record Kind(List<Outcome> cell, boolean[] meets, int listed,
+                        TotalsASharingCanComeTo.Reach reach) {}
 
     private static final class Composition {
 
@@ -328,6 +315,8 @@ final class CoupledCardinalityComposer {
         private final Map<TermPath, ObservedValue> written;
         private final NumericSet size;
         private final List<CardinalityComposer.Asked> counts;
+        /** For each count, whether it asks for so many, from none to the most elements held. */
+        private final boolean[][] asked;
         private final TermPath container;
         private final Type sourceType;
         private final Shape.Sequence holding;
@@ -376,6 +365,14 @@ final class CoupledCardinalityComposer {
             this.number = coupled.number();
             this.carrier = coupled.carrier();
             this.standing = new CardinalityComposer.Standing.WhereItIsWritten(sourceType, reading);
+            // Whether each count asks for so many is the same for every sharing, and asked of
+            // every one it would be worked out again for each.
+            this.asked = new boolean[counts.size()][MOST_ELEMENTS + 1];
+            for (int count = 0; count < asked.length; count++) {
+                for (int many = 0; many <= MOST_ELEMENTS; many++) {
+                    asked[count][many] = counts.get(count).asMany(many);
+                }
+            }
         }
 
         /** What is listed of the element's other positions, and whether it is all of them. */
@@ -509,29 +506,63 @@ final class CoupledCardinalityComposer {
             return out;
         }
 
-        private static LinearForm<Integer> formOf(Map<Integer, ExactRatio> weights,
-                                                  ExactRatio constant) {
-            Map<Integer, ExactRatio> kept = new HashMap<>();
-            weights.forEach((atom, weight) -> {
-                if (!weight.isZero()) {
-                    kept.put(atom, weight);
+        /**
+         * What a cell leaves an element: each relation of it is a bound on the element's number
+         * that is a line in the total, or a bound on the total alone — or null where the exact
+         * arithmetic could not hold it.
+         */
+        private TotalsASharingCanComeTo.Reach reachOf(List<Outcome> cell) {
+            List<TotalsASharingCanComeTo.Line> lower = new ArrayList<>();
+            List<TotalsASharingCanComeTo.Line> upper = new ArrayList<>();
+            ExactRatio totalLow = null;
+            ExactRatio totalHigh = null;
+            for (Outcome outcome : cell) {
+                Weighed relation = outcome.relation();
+                // a · number + b · total + c in the region of nought: the number is in the
+                // region, turned about where a weighs it below nought, of -(b · total + c) / a.
+                ExactRatio weight = relation.onElement().isZero() ? relation.onTotal()
+                        : relation.onElement();
+                if (weight.isZero()) {
+                    continue;
                 }
-            });
-            return new LinearForm<>(constant, kept);
-        }
-
-        private static List<LaterNumbersEliminated.Bound<Integer>> boundsOf(
-                LinearForm<Integer> form, Rel region) {
-            return switch (region) {
-                case LT -> List.of(new LaterNumbersEliminated.Bound<>(form, true));
-                case LE -> List.of(new LaterNumbersEliminated.Bound<>(form, false));
-                case GT -> List.of(new LaterNumbersEliminated.Bound<>(form.negate(), true));
-                case GE -> List.of(new LaterNumbersEliminated.Bound<>(form.negate(), false));
-                case EQ -> List.of(new LaterNumbersEliminated.Bound<>(form, false),
-                        new LaterNumbersEliminated.Bound<>(form.negate(), false));
-                case NE -> throw new IllegalStateException("a relation stands below or above"
-                        + " nought and never apart from it");
-            };
+                Rel region = weight.signum() < 0 ? outcome.region().turned() : outcome.region();
+                if (relation.onElement().isZero()) {
+                    ExactRatio at = held(relation.constant().negated().dividedBy(weight));
+                    if (at == null) {
+                        return null;
+                    }
+                    if (region == Rel.LT || region == Rel.LE || region == Rel.EQ) {
+                        totalHigh = totalHigh == null || at.compareTo(totalHigh) < 0 ? at
+                                : totalHigh;
+                    }
+                    if (region == Rel.GT || region == Rel.GE || region == Rel.EQ) {
+                        totalLow = totalLow == null || at.compareTo(totalLow) > 0 ? at : totalLow;
+                    }
+                    continue;
+                }
+                ExactRatio slope = held(relation.onTotal().negated().dividedBy(weight));
+                ExactRatio intercept = held(relation.constant().negated().dividedBy(weight));
+                if (slope == null || intercept == null) {
+                    return null;
+                }
+                TotalsASharingCanComeTo.Line line = new TotalsASharingCanComeTo.Line(slope,
+                        intercept);
+                if (region == Rel.LT || region == Rel.LE || region == Rel.EQ) {
+                    upper.add(line);
+                }
+                if (region == Rel.GT || region == Rel.GE || region == Rel.EQ) {
+                    lower.add(line);
+                }
+            }
+            if (domain.least() != null) {
+                lower.add(new TotalsASharingCanComeTo.Line(ExactRatio.ZERO,
+                        ExactRatio.of(domain.least())));
+            }
+            if (domain.most() != null) {
+                upper.add(new TotalsASharingCanComeTo.Line(ExactRatio.ZERO,
+                        ExactRatio.of(domain.most())));
+            }
+            return new TotalsASharingCanComeTo.Reach(lower, upper, totalLow, totalHigh);
         }
 
         /** The numbers an element may be at the total {@code at}, in the cell. */
@@ -552,58 +583,21 @@ final class CoupledCardinalityComposer {
             return left;
         }
 
-        /** The totals the bounds leave, or null where they leave none. */
-        private Span spanOf(List<LaterNumbersEliminated.Bound<Integer>> level) {
-            ExactRatio low = null;
-            boolean lowStrict = false;
-            ExactRatio high = null;
-            boolean highStrict = false;
-            for (LaterNumbersEliminated.Bound<Integer> bound : level) {
-                ExactRatio weight = bound.form().coefs().get(TOTAL);
-                if (weight == null) {
-                    int sign = bound.form().constant().signum();
-                    if (bound.strict() ? sign >= 0 : sign > 0) {
-                        return null;
-                    }
-                    continue;
-                }
-                ExactRatio at = held(bound.form().constant().negated().dividedBy(weight));
-                if (at == null) {
-                    return null;
-                }
-                if (weight.signum() > 0) {
-                    int against = high == null ? -1 : at.compareTo(high);
-                    if (against < 0 || (against == 0 && bound.strict())) {
-                        high = at;
-                        highStrict = bound.strict();
-                    }
-                } else {
-                    int against = low == null ? 1 : at.compareTo(low);
-                    if (against > 0 || (against == 0 && bound.strict())) {
-                        low = at;
-                        lowStrict = bound.strict();
-                    }
-                }
-            }
-            return new Span(low, lowStrict, high, highStrict);
-        }
-
-        /** The whole numbers a total is tried at in the span, the nearest nought first. */
-        private List<BigInteger> totalsIn(Span span) {
+        /** The whole numbers a total is tried at in the interval, the nearest nought first. */
+        private List<BigInteger> totalsIn(TotalsASharingCanComeTo.Interval span) {
             BigInteger low = null;
             BigInteger high = null;
             if (span.low() != null) {
                 if (!(span.low().ceiling() instanceof ExactAnswer.Held<BigInteger>(var up))) {
                     return List.of();
                 }
-                low = span.lowStrict() && span.low().isWhole() ? up.add(BigInteger.ONE) : up;
+                low = up;
             }
             if (span.high() != null) {
                 if (!(span.high().floor() instanceof ExactAnswer.Held<BigInteger>(var down))) {
                     return List.of();
                 }
-                high = span.highStrict() && span.high().isWhole()
-                        ? down.subtract(BigInteger.ONE) : down;
+                high = down;
             }
             if (low != null && high != null && low.compareTo(high) > 0) {
                 return List.of();
@@ -645,31 +639,14 @@ final class CoupledCardinalityComposer {
          * The number and total at which {@code cell} stands, or null where there are none to be
          * found.
          */
-        private BigInteger[] standingIn(List<Outcome> cell) {
-            Map<Integer, ExactRatio> weights = new HashMap<>();
-            List<LaterNumbersEliminated.Bound<Integer>> bounds = new ArrayList<>();
-            for (Outcome outcome : cell) {
-                Weighed relation = outcome.relation();
-                weights.clear();
-                weights.put(ELEMENT, relation.onElement());
-                weights.put(TOTAL, relation.onTotal());
-                bounds.addAll(boundsOf(formOf(weights, relation.constant()), outcome.region()));
-            }
-            addDomain(bounds, ELEMENT, ExactRatio.ONE);
-            LaterNumbersEliminated<Integer> solved =
-                    LaterNumbersEliminated.of(bounds, List.of(TOTAL, ELEMENT), MOST_PAIRS);
-            if (solved instanceof LaterNumbersEliminated.StoppedShort<Integer>) {
-                refused.add(CompositionBudget.PAIRS_OF_BOUNDS_A_TOTAL_IS_SOLVED_WITH);
+        private BigInteger[] standingIn(List<Outcome> cell,
+                                        TotalsASharingCanComeTo.Reach reach) {
+            TotalsASharingCanComeTo.Interval totals =
+                    TotalsASharingCanComeTo.whereAnElementCanBe(reach, unheld);
+            if (totals == null) {
                 return null;
             }
-            if (!(solved instanceof LaterNumbersEliminated.Eliminated<Integer> eliminated)) {
-                return null;
-            }
-            Span span = spanOf(eliminated.levels().getFirst());
-            if (span == null) {
-                return null;
-            }
-            for (BigInteger total : totalsIn(span)) {
+            for (BigInteger total : totalsIn(totals)) {
                 WholeNumbersLeft left = intervalAt(cell, total);
                 BigInteger at = left == null ? null : left.one();
                 if (at != null) {
@@ -677,25 +654,6 @@ final class CoupledCardinalityComposer {
                 }
             }
             return null;
-        }
-
-        /** The bounds the numbers of the elements the weight stands for keep to. */
-        private void addDomain(List<LaterNumbersEliminated.Bound<Integer>> bounds, int atom,
-                               ExactRatio weight) {
-            if (domain.least() != null) {
-                ExactRatio least = held(weight.times(ExactRatio.of(domain.least())));
-                if (least != null) {
-                    bounds.add(new LaterNumbersEliminated.Bound<>(
-                            formOf(Map.of(atom, ExactRatio.ONE.negated()), least), false));
-                }
-            }
-            if (domain.most() != null) {
-                ExactRatio most = held(weight.times(ExactRatio.of(domain.most())));
-                if (most != null) {
-                    bounds.add(new LaterNumbersEliminated.Bound<>(
-                            formOf(Map.of(atom, ExactRatio.ONE), most.negated()), false));
-                }
-            }
         }
 
         /**
@@ -728,7 +686,8 @@ final class CoupledCardinalityComposer {
         private List<Kind> kinds(List<BorderQuantity.Observation> observed) {
             List<Kind> out = new ArrayList<>();
             for (List<Outcome> cell : cells()) {
-                BigInteger[] probe = standingIn(cell);
+                TotalsASharingCanComeTo.Reach reach = reachOf(cell);
+                BigInteger[] probe = reach == null ? null : standingIn(cell, reach);
                 if (probe == null) {
                     continue;
                 }
@@ -744,7 +703,7 @@ final class CoupledCardinalityComposer {
                         key.add(each);
                     }
                     if (seen.add(key)) {
-                        out.add(new Kind(cell, meets, listed));
+                        out.add(new Kind(cell, meets, listed, reach));
                     }
                 }
             }
@@ -801,7 +760,7 @@ final class CoupledCardinalityComposer {
             int[] chosen = new int[meeting.length];
             int kept = coupled.keptCount();
             for (int count = 0; count < meeting.length; count++) {
-                if (count != kept && !coupled.asked().get(count).asMany(meeting[count])) {
+                if (count != kept && !asked[count][meeting[count]]) {
                     return out;
                 }
                 chosen[count] = meeting[count];
@@ -812,7 +771,7 @@ final class CoupledCardinalityComposer {
             }
             for (int different = meeting[kept] > 0 ? 1 : 0; different <= meeting[kept];
                     different++) {
-                if (coupled.asked().get(kept).asMany(different)) {
+                if (asked[kept][different]) {
                     int[] one = chosen.clone();
                     one[kept] = different;
                     out.add(one);
@@ -879,47 +838,15 @@ final class CoupledCardinalityComposer {
 
         /** The whole numbers a container of this sharing can come to, tried in turn. */
         private List<BigInteger> totalsOf(List<Kind> kinds, int[] sharing, List<Integer> active) {
-            List<LaterNumbersEliminated.Bound<Integer>> bounds = new ArrayList<>();
-            // The total is what the elements of every kind come to.
-            Map<Integer, ExactRatio> comes = new HashMap<>();
-            comes.put(TOTAL, ExactRatio.ONE.negated());
-            for (int at = 0; at < active.size(); at++) {
-                comes.put(at + 1, ExactRatio.ONE);
+            List<TotalsASharingCanComeTo.Reach> reaches = new ArrayList<>();
+            int[] counts = new int[active.size()];
+            for (int at = 0; at < counts.length; at++) {
+                reaches.add(kinds.get(active.get(at)).reach());
+                counts[at] = sharing[active.get(at)];
             }
-            LinearForm<Integer> equal = formOf(comes, ExactRatio.ZERO);
-            bounds.add(new LaterNumbersEliminated.Bound<>(equal, false));
-            bounds.add(new LaterNumbersEliminated.Bound<>(equal.negate(), false));
-            for (int at = 0; at < active.size(); at++) {
-                ExactRatio count = ExactRatio.of(sharing[active.get(at)]);
-                for (Outcome outcome : kinds.get(active.get(at)).cell()) {
-                    Weighed relation = outcome.relation();
-                    ExactRatio onTotal = held(count.times(relation.onTotal()));
-                    ExactRatio constant = held(count.times(relation.constant()));
-                    if (onTotal == null || constant == null) {
-                        return List.of();
-                    }
-                    Map<Integer, ExactRatio> weights = new HashMap<>();
-                    weights.put(at + 1, relation.onElement());
-                    weights.put(TOTAL, onTotal);
-                    bounds.addAll(boundsOf(formOf(weights, constant), outcome.region()));
-                }
-                addDomain(bounds, at + 1, count);
-            }
-            List<Integer> order = new ArrayList<>();
-            for (int atom = 0; atom <= active.size(); atom++) {
-                order.add(atom);
-            }
-            LaterNumbersEliminated<Integer> solved =
-                    LaterNumbersEliminated.of(bounds, order, MOST_PAIRS);
-            if (solved instanceof LaterNumbersEliminated.StoppedShort<Integer>) {
-                refused.add(CompositionBudget.PAIRS_OF_BOUNDS_A_TOTAL_IS_SOLVED_WITH);
-                return List.of();
-            }
-            if (!(solved instanceof LaterNumbersEliminated.Eliminated<Integer> eliminated)) {
-                return List.of();
-            }
-            Span span = spanOf(eliminated.levels().getFirst());
-            return span == null ? List.of() : totalsIn(span);
+            TotalsASharingCanComeTo.Interval found =
+                    TotalsASharingCanComeTo.of(reaches, counts, unheld);
+            return found == null ? List.of() : totalsIn(found);
         }
 
         /**
