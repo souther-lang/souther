@@ -713,16 +713,21 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * {@code p + a + (M - 10) - (M - 10) != 0} stops wherever {@code p + a} is above ten, though
      * the form fits for amounts up to a million: no row has {@code a} above ten, so {@code a} is
      * related to {@code b} and not divided at thirty as it would be for all the {@code a}, and
-     * {@code b} is not shown to take every value.
+     * {@code b} is divided where {@code a} can no longer settle it: below twenty no {@code a} up
+     * to ten reaches thirty, from thirty on none is needed, and between the two {@code a} and
+     * {@code b} come to either side of thirty.
      */
     @Test
     void aStatementTheSourceMayNotWorkOutIsNotTakenOffTheWay() {
         String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
         assertEquals(Map.of("a", RELATES), pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
                 "a.value + 9223372036854775807 - 9223372036854775807 == p.value"));
-        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
-                pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
-                        "p.value + a.value + 9223372036854775797 - 9223372036854775797 == 0"));
+        String inputs = "p: Yen, a: Yen, b: Yen";
+        String kept = "p.value + a.value + 9223372036854775797 - 9223372036854775797 == 0";
+        assertEquals(Map.of("a", RELATES), pastAWayOffAValue(inputs, yen, kept));
+        assertEquals(List.of("b/0 <= x <= 19", "b/19 < x < 30", "b/30 <= x <= 1000000"),
+                classesAt(inputs, yen, "if " + kept + " then false else a.value + b.value >= 30",
+                        "b"));
     }
 
     /**
@@ -3105,6 +3110,53 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String unshown = capped.formatted(
                 "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
         assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());
+    }
+
+    /**
+     * A sum kept under a name and worked on after it is held against a number is computed in an
+     * {@code Int}, so its terms come to at most the greatest {@code Int}. That limit on a sum
+     * leaves each term every value up to what the others leave it, and the number the sum is held
+     * against the values the terms can come to: the sum read is the sum written out twice, and a
+     * term capped on an arm of an earlier comparison reads as it does without the cap.
+     */
+    @Test
+    void aSumKeptUnderANameAndHeldAgainstANumberLeavesEachTermAndTheNumberTheirRun() {
+        String named = """
+                module w1
+                data Yen = Int invariant value >= 0
+                behavior m : (a: Yen, b: Yen, c: Yen) -> Yen | Exceeds
+                    constructs Yen
+                let m (a, b, c) = {
+                    let g = a + b
+                    guard g >= c else Exceeds
+                    Yen(g.value - c.value)
+                }
+                """;
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(named, whereWritten(named, ">= c")));
+        assertEquals(List.of("c/0 <= x <= 0", "c/0 < x"), classesIn(named, "c"));
+        assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
+
+        String writtenOut = named.replace("let g = a + b\n    guard g >= c",
+                "guard a + b >= c").replace("g.value", "a.value + b.value");
+        assertEquals(Set.of(), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
+
+        String payroll = """
+                module w1
+                data Yen = Int invariant value >= 0
+                data Pay = { base: Yen, commuting: Yen, other: Yen }
+                let capped (p: Pay): Yen =
+                    if p.commuting > Yen(150000) then Yen(150000) else p.commuting
+                behavior m : (p: Pay, uplift: Yen, insurance: Yen) -> Yen | Exceeds
+                    constructs Yen
+                let m (p, uplift, insurance) = {
+                    let gross = p.base + p.commuting + p.other + uplift
+                    let subtracted = capped(p) + insurance
+                    guard gross >= subtracted else Exceeds
+                    Yen(gross.value - subtracted.value)
+                }
+                """;
+        assertEquals(Set.of(), notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
     }
 
     /**
