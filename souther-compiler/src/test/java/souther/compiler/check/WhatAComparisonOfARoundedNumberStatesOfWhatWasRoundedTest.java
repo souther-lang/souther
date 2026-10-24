@@ -82,25 +82,32 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
     }
 
     /**
+     * A threshold, in eighths of a step: on a step, at nought and on either side of it; between
+     * two steps, at the half and off it, on either side of nought. A threshold on a step is the
+     * rounding's own line, and one between steps is met by the step above or the one below.
+     */
+    private static final int[] THRESHOLDS_IN_EIGHTHS = {0, 8, -16, 4, -4, 3, -11};
+
+    /**
      * A rounding at a scale is the rounding of the number taken in steps: every way of rounding,
-     * every relation, scales on both sides of nought, thresholds on the steps and between them,
-     * and numbers on a grid finer than any step asked about — what the statement says of the
-     * number is whether the run time's {@code Decimal.round} of it stands that way to the
-     * threshold.
+     * every relation, scales below nought, at it and above it, and thresholds on the steps and
+     * between them. The numbers are every eighth of a step from two steps below the threshold to
+     * two above, which meets each step, each half and a number between them on both sides of where
+     * the answer turns — what the statement says of the number is whether the run time's
+     * {@code Decimal.round} of it stands that way to the threshold.
      */
     @Test
     void aRoundingAtAScaleStatesWhatTheRunTimesRoundingDoes() {
-        for (WholeRounding way : WholeRounding.values()) {
-            for (Rel rel : Rel.values()) {
-                for (int scale = -1; scale <= 2; scale++) {
-                    for (int thousandths = -1250; thousandths <= 1250; thousandths += 125) {
-                        BigDecimal threshold = BigDecimal.valueOf(thousandths, 3)
-                                .movePointRight(Math.max(0, -scale) * 2);
+        for (int scale : new int[] {-1, 0, 2}) {
+            BigDecimal eighth = BigDecimal.ONE.movePointLeft(scale).divide(BigDecimal.valueOf(8));
+            for (int at : THRESHOLDS_IN_EIGHTHS) {
+                BigDecimal threshold = eighth.multiply(BigDecimal.valueOf(at));
+                for (WholeRounding way : WholeRounding.values()) {
+                    for (Rel rel : Rel.values()) {
                         ConstantComparison stated = RoundedToAWholeNumber.statementAtAScale(way,
                                 rel, ExactRatio.of(threshold), BigInteger.valueOf(scale));
-                        for (int fine = -1600; fine <= 1600; fine += 5) {
-                            BigDecimal number = BigDecimal.valueOf(fine, 3)
-                                    .movePointRight(Math.max(0, -scale) * 2);
+                        for (int fine = at - 16; fine <= at + 16; fine++) {
+                            BigDecimal number = eighth.multiply(BigDecimal.valueOf(fine));
                             BigDecimal rounded = DecimalMath.round(scale, runTimes(way), number);
                             String asked = way + " " + rel + " " + threshold + " at scale "
                                     + scale + ", " + number + " rounds to " + rounded;
