@@ -345,6 +345,7 @@ public final class PublicationOrders {
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     // Beside it: the rows that walk composes, as the choice of one is handed them.
                     CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                    CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,
                     // After every figure a search for the value stops at, because what this one

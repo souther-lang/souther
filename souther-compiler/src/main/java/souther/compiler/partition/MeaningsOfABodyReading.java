@@ -142,8 +142,14 @@ public final class MeaningsOfABodyReading {
                     asked(binary.occurrence(), MeaningsOfABody.Part.Asked.ITSELF, binary, reads);
             case Core.Match match -> entered(match, match.place().occurrence(),
                     match.cases().size(), reads);
-            case Core.IfConstructed attempt -> entered(attempt, attempt.occurrence(),
-                    1 + attempt.els().size(), reads);
+            case Core.IfConstructed attempt -> {
+                entered(attempt, attempt.occurrence(), 1 + attempt.els().size(), reads);
+                // Where the figure was passed no application is read, and so nothing is said of
+                // which string the value handed to the construction is a piece of.
+                if (pastTheFigure == null) {
+                    filed.metAsPieces(Pullback.ofThePiecesAttempted(attempt, reads, read()));
+                }
+            }
             default -> { }
         }
         ScopeStep.forEachChild(e, (child, step) -> walk(child,
