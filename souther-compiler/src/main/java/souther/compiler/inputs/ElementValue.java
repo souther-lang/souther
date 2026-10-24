@@ -761,7 +761,8 @@ public sealed interface ElementValue {
      * of the element, read off the law the library states of the operation.
      *
      * @param scale how many places the number keeps; below nought, how many it rounds off before
-     *              the point
+     *              the point. One the run time rounds at, since a rounding at another answers
+     *              nothing ({@link ARounding#answersAtAScale})
      * @param way   how it is rounded
      * @param inner what is rounded
      */
@@ -771,12 +772,15 @@ public sealed interface ElementValue {
             Objects.requireNonNull(scale, "a number is rounded at a scale");
             Objects.requireNonNull(way, "some way");
             Objects.requireNonNull(inner, "and a number is rounded");
+            if (!ARounding.answersAtAScale(scale)) {
+                throw new IllegalArgumentException("the run time rounds at no scale " + scale);
+            }
         }
 
-        /** Ten to the {@code scale}: how many of the steps this rounds to make one. */
+        /** Ten to the {@code scale}, held as its exponents: how many of the steps this rounds to
+         *  make one. */
         public ExactRatio stepsInOne() {
-            BigInteger ten = BigInteger.TEN.pow(scale.abs().intValueExact());
-            return scale.signum() >= 0 ? ExactRatio.of(ten) : ExactRatio.of(BigInteger.ONE, ten);
+            return ExactRatio.tenTo(scale.longValueExact());
         }
 
         /** What this comes to for {@code element}, or null where it holds no number this needs. */
@@ -786,11 +790,15 @@ public sealed interface ElementValue {
                 return null;
             }
             ExactRatio steps = stepsInOne();
-            return rounded.flatMap(value -> value.times(steps)).flatMap(scaled -> {
+            return rounded.flatMap(value -> value.times(steps).flatMap(scaled -> {
+                // A number on a step rounds to itself, and its steps are not written out to say so.
+                if (scaled.isWhole()) {
+                    return ExactAnswer.held(value);
+                }
                 BigInteger whole = way.of(scaled);
                 return whole == null ? ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER)
                         : ExactRatio.of(whole).dividedBy(steps);
-            });
+            }));
         }
 
         @Override
@@ -813,6 +821,12 @@ public sealed interface ElementValue {
      * <p>One value however it was written. The terms are a mapping to their weights, so
      * {@code q·p·(1 − d)} and {@code p·q − d·q·p} are one value, and the arithmetic that adds and
      * scales them is {@link AffineForms}'s.
+     *
+     * <p>The value of an element wherever working it out answers, and only that. Two writings of
+     * one product stop on different elements — {@code (a·b)·c} stops where {@code a·b} is past a
+     * long and {@code a·(b·c)} does not when {@code c} is nought — and that is told of the
+     * operators as they were written, and a row is taken to stand where it was run and answered.
+     * Where both answer they answer this.
      *
      * @param form each term at its weight, at least one of them no single field: a product of two
      *             fields or more, or a rounding
@@ -1555,8 +1569,8 @@ public sealed interface ElementValue {
             }
             Long scale = rounds.scale() == null ? Long.valueOf(0) : wholeNumberOf(rounds.scale());
             WholeRounding way = rounds.wayOf(followed(rounds.policy()));
-            if (scale == null || scale < Integer.MIN_VALUE || scale > Integer.MAX_VALUE
-                    || way == null) {
+            if (scale == null || way == null
+                    || !ARounding.answersAtAScale(BigInteger.valueOf(scale))) {
                 return null;
             }
             LinearForm<Atom> form = AffineForms.of(rounds.rounded(), at, atoms());

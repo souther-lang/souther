@@ -28,9 +28,19 @@ import java.util.Objects;
  * thing an element holds against a total of another, over the same list, is a rule about one total,
  * and what one element comes to is the difference: one value however the totals were written.
  *
- * <p>Only in a type whose sums have no end to pass. A sum of whole numbers stops at the end of a
- * long, and two writings of one total stop at different totals, so there they are two numbers and
- * are left as they were written.
+ * <p>The one total is what the totals come to wherever the run answers, and only that. Which runs
+ * answer is not the one total's to say: two writings of it stop on different runs — a sum of
+ * decimals stops where two of its values have scales no decimal holds the sum of, and
+ * {@code Σa + Σb} meets that adding a value of {@code a} to one of {@code b} never does — and what
+ * a run stops on is told of the operators as they were written, while a row is taken to stand at a
+ * number only where it was run and answered. So a number that is read as the one total is read
+ * truly of every run that answers.
+ *
+ * <p>Only in a type with no ends. Where the type has them, the reading holds a total inside them,
+ * since a total past them is one no run answers with, and that is said of the total as it is
+ * written: {@code Σ 2·n} is held inside a long and {@code 2·Σ n} is held where {@code Σ n} is, which
+ * are different totals. Read as the one total, the totals as written would lose what holds them,
+ * so there they are left as they were written.
  *
  * <p>What makes it one total is what the library says the operation is
  * ({@link BoundOperationFacts#accumulation}): an addition from nought. Two runs over the same
@@ -150,14 +160,13 @@ public final class TotalsOfOneRun {
     }
 
     /**
-     * Whether a total computed in {@code each} is the number the arithmetic says wherever it is
-     * computed: where the type has no end its sums pass, so no total stops where another writing
-     * of it would not.
+     * Whether a total of {@code each} is held by nothing that turns on how it is written: whether
+     * its type has no ends to hold a total inside.
      *
-     * <p>A whole number stops at the ends of a long, and {@code Σ 2·n} stops where {@code n}'s
-     * total passes half of one while {@code 2·Σ n} stops where that total passes all of one. The
-     * two are one number only short of those ends, and a reading that took one for the other would
-     * take the values between them as rows.
+     * <p>A whole number is held inside a long, and {@code Σ 2·n} is held where {@code n}'s total
+     * is inside half of one while {@code 2·Σ n} is held where that total is inside all of one. A
+     * reading that took one for the other would take the values between them as values a run
+     * answers with.
      */
     private static boolean holdsEverySum(Type each, RuleReadingSource source) {
         Carrier carrier = each == null ? null : Carrier.ofValue(each, source.declarations());

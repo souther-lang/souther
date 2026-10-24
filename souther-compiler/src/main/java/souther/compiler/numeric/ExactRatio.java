@@ -104,6 +104,15 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         return new ExactRatio(at.unscaledValue(), BigInteger.ONE, -scale, -scale);
     }
 
+    /**
+     * Ten to {@code power}, which is two to it and five to it: held as the two exponents, and never
+     * written out, so a power of any size a long counts is held as one of a size nothing builds.
+     * What is worked out of it afterwards is held only as far as the arithmetic holds it.
+     */
+    public static ExactRatio tenTo(long power) {
+        return new ExactRatio(BigInteger.ONE, BigInteger.ONE, power, power);
+    }
+
     private ExactParts parts() {
         return new ExactParts(numeratorWithoutUnits, denominatorWithoutUnits, twos, fives);
     }

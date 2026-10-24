@@ -324,6 +324,58 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
         assertFalse(nine.contains("no value can stand there"), nine);
     }
 
+    private static final String PARENTHESISED = """
+            module p
+            data L = { a: Int, b: Int, c: Int }
+            behavior f : (xs: List<L>) -> Int
+            let f (xs) = if List.sum(List.map(x -> %s, xs)) >= 1 then 1 else 0
+            example f
+                | "past a long on the way" : ([L { a = 9223372036854775807, b = 2, c = 0 }]) -> 0
+            """;
+
+    /**
+     * Two writings of one product are read as the one product, and each stops where it is written
+     * to. With the largest long, two and nought, {@code (a·b)·c} stops at {@code a·b} and
+     * {@code a·(b·c)} answers nought: the example is an error of the first alone, and only in the
+     * second does the row stand at nought, the point below the line, which the first still owes.
+     */
+    @Test
+    void aProductIsReadAsOneValueAndStopsWhereItIsWrittenToStop() {
+        Compilation stops = measured(PARENTHESISED.formatted("(x.a * x.b) * x.c"));
+        Compilation answers = measured(PARENTHESISED.formatted("x.a * (x.b * x.c)"));
+        for (Compilation each : List.of(stops, answers)) {
+            assertTrue(report(each).contains("List.sum({1·a·b·c + 0 | xs[*]}): = 1"),
+                    () -> report(each));
+        }
+        assertEquals(List.of("E1905"), codesOf(stops), () -> report(stops));
+        assertEquals(List.of(), codesOf(answers), () -> report(answers));
+        assertTrue(report(stops).contains("! no row is at the OFF point"), () -> report(stops));
+        assertFalse(report(answers).contains("! no row is at the OFF point"),
+                () -> report(answers));
+    }
+
+    /** A rounding at a scale at the end of what the run time takes is read, and one at a scale
+     *  past it, which ends every run, is not. */
+    @Test
+    void aRoundingIsReadOnlyAtAScaleTheRunTimeRoundsAt() {
+        String model = """
+                module r
+                data L = { a: Decimal }
+                behavior f : (xs: List<L>) -> Int
+                let f (xs) =
+                    if Decimal.compare(List.sum(List.map(x -> Decimal.round(%s, HALF_UP, x.a),
+                        xs)), 1.0m) >= 0 then 1 else 0
+                """;
+        String atTheLeast = report(measured(model.formatted("-2147483648")));
+        assertTrue(atTheLeast.contains("round(-2147483648, HALF_UP, 1·a + 0)"), atTheLeast);
+        String past = report(measured(model.formatted("2147483648")));
+        assertFalse(past.contains("round(2147483648"), past);
+    }
+
+    private static List<String> codesOf(Compilation compilation) {
+        return compilation.errors().stream().map(each -> each.diagnostic().code()).toList();
+    }
+
     private static List<List<FixtureTemplate>> composedForTheRules(Compilation compilation) {
         List<List<FixtureTemplate>> out = new ArrayList<>();
         Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("capped")

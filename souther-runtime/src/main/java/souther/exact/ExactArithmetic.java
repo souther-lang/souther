@@ -2,6 +2,8 @@ package souther.exact;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
@@ -110,26 +112,51 @@ public final class ExactArithmetic {
             denominator = denominator.shiftRight(inDenominator);
             twos = ExactPowers.added(twos, -inDenominator);
         }
-        // A five leaves no such mark, so it is one division each — bounded by the digits the number
-        // already has, so nothing here is amplified by the exponents: a power of ten held as a scale never
-        // reaches this loop at all.
-        while (true) {
-            BigInteger[] divided = numerator.divideAndRemainder(ExactPowers.FIVE);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            numerator = divided[0];
-            fives = ExactPowers.added(fives, 1);
-        }
-        while (true) {
-            BigInteger[] divided = denominator.divideAndRemainder(ExactPowers.FIVE);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            denominator = divided[0];
-            fives = ExactPowers.added(fives, -1);
-        }
+        // A five leaves no such mark, so the fives come off by division.
+        long[] taken = new long[1];
+        numerator = withoutFives(numerator, taken);
+        fives = ExactPowers.added(fives, taken[0]);
+        taken[0] = 0;
+        denominator = withoutFives(denominator, taken);
+        fives = ExactPowers.added(fives, -taken[0]);
         return new ExactParts(numerator, denominator, twos, fives);
+    }
+
+    /**
+     * {@code of}, which is not nought, with every factor of five taken off, and how many were added
+     * to {@code taken}.
+     *
+     * <p>Five to each power of two is tried while it divides what is left, and then each of those
+     * powers once more from the largest down: a number holding {@code k} fives is divided about
+     * {@code 2·log k} times, each by a power no larger than what comes off. One five at a time, a
+     * whole number written out from a power of ten — a decimal rounded to a scale far from nought
+     * is one — would be divided once per digit, each time across all of its digits.
+     */
+    private static BigInteger withoutFives(BigInteger of, long[] taken) {
+        List<BigInteger> powers = new ArrayList<>();
+        BigInteger power = ExactPowers.FIVE;
+        while (true) {
+            BigInteger[] divided = of.divideAndRemainder(power);
+            if (divided[1].signum() != 0) {
+                break;
+            }
+            of = divided[0];
+            taken[0] += 1L << powers.size();
+            powers.add(power);
+            // A square with more bits than what is left cannot divide it.
+            if (2L * power.bitLength() - 1 > of.bitLength()) {
+                break;
+            }
+            power = power.multiply(power);
+        }
+        for (int i = powers.size() - 1; i >= 0; i--) {
+            BigInteger[] divided = of.divideAndRemainder(powers.get(i));
+            if (divided[1].signum() == 0) {
+                of = divided[0];
+                taken[0] += 1L << i;
+            }
+        }
+        return of;
     }
 
     /**

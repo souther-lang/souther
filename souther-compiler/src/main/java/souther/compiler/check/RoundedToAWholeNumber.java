@@ -119,23 +119,28 @@ public final class RoundedToAWholeNumber {
 
     /**
      * What a number stands to exactly where its rounding by {@code way} at {@code places} stands
-     * {@code rel} to {@code against} — or null where the scale is past what a scale is, or the
+     * {@code rel} to {@code against} — or null where the run time rounds at no such scale, or the
      * exact arithmetic cannot hold a number of it.
+     *
+     * <p>The steps in one are ten to the scale, held as its exponents: a scale is written as a
+     * number, and how far it is from nought is no measure of what this can afford to build.
      */
     static ConstantComparison statementAtAScale(WholeRounding way, Rel rel, ExactRatio against,
                                                 BigInteger places) {
-        if (places.bitLength() >= Integer.SIZE) {
+        if (!ARounding.answersAtAScale(places)) {
             return null;
         }
-        BigInteger ten = BigInteger.TEN.pow(places.abs().intValueExact());
-        ExactRatio steps = places.signum() >= 0 ? ExactRatio.of(ten)
-                : ExactRatio.of(BigInteger.ONE, ten);
+        ExactRatio steps = ExactRatio.tenTo(places.longValueExact());
         ExactRatio inSteps = against.times(steps).orNull();
         if (inSteps == null) {
             return null;
         }
-        ConstantComparison onTheSteps = inSteps.isWhole()
-                ? ConstantComparison.ofAWholeNumber(rel, inSteps.floor().orNull(), way::atLeast)
+        BigInteger onAStep = inSteps.isWhole() ? inSteps.floor().orNull() : null;
+        if (inSteps.isWhole() && onAStep == null) {
+            return null;
+        }
+        ConstantComparison onTheSteps = onAStep != null
+                ? ConstantComparison.ofAWholeNumber(rel, onAStep, way::atLeast)
                 : betweenTwoSteps(way, rel, inSteps);
         return onTheSteps == null ? null : dividedBy(onTheSteps, steps);
     }

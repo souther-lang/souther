@@ -128,7 +128,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
         public boolean toAWholeNumber() {
             return scale == null;
         }
-
         /** The way {@code written} rounds, where it is a case of the policy, and null otherwise. */
         public WholeRounding wayOf(Core written) {
             return Core.withoutStanding(written) instanceof Core.UnitValue unit

@@ -20,6 +20,7 @@ import souther.runtime.UP;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -115,6 +116,55 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
                                     holds(stated, ExactRatio.of(number)), asked);
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * A scale far from nought is read where the threshold, counted in steps, is a number the exact
+     * arithmetic holds, and as the run time rounds; where it is not, the comparison is not read,
+     * and nothing is written out to find that. Past what the run time takes it rounds nothing, and
+     * nothing is read.
+     *
+     * <p>At the least scale a step is ten to more than two billion: thirty is a part of one step,
+     * held as its exponents, and a number of a few units rounds to nought or to a step either
+     * side, so only rounding up or toward the ceiling takes one above nought past thirty. At the
+     * greatest, thirty is thirty times ten to two billion steps, a whole number no arithmetic here
+     * writes, and the comparison is not read.
+     */
+    @Test
+    void aScaleFarFromNoughtIsReadOnlyAsFarAsTheArithmeticHoldsIt() {
+        ExactRatio thirty = ExactRatio.of(30);
+        for (WholeRounding way : WholeRounding.values()) {
+            for (Rel rel : Rel.values()) {
+                for (int scale : new int[] {-40, 40}) {
+                    ConstantComparison stated = RoundedToAWholeNumber.statementAtAScale(way, rel,
+                            thirty, BigInteger.valueOf(scale));
+                    BigDecimal step = BigDecimal.ONE.movePointLeft(scale);
+                    for (BigDecimal number : List.of(BigDecimal.valueOf(30), BigDecimal.valueOf(-30),
+                            BigDecimal.valueOf(30).add(step.divide(BigDecimal.TWO)),
+                            BigDecimal.valueOf(30).subtract(step.divide(BigDecimal.TWO)),
+                            step.divide(BigDecimal.TWO), BigDecimal.ONE)) {
+                        BigDecimal rounded = DecimalMath.round(scale, runTimes(way), number);
+                        assertEquals(rel.holds(rounded.compareTo(BigDecimal.valueOf(30))),
+                                holds(stated, ExactRatio.of(number)),
+                                way + " " + rel + " 30 at scale " + scale + ", " + number);
+                    }
+                }
+                ConstantComparison atTheLeast = RoundedToAWholeNumber.statementAtAScale(way, rel,
+                        thirty, BigInteger.valueOf(Integer.MIN_VALUE));
+                for (int tenths = -55; tenths <= 355; tenths += 5) {
+                    ExactRatio number = ExactRatio.of(BigInteger.valueOf(tenths), BigInteger.TEN);
+                    boolean toAStep = number.signum() > 0
+                            && (way == WholeRounding.UP || way == WholeRounding.CEILING);
+                    assertEquals(rel.holds(toAStep ? 1 : -1), holds(atTheLeast, number),
+                            way + " " + rel + " 30 at the least scale, " + number);
+                }
+                for (long scale : new long[] {Integer.MAX_VALUE, Integer.MIN_VALUE - 1L,
+                                              Integer.MAX_VALUE + 1L}) {
+                    assertEquals(null, RoundedToAWholeNumber.statementAtAScale(way, rel, thirty,
+                            BigInteger.valueOf(scale)), way + " " + rel + " at scale " + scale);
                 }
             }
         }

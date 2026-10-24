@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 
+import java.math.BigInteger;
 import java.util.Objects;
 
 /**
@@ -34,6 +35,15 @@ public record ARounding(Core scale, Core policy, Core rounded, Ways ways) {
     /** The way {@code written} rounds, where it is a case of the policy, and null otherwise. */
     public WholeRounding wayOf(Core written) {
         return ways.of(written);
+    }
+
+    /**
+     * Whether the run time rounds at {@code scale}: it takes a scale an {@code int} holds and ends
+     * the run at any other, so a rounding at another scale answers nothing and is no number.
+     */
+    public static boolean answersAtAScale(BigInteger scale) {
+        return scale.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) >= 0
+                && scale.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }
 
     /**
