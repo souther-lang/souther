@@ -78,18 +78,18 @@ class APairIsChosenOnePositionAtATimeTest {
     /**
      * A search that stopped at its bound has not tried everything it had.
      *
-     * <p>Eleven positions, each with a hole in its range, and the assignment that satisfies all of
-     * them is the last the walk would reach. What the reader is owed is which of the two happened:
-     * that everything was refused is a stronger claim than that the search ran out, and it is the one
-     * a later reader would take for an impossibility.
+     * <p>Eleven positions of two values each, under a rule on a product no reading of the ends
+     * holds, so nothing rules a value out ahead of the search and every assignment is one it would
+     * compose. That is more than the bound, and the rule refuses every one of them. What the reader
+     * is owed is which of the two happened: that everything was refused is a stronger claim than
+     * that the search ran out, and it is the one a later reader would take for an impossibility.
      */
     @Test
     void aSearchThatRanOutSaysSoRatherThanThatEverythingWasRefused() throws Exception {
         StringBuilder fields = new StringBuilder("    { a1: Int\n");
-        StringBuilder rule = new StringBuilder("a1 /= 0");
+        String rule = "a1 * a2 >= 5";
         for (int i = 2; i <= 11; i++) {
             fields.append("    , a").append(i).append(": Int\n");
-            rule.append(" && a").append(i).append(" /= 0");
         }
         String model = """
                 module example.budget
@@ -103,7 +103,7 @@ class APairIsChosenOnePositionAtATimeTest {
                 behavior f : (r: R, flag: Bool) -> Ok
 
                 let f (r, flag) = if flag then Ok else Ok
-                """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString());
+                """.replace("FIELDS", fields.toString()).replace("RULE", rule);
         Path file = Files.createTempDirectory("souther-budget").resolve("model.sou");
         Files.writeString(file, model);
         String rows = CliInProcess.printed("examples", "--generate", file.toString());

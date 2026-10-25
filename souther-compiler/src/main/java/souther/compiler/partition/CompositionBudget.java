@@ -118,6 +118,13 @@ public enum CompositionBudget {
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
 
+    /** How many cases a value is planned under where a rule of a value above names a field under
+     *  a sum and nobody asked which case the value is. Each is a row composed whole, and what
+     *  multiplies here is the cases of every such sum the parameter holds, counted across all of
+     *  them; past it the cases left are not planned under, and the search is carried out with the
+     *  figure. */
+    CASES_A_RULE_ABOVE_IS_PLANNED_UNDER(8),
+
     /** How many ways a search looks along where conditions on the way to a border came out one of
      *  several ways, each a row is composed along whole. Every way of taking their open
      *  alternatives together where they are no more than this; past it, each open alternative
@@ -712,6 +719,9 @@ public enum CompositionBudget {
             case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
             case WAYS_UNDER_THE_CASES_TRIED ->
                     "how many ways under the cases of a sum a container is written are tried";
+            case CASES_A_RULE_ABOVE_IS_PLANNED_UNDER ->
+                    "how many cases of a sum a value is built as where a rule above it names a"
+                            + " field of its cases";
             case WAYS_A_WAY_IS_LOOKED_ALONG ->
                     "how many ways a row is looked for along where conditions on the way are"
                             + " one of several things";
@@ -835,6 +845,7 @@ public enum CompositionBudget {
                  SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,

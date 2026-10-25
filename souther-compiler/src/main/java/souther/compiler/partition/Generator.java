@@ -778,6 +778,9 @@ public final class Generator {
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
+                             // The cases past it were never planned under, so what the search came
+                             // to is about the cases it tried.
+                             CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                              // The strings past this many pieces were never offered, so what the
@@ -4104,12 +4107,75 @@ public final class Generator {
         /** The positions the classes standing leave no case in common. */
         private final Set<TermPath> disagreeing = new HashSet<>();
 
-        StandingTogether(WhatEachClassRequires requires, int[] where) {
+        /** The positions the walk may move, which are the only ones it stands again with a case. */
+        private final boolean[] movable;
+
+        StandingTogether(WhatEachClassRequires requires, int[] where, int[] steps) {
             this.requires = requires;
+            this.movable = new boolean[requires.axes.size()];
+            for (int step : steps) {
+                movable[step] = true;
+            }
             for (int i = 0; i < requires.axes.size() && i < where.length; i++) {
                 if (where[i] != NOT_HERE) {
                     add(i, where[i]);
                 }
+            }
+        }
+
+        /**
+         * Moving a case of a sum is the row being another case: the positions under the case it
+         * left stand at no class, and the ones under the case it enters stand at the first class
+         * that can be beside the rest, as {@link #standing} stands them.
+         */
+        @Override
+        public List<int[]> carry(int[] where, int axis, int from, int to) {
+            if (requires.of(axis, from).equals(requires.of(axis, to))) {
+                return List.of();
+            }
+            List<Axis> axes = requires.axes;
+            Requirements leaving = axes.get(axis).requiring(axes.get(axis).classes().get(from));
+            Requirements entering = axes.get(axis).requiring(axes.get(axis).classes().get(to));
+            List<int[]> changed = new ArrayList<>();
+            // Out from under the case left first, so that what is put under the one entered is
+            // asked beside the row as it now is.
+            for (int j = axis + 1; j < where.length; j++) {
+                if (movable[j] && where[j] != NOT_HERE
+                        && !axes.get(j).requirements().compatibleWith(entering)) {
+                    changed.add(new int[] {j, where[j]});
+                    remove(j, where[j]);
+                    where[j] = NOT_HERE;
+                }
+            }
+            for (int j = axis + 1; j < where.length; j++) {
+                Requirements own = axes.get(j).requirements();
+                if (!movable[j] || where[j] != NOT_HERE || own.compatibleWith(leaving)
+                        || !own.compatibleWith(entering)) {
+                    continue;
+                }
+                int here = j;
+                int cls = standingAt(axes.get(j), c -> admits(here, c)
+                        && !leavesNoRoomBeside(requires, where, here, c));
+                if (cls != NOT_HERE) {
+                    changed.add(new int[] {j, NOT_HERE});
+                    add(j, cls);
+                    where[j] = cls;
+                }
+            }
+            return changed;
+        }
+
+        @Override
+        public void restore(int[] where, List<int[]> changed) {
+            for (int i = changed.size() - 1; i >= 0; i--) {
+                int[] one = changed.get(i);
+                if (where[one[0]] != NOT_HERE) {
+                    remove(one[0], where[one[0]]);
+                }
+                if (one[1] != NOT_HERE) {
+                    add(one[0], one[1]);
+                }
+                where[one[0]] = one[1];
             }
         }
 
@@ -4123,6 +4189,14 @@ public final class Generator {
         @Override
         public boolean holds() {
             return disagreeing.isEmpty();
+        }
+
+        /** Whether {@code axis}, at no class now, can stand at {@code cls} beside the rest. */
+        boolean admits(int axis, int cls) {
+            add(axis, cls);
+            boolean holds = holds();
+            remove(axis, cls);
+            return holds;
         }
 
         private void add(int axis, int cls) {
@@ -4381,7 +4455,7 @@ public final class Generator {
         ParameterProjections.Settling settling = known.settling(origin.from(), walking.steps());
         Traversal[] result = {Traversal.EXHAUSTED};
         NearestAssignments.Ended ended = walking.walk().visitAt(distance,
-                new StandingTogether(requires, origin.base().clone()),
+                new StandingTogether(requires, origin.base().clone(), walking.steps()),
                 (where, from, to) -> {
                     for (int filled = from; filled <= to; filled++) {
                         if (known.leavesOut(settling, where, filled)) {
@@ -11777,8 +11851,12 @@ public final class Generator {
                                    Requirements additional, Handed handed, CandidateCheck check,
                                    FoundOut found, ValueTaking taking) {
         Composing[] made = {null};
+        // One count of the cases planned under for a rule above, across both walks and every sum
+        // they plan under: what multiplies is the cases of each such sum, and a count per sum would
+        // let the product past it.
+        CasesUnderARule cases = new CasesUnderARule();
         Outcome first = valueAtOnce(subject, p, decided, asked, settled, additional, handed, check,
-                found, taking, made);
+                found, taking, made, cases);
         if (first instanceof Outcome.Built || first instanceof Outcome.PassedOver
                 || first instanceof Outcome.Halted || made[0] == null
                 || made[0].notHeld().isEmpty()) {
@@ -11788,7 +11866,20 @@ public final class Generator {
         Map<TermPath, List<FixtureTemplate>> offered = offeredApart(subject, decided, made[0],
                 found);
         return offered == null ? first : valueAtOnce(subject, p, offered, asked, settled,
-                additional, handed, check, found, taking, new Composing[1]);
+                additional, handed, check, found, taking, new Composing[1], cases);
+    }
+
+    /**
+     * What is left of the one count of cases planned under for a rule above, and whether the
+     * attempt last made under one came to a position its rules leave nothing at.
+     *
+     * <p>The mark is the attempt's answer and is read by the walk that made it, straight after:
+     * a case settled by its rules before anything was searched is not one the count is spent on.
+     */
+    private static final class CasesUnderARule {
+
+        private int left = CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum();
+        private boolean leftNothing;
     }
 
     /**
@@ -11914,7 +12005,11 @@ public final class Generator {
                                        Map<TermPath, Place> settled,
                                        Requirements additional, Handed handed,
                                        CandidateCheck check, FoundOut found, ValueTaking taking,
-                                       Composing[] through) {
+                                       Composing[] through, CasesUnderARule cases) {
+        // Every call answers whether it searched anything, and starts from "it did": a caller
+        // reads the answer straight after the call, and a call that says nothing of it has not
+        // left what an earlier call did.
+        cases.leftNothing = false;
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -11979,7 +12074,8 @@ public final class Generator {
                 (at, building) -> new ConstructionPlan.ItMayHold(
                         within(heldRange(rules, at, building, subject.ruleReading()),
                                 sized.get(at)),
-                        ElementsKeptApart.heldBy(rules.heldAt(at))));
+                        ElementsKeptApart.heldBy(rules.heldAt(at))),
+                rules::speaksUnder);
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
@@ -12028,6 +12124,55 @@ public final class Generator {
                                                 .collect(java.util.stream.Collectors.joining(" or "))
                                         + ", and nothing said which of them the value under it is");
             }
+            // A rule of a value above names a field under a position that holds nothing until a
+            // narrowing says what stands there, and nobody asked which. Planned under each case in
+            // turn, so the field is a position held to that rule, and the first that composes is
+            // the answer. A case whose plan composes nothing says nothing of the next one, so what
+            // comes back where none composes is what the first case searched came to, unless the
+            // figure stopped the rest.
+            //
+            // Counted where a case was searched, and not where its rules left a position nothing
+            // before anything was searched: that case is settled by the rules, and a count spent
+            // on it is a case further on never tried.
+            case ConstructionPlan.Result.UnderEachCase(TermPath where, List<Refinement> under) -> {
+                Outcome first = null;
+                boolean firstSearched = false;
+                for (Refinement each : under) {
+                    if (!(additional.merge(where.refine(each).requirements())
+                            instanceof Requirements.Merge.Merged(Requirements narrowed))) {
+                        continue;
+                    }
+                    if (cases.left == 0) {
+                        return new Outcome.Stopped(CompositionShortfall.of(
+                                Set.of(CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER)),
+                                new LinkedHashMap<>(), null);
+                    }
+                    // Taken before the case is planned: a sum under it asks the same count, and one
+                    // asked only afterwards lets every sum on the way down pass it.
+                    cases.left--;
+                    Outcome made = valueAtOnce(subject, p, decided, asked, settled, narrowed,
+                            handed, check, found, taking, through, cases);
+                    if (made instanceof Outcome.Built || made instanceof Outcome.PassedOver
+                            || made instanceof Outcome.Halted) {
+                        return made;
+                    }
+                    boolean searched = !cases.leftNothing;
+                    if (!searched) {
+                        cases.left++;
+                    }
+                    if (first == null || (searched && !firstSearched)) {
+                        first = made;
+                        firstSearched = searched;
+                    }
+                }
+                // What this planning under the cases came to is that some case was searched, and
+                // that is what a plan above it counts: the cases of a sum inside a case are this
+                // call's own, and the flag a case left behind is not the answer of the call.
+                cases.leftNothing = !firstSearched;
+                return first != null ? first
+                        : new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                "`" + where + "` stands at no case the row can be");
+            }
         }
         // A position a container of this value is handed the value at, which this plan holds no
         // position at: it is inside a value chosen whole, and what stands inside that is nothing
@@ -12058,6 +12203,19 @@ public final class Generator {
         }
         Choices choices = choicesOf(subject, plan, fixed, rules);
         if (choices.missingAt() != null) {
+            // Marked for a walk planning under each case, which counts only the cases it searched:
+            // one whose rules leave a position nothing was settled before anything was searched.
+            if (choices.leftNothingAt() != null) {
+                cases.leftNothing = true;
+                // The model's answer where the rules leave the position nothing without anything
+                // the caller settled — under the narrowings this row is asked under, which are the
+                // combination's own — and this compiler's where a value settled beside it is why.
+                boolean byTheRules = settled.isEmpty() || ConstructionRules.of(subject, Map.of())
+                        .limitsAt(choices.leftNothingAt()).leavesNothing();
+                return new Outcome.Unresolved(byTheRules
+                        ? UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE
+                        : UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, choices.missingAt());
+            }
             // A position nothing stands at is the declarations' answer where the plan reached
             // everything, and this compiler's where it did not: what the search would have been
             // offered at a position the plan stopped short of is whole values of a type it declined
@@ -12689,6 +12847,7 @@ public final class Generator {
     private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
                            List<List<FixtureTemplate>> reserves, String missingAt,
+                           TermPath leftNothingAt,
                            Set<CompositionBudget> missingUnderAFigure,
                            List<Displacing> displacing, CompositionShortfall met) {
 
@@ -12699,7 +12858,16 @@ public final class Generator {
 
         static Choices missing(ConstructionPlan plan, String at,
                                Set<CompositionBudget> under, CompositionShortfall met) {
-            return new Choices(plan, List.of(), List.of(), List.of(), at, under, List.of(), met);
+            return new Choices(plan, List.of(), List.of(), List.of(), at, null, under, List.of(),
+                    met);
+        }
+
+        /** None, because the rules leave the position {@code at} no value under what this plan
+         *  was made with. */
+        static Choices leavingNothingAt(ConstructionPlan plan, TermPath at) {
+            return new Choices(plan, List.of(), List.of(), List.of(),
+                    "the rules leave no value at `" + at + "`", at, Set.of(), List.of(),
+                    CompositionShortfall.NONE);
         }
 
         /**
@@ -12783,6 +12951,11 @@ public final class Generator {
             }
             FieldDomains.ConstructionLimits limits = left.limitsAt(slot.at());
             NumericDomain.Bounds here = limits.values();
+            // A position the rules leave no value at, under the narrowings this plan was made with
+            // and what the caller settled: no value is offered, and that is said as itself.
+            if (limits.leavesNothing()) {
+                return Choices.leavingNothingAt(plan, slot.at());
+            }
             Proposals stands = subject.representativesHolding(slot.type(), limits);
             met = met.and(stands.met());
             if (stands.isEmpty()) {
@@ -12805,7 +12978,7 @@ public final class Generator {
             reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
             displacing.add(new Displacing(slot.type(), limits));
         }
-        return new Choices(plan, paths, values, reserves, null, Set.of(), displacing, met);
+        return new Choices(plan, paths, values, reserves, null, null, Set.of(), displacing, met);
     }
 
     /** What a position's value is displaced within: its type, and what its rules leave of it. */

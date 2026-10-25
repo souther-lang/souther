@@ -258,7 +258,7 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                 TermPath.of(List.of("items", "filed").get(parameter)),
                 ScopedDeclarations.wrapsOf(symbols), symbols, ScopedDeclarations.kindsOf(symbols),
                 ScopedDeclarations.sumsOf(symbols), Set.of(), Requirements.NONE, contents,
-                howMany);
+                howMany, _ -> false);
     }
 
     private record Read(List<Type> types, Symbols symbols) {}

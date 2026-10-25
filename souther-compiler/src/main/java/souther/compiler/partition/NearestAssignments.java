@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * The assignments over one origin's base that move some of the positions a row is not about, at
@@ -35,6 +36,22 @@ final class NearestAssignments {
 
         /** Whether the classes standing can all stand in one value. */
         boolean holds();
+
+        /**
+         * Stands again, in {@code where}, the positions that moving {@code axis} from the class
+         * {@code from} to the class {@code to} takes the row out from under or puts it under: the
+         * move is a case of a sum becoming another, and the positions under the case it left are
+         * not there to keep. Those are part of the one move and not moves of their own.
+         *
+         * @return each position changed and the class it stood at before, for {@link #restore};
+         *         none where the move is not a case becoming another
+         */
+        default List<int[]> carry(int[] where, int axis, int from, int to) {
+            return List.of();
+        }
+
+        /** Puts back what {@link #carry} changed. */
+        default void restore(int[] where, List<int[]> changed) {}
     }
 
     /** Whether a part of the walk is one the visitor would pass over whatever is decided below. */
@@ -292,6 +309,11 @@ final class NearestAssignments {
             }
             int axis = steps[chosen[k]];
             int stood = where[axis];
+            // A position under a case an earlier move left stands at no class, and has none to
+            // move to: the row is not there, and the combinations that leave it out are walked.
+            if (stood < 0) {
+                return false;
+            }
             int at = stood;
             for (int c = 0; c < classes[axis]; c++) {
                 if (c == stood) {
@@ -308,9 +330,11 @@ final class NearestAssignments {
                 together.move(axis, at, c);
                 at = c;
                 where[axis] = c;
+                List<int[]> carried = together.carry(where, axis, stood, c);
                 if (together.holds() && classesOf(k + 1, chosen[k] + 1, now)) {
                     return true;
                 }
+                together.restore(where, carried);
             }
             together.move(axis, at, stood);
             where[axis] = stood;

@@ -11,6 +11,7 @@ import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -658,7 +659,8 @@ final class Witnesses {
             given.put(each.getKey(), inner.values().getFirst());
         }
         Proposals composed = Partitions.composed(named,
-                Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given);
+                Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given,
+                Partitions.RulesAround.NONE);
         met = met.and(composed.met());
         FixtureTemplate written = composed.isEmpty() ? null
                 : WornNames.under(view.wrappers(), composed.values().getFirst(), source);
@@ -1099,7 +1101,7 @@ final class Witnesses {
         // a stop is kept where the walk came to it and one past the last value taken is never
         // reached.
         Proposals.Gathering out = Proposals.Gathering.distinct();
-        Placed placed = placed(type, atThePlace, reading, expanding);
+        Placed placed = placed(type, atThePlace, reading, expanding, Partitions.RulesAround.NONE);
         out.addAll(placed.offered(), many);
         if (placed.everyValue() || out.size() >= many) {
             return out.done();
@@ -1672,14 +1674,14 @@ final class Witnesses {
      * one the rules refuse — stepped, composed or proposed, it only takes what holds it with it.
      */
     static Placed placed(Type type, AdmissibleSet atThePlace, RuleReadingContext reading,
-                         Set<TypeSymbol> expanding) {
+                         Set<TypeSymbol> expanding, Partitions.RulesAround around) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         Proposals.Gathering out = Proposals.Gathering.inOrder();
         for (PartitionClass each : PartitionClasses.of(
                 PartitionClasses.casesAt(view, atThePlace, reading), view, reading, expanding)) {
-            out.addAll(Partitions.standingFor(each.representatives(), reading, expanding));
+            out.addAll(Partitions.standingFor(each.representatives(), reading, expanding, around));
         }
         return new Placed(out.done(), namesFinitelyMany(atThePlace)
                 || namesFinitelyMany(PartitionClasses.admittedByItsNames(view, reading)));
@@ -1701,14 +1703,20 @@ final class Witnesses {
             return offered.values();
         }
 
-        /** These kept to the numbers {@code within} leaves, where a value is a number and a range
+        /** These kept to the numbers {@code limits} leaves, where a value is a number and a range
          *  is known; a value that is no number is not one a range says anything about. */
-        Placed within(NumericDomain.Bounds within) {
-            if (within == null) {
+        Placed within(FieldDomains.ConstructionLimits limits) {
+            NumericDomain.Bounds within = limits.values();
+            OrderedRuns ordered = limits.ordered();
+            if (within == null && ordered == null) {
                 return this;
             }
+            // Between the ends, and in one of the runs the order leaves: a number between the ends
+            // of two runs is one every alternative refuses.
             return new Placed(offered.map(each ->
-                    !(Counts.writtenIn(each.value()) instanceof Place at) || within.admits(at)
+                    !(Counts.writtenIn(each.value()) instanceof Place at)
+                            || ((within == null || within.admits(at))
+                                    && (ordered == null || ordered.admits(at)))
                             ? each : null), everyValue);
         }
 
@@ -1732,15 +1740,19 @@ final class Witnesses {
      *
      * <p>Only where the place's rules say which values stand there. Where they say nothing, the
      * place divides into what its type does, which is what a builder already offers.
+     *
+     * @param around the rules of the values the place is inside, which a value built for one of
+     *               its classes is held to ({@link Partitions.RulesAround})
      */
     static Proposals firstWhatThePlaceAdmits(Type type, FieldDomains.ConstructionLimits limits,
                                              RuleReadingContext reading,
                                              Set<TypeSymbol> expanding,
+                                             Partitions.RulesAround around,
                                              Supplier<Proposals> otherwise) {
         if (limits.admits().approximation().isAny()) {
             return otherwise.get();
         }
-        return placed(type, limits.admits(), reading, expanding).within(limits.values())
+        return placed(type, limits.admits(), reading, expanding, around).within(limits)
                 .before(otherwise);
     }
 

@@ -8,6 +8,9 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -441,6 +444,76 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                             .refine(caseNamed(sum, each)).then("limit")).projection(),
                     () -> "the only value that wrote anything is `Holder`, under case " + each);
         }
+    }
+
+    /** A choice of ranges above a sum whose case `A` states {@code CASE} of the shared field. */
+    private static final String A_CHOICE_ABOVE = """
+            module g
+
+            data Paging = { limit: Int }
+            data A = { ...Paging, x: Int }
+                invariant own = CASE
+            data B = { ...Paging, y: Int }
+            data Q = A | B
+
+            data Holder = { q: Q }
+                invariant apart = q.limit > 100 || q.limit < 0
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
+    /** What the order leaves the shared field under {@code each}. */
+    private static OrderedRuns orderedUnder(InputDomain sum, String each) {
+        return sum.at(TermPath.of("h").then("q").refine(caseNamed(sum, each)).then("limit"))
+                .orderedRegion();
+    }
+
+    /** Whether {@code end} is the whole number {@code at}. */
+    private static boolean at(Endpoint end, long at) {
+        return end != null && end.at().sameAs(Count.of(at));
+    }
+
+    /**
+     * A choice of ranges the value above leaves the shared field is a gap in it under each case,
+     * met with what the case's own rules leave it: both runs where the case's rule cuts one short.
+     */
+    @Test
+    void theRunsAChoiceAboveLeavesStandUnderEachCaseMetWithTheCasesOwn() {
+        InputDomain sum = reading(A_CHOICE_ABOVE.replace("CASE", "limit <= 150"));
+
+        OrderedRuns underB = orderedUnder(sum, "B");
+        assertEquals(2, underB.runs().size(), underB::toString);
+        assertTrue(at(underB.runs().getFirst().high(), -1), underB::toString);
+        assertNull(underB.runs().getLast().high(),
+                "under `B`, which has no rule of its own, the upper run runs on");
+        OrderedRuns underA = orderedUnder(sum, "A");
+        assertEquals(2, underA.runs().size(), underA::toString);
+        assertTrue(at(underA.runs().getLast().high(), 150),
+                "and under `A` the upper run stops where `A`'s own rule stops it: " + underA);
+    }
+
+    /**
+     * And where the case's own rule leaves one of the runs, the field is that run — which is where
+     * it stops, and not the ends around both runs met with the case's rule.
+     */
+    @Test
+    void aCaseLeavingOneOfTheRunsAboveLeavesTheFieldThatRun() {
+        OrderedRuns underA = orderedUnder(reading(A_CHOICE_ABOVE.replace("CASE", "limit >= 0")),
+                "A");
+
+        assertEquals(1, underA.runs().size(), underA::toString);
+        assertTrue(at(underA.runs().getFirst().low(), 101), underA::toString);
+    }
+
+    /** And where it leaves neither, the field holds nothing under that case. */
+    @Test
+    void aCaseLeavingNeitherOfTheRunsAboveLeavesTheFieldNothing() {
+        InputDomain sum = reading(A_CHOICE_ABOVE.replace("CASE", "limit >= 0 && limit <= 100"));
+
+        assertTrue(orderedUnder(sum, "A").holdsNothing(), () -> orderedUnder(sum, "A").toString());
+        assertEquals(2, orderedUnder(sum, "B").runs().size(), "and `B` still has both");
     }
 
     /** The narrowing that names this case of the sum standing at {@code sum}. */

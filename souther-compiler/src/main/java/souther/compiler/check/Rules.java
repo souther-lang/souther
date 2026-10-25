@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -87,6 +88,15 @@ public sealed interface Rules {
         return switch (this) {
             case Read read -> read.domains().admits(path);
             case NoneWritten _ -> AdmissibleSet.complete(ValueSet.ANY);
+        };
+    }
+
+    /** What the order leaves {@code path}, or null where no rule of it stops the path
+     *  ({@link FieldDomains#orderedRegionAt}). */
+    default OrderedRuns orderedRegionAt(RuleKey path) {
+        return switch (this) {
+            case Read read -> read.domains().orderedRegionAt(path);
+            case NoneWritten _ -> null;
         };
     }
 

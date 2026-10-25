@@ -83,7 +83,7 @@ class APlanAsksAMapForWhatIsAskedOfEachPartTest {
         ConstructionPlan.Result result = ConstructionPlan.of(read.declared(), TermPath.of("u"),
                 ScopedDeclarations.wrapsOf(symbols), symbols, ScopedDeclarations.kindsOf(symbols),
                 ScopedDeclarations.sumsOf(symbols), decided, Requirements.NONE,
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, result,
                 () -> "a plan is made: " + result).plan();
     }
