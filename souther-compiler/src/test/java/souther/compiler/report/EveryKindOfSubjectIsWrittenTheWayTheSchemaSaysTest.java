@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.DocumentShape;
 import souther.compiler.publish.MeasureWord;
+import souther.compiler.publish.PublishedOpening;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSubject;
 import souther.compiler.publish.SubjectWord;
@@ -278,6 +279,28 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         }
         JsonNode kind = branch.get("properties").get("kind");
         return kind.get("const").asString().equals(written.get("kind").asString());
+    }
+
+    /** And the behaviors an unsettled fork was met under, which the schema holds to a shape too. */
+    @Test
+    void theSchemaAcceptsTheBehaviorsAFactWasMetUnder() {
+        ObjectNode document = document();
+        ObjectNode entry = ((tools.jackson.databind.node.ArrayNode)
+                document.get("keptOpenBy")).addObject();
+        entry.put("kind", "arms_unsettled");
+        entry.put("runSensitivity", "unaffected");
+        ObjectNode writtenBy = JSON.createObjectNode();
+        writtenBy.put("kind", "body");
+        writtenBy.put("definition", "filter");
+        AdequacyReport.about(entry.putObject("about"),
+                new PublishedSubject.AtAFork("m", writtenBy, 0, 0, "if"),
+                new DocumentSources(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        AdequacyReport.observedIn(entry, List.of(
+                new PublishedOpening.ObservedIn("crm", "convertLead"),
+                new PublishedOpening.ObservedIn("crm", "screenForDuplicates")));
+
+        assertEquals(List.of(), DocumentShape.of(document).wrong());
+        assertEquals(2, entry.get("observedIn").size());
     }
 
     /** The schema this compiler ships beside the documents it writes. */
