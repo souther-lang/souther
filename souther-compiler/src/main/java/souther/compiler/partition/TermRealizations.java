@@ -2877,15 +2877,19 @@ final class TermRealizations {
         // One place of each run of the set inside each of those, standing for it — and where the
         // one standing for it is a value the position's values refuse, a value of the run they
         // take, worked out of the set: the place standing for a run is chosen by where the number
-        // is usually near, and a rule singling a value out may single out that one.
+        // is usually near, and a rule singling a value out may single out that one. Where the
+        // order names no place for a run, nothing is worked out in its stead: an order declines
+        // on purpose, as above a string a rule stops short of, where every value would carry a
+        // character nobody wrote.
         Carrier carrier = orders.answered();
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<Place> offered = new ArrayList<>();
         for (NumericDomain.Bounds run : runs) {
             for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
                     run == null ? null : run.min(), run == null ? null : run.max())) {
-                Place found = space.standingFor(look, usual).level() instanceof Level.OnACarrier on
-                        && carrier.admitted(admits, on.at()) ? on.at()
+                Place found = !(space.standingFor(look, usual).level()
+                        instanceof Level.OnACarrier on) ? null
+                        : carrier.admitted(admits, on.at()) ? on.at()
                         : admittedIn(look, carrier, admits);
                 if (found != null && !offered.contains(found)) {
                     offered.add(found);

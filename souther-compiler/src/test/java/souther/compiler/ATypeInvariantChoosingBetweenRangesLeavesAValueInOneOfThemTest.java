@@ -155,6 +155,37 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         assertFalse(block.contains("nothing here could build"), block);
     }
 
+    /**
+     * A value a rule singles out leaves the two runs either side of it, and every position with
+     * such a hole is written in one of them — so a record of many of them is one row, and not a
+     * search through every pairing of the values beside each hole.
+     */
+    @Test
+    void positionsEachWithAHoleAreWrittenBesideTheirHoles() {
+        StringBuilder fields = new StringBuilder("    { a1: Int\n");
+        StringBuilder rule = new StringBuilder("a1 /= 0");
+        for (int i = 2; i <= 11; i++) {
+            fields.append("    , a").append(i).append(": Int\n");
+            rule.append(" && a").append(i).append(" /= 0");
+        }
+        String block = blockOf("""
+                module example.gap
+
+                data R =
+                FIELDS    }
+                    invariant rule = RULE
+
+                data Ok
+
+                behavior f : (r: R, flag: Bool) -> Ok
+
+                let f (r, flag) = if flag then Ok else Ok
+                """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString()));
+
+        assertTrue(block.contains("a11 = 1"), block);
+        assertFalse(block.contains("no row for"), block);
+    }
+
     /** One declaration's choice cut to one run by a rule beside it is written in that run. */
     @Test
     void aChoiceCutToOneRunByTheRuleBesideItIsWrittenInThatRun() {
