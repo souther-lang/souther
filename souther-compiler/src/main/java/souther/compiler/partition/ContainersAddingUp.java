@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.NumericMeasures;
@@ -2291,7 +2291,7 @@ final class ContainersAddingUp {
             decided.addAll(apart);
             // The element's own rules are the ones it is built to: what is above a container says
             // of the container and not of what stands in it.
-            FieldDomains rules = ConstructionRules.rulesOf(element, reading);
+            PlacesTheRulesRead rules = PlacesTheRulesRead.of(element, reading.source());
             return ConstructionPlan.of(element, at, reading.source().inners(),
                     reading.source().symbols(),
                     reading.source().kinds(), reading.source().sums(), decided,
@@ -2299,7 +2299,7 @@ final class ContainersAddingUp {
                     (_, building) -> ConstructionPlan.ItMayHold.counting(
                             Partitions.heldRange(building, reading, null)),
                     here -> RuleAddress.of(at, here) instanceof RuleAddress address
-                            && rules.namesUnder(address.key()));
+                            && rules.readUnder(address.key()));
         }
 
         /** The way the last answer is about. */

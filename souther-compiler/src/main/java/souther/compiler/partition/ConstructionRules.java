@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -59,6 +60,8 @@ final class ConstructionRules {
     /** Each value's rules with nothing settled, which every settling is taken onto. */
     private final Map<TermPath, FieldDomains> readBare = new HashMap<>();
     private final Map<Taken, FieldDomains.Composing> composed = new HashMap<>();
+    /** The places each value's rules read, by where the value stands. */
+    private final Map<TermPath, PlacesTheRulesRead> readAt = new HashMap<>();
 
     private ConstructionRules(MeasuredInput subject, Map<TermPath, Place> settled) {
         this.subject = subject;
@@ -153,7 +156,7 @@ final class ConstructionRules {
      * <p>With nothing settled, which is the declaration's own reading and the one the walk that read
      * the inputs has already made: asked again here, it is borrowed rather than read.
      */
-    static FieldDomains rulesOf(Type type, RuleReadingContext reading) {
+    private static FieldDomains rulesOf(Type type, RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         // Whether the position is a record, and which record, are one answer and it is the
         // reading's. The rules are then read on the name the value is written under where it wraps
@@ -183,11 +186,17 @@ final class ConstructionRules {
      */
     boolean speaksUnder(TermPath here) {
         for (RuleRoots.Naming each : namingOf(here)) {
-            if (bare(each).namesUnder(each.address().key())) {
+            if (placesRead(each).readUnder(each.address().key())) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** The places the rules of the value {@code value} names a position in read. */
+    private PlacesTheRulesRead placesRead(RuleRoots.Naming value) {
+        return readAt.computeIfAbsent(value.address().root(),
+                at -> PlacesTheRulesRead.of(value.value(), reading.source()));
     }
 
     private List<RuleRoots.Naming> namingOf(TermPath path) {

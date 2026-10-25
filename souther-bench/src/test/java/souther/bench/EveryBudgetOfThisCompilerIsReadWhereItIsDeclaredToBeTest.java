@@ -606,17 +606,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$ValueTaking;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the same bound over one pass of the assignments"),
-            Map.entry("souther.compiler.partition.Generator#valueAt("
-                            + "Lsouther/compiler/partition/MeasuredInput;I"
-                            + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;"
-                            + "Lsouther/compiler/inputs/Requirements;"
-                            + "Lsouther/compiler/partition/Generator$Handed;"
-                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
-                            + "Lsouther/compiler/partition/Generator$FoundOut;"
-                            + "Lsouther/compiler/partition/Generator$ValueTaking;)"
-                            + "Lsouther/compiler/partition/Generator$Outcome;",
-                    "holds one count of the cases planned under for a rule above, for both walks"
-                            + " of one parameter's value"),
             Map.entry("souther.compiler.partition.Generator#valueAtOnce("
                             + "Lsouther/compiler/partition/MeasuredInput;I"
                             + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;"
@@ -625,10 +614,25 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$CandidateCheck;"
                             + "Lsouther/compiler/partition/Generator$FoundOut;"
                             + "Lsouther/compiler/partition/Generator$ValueTaking;"
-                            + "[Lsouther/compiler/partition/Generator$Composing;[I)"
+                            + "[Lsouther/compiler/partition/Generator$Composing;"
+                            + "Lsouther/compiler/partition/Generator$CasesUnderARule;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "stops planning under the cases a rule above names a field of where the count"
                             + " runs out, and says so as the search stopped at that figure"),
+            Map.entry("souther.compiler.partition.Generator$CasesUnderARule#<init>()V",
+                    "begins the one count of the cases planned under for a rule above"),
+            Map.entry("souther.compiler.partition.Partitions$RulesAround$Budget#<init>()V",
+                    "begins the one count of the records composed under a rule above, for a value"
+                            + " built whole"),
+            Map.entry("souther.compiler.partition.Partitions#composed("
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + "Lsouther/compiler/check/RuleReadingContext;"
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/partition/Partitions$RulesAround;)"
+                            + "Lsouther/compiler/partition/Proposals;",
+                    "stops composing a record a rule above reads under where the count runs out,"
+                            + " and says so as the figure"),
             Map.entry("souther.compiler.partition.ConstructionPlan#node("
                             + "Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/inputs/TermPath;"

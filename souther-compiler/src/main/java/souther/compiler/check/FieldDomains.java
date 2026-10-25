@@ -2093,19 +2093,6 @@ public final class FieldDomains {
     }
 
     /**
-     * Whether these rules name a position strictly under {@code path}, which a value built whole at
-     * {@code path} by its own declaration's rules is built without.
-     */
-    public boolean namesUnder(RuleKey path) {
-        for (RuleKey each : namedBy.values()) {
-            if (!each.equals(path) && each.isAtOrUnder(path)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * What the order leaves the value at {@code path} — one run, runs apart, or none — or null
      * where no rule of the order stops it short of its order's own ends.
      *

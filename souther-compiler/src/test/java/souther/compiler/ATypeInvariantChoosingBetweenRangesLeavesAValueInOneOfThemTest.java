@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.GeneratedRows;
@@ -240,6 +241,153 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
                 """);
 
         assertFalse(block.contains("no row for"), block);
+    }
+
+    /** A record behind a name that wraps it, with a rule of its own, built for a rule above. */
+    private static final String WRAPPED_RECORD = """
+            module example.gap
+
+            data Paging = { limit: Int }
+                invariant own = limit >= 0
+            data Wrapped = Paging
+                invariant wrapped = value.limit <= 500
+            data Holder = { p: Wrapped }
+                invariant above = p.value.limit > 100
+            data Holders = List<Holder>
+                invariant nonEmpty = List.length(value) >= 1
+
+            behavior f : (hs: Holders, n: Int) -> Bool
+            let f (hs, n) = if n >= 3 then true else false
+            """;
+
+    /**
+     * A record behind a name that wraps it is built as that name, held to the name's rules and
+     * the rule above as well as to its own, wherever it is built whole.
+     */
+    @Test
+    void aWrappedRecordBuiltForARuleAboveWearsItsNameAndHoldsItsRules() {
+        String block = blockOf(WRAPPED_RECORD);
+
+        assertTrue(block.contains("Wrapped(Paging { limit = 101 })"), block);
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /** A sum behind a name that wraps it, its cases sharing the field a rule above names. */
+    private static final String WRAPPED_SUM = """
+            module example.gap
+
+            data Paging = { limit: Int }
+            data A = { ...Paging, x: Int }
+                invariant own = limit >= 0
+            data B = { ...Paging, y: Int }
+            data Q = A | B
+            data Wrapped = Q
+            data Holder = { q: Wrapped }
+                invariant above = q.value.limit > 100
+            data Holders = List<Holder>
+                invariant nonEmpty = List.length(value) >= 1
+
+            behavior f : (hs: Holders, n: Int) -> Bool
+            let f (hs, n) = if n >= 3 then true else false
+            """;
+
+    /** And a sum behind a name is built as one of its cases under that name. */
+    @Test
+    void aWrappedSumBuiltForARuleAboveIsACaseUnderItsName() {
+        String block = blockOf(WRAPPED_SUM);
+
+        assertTrue(block.contains("Wrapped(A { limit = 101"), block);
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /**
+     * A sum no rule above reads is built as its first case, whatever the cases hold: the rules
+     * above name the other field, so there is nothing to plan the cases apart by.
+     */
+    @Test
+    void aSumNoRuleAboveReadsIsBuiltAsItsFirstCase() {
+        String block = blockOf("""
+                module example.gap
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+                data Holder = { q: Q, size: Int }
+                    invariant above = size > 100
+
+                behavior f : (h: Holder, n: Int) -> Bool
+                let f (h, n) = if n >= 3 then true else false
+                """);
+
+        assertTrue(block.contains("q = A {"), block);
+        assertFalse(block.contains("q = B {"), block);
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /**
+     * A sum under a rule above, more cases than the one count holds, every case but the last one
+     * the rules leave no value in. Those are settled by the rules and not searched, so the count
+     * reaches the last case: the rows owed at the other parameter's points are written under it,
+     * and so are the rows for its classes, whose search starts from the first case and moves the
+     * case of the sum as one position.
+     */
+    @Test
+    void casesTheRulesSettleAreNotCountedAndARowIsWrittenUnderTheCaseLeft() {
+        String block = blockOf(manyCasesBeforeOne("{ ...Paging, r: R }\n"
+                + "    invariant own = limit < 0\n"));
+
+        assertTrue(block.contains("fills n=x < 3"), block);
+        assertTrue(block.contains("(Holder { q = C10 { limit = 101, r = S { s = 0 } } }, 3)"),
+                block);
+        assertFalse(block.contains("no row for `n"), block);
+    }
+
+    /**
+     * The same, with cases the rules leave a value in at each field and none at the two together,
+     * which only searching them finds: the search stops at the count before the last case, and
+     * says it left something untried rather than that every value was refused.
+     */
+    @Test
+    void casesSearchedAndRefusedStopAtTheCount() {
+        String block = blockOf(manyCasesBeforeOne("{ ...Paging }\n"
+                + "    invariant own = limit * limit < 0\n"));
+
+        assertTrue(block.contains("no row for `n = 3` in `f`: the search left something untried"),
+                block);
+        assertFalse(block.contains("no row for `n = 3` in `f`: every value tried was refused"),
+                block);
+    }
+
+    /**
+     * A holder whose rule asks more than {@code 100} of its sum's shared field, the sum's cases all
+     * declared {@code before} but the last, which states nothing of the field and holds a sum of
+     * its own; read beside another parameter.
+     */
+    private static String manyCasesBeforeOne(String before) {
+        StringBuilder cases = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        int many = CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum() + 2;
+        for (int i = 1; i <= many; i++) {
+            cases.append("data C").append(i).append(" = ")
+                    .append(i < many ? before : "{ ...Paging, r: R }\n");
+            names.append(i == 1 ? "" : " | ").append("C").append(i);
+        }
+        return """
+                module example.gap
+
+                data Paging = { limit: Int }
+                data S = { s: Int }
+                data T = { t: Int }
+                data R = S | T
+                CASES
+                data Q = NAMES
+                data Holder = { q: Q }
+                    invariant above = q.limit > 100
+
+                behavior f : (h: Holder, n: Int) -> Bool
+                let f (h, n) = if n >= 3 then true else false
+                """.replace("CASES", cases).replace("NAMES", names);
     }
 
     /** One declaration's choice cut to one run by a rule beside it is written in that run. */
