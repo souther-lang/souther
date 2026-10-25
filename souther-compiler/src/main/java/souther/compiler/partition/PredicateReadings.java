@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleRef;
@@ -21,7 +22,7 @@ import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
-import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -267,8 +268,10 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                         at -> reads.writtenStringOf(at, symbols, read.newtypes()));
         if (stated != null) {
             read(call, written.application(), behavior, stated, reads, out, reaches);
-        } else if (call.type() == Type.Prim.BOOL && call.args().stream().anyMatch(each ->
-                Core.withoutStanding(each).type() instanceof Type.FnOf)) {
+        } else if (call.operation() instanceof ValueName.Stdlib.Operation operation
+                && DefaultBoundOperationFacts.get().quantifiesOverTheElementsItIsHanded(operation)) {
+            // Asked of what the operation is proved to come to, and not of the shape of what it is
+            // handed: a quantifier is one whether its closure is written at it or named.
             piecesRead(call, written.application(), behavior, read, reads, out, reaches);
         }
     }

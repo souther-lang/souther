@@ -1081,19 +1081,17 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         case Proposition.Truth truth -> alike(truth.of(), apart);
                         case Proposition.Present present -> alike(present.of(), apart);
                         case Proposition.InCases cases -> alike(cases.of(), apart);
-                        case Proposition.InTheStrings(
-                                Proposition.InTheStrings.Strings.AtAPosition(var at), var _, var _,
-                                var _) -> alike(new DecisionSubject.AnInput(at), apart);
-                        // A piece is whichever the statement it is read inside says it is.
-                        case Proposition.InTheStrings _ -> false;
                         case Proposition.SameValue same ->
                                 alike(same.one(), apart) && alike(same.other(), apart);
                         // Which element holding the value is the last to, what some element of a
                         // container meets, what an operation answered of something: each turns on
-                        // which element it is asked of, or on what nothing here reads.
+                        // which element it is asked of, or on what nothing here reads. And which
+                        // strings a string is one of, which no model has been shown to ask of the
+                        // element a value is held by.
                         case Proposition.LastToHold _, Proposition.Some _,
                              Proposition.OnAnApplication _, Proposition.SomeReachable _,
-                             Proposition.Unread _, Proposition.Carried _ -> false;
+                             Proposition.Unread _, Proposition.Carried _,
+                             Proposition.InTheStrings _ -> false;
                     };
                 }
 

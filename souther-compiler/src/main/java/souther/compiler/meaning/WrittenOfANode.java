@@ -57,9 +57,7 @@ public final class WrittenOfANode {
             case Proposition.Truth truth -> reads(truth.of());
             case Proposition.InCases cases -> reads(cases.of());
             case Proposition.Present present -> reads(present.of());
-            case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at), var _, var _,
-                    var _) -> reads(at);
+            // Which strings a string is one of is not shown to be asked of a node's own places.
             case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());

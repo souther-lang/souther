@@ -1621,9 +1621,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
             case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
-            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
-                                          var _, var _, var _) -> true;
-            case Proposition.InTheStrings _ -> false;
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && statesNoRelation(some.ofTheElement());
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);
@@ -1633,10 +1630,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.WhereItAnswers where ->
                     statesNoRelation(where.answers()) && statesNoRelation(where.states());
             // Settled, a relation, two values being one, or something nobody read: each is read
-            // as what it is ({@link #readOnce}).
+            // as what it is ({@link #readOnce}). And which strings a string is one of, which is
+            // read where the rules about a position's strings are, and is no line of numbers.
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
                  Proposition.Unread _, Proposition.LastToHold _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _ -> false;
+                 Proposition.SomeReachable _, Proposition.InTheStrings _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }

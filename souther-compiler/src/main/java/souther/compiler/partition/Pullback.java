@@ -1425,7 +1425,6 @@ final class Pullback {
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
     private static final ValueName.Stdlib TAKE = ValueName.Stdlib.operation("List", "take");
-    private static final ValueName.Stdlib DROP = ValueName.Stdlib.operation("List", "drop");
 
     /**
      * Why {@code more} readings of the condition, made at one place where it splits, are not
@@ -2165,9 +2164,14 @@ final class Pullback {
     }
 
     /**
-     * The pieces {@code container} is, or the window of them that {@code List.take} and
-     * {@code List.drop} left of the pieces, in the order they were applied — or null where it is
-     * neither, or a count is not a number written out and not negative.
+     * The pieces {@code container} is, or the window of them that the operations keeping the
+     * elements of a list by their index left of the pieces, in the order they were applied — or
+     * null where it is neither, or a count is not a number written out and not negative.
+     *
+     * <p>Which operations those are, and which side of the count each keeps, is what the library
+     * declares of them ({@link BoundOperationFacts#holdsTheElementsByIndex}) and not their names:
+     * one that keeps the elements below the count takes, and one that keeps those at or above it
+     * drops.
      *
      * <p>A window that holds no piece is a window, and is not null: a container of none still has
      * some of them false and every one of them true. The window of what is taken from a window
@@ -2179,23 +2183,29 @@ final class Pullback {
         if (whole != null) {
             return whole;
         }
-        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
-                || !(call.declared().operation() instanceof ValueName.Stdlib operation)
-                || (!TAKE.equals(operation) && !DROP.equals(operation))) {
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)) {
             return null;
         }
-        Denotation count = container.at().standing(call.args().get(0),
+        BoundOperationFacts.KeptByIndex kept =
+                DefaultBoundOperationFacts.get().holdsTheElementsByIndex(call.declared().operation());
+        if (kept == null || (kept.kept() != Rel.LT && kept.kept() != Rel.GE)) {
+            return null;
+        }
+        Denotation count = container.at().standing(call.args().get(kept.count().position()),
                 read.rules().symbols(), read.rules().newtypes());
         if (!(Core.withoutStanding(count.value()) instanceof Core.Int number)
                 || number.value() < 0) {
             return null;
         }
-        Pieces inner = piecesInAWindow(container.at().standing(call.args().get(1),
-                read.rules().symbols(), read.rules().newtypes()));
+        Pieces inner = piecesInAWindow(container.at().standing(
+                call.args().get(kept.list().position()), read.rules().symbols(),
+                read.rules().newtypes()));
         if (inner == null) {
             return null;
         }
-        return inner.through(TAKE.equals(operation) ? inner.window().taking(number.value())
+        // The operation keeps the elements whose index is below the count, or at or above it, as
+        // it is declared to; those are what taking and dropping are.
+        return inner.through(kept.kept() == Rel.LT ? inner.window().taking(number.value())
                 : inner.window().dropping(number.value()));
     }
 
