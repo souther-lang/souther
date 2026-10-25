@@ -504,8 +504,9 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "inputs/InputReads;)" + core, 2, GOES_ON_INTO_IT);
         row(out, c + "inputs/InputReads", "walkNames",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", 1, COUNTS_THROUGH_IT);
-        row(out, c + "inputs/InputReads", "readsAnApplied", "(" + core + "L" + c
-                + "check/Symbols;L" + c + "check/DeclarationNewtypes;Ljava/util/Set;)Z", 1,
+        row(out, c + "inputs/InputReads", "applicationsRead", "(" + core + "L" + c
+                + "check/Symbols;L" + c
+                + "check/DeclarationNewtypes;Ljava/util/Set;Ljava/util/Set;)V", 1,
                 COUNTS_THROUGH_IT);
         row(out, c + "check/Clauses", "substituted",
                 "(" + core + "Ljava/util/Map;)" + core, 1, REWRITES_UNDER_IT);

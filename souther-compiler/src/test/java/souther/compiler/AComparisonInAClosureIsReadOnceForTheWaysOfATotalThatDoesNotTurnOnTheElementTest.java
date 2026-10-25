@@ -176,6 +176,25 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
 
+    /**
+     * A value that turns on the outer closure's parameter only is split with the outer
+     * applications, and not also with the inner closure's, which it is the same on: the readings
+     * are the outer ones times its cases, however long the inner table.
+     */
+    @Test
+    void aValueTurningOnTheOuterParameterAloneIsNotSplitWithTheInnerApplications() {
+        int outer = 8;
+        int inner = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / outer;
+        String report = report("""
+                behavior g : (w: Window) -> Ok | No
+                let g (w) = {
+                    guard List.any(t -> List.any(s -> s <= Int.max(t, w.first.pay), %s), %s) else No
+                    Ok
+                }
+                """.formatted(table(inner), table(outer)));
+        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
     /** A helper that is handed nothing of the application is the same total on each. */
     @Test
     void aTotalFromAHelperHandedNothingOfTheApplicationIsReadWhateverTheTableLength() {
