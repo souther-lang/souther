@@ -306,6 +306,10 @@ public final class FieldDomains {
      *  it is asked. */
     private volatile Map<RuleKey, List<EntryHeld.Requirement>> entriesHeld;
 
+    /** What the rules of this value ask of each list about its sides
+     *  ({@link #sidesBalancedAt}), read the first time it is asked. */
+    private volatile Map<RuleKey, List<SidesBalanced.Requirement>> sidesBalanced;
+
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
                          Map<RuleKey, ValueSet> admittedByName,
@@ -1971,6 +1975,22 @@ public final class FieldDomains {
         if (held == null) {
             held = EntryHeld.writtenOn(named, source);
             entriesHeld = held;
+        }
+        return held.getOrDefault(path, List.of());
+    }
+
+    /**
+     * What the rules of this value ask of the list at {@code path} about its sides, or nothing
+     * where they ask none of it ({@link SidesBalanced}), read once like {@link #entriesHeldAt}.
+     */
+    public List<SidesBalanced.Requirement> sidesBalancedAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        Map<RuleKey, List<SidesBalanced.Requirement>> held = sidesBalanced;
+        if (held == null) {
+            held = SidesBalanced.writtenOn(named, source);
+            sidesBalanced = held;
         }
         return held.getOrDefault(path, List.of());
     }

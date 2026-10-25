@@ -76,6 +76,19 @@ public sealed interface InvariantStatement {
     }
 
     /**
+     * A rule saying the elements of a list standing at one case of a field add up to what those at
+     * another case do ({@link SidesBalanced}).
+     */
+    record BalancesSides(InvariantStatementId id, SidesBalanced.Stated balanced)
+            implements InvariantStatement {
+
+        public BalancesSides {
+            Objects.requireNonNull(id, "a rule balancing the sides of a list is some statement");
+            Objects.requireNonNull(balanced, "and it balances some");
+        }
+    }
+
+    /**
      * A statement this reading recognised and made nothing of.
      *
      * <p>Not a rule that states nothing, and the difference is what a consumer acts on: from "this

@@ -852,7 +852,11 @@ sealed interface StatedByClauses {
                 // rule is about the two together and the builders of the map are told it.
                 AdmissibleReading.EntryAt entry = values.entryHeldAt(part, at);
                 if (entry == null) {
-                    return Adoption.nothing();
+                    // Or the sides of a list: taken in at the list, whose builders choose how many
+                    // elements stand at each case and what each adds.
+                    FactSubject list = values.sidesBalancedAt(part, at);
+                    return list == null ? Adoption.nothing()
+                            : Adoption.at(Set.of(list), Set.of(list), false);
                 }
                 Set<FactSubject> both = Set.of(entry.container(), entry.key());
                 return Adoption.at(both, both, false);

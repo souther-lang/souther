@@ -12,6 +12,7 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.EntryHeld;
 import souther.compiler.check.PartId;
+import souther.compiler.check.SidesBalanced;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
@@ -2071,6 +2072,10 @@ public final class Partitions {
                         ? holdingTheEntriesAskedFor(field.getValue(), asked.get(name),
                                 chosenByName, limits, reading)
                         : null;
+                List<SidesBalanced.Requirement> sides = rules.sidesBalancedAt(RuleKey.of(name));
+                if (holding == null && !sides.isEmpty()) {
+                    holding = balancedSides(field.getValue(), sides, limits, reading);
+                }
                 // The first value, with what was met in front of it: a field's later values are
                 // values nothing here takes.
                 Proposals stands = holding != null ? holding.firstOf(1)
@@ -2156,6 +2161,72 @@ public final class Partitions {
             worn.add(under);
         }
         return Proposals.of(worn).meeting(made.met());
+    }
+
+    /**
+     * A list of {@code type} whose elements at the two cases the rule names add up to one another,
+     * or null where this does not build for what it asks.
+     *
+     * <p>As many elements as the rules require, at least two, split between the two cases; each
+     * element at one case adds as many units as the other case has elements, so the totals are
+     * the product of the two counts whichever the counts are. Null leaves the field to be chosen
+     * as any other: two requirements on one list, an element that is no record, a number reached
+     * through anything but a name's value, and a count the rules do not leave room for.
+     */
+    private static Proposals balancedSides(Type type, List<SidesBalanced.Requirement> asked,
+                                           FieldDomains.ConstructionLimits limits,
+                                           RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (asked.size() != 1
+                || !(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
+                || kind != Shape.Sequence.Kind.LIST) {
+            return null;
+        }
+        SidesBalanced.Requirement rule = asked.getFirst();
+        TypeView elementView = TypeView.of(element, source.inners(), source.symbols(),
+                source.kinds(), source.sums());
+        if (!(elementView.shape() instanceof Shape.Product product)
+                || !(product.name() instanceof TypeSymbol.AtModule record)
+                || !product.fields().containsKey(rule.field())
+                || !product.fields().containsKey(rule.number().getFirst())
+                || rule.number().size() > 2
+                || !(source.symbols().scope().reach(rule.one())
+                        instanceof TypeReachName.Written one)
+                || !(source.symbols().scope().reach(rule.other())
+                        instanceof TypeReachName.Written other)) {
+            return null;
+        }
+        DeclaredBounds.CountRange room = heldRange(type, reading, limits.held());
+        int count = Math.max(2, room.least());
+        if (count > room.most()) {
+            return null;
+        }
+        int onOne = count / 2;
+        int onOther = count - onOne;
+        List<FixtureTemplate> elements = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            boolean atOne = i < onOne;
+            FixtureTemplate amount = writtenNumberAt(product.fields().get(rule.number().getFirst()),
+                    BigDecimal.valueOf(atOne ? onOther : onOne), reading);
+            if (amount == null) {
+                return null;
+            }
+            Proposals composed = composed(record,
+                    rulesOver(elementView.wrappers(), record, source), reading, Set.of(),
+                    Map.of(rule.field(), FixtureTemplate.unitCase(atOne ? one : other),
+                            rule.number().getFirst(), amount));
+            FixtureTemplate each = composed.isEmpty() ? null
+                    : WornNames.under(elementView.wrappers(), composed.values().getFirst(), source);
+            if (each == null) {
+                return null;
+            }
+            elements.add(each);
+        }
+        FixtureTemplate list = WornNames.under(view.wrappers(),
+                FixtureTemplate.collection(elements), source);
+        return list == null ? null : Proposals.ofNullable(list);
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

@@ -342,6 +342,18 @@ final class AdmissibleReading {
     /** A leaf asking {@code container} for an entry under the key at {@code key}. */
     record EntryAt(FactSubject container, FactSubject key) {}
 
+    /**
+     * The list {@code part} says the sides of balance in, or null where it says nothing of the
+     * kind ({@link SidesBalanced}) or names a list that is no position of this value.
+     */
+    FactSubject sidesBalancedAt(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()) {
+            return null;
+        }
+        SidesBalanced.Stated stated = SidesBalanced.read(part.of());
+        return stated == null ? null : positionIn(stated.list(), at);
+    }
+
     /** What a name stands for where it was given a value, and the expression itself otherwise. */
     private static Core followed(Core e, Denotations at) {
         Core here = e;

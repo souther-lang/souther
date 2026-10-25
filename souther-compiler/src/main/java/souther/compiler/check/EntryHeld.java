@@ -199,7 +199,8 @@ public final class EntryHeld {
                     Stated stated = switch (one) {
                         case InvariantStatement.HoldsAnEntry it -> it.held();
                         case InvariantStatement.Applies it -> read(it.call(), core -> core);
-                        case InvariantStatement.Compares _, InvariantStatement.Unread _ -> null;
+                        case InvariantStatement.Compares _, InvariantStatement.Unread _,
+                             InvariantStatement.BalancesSides _ -> null;
                     };
                     RuleKey where = stated == null ? null
                             : ElementsApart.placeOf(stated.container(), fields, true);

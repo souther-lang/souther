@@ -145,6 +145,12 @@ public final class InvariantStatements {
                         instanceof Core.PreservedCall call) {
             return new InvariantStatement.Applies(reached.statement(), call);
         }
+        // Two totals of one list at two cases of a field of its elements, compared for equality.
+        SidesBalanced.Stated balanced = reached.said().positive()
+                ? SidesBalanced.read(Clauses.substituted(reached.said().of(), given)) : null;
+        if (balanced != null) {
+            return new InvariantStatement.BalancesSides(reached.statement(), balanced);
+        }
         // A lookup in a map followed to a statement about what it found: stated as the entry the
         // rule asks the map for, which no operation the representation kept standing says.
         EntryHeld.Stated entry = reached.said().positive()
