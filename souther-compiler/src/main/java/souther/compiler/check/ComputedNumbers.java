@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
@@ -251,7 +251,7 @@ final class ComputedNumbers {
                         .comesTo(place -> standingAt(domain, FactSubject.of(place)));
                 Optional<Count> at = comesTo == null ? null : Count.written(comesTo).orNull();
                 if (at != null && at.isPresent()) {
-                    out = ConstraintState.settling(out, each.atom(), at.get(), each.spacing());
+                    out = ConstraintState.settling(out, each.atom(), at.get(), each.space());
                     done.add(each.atom());
                     moved = true;
                 }
@@ -261,7 +261,7 @@ final class ComputedNumbers {
     }
 
     /** A number the rules write as arithmetic over places, and how its values are spaced. */
-    record Computed(FactSubject atom, ComputedNumber number, Granularity spacing) {}
+    record Computed(FactSubject atom, ComputedNumber number, NumberSpace space) {}
 
     /**
      * The numbers {@code state} holds that are arithmetic over places.
@@ -274,9 +274,9 @@ final class ComputedNumbers {
         List<Computed> out = new ArrayList<>();
         for (FactSubject atom : domain.atomsSpokenOf()) {
             ComputedNumber number = ComputedNumber.of(atom.identity(), ComputedNumbers::aPlace);
-            Granularity spacing = domain.spacingOf(atom);
-            if (number != null && spacing != null) {
-                out.add(new Computed(atom, number, spacing));
+            NumberSpace space = domain.spaceOf(atom);
+            if (number != null && space != null) {
+                out.add(new Computed(atom, number, space));
             }
         }
         return List.copyOf(out);

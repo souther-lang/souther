@@ -1193,7 +1193,7 @@ public final class InvariantChecker {
         // constraints the reading below ends in; the ranges of the algebra alone are the hulls.
         ConstraintState<FactSubject> constraints = k.constraints()
                 .takingRead(answered.whole().confinement(), allowed, c.answers);
-        ComputedNumbers.Account account = new ReadAccount(constraints.values(), c.terms);
+        ComputedNumbers.Account account = new ReadAccount(c.terms, constraints.values());
         for (ComputedNumbers.Defining each : definitions) {
             // Only where every clause of the value was read: a rule this did not read may hold
             // any place the number is made of, or the place it defines, to fewer numbers.

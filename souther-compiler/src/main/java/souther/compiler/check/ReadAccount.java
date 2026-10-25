@@ -8,10 +8,13 @@ import souther.compiler.values.ValueSet;
  * What the reading of a value's rules says of a place beyond its range: the order its numbers are
  * worked out in, and which values the rules leave it.
  *
- * @param values the values the rules leave each place, as the reading ended
+ * <p>The order is asked of what named the place and not of the interval algebra, which is told it
+ * only once the reading is done.
+ *
  * @param terms  what knows the order each place's numbers run on
+ * @param values the values the rules leave each place, as the reading ended
  */
-record ReadAccount(ConjoinedAdmissibleValues<FactSubject> values, Terms terms)
+record ReadAccount(Terms terms, ConjoinedAdmissibleValues<FactSubject> values)
         implements ComputedNumbers.Account {
 
     @Override
