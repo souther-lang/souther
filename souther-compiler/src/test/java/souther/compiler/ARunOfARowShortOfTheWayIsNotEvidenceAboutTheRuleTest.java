@@ -38,18 +38,23 @@ class ARunOfARowShortOfTheWayIsNotEvidenceAboutTheRuleTest {
      * <p>The record the body builds is no position a row writes, so a row is composed without
      * what the condition states — the condition is about the input, and what the row was composed
      * without is what the way states of it.
+     *
+     * <p>And no value of the input makes the condition hold: the type of the input keeps the two
+     * apart. Nothing in the way says so, so the rule is neither proved out nor taken by any row
+     * the walk reaches, however far it goes.
      */
     private static final String RECORDS_OF_THE_INPUT_COMPARED = """
             module example.inputrecords
 
             data K = { id: Int }
             data R = { k: K, n: Int }
+                invariant apart = k.id /= n
             data Yes
             data No
             data Answer = Yes | No
 
             behavior decides : (r: R) -> Answer
-            let decides (r) = if r.k == K { id = r.n + 1000 } then Yes else No
+            let decides (r) = if r.k == K { id = r.n } then Yes else No
             """;
 
     /** The rule the composed row did not take is not one this says nothing takes. */

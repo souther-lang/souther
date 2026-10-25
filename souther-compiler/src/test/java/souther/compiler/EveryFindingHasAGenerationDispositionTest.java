@@ -57,7 +57,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryFindingHasAGenerationDispositionTest {
 
-    /** Two boundary gaps a strategy composes a row for, and an arm no strategy reaches. */
+    /** Two boundary gaps a strategy composes a row for, and a rule that only a row past the
+     *  boundaries takes. */
     private static final String POLICY = """
             module example.policy
 

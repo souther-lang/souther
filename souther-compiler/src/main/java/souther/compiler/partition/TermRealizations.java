@@ -3338,6 +3338,10 @@ final class TermRealizations {
          * record, or the elements are kept apart or are in a set. And they stand where no element
          * could be composed inside the bounds, with what that composing met beside what building
          * them did: the offer is then short of the way, and says so.
+         *
+         * <p>Only of a container a parameter roots. A container inside an element of another is
+         * the element's own, and the bounds the way puts on elements are on those of the container
+         * a condition names; the region has no answer for a position under an element of it.
          */
         Proposals over(Proposals seeds, TypeView holder, int many, List<List<String>> keptApart,
                        RuleReadingContext reading) {
@@ -3349,26 +3353,14 @@ final class TermRealizations {
                     || !(ref.name() instanceof TypeSymbol.AtModule record)) {
                 return seeds;
             }
-            RuleReadingSource ruleSource = reading.source();
-            if (!(TypeView.shapeOf(carrier.element(), ruleSource.inners(), ruleSource.symbols(),
-                    ruleSource.kinds(), ruleSource.sums())
-                    instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))) {
-                return seeds;
-            }
-            Map<String, NumericDomain.Bounds> held = new LinkedHashMap<>();
-            for (String field : fields.keySet()) {
-                if (within.projectionOf(new NumericTerm.ValueOf(container.element().then(field)))
-                        instanceof NumericDomain.FormProjection.Within(
-                                NumericDomain.Bounds bounds)
-                        && !bounds.saysNothing()) {
-                    held.put(field, bounds);
-                }
-            }
+            Map<String, NumericDomain.Bounds> held =
+                    Partitions.leftTheFieldsOfAnElement(record, container, within, reading);
             if (held.isEmpty()) {
                 return seeds;
             }
             Proposals element = Partitions.composedHeldTo(record,
-                    Partitions.rulesOver(carrier.element(), record, ruleSource), reading, held);
+                    Partitions.rulesOver(carrier.element(), record, reading.source()), reading,
+                    held);
             if (element.isEmpty()) {
                 return seeds.meeting(element.met());
             }

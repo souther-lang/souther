@@ -5116,7 +5116,8 @@ public final class Generator {
          */
         default BoundaryAttempt withAccount(CompositionAccount account) {
             return switch (this) {
-                case BoundaryAttempt.Built built -> new BoundaryAttempt.Built(built.row(), account);
+                case BoundaryAttempt.Built built ->
+                        new BoundaryAttempt.Built(built.row(), account, built.refused());
                 case Unresolved none -> new Unresolved(none.why(), account);
                 case Stopped stopped -> new Stopped(stopped.why(), stopped.met(), account);
                 case Unexhausted unexhausted ->
@@ -5140,8 +5141,16 @@ public final class Generator {
          * come from and one place a row is assembled, and they are the same method — which is what
          * makes this cheap to hold and worth holding: the next word added beside these has the same
          * question to answer, and this is where it gets asked.
+         *
+         * <p><b>Built is not reached.</b> A walk held to the run of its rows ({@link RowJudge}) can
+         * come back with a row whose run the judge refused: offered where the walk reached no row
+         * the judge accepts and was not stopped, so that what that run did can be told. Such a row
+         * is a row and is no row the search was for, and whoever walks on past this attempt —
+         * another way of writing the elements, another pair of numbers — goes on past it.
+         *
+         * @param refused whether the judge the walk was held to refused the row's run
          */
-        record Built(GeneratedRow row, CompositionAccount unrepresented)
+        record Built(GeneratedRow row, CompositionAccount unrepresented, boolean refused)
                 implements BoundaryAttempt {
 
             public Built {
@@ -5151,6 +5160,11 @@ public final class Generator {
                                 + " take, which is a row that does not arrive: " + gap.anchor());
                     }
                 }
+            }
+
+            /** A row no judge refused. */
+            public Built(GeneratedRow row, CompositionAccount unrepresented) {
+                this(row, unrepresented, false);
             }
         }
 
@@ -5508,24 +5522,44 @@ public final class Generator {
                 return counted;
             }
         }
-        return builtShort.isEmpty() ? whole : builtShort.getFirst();
+        return heldBack(builtShort, whole);
+    }
+
+    /**
+     * The attempt that stands where none of these came back whole and reached: the first row built
+     * that a judge did not refuse, short of the way as it may be, since the run of a row that took
+     * what was asked took it however it was composed; otherwise the first row built, which says
+     * where its run went; otherwise {@code none}.
+     */
+    private static BoundaryAttempt heldBack(List<BoundaryAttempt> builtShort,
+                                            BoundaryAttempt none) {
+        for (BoundaryAttempt each : builtShort) {
+            if (each instanceof BoundaryAttempt.Built built && !built.refused()) {
+                return each;
+            }
+        }
+        return builtShort.isEmpty() ? none : builtShort.getFirst();
     }
 
     /**
      * Whether {@code attempt} is a row built with nothing its own account names as left out of
-     * the way — and, where it is a row built with something, {@code attempt} put in
-     * {@code builtShort}.
+     * the way, and that no judge refused — and, where it is a row built with something left out
+     * or a row refused, {@code attempt} put in {@code builtShort}.
      *
      * <p>An account naming nothing does not show nothing was left out: a condition the walk had
      * no words for is in no account ({@link CompositionAccount}). One naming something shows that
      * much was, which is all this asks of it.
+     *
+     * <p>A row refused is a row built, and is held back like a row built short: the next way of
+     * composing may reach a row the judge accepts, and a search that stopped at the first row
+     * built would never look.
      */
-    private static boolean builtLeavingNothingOut(BoundaryAttempt attempt,
-                                                  List<BoundaryAttempt> builtShort) {
+    static boolean builtLeavingNothingOut(BoundaryAttempt attempt,
+                                          List<BoundaryAttempt> builtShort) {
         if (!(attempt instanceof BoundaryAttempt.Built built)) {
             return false;
         }
-        if (built.unrepresented().onTheWay().isEmpty()
+        if (!built.refused() && built.unrepresented().onTheWay().isEmpty()
                 && built.unrepresented().onAnAnswer().isEmpty()) {
             return true;
         }
@@ -5755,6 +5789,10 @@ public final class Generator {
                 : preferring.over(RowTaking.FIRST);
         boolean[] noRowAnswered = {false};
         SearchShortfall[] passedFound = {SearchShortfall.NONE};
+        // The first row a judge refused, which stands where no way of writing the contents under
+        // the cases reaches a row it accepts: a row built and no row the search was for, so
+        // another way is tried past it.
+        List<List<FixtureTemplate>> refusedKept = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -5806,6 +5844,12 @@ public final class Generator {
                     // A row was composed. Which one goes out is the preference's, and the first
                     // composed where nothing ranked them.
                     List<FixtureTemplate> kept = preferring == null ? null : preferring.taken();
+                    if (kept != null && preferring.takenIsRefused()) {
+                        if (refusedKept.isEmpty()) {
+                            refusedKept.add(kept);
+                        }
+                        return false;
+                    }
                     if (kept != null) {
                         kept.toArray(composed);
                         return true;
@@ -5824,8 +5868,15 @@ public final class Generator {
                 }
             }
         });
+        // No way reached a row the judge accepts and the walk was not stopped: the row it refused
+        // first is what comes back, built and marked refused.
+        boolean refusedOnly = walked != ContentsAsked.UnderTheCases.Walked.COMPOSED
+                && !refusedKept.isEmpty() && preferring.takenIsRefused();
+        if (refusedOnly) {
+            refusedKept.getFirst().toArray(composed);
+        }
         ParameterCameToNothing failed = null;
-        if (walked != ContentsAsked.UnderTheCases.Walked.COMPOSED) {
+        if (walked != ContentsAsked.UnderTheCases.Walked.COMPOSED && !refusedOnly) {
             // What every way tried came to, beside the figure where the walk stopped short of the
             // rest and a way under a case nobody read; where no way came to nothing to say it in,
             // the figure, the case nobody read, or that no case held them.
@@ -5949,7 +6000,7 @@ public final class Generator {
                     new UnresolvedCombination(List.of(label), why), where.unrepresented());
             case AnswersStoodIn.Stood(var answers) -> new BoundaryAttempt.Built(
                     new GeneratedRow(List.of(new Purpose.ForAPoint(label)), inputs, answers),
-                    where.unrepresented());
+                    where.unrepresented(), refusedOnly);
         };
     }
 
@@ -9858,8 +9909,8 @@ public final class Generator {
         /**
          * Ranking the rows {@code judge} accepts. A row it refuses is no candidate: it ranks no
          * further and moves nothing the ranking keeps, and the walk goes on to the next row. Where
-         * it accepts none, the first row refused is the row taken, which is the row that would
-         * have been taken without a judge.
+         * it accepts none, the first row refused whose run answered is the row taken: not ranked
+         * against the others, since what it is taken for is to say where its run went.
          */
         TellingArmsApart(Trial trial, List<StoodInAnswer> answers, RowJudge judge) {
             this.trial = runningOnce(trial);
@@ -9896,10 +9947,22 @@ public final class Generator {
             };
         }
 
-        /** The row taken, or null where nothing offered met the requirement. */
+        /**
+         * The row taken, or null where nothing offered met the requirement.
+         *
+         * <p>Where the judge refused every row the walk reached, the first of them — unless the
+         * walk was stopped at its figure. Stopped, the rows past the figure are rows nobody looked
+         * at, and a row refused is no answer to whether one of them is accepted: nothing is taken,
+         * and the figure is what is told ({@link #untried}).
+         */
         @Override
         public List<FixtureTemplate> taken() {
-            return best != null ? best : refused;
+            return best != null ? best : stoppedAtItsFigure ? null : refused;
+        }
+
+        @Override
+        public boolean takenIsRefused() {
+            return best == null && !stoppedAtItsFigure && refused != null;
         }
 
         /** Whether a run of a row that met the requirement went past what a run may spend. */
@@ -10017,8 +10080,9 @@ public final class Generator {
         }
 
         /**
-         * {@code judge}, as a preference: the rows it accepts are the ones offered, and where the
-         * walk reaches none, the first row whose run answered is, as it would be without a judge.
+         * {@code judge}, as a preference: the rows it accepts are the ones offered, ranked as rows
+         * are, and where the walk reaches none, the first row whose run answered is offered in
+         * their place, so that what that run did can still be told.
          */
         static RowJudge preferring(RowJudge judge) {
             return new RowJudge() {
@@ -10047,6 +10111,14 @@ public final class Generator {
 
         /** The row taken, or null where nothing offered was. */
         List<FixtureTemplate> taken();
+
+        /**
+         * Whether the row taken is one a judge refused, offered because the walk reached none it
+         * accepts ({@link RowJudge#preferring}).
+         */
+        default boolean takenIsRefused() {
+            return false;
+        }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
         SearchShortfall untried();

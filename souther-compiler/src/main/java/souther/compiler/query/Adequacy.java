@@ -3712,11 +3712,16 @@ public final class Adequacy {
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
                     }
+                    // The pair that came nearest is the one with the most rows built that no judge
+                    // refused, and then the most rows built: a refused row says where its run went
+                    // and is no row the search was for.
                     long built = out.stream()
                             .filter(Generator.BoundaryAttempt.Built.class::isInstance).count();
-                    if (built > nearestBuilt) {
+                    long reached = out.stream().filter(Adequacy::builtAndNotRefused).count();
+                    long nearness = reached * (out.size() + 1) + built;
+                    if (nearness > nearestBuilt) {
                         nearest = out;
-                        nearestBuilt = built;
+                        nearestBuilt = nearness;
                     }
                 }
                 // No pair composed a row whole. What the pair that came nearest built stays, since
@@ -3773,10 +3778,18 @@ public final class Adequacy {
                 : attempt.withAccount(said);
     }
 
-    /** Whether a row was built and nothing asked of an answer was left uncomposed. */
-    private static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {
-        return attempt instanceof Generator.BoundaryAttempt.Built built
-                && built.unrepresented().onAnAnswer().isEmpty();
+    /**
+     * Whether a row was built that no judge refused and nothing asked of an answer was left
+     * uncomposed. A row refused is a row built and is no reason to stop: the next pair of numbers
+     * may reach a row the judge accepts.
+     */
+    static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {
+        return builtAndNotRefused(attempt)
+                && attempt.unrepresented().onAnAnswer().isEmpty();
+    }
+
+    private static boolean builtAndNotRefused(Generator.BoundaryAttempt attempt) {
+        return attempt instanceof Generator.BoundaryAttempt.Built built && !built.refused();
     }
 
     /**

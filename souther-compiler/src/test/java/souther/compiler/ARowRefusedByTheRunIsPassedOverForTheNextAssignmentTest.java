@@ -88,6 +88,25 @@ class ARowRefusedByTheRunIsPassedOverForTheNextAssignmentTest {
                 () -> "every rule is taken by a row: " + settled);
     }
 
+    /** Elements that are numbers have no fields to hold: the statement is the element's own. */
+    @Test
+    void everyNumberOfAListMeetsTheStatement() {
+        List<RuleSettlement> settled = settlementsOf("""
+                module example.numbers
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior f : (xs: List<Int>) -> Answer
+                let f (xs) =
+                    if List.length(xs) > 0 && List.all(x -> x >= 3, xs) then Yes else No
+                """);
+
+        assertEquals(settled.size(), requiredOf(settled).size(),
+                () -> "every rule is taken by a row: " + settled);
+    }
+
     @Test
     void everyElementOfAContainerThatHoldsSeveralMeetsTheStatement() {
         List<RuleSettlement> settled = settlementsOf(A_NON_EMPTY_CONTAINER_OF_ELEMENTS_THAT_ALL_MEET
@@ -112,8 +131,11 @@ class ARowRefusedByTheRunIsPassedOverForTheNextAssignmentTest {
     }
 
     /**
-     * The fields of an element that the type relates are chosen together: one at the least the way
-     * leaves it and the other where the relation then leaves it, and not each at its own least.
+     * A rule whose elements have fields the type relates is taken by a row, from the model to the
+     * row. That the pair is chosen together, and not each field at its own least, is what
+     * {@code AnElementHeldToABoundIsChosenAgainstItsRecordsRulesTest} asks of the composing: a
+     * pair chosen apart is refused by the type and the walk goes on to another assignment, so
+     * this passes either way.
      */
     @Test
     void anElementWhoseFieldsTheTypeRelatesMeetsTheStatementAndTheRelation() {

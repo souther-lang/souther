@@ -36,6 +36,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.RuleAddress;
@@ -1938,6 +1939,42 @@ public final class Partitions {
                         ? Proposals.NONE
                         : Proposals.of(List.of(FixtureTemplate.record(written, chosen.fields()))))
                 .meeting(chosen.met());
+    }
+
+    /**
+     * What {@code within} leaves the number of each field of an element of {@code container}, for
+     * the fields that hold one and are left less than their type holds.
+     *
+     * <p>Asked of the fields that hold a number and of no other: the region answers for numbers,
+     * and a field of text or of a container has none to be asked of. And of the fields of the
+     * element itself — a field of a record in the element is the record's own, which the ends
+     * are not read for.
+     *
+     * @param record    the type of the element
+     * @param container the container the way bounds the elements of, which a parameter roots
+     */
+    static Map<String, NumericDomain.Bounds> leftTheFieldsOfAnElement(
+            TypeSymbol.AtModule record, TermPath container, SearchRegion within,
+            RuleReadingContext reading) {
+        RuleReadingSource ruleSource = reading.source();
+        if (!(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums())
+                instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))) {
+            return Map.of();
+        }
+        Map<String, NumericDomain.Bounds> held = new LinkedHashMap<>();
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            TypeView view = TypeView.of(field.getValue(), ruleSource.inners(),
+                    ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+            if (DeclaredBounds.of(view, reading) != null
+                    && within.projectionOf(
+                            new NumericTerm.ValueOf(container.element().then(field.getKey())))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
+                    && !bounds.saysNothing()) {
+                held.put(field.getKey(), bounds);
+            }
+        }
+        return held;
     }
 
     /**
