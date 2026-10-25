@@ -12,6 +12,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Today;
 import souther.compiler.types.Type;
 
@@ -141,12 +142,12 @@ public final class MeasuredInput {
     /** A position as what it is offered turns on: where the value stops and the runs it is in, how
      *  much it holds, the class it is held to and the values its rules name — and not the rest of
      *  what the rules admit, which nothing offered here reads. */
-    private record Offered(Type type, NumericDomain.Bounds values,
-                           List<NumericDomain.Bounds> runs, FieldDomains.Held held,
-                           HeldClass heldTo, FieldDomains.ConstructionLimits.ValuesNamed named) {
+    private record Offered(Type type, NumericDomain.Bounds values, OrderedRuns ordered,
+                           FieldDomains.Held held, HeldClass heldTo,
+                           FieldDomains.ConstructionLimits.ValuesNamed named) {
 
         Offered(Type type, FieldDomains.ConstructionLimits limits) {
-            this(type, limits.values(), limits.runs(), limits.held(), limits.heldTo(),
+            this(type, limits.values(), limits.ordered(), limits.held(), limits.heldTo(),
                     limits.valuesNamed());
         }
     }

@@ -212,15 +212,15 @@ public sealed interface Position permits ReadPosition {
     AdmissibleSet admitted();
 
     /**
-     * The runs a choice of ranges left the position's value, lowest first, or null where its rules
-     * leave it one.
+     * What the order the value is compared on leaves it — one run, runs apart, or none — or null
+     * where no rule of the order stops it.
      *
-     * <p>Beside {@link #admitted} and not in it: those are values, and these are runs of the order
-     * the value is compared on, which a date has and a set of values does not hold. Between the
-     * ends of the first and the last the bounds of the value say nothing of the gaps, and a value
-     * chosen in one is a value every alternative refuses.
+     * <p>Beside {@link #admitted} and not in it: those are values, and this is on the order the
+     * value is compared on, which a date has and a set of values does not hold. The bounds of the
+     * value are the ends around it and say nothing of the gaps between runs, and a value chosen in
+     * one is a value every alternative refuses.
      */
-    OrderedRuns runsApart();
+    OrderedRuns orderedRegion();
 
     /**
      * The questions the rules written about this position raise that nothing answered, each naming

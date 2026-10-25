@@ -31,7 +31,7 @@ import java.util.Set;
 record ReadPosition(TermPath path, TypeView view, List<PositionBounds> bounds,
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
-                    ObligationDomain obligations, AdmissibleSet admitted, OrderedRuns runsApart,
+                    ObligationDomain obligations, AdmissibleSet admitted, OrderedRuns orderedRegion,
                     List<RuleWithoutALine> rulesWithoutALine,
                     List<EndLeftOpen> endsLeftOpen,
                     List<StandingQuestion> unansweredQuestions,

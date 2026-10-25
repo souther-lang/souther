@@ -175,6 +175,28 @@ class WhatOrderedRulesLeaveEachPositionTest {
     }
 
     /**
+     * A meet of runs apart with a range is whatever it comes to — two runs, one, or none — and each
+     * is said as itself.
+     */
+    @Test
+    void runsApartMetWithARangeComeToTwoRunsOneOrNone() {
+        OrderedRuns apart = OrderedRuns.of(List.of(below(-1), above(101)));
+
+        assertEquals(List.of(from(-10, -1), from(101, 110)),
+                apart.meet(OrderedRuns.of(from(-10, 110))).runs());
+        assertEquals(List.of(from(101, 150)), apart.meet(OrderedRuns.of(from(0, 150))).runs(),
+                "one run, which is not the ends around both met with the range");
+        assertTrue(apart.meet(OrderedRuns.of(from(0, 100))).holdsNothing(),
+                "and none, which is not the range");
+        assertEquals(List.of(), apart.partsOf(new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(100)))));
+        assertTrue(apart.meet(OrderedRuns.of(from(0, 100))).hull().holdsNothing(),
+                "the ends around nothing are an interval holding nothing");
+        assertEquals(apart.meet(OrderedRuns.of(from(0, 100))),
+                apart.meet(OrderedRuns.of(from(20, 30))), "nothing is nothing however it was reached");
+    }
+
+    /**
      * Runs that overlap or touch are one run, and a choice is the same runs whichever way round it
      * was written and however it was grouped.
      */

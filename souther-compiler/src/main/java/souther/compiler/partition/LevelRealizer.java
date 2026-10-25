@@ -381,7 +381,7 @@ public final class LevelRealizer {
         // when the row is built and the item reported as one nothing was found for.
         if (one.term() instanceof NumericTerm.ValueOf value
                 && inNoDeclaredRun(one.where(), one.of(), runs.get(one.term()),
-                        within.runsAt(value))) {
+                        within.orderedRegionAt(value))) {
             return new Realization.Impossible();
         }
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
@@ -2607,7 +2607,7 @@ public final class LevelRealizer {
             case Criterion.Within within -> {
                 ValueSet admits = looking.toComposeFrom(term, region).toCrossTheRunWith();
                 OrderedRuns declared = term instanceof NumericTerm.ValueOf value
-                        ? region.runsAt(value) : null;
+                        ? region.orderedRegionAt(value) : null;
                 yield admits == null ? null
                         : someValueIn(within, carrier, bounds, declared, admits, members, apart,
                                 looking::meter, stoppedBy);

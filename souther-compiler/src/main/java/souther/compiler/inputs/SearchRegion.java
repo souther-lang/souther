@@ -222,15 +222,15 @@ public interface SearchRegion {
     }
 
     /**
-     * The runs a choice of ranges in its declarations left the value at {@code place}, lowest
-     * first, or null where they leave it one ({@link Position#runsApart}).
+     * What the order leaves the value at {@code place} by its declarations — one run, runs apart,
+     * or none — or null where no rule of the order stops it ({@link Position#orderedRegion}).
      *
-     * <p>{@link #projectionOf} is the ends around them, and a search choosing the value inside
-     * those ends is held to these as well: a value in a gap between two of them is one every
-     * alternative refuses. A region that reads no declarations says nothing of them, which is what
-     * the default is.
+     * <p>{@link #projectionOf} may be wider, and a search choosing the value is held to this as
+     * well: a value in a gap between two runs is one every alternative refuses, and a value where
+     * this holds nothing is one no rule admits. A region that reads no declarations says nothing of
+     * it, which is what the default is.
      */
-    default OrderedRuns runsAt(NumericTerm.ValueOf place) {
+    default OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
         return null;
     }
 

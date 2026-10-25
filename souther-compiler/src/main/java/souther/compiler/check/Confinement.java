@@ -936,19 +936,24 @@ sealed interface Confinement<A> {
         }
 
         /**
-         * The runs a choice of ranges left each position, where it left more than one, for the
-         * readers that choose a value.
+         * What the order leaves each position some rule of it stopped, for the readers that choose
+         * a value: one run, runs apart, or none.
          *
          * <p>Beside the envelope and not in it. The envelope is the ends around the runs and is
-         * where a line falls; a value chosen between those ends may fall in the gap, which every
-         * alternative refuses. Taken over every name a position answers to, as the envelope is, and
-         * with the ends a rule put there and not the order's own: an end where the order already
-         * stops is one a reader choosing a value takes for a rule's, and offers the least whole
-         * number for a run nobody closed.
+         * where a line falls; a value chosen between those ends may fall in a gap, which every
+         * alternative refuses. Every shape and not only runs apart, because whoever meets this with
+         * another rule may come to any of them, and is owed the answer whichever it is.
+         *
+         * <p>Taken over every name a position answers to, as the envelope is, and with the ends a
+         * rule put there and not the order's own: an end where the order already stops is one a
+         * reader choosing a value takes for a rule's, and offers the least whole number for a run
+         * nobody closed. A position whose rules state no end short of its order is absent, as
+         * every value of the order is what a position nothing here speaks of holds.
          *
          * @param aliases the names each position answers to, in the vocabulary of the reader asking
          */
-        Map<RuleKey, OrderedRuns> runsApartOver(Map<RuleKey, ? extends Collection<A>> aliases) {
+        Map<RuleKey, OrderedRuns> orderedRegionsOver(
+                Map<RuleKey, ? extends Collection<A>> aliases) {
             Map<RuleKey, OrderedRuns> out = new LinkedHashMap<>();
             aliases.forEach((position, subjects) -> {
                 OrderedRuns runs = null;
@@ -958,8 +963,10 @@ sealed interface Confinement<A> {
                         runs = runs == null ? here : runs.meet(here);
                     }
                 }
-                if (runs != null && !runs.isOneRun()) {
-                    out.put(position, statedWithin(runs, subjects));
+                OrderedRuns stated = runs == null ? null : statedWithin(runs, subjects);
+                if (stated != null
+                        && !(stated.isOneRun() && stated.hull().equals(OrderedInterval.OPEN))) {
+                    out.put(position, stated);
                 }
             });
             return out;
@@ -967,6 +974,9 @@ sealed interface Confinement<A> {
 
         /** {@code runs} with the ends the order of {@code subjects} stops at left open. */
         private OrderedRuns statedWithin(OrderedRuns runs, Collection<A> subjects) {
+            if (runs.holdsNothing()) {
+                return runs;
+            }
             for (A each : subjects) {
                 Carrier carrier = carriers.get(each);
                 if (carrier != null) {

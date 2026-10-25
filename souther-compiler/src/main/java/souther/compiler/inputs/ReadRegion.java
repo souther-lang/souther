@@ -90,8 +90,8 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public OrderedRuns runsAt(NumericTerm.ValueOf place) {
-        return within.runsAt(place);
+    public OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
+        return within.orderedRegionAt(place);
     }
 
     @Override

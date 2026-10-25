@@ -531,7 +531,7 @@ public final class InvariantChecker {
                   Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                   Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
                   BoundaryState derived, SettledOrderEnvelope settledOrder,
-                  Map<RuleKey, OrderedRuns> runsApart) {
+                  Map<RuleKey, OrderedRuns> orderedRegions) {
 
         /** The atom each count is recorded against, for a reader that wants the subject and not
          *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
@@ -1317,9 +1317,9 @@ public final class InvariantChecker {
                 // is filed under whichever the reading that read it recognised — asked of one, what
                 // a choice left a position would turn on how the rule was spelled.
                 answered.whole().confinement().envelopeOver(aliases),
-                // And the runs a choice of ranges left a position, where it left a gap, for whoever
-                // chooses a value there: the envelope's ends hold the gap between them.
-                Map.copyOf(answered.whole().confinement().runsApartOver(aliases)));
+                // And what the order leaves each position, for whoever chooses a value there: the
+                // envelope's ends hold the gaps between runs.
+                Map.copyOf(answered.whole().confinement().orderedRegionsOver(aliases)));
     }
 
     /**

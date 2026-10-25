@@ -82,7 +82,7 @@ public final class OrderedIntervals<A> {
             Map<A, OrderedRuns> apart = new LinkedHashMap<>();
             runs.forEach((position, held) -> {
                 ranges.put(position, held.hull());
-                if (!held.isOneRun()) {
+                if (held.runs().size() > 1) {
                     apart.put(position, held);
                 }
             });

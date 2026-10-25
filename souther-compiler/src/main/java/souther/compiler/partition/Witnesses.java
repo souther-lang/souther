@@ -11,6 +11,7 @@ import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -1701,14 +1702,20 @@ final class Witnesses {
             return offered.values();
         }
 
-        /** These kept to the numbers {@code within} leaves, where a value is a number and a range
+        /** These kept to the numbers {@code limits} leaves, where a value is a number and a range
          *  is known; a value that is no number is not one a range says anything about. */
-        Placed within(NumericDomain.Bounds within) {
-            if (within == null) {
+        Placed within(FieldDomains.ConstructionLimits limits) {
+            NumericDomain.Bounds within = limits.values();
+            OrderedRuns ordered = limits.ordered();
+            if (within == null && ordered == null) {
                 return this;
             }
+            // Between the ends, and in one of the runs the order leaves: a number between the ends
+            // of two runs is one every alternative refuses.
             return new Placed(offered.map(each ->
-                    !(Counts.writtenIn(each.value()) instanceof Place at) || within.admits(at)
+                    !(Counts.writtenIn(each.value()) instanceof Place at)
+                            || ((within == null || within.admits(at))
+                                    && (ordered == null || ordered.admits(at)))
                             ? each : null), everyValue);
         }
 
@@ -1740,7 +1747,7 @@ final class Witnesses {
         if (limits.admits().approximation().isAny()) {
             return otherwise.get();
         }
-        return placed(type, limits.admits(), reading, expanding).within(limits.values())
+        return placed(type, limits.admits(), reading, expanding).within(limits)
                 .before(otherwise);
     }
 

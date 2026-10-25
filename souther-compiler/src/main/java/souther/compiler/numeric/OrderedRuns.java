@@ -4,40 +4,58 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The values of one order lying in runs, which is what a choice between ranges leaves a position.
+ * The values of one order the rules leave a position, as the runs they lie in.
  *
  * <p>Runs and not the ends around them. A choice between {@code value < 0} and {@code value > 100}
  * is the two of them: every value between is one neither alternative admits, and a reader choosing
  * a value for the position out of the ends around both would choose one of those.
  *
+ * <p><b>Every shape the rules can leave, and each said as itself.</b> Met with another rule, two
+ * runs may come to one run or to none, and both are answers: one run is where the position stops
+ * and none is a position nothing can stand at. So this is the whole of what the order leaves and
+ * never a note beside an interval kept somewhere else — a reader holding one of these holds the
+ * answer, and the ends around it ({@link #hull}) are a projection of it for a reader of ends.
+ *
  * <p>Lowest first, with a value of the order between each run and the next that neither holds —
- * runs that overlap or touch are one run. So two of these holding the same values are equal, and
- * one run is the case of a position the rules leave an interval. A set holding nothing is one run
- * holding nothing, which is how an interval says it.
+ * runs that overlap or touch are one run. Made only by the factories here, which put what they are
+ * handed into that shape, so the walks below can take it for granted and two of these holding the
+ * same values are equal.
  *
  * <p>How many runs there are is bounded by what was written. A meet of two of these is at most as
  * many runs as both together less one, and a join at most as many as both together, so a position
  * holds no more runs than the comparisons the rules make of it, and nothing here gives up.
- *
- * @param runs the runs, lowest first and apart from each other; one run where they leave no gap
  */
-public record OrderedRuns(List<OrderedInterval> runs) {
+public final class OrderedRuns {
 
-    public OrderedRuns {
-        runs = List.copyOf(runs);
-        if (runs.isEmpty()) {
-            throw new IllegalArgumentException("a set of runs holding nothing is one empty run");
-        }
+    /** The runs, lowest first and apart from each other; none where nothing is left. */
+    private final List<OrderedInterval> runs;
+
+    /**
+     * An interval holding nothing, as the reading came to it, where nothing is left; null
+     * otherwise.
+     *
+     * <p>Kept for {@link #hull}: a reader of ends asks for an interval, and one holding nothing is
+     * how an interval says nothing is left. Which ends it has is no part of what this holds, so it
+     * takes no part in equality.
+     */
+    private final OrderedInterval nothing;
+
+    private OrderedRuns(List<OrderedInterval> runs, OrderedInterval nothing) {
+        this.runs = List.copyOf(runs);
+        this.nothing = nothing;
     }
 
-    /** The values of one interval, which is one run. */
+    /** The values of one interval, which is one run, or none where it holds nothing. */
     public static OrderedRuns of(OrderedInterval run) {
-        return new OrderedRuns(List.of(run));
+        return run.holdsNothing() ? new OrderedRuns(List.of(), run)
+                : new OrderedRuns(List.of(run), null);
     }
 
     /**
      * The values of {@code runs} together, in the shape above: lowest first, those that overlap or
-     * touch as one, and one run holding nothing where none of them holds a value.
+     * touch as one, and none where none of them holds a value.
+     *
+     * @param runs at least one interval, so that nothing left is said by one of them
      */
     public static OrderedRuns of(List<OrderedInterval> runs) {
         List<OrderedInterval> held = new ArrayList<>();
@@ -47,7 +65,7 @@ public record OrderedRuns(List<OrderedInterval> runs) {
             }
         }
         if (held.isEmpty()) {
-            return of(runs.getFirst());
+            return new OrderedRuns(List.of(), runs.getFirst());
         }
         held.sort(OrderedRuns::byLowerEnd);
         List<OrderedInterval> out = new ArrayList<>();
@@ -61,16 +79,37 @@ public record OrderedRuns(List<OrderedInterval> runs) {
             }
         }
         out.add(reaching);
-        return new OrderedRuns(out);
+        return new OrderedRuns(out, null);
     }
 
-    /** Whether these are one run, which an interval says as well as this does. */
+    /** The runs, lowest first; none where nothing is left. */
+    public List<OrderedInterval> runs() {
+        return runs;
+    }
+
+    /** Whether the rules leave the position no value of its order. */
+    public boolean holdsNothing() {
+        return runs.isEmpty();
+    }
+
+    /** Whether the values are one run, which an interval says as well as this does. */
     public boolean isOneRun() {
         return runs.size() == 1;
     }
 
-    /** The ends around every run, which is every value of the runs and those between them. */
+    /** Whether {@code at} is a value of one of the runs. */
+    public boolean admits(Place at) {
+        return runs.stream().anyMatch(run -> run.admits(at));
+    }
+
+    /**
+     * The ends around every run, which is every value of the runs and those between them — an
+     * interval holding nothing where nothing is left.
+     */
     public OrderedInterval hull() {
+        if (holdsNothing()) {
+            return nothing;
+        }
         return isOneRun() ? runs.getFirst()
                 : new OrderedInterval(runs.getFirst().low(), runs.getLast().high());
     }
@@ -80,6 +119,12 @@ public record OrderedRuns(List<OrderedInterval> runs) {
      * walked from the lowest, so each run is passed once.
      */
     public OrderedRuns meet(OrderedRuns other) {
+        if (holdsNothing()) {
+            return this;
+        }
+        if (other.holdsNothing()) {
+            return other;
+        }
         List<OrderedInterval> out = new ArrayList<>();
         int i = 0;
         int j = 0;
@@ -97,6 +142,19 @@ public record OrderedRuns(List<OrderedInterval> runs) {
         return of(out);
     }
 
+    /** The values either holds. */
+    public OrderedRuns join(OrderedRuns other) {
+        if (holdsNothing()) {
+            return other;
+        }
+        if (other.holdsNothing()) {
+            return this;
+        }
+        List<OrderedInterval> both = new ArrayList<>(runs);
+        both.addAll(other.runs);
+        return of(both);
+    }
+
     /**
      * The part of {@code bounds} inside each run, lowest first, and none where it holds nothing of
      * any of them — which is a range a reader would otherwise have looked for a value in, and the
@@ -107,18 +165,23 @@ public record OrderedRuns(List<OrderedInterval> runs) {
     public List<NumericDomain.Bounds> partsOf(NumericDomain.Bounds bounds) {
         OrderedRuns met = bounds == null ? this
                 : meet(of(new OrderedInterval(bounds.min(), bounds.max())));
-        if (met.hull().holdsNothing()) {
-            return List.of();
-        }
         return met.runs.stream()
                 .map(run -> new NumericDomain.Bounds(run.low(), run.high())).toList();
     }
 
-    /** The values either holds. */
-    public OrderedRuns join(OrderedRuns other) {
-        List<OrderedInterval> both = new ArrayList<>(runs);
-        both.addAll(other.runs);
-        return of(both);
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof OrderedRuns it && runs.equals(it.runs);
+    }
+
+    @Override
+    public int hashCode() {
+        return runs.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return holdsNothing() ? "OrderedRuns[nothing]" : "OrderedRuns" + runs;
     }
 
     /**

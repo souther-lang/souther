@@ -127,23 +127,23 @@ final class ConstructionRules {
         FieldDomains.Held held = null;
         AdmissibleSet admits = FieldDomains.ConstructionLimits.NONE.admits();
         HeldClass heldTo = FieldDomains.ConstructionLimits.NONE.heldTo();
-        // The runs of every value naming the position, met, and met with where they all stop it
-        // when the answer is put together — a gap one value's rules leave is a gap in the position.
-        OrderedRuns runs = null;
+        // What the order leaves the position by every value naming it, met, and met with where
+        // they all stop it when the answer is put together — a gap one value's rules leave is a gap
+        // in the position, and a value leaving it nothing leaves the position nothing.
+        OrderedRuns ordered = null;
         for (int i = 0; i < named.size(); i++) {
             RuleRoots.Naming each = named.get(i);
             FieldDomains.ConstructionLimits here = composedUnder(each, settling.fixed().get(i))
                     .at(each.address().key());
             values = meet(values, here.values());
-            OrderedRuns apart = here.runsApart();
-            if (apart != null) {
-                runs = runs == null ? apart : runs.meet(apart);
+            if (here.ordered() != null) {
+                ordered = ordered == null ? here.ordered() : ordered.meet(here.ordered());
             }
             held = meet(held, here.held());
             admits = admits.narrower(here.admits());
             heldTo = heldTo.and(here.heldTo());
         }
-        return FieldDomains.ConstructionLimits.of(values, runs, held, admits, heldTo);
+        return FieldDomains.ConstructionLimits.of(values, ordered, held, admits, heldTo);
     }
 
     /**

@@ -2262,11 +2262,11 @@ final class ReadQuantities implements Quantities {
         return classFixedAt(place, true);
     }
 
-    /** The runs the position {@code place} is the value of was read to leave it, or null where
-     *  it was read to leave one or no position is there. */
-    public OrderedRuns runsAt(NumericTerm.ValueOf place) {
+    /** What the order the position {@code place} is the value of was read to leave it, or null
+     *  where no rule of the order stops it or no position is there. */
+    public OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
         Position at = byPath.get(place.position());
-        return at == null ? null : at.runsApart();
+        return at == null ? null : at.orderedRegion();
     }
 
     /**

@@ -91,11 +91,11 @@ public sealed interface Rules {
         };
     }
 
-    /** The runs a choice of ranges left {@code path}, or null where it left one
-     *  ({@link FieldDomains#runsApartAt}). */
-    default OrderedRuns runsApartAt(RuleKey path) {
+    /** What the order leaves {@code path}, or null where no rule of it stops the path
+     *  ({@link FieldDomains#orderedRegionAt}). */
+    default OrderedRuns orderedRegionAt(RuleKey path) {
         return switch (this) {
-            case Read read -> read.domains().runsApartAt(path);
+            case Read read -> read.domains().orderedRegionAt(path);
             case NoneWritten _ -> null;
         };
     }

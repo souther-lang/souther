@@ -63,7 +63,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -2272,6 +2271,11 @@ public final class Partitions {
         FieldDomains.Held held = limits.held();
         RuleReadingSource ruleSource = reading.source();
         Proposals.Gathering candidates = Proposals.Gathering.distinct();
+        // A position the rules leave nothing at is offered nothing: every value written there is
+        // one they refuse.
+        if (limits.leavesNothing()) {
+            return candidates.done();
+        }
         // A member of the class the value is held to, first: the values offered below are read off
         // where the value stops, and a value between the ends is of the class only by luck — the
         // first of a month offered for a position held to the first of each, and not whatever date
@@ -2291,19 +2295,12 @@ public final class Partitions {
                     ElementsKeptApart.heldBy(held), reading, expanding)
                     .map(bare -> RepresentativeSource.under(spelled.names(), bare)));
         }
-        // Of each run a choice of ranges left the value, lowest first, where it left more than one:
-        // a value between the ends of the first and the last is one every alternative refuses
-        // where it falls between two runs.
-        for (NumericDomain.Bounds run : runsOf(limits)) {
+        // Of each run the order leaves the value, lowest first: a value between the ends of the
+        // first and the last is one every alternative refuses where it falls between two runs.
+        for (NumericDomain.Bounds run : limits.runs()) {
             candidates.addAll(representativesOf(view, reading, run, expanding));
         }
         return candidates.done();
-    }
-
-    /** The runs a value is chosen in: those {@code limits} keeps apart, or where the value stops
-     *  where it is one run. */
-    private static List<NumericDomain.Bounds> runsOf(FieldDomains.ConstructionLimits limits) {
-        return limits.runs().isEmpty() ? Collections.singletonList(limits.values()) : limits.runs();
     }
 
     /**
@@ -2334,6 +2331,11 @@ public final class Partitions {
         Proposals ordinarily = representativesHolding(view, reading, limits, Set.of());
         Proposals.Gathering base = Proposals.Gathering.distinct();
         base.addAll(ordinarily);
+        // Nothing held back and nothing displaced where nothing can stand: both are values beside
+        // the ones offered, and there are none.
+        if (limits.leavesNothing()) {
+            return base.done();
+        }
         // What a position holds back for the product search's second pass is on offer here from the
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
@@ -2347,7 +2349,9 @@ public final class Partitions {
         Carrier carrier = declared.carrier();
         NumericDomain.Bounds range = TypeBounds.admissible(declared, within);
         Place step = displaced(range, carrier, reading.today());
-        if (step == null) {
+        // Displaced inside the ends around what the order leaves, which may be a gap between two
+        // runs: a value there is no second value but one every alternative refuses.
+        if (step == null || (limits.ordered() != null && !limits.ordered().admits(step))) {
             return base.done();
         }
         FixtureTemplate value = standing(view, carrier, step, ruleSource);
@@ -2385,7 +2389,7 @@ public final class Partitions {
         Carrier carrier = declared.carrier();
         // In each run the value may be in, since a member between two of them is one every
         // alternative refuses.
-        for (NumericDomain.Bounds within : runsOf(limits)) {
+        for (NumericDomain.Bounds within : limits.runs()) {
             NumericDomain.Bounds run = TypeBounds.admissible(declared, within);
             ClassMembers members = held.standingIn(run, carrier,
                     carrier.usualPlace(reading.today()), named.keptOut() + 1);
