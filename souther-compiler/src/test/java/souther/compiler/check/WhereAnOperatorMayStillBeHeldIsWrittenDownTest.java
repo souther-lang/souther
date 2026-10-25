@@ -103,8 +103,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
      */
     private static final List<Held> HANDED_IN = List.of(
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated#operator",
-                    "the arithmetic a clause writes a number with, as it is evaluated once the"
-                            + " places it is made of are at numbers"),
+                    "the arithmetic a clause writes a number with, as it is evaluated over the"
+                            + " ranges or the numbers its places are at"),
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated.<init>",
                     "makes the arithmetic a clause writes a number with"),
             new Held("souther.compiler.ast.Hir.Binary#op",
@@ -259,9 +259,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),
             new Held("souther.compiler.check.ComputedNumber.bounded",
-                    "does what each of those three does to the range its operands lie in"),
-            new Held("souther.compiler.check.ComputedNumber.evaluate",
-                    "does what each of those three does to the numbers its operands come to"),
+                    "does what each of those three does to the range its operands lie in, a"
+                            + " single number being the range of one"),
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated.operator",
                     "hands back the operator the arithmetic was written with"),
             // Recognising a comparison, which is what carries the claim to everything below.
