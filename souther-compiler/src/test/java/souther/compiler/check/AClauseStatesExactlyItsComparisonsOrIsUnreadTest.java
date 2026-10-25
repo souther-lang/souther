@@ -11,6 +11,7 @@ import souther.compiler.types.TypeSymbols;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -90,6 +91,26 @@ class AClauseStatesExactlyItsComparisonsOrIsUnreadTest {
                         sum(-200, Rel.LE, 2, 2))),
                 ClauseAffineMeaning.ofComparisons(
                         List.of(sum(-100, Rel.GE, 1, 1), sum(-200, Rel.LE, 2, 2))));
+    }
+
+    /** A published fact does not change under whoever holds a map it was made from, or the one it
+     *  hands out. */
+    @Test
+    void aComparisonIsNotChangedThroughTheMapsItWasMadeFromOrHandsOut() {
+        Map<RuleKey, ExactRatio> weights = new LinkedHashMap<>();
+        weights.put(RuleKey.of("b"), ExactRatio.ONE);
+        weights.put(RuleKey.of("a"), ExactRatio.ONE);
+        ClauseAffineMeaning.Comparison comparison = new ClauseAffineMeaning.Comparison(
+                new LinearForm<>(ExactRatio.ZERO, weights), Rel.GE);
+        ClauseAffineMeaning.Exact exact = new ClauseAffineMeaning.Exact(List.of(comparison));
+
+        weights.clear();
+        assertEquals(2, exact.conjuncts().getFirst().form().coefs().size());
+        assertEquals(List.of(RuleKey.of("b"), RuleKey.of("a")),
+                List.copyOf(exact.conjuncts().getFirst().form().coefs().keySet()),
+                "the order the places were given in is kept");
+        assertThrows(UnsupportedOperationException.class,
+                () -> exact.conjuncts().getFirst().form().coefs().clear());
     }
 
     @Test

@@ -4,6 +4,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -94,6 +96,11 @@ public sealed interface ClauseAffineMeaning {
         public Comparison {
             Objects.requireNonNull(form, "a comparison is of a sum");
             Objects.requireNonNull(rel, "a comparison stands one way to nought");
+            // A published fact is a value: the places a caller weighed are copied in the order it
+            // gave them and cannot be changed through the form this hands out, so what the exact
+            // clause was checked to be at construction is what it is afterwards.
+            form = new LinearForm<>(form.constant(),
+                    Collections.unmodifiableMap(new LinkedHashMap<>(form.coefs())));
         }
     }
 }
