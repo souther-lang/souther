@@ -3440,7 +3440,7 @@ public final class Generator {
         // What the walks came to, added up the way a combination's readings are. What is pinned
         // is one reading — a class apiece at the positions the requirement names — so what is left
         // to say is whether either walk was stopped in front of work nobody did.
-        Completeness looked = building.builds == 0 && composing.builds == 0
+        Completeness looked = building.tried() == 0 && composing.tried() == 0
                 ? Completeness.NOTHING_YET : Completeness.NOTHING_YET.searched();
         if (stated == Traversal.STOPPED || composed == Traversal.STOPPED) {
             looked = looked.cutShort();
@@ -3536,6 +3536,14 @@ public final class Generator {
         /** How many were built, which is what this is allowed so many of. */
         private int builds;
 
+        /** How many were turned away before being built, for the classes leaving no room. */
+        private int turnedAway;
+
+        /** How many candidates were tried at all, built or turned away. */
+        int tried() {
+            return builds + turnedAway;
+        }
+
         /** The figure this walk stopped at where it ran out of builds, as it stood there. */
         private final Set<Figure> boundsReached = new HashSet<>();
 
@@ -3611,6 +3619,17 @@ public final class Generator {
             known.written(candidate, given);
             if (!candidate.from().composes() && given.isEmpty()) {
                 return Taken.AND_MORE;   // nothing here can be written against the model's value
+            }
+            // What composing it would find out first, found out without building it. A candidate
+            // whose classes leave what the row is held to no room is one nothing can be built
+            // from, and what a search is allowed to build is not spent on it.
+            Attempt noRoom = classesLeaveNoRoom(axes, candidate.where(), held);
+            if (noRoom != null) {
+                turnedAway++;
+                known.built(candidate, noRoom);
+                foundOut = foundOut.and(noRoom.found());
+                last = noRoom;
+                return Taken.AND_MORE;
             }
             if (builds >= most) {
                 boundsReached.add(buildsReached());
@@ -8929,6 +8948,50 @@ public final class Generator {
     }
 
     /**
+     * Why the classes {@code where} stands at leave a number the comparisons ask for no room, or
+     * null where none does or {@code held} is not what comparisons ask: the first thing composing a
+     * row finds out, and found out without composing it.
+     *
+     * <p>A candidate this refuses is one no building could compose, so a search that is bounded in
+     * what it builds does not count it among them.
+     */
+    private static Attempt classesLeaveNoRoom(MeasuredInput.MeasuredAxes axes, int[] where,
+                                              HeldTogether held) {
+        if (!(held instanceof HeldTogether.Asked holding) || holding.asked().isEmpty()) {
+            return null;
+        }
+        SequencedMap<RealizationTarget, AskedAt> numbers =
+                numbersTheClassesAdmit(axes, where, axes.subject().quantities());
+        for (Map.Entry<RealizationTarget, AskedAt> each : holding.asked().entrySet()) {
+            Attempt noRoom = leavesNoRoom(each.getKey(), each.getValue(), numbers.get(each.getKey()),
+                    axes.subject().quantities());
+            if (noRoom != null) {
+                return noRoom;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why a number asked to stand at {@code asked} has no room in {@code theClass}, the numbers
+     * its class admits — or null where it has, or where the class is of no number.
+     */
+    private static Attempt leavesNoRoom(RealizationTarget key, AskedAt asked, AskedAt theClass,
+                                        Quantities measuring) {
+        // A class is of a number, so only a number is asked by both.
+        if (theClass == null || !(key instanceof RealizationTarget.OfANumber number)) {
+            return null;
+        }
+        Carrier on = carrierOf(number.term(), measuring);
+        if (on != null && asked.named() != null && theClass.walking().holds(asked.named(), on)) {
+            return null;
+        }
+        return new Attempt(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                key.toString(), Optional.of("`" + key
+                        + "` is asked to stand where its class leaves it no room"));
+    }
+
+    /**
      * The numbers this row's classes admit, by the number each is a class of.
      *
      * <p>Read off the classes the row sits in and not off the axes, because an axis is a number the
@@ -10968,16 +11031,12 @@ public final class Generator {
         for (Map.Entry<RealizationTarget, AskedAt> each : holding.asked().entrySet()) {
             AskedAt asked = each.getValue();
             AskedAt theClass = numbers.get(each.getKey());
+            Attempt noRoom = leavesNoRoom(each.getKey(), asked, theClass, subject.quantities());
+            if (noRoom != null) {
+                return RowComposed.Failed.ofTheRow(noRoom);
+            }
             // A class is of a number, so only a number is asked by both.
-            if (theClass != null && each.getKey() instanceof RealizationTarget.OfANumber number) {
-                Carrier on = carrierOf(number.term(), subject.quantities());
-                if (on == null || asked.named() == null
-                        || !theClass.walking().holds(asked.named(), on)) {
-                    return RowComposed.Failed.ofTheRow(new Attempt(null,
-                            UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                            each.getKey().toString(), Optional.of("`" + each.getKey()
-                                    + "` is asked to stand where its class leaves it no room")));
-                }
+            if (theClass != null && each.getKey() instanceof RealizationTarget.OfANumber) {
                 asked = new AskedAt(asked.about().meet(theClass.about()), asked.walked());
             }
             numbers.put(each.getKey(), asked);
