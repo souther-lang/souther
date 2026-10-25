@@ -135,6 +135,50 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     }
 
     /**
+     * The same, whatever the other rule is written as: it is the map it reads from that matters and
+     * not the shape of what it says of it. Two keys held at once are forbidden, and the record holds
+     * the key {@code 1} by the first rules, so the key nought is no key of any map beside it.
+     */
+    @Test
+    void aRuleDenyingTwoKeysTogetherLeavesTheMapAndItsKeyUnanswered() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { key: Int, required: Int, rates: Map<Int, Int> }
+                    invariant fixed = required == 1
+                    invariant heldKey = Map.containsKey(key, rates)
+                    invariant heldRequired = Map.containsKey(required, rates)
+                    invariant notBoth = Bool.not(
+                        Map.containsKey(0, rates) && Map.containsKey(1, rates))
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                """);
+
+        assertFalse(left.get("n.key").isEmpty(), "a key of nought has no map beside it");
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /**
+     * A rule that reads the map only to count what it holds is the count the range of the map
+     * already carries, and asks nothing else of it.
+     */
+    @Test
+    void aRuleOnlyCountingTheMapLeavesItReadAtItsKey() {
+        assertEquals(Map.of("n.key", List.of(), "n.rates", List.of()),
+                unansweredAtTheFields("""
+                        module demo
+
+                        data N = { key: Int, rates: Map<Int, Int> }
+                            invariant held = Map.containsKey(key, rates)
+                            invariant some = Map.size(rates) >= 1
+
+                        behavior probe : (n: N) -> Int
+                        let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                        """));
+    }
+
+    /**
      * A key that is not a field of the record is a key the builders are never told of, because a
      * record's fields are chosen one at a time and a key is chosen before the map it is a key of.
      * The rule is left standing rather than called read.

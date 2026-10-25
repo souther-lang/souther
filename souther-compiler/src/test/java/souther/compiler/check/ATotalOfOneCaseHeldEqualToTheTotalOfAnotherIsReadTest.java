@@ -149,6 +149,33 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
                 """).isEmpty());
     }
 
+    /** And so is a list that another rule keeps apart, whatever the other rule is written as. */
+    @Test
+    void aListThatIsAlsoKeptApartLeavesTheBalanceUnanswered() {
+        assertFalse(unansweredAtTheList("""
+                module demo
+
+                import List ( fold, length )
+
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                data Side = Debit | Credit
+                data Posting = { side: Side, amount: Amount }
+
+                let sideTotal (wanted: Side, postings: List<Posting>): Decimal =
+                    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.amount.value) else acc,
+                         0.0m, postings)
+
+                data N = { postings: List<Posting> }
+                    invariant balanced =
+                        Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
+                    invariant apart = List.allDistinctBy(.amount, postings)
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = 1
+                """).isEmpty());
+    }
+
     /**
      * A rule of the element that could not be read is still a rule it has: nothing read of it is
      * not the same as nothing written, and an element is taken for one with no rule only where

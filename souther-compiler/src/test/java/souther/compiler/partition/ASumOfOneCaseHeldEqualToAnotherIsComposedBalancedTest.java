@@ -198,15 +198,22 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
     }
 
     /**
-     * Elements that are also to be kept apart are not made by this: they differ in their side and
-     * their amount and nothing else, and what keeps them apart in the rest is not asked. A list
+     * Elements that are also to be kept apart are not balanced by this: they differ in their side
+     * and their amount and nothing else, and what keeps them apart in the rest is not asked. A list
      * of a debit of four against credits of one and three is kept apart and balanced both, so this
-     * is a combination left unbuilt and not a type with no such list.
+     * is a combination left unbuilt and not a type with no such list. The balance is not taken on at
+     * all, which is said by the reading that leaves it unanswered, and the list is composed as any
+     * other is.
      */
     @Test
-    void aListThatIsAlsoKeptApartIsNotBuilt() {
-        assertNull(composedOrNot(journal(3, "value >= 0.0m",
-                "invariant apart = List.allDistinctBy(.amount, postings)")).fields());
+    void aListThatIsAlsoKeptApartIsNotBalanced() {
+        Sides sides = sidesOf(composed(journal(3, "value >= 0.0m",
+                "invariant apart = List.allDistinctBy(.amount, postings)"))
+                .fields().get("postings").text());
+
+        assertTrue(sides.total("Debit").compareTo(sides.total("Credit")) != 0
+                        || sides.amounts().keySet().size() < 2,
+                "no balance was built for it: " + sides);
     }
 
     private static Partitions.FieldsChosen composed(String source) {

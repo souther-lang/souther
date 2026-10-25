@@ -159,14 +159,7 @@ public final class InvariantStatements {
         if (entry != null) {
             return new InvariantStatement.HoldsAnEntry(reached.statement(), entry);
         }
-        // The denial of a rule of a kind something is built for is a rule that asks the opposite
-        // of what is built, and is told apart from the statements this has no form for.
-        if (!reached.said().positive()) {
-            Core denied = Clauses.substituted(reached.said().of(), given);
-            boolean asksTheOpposite = SidesBalanced.read(denied) != null
-                    || EntryHeld.read(denied, core -> core) != null;
-            return new InvariantStatement.Unread(reached.statement(), asksTheOpposite);
-        }
-        return new InvariantStatement.Unread(reached.statement());
+        return new InvariantStatement.Unread(reached.statement(),
+                Clauses.substituted(reached.said().of(), given));
     }
 }

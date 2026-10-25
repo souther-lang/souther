@@ -6,8 +6,10 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What each rule written on a record states, with the fields of the record the places it names are.
@@ -27,12 +29,30 @@ import java.util.Map;
  * @param statements       every statement of every conjunct, the ones nothing was made of included
  * @param declared         how many conjuncts the record's rules are written as, whether or not any
  *                         of them was read
- * @param unread           how many of those nothing was made of: a rule that left no statement,
- *                         and a statement that is only a statement that something was written
+ * @param unread           how many of those left no statement at all, which is a rule whose reading
+ *                         stopped and whose places are not known
  * @param everyRuleReached whether every declaration whose rules govern the record was expanded
+ * @param readByOthers     the fields a rule reads from that no consumer builds for, other than to
+ *                         count what they hold
  */
 record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements,
-                   int declared, int unread, boolean everyRuleReached) {
+                   int declared, int unread, boolean everyRuleReached,
+                   Set<String> readByOthers) {
+
+    /**
+     * Whether a rule that nothing here builds for reads from the field {@code field}, other than to
+     * count what it holds.
+     *
+     * <p>The question a builder asks before it takes a field on: it builds the field holding what
+     * the rules it knows ask of it, and is right only if no other rule asks anything else of the
+     * field. A rule is told apart by where it reads from and not by what it says, so a denial, a
+     * denied choice and a rule written through a helper are all the same to it. How many a field
+     * holds is the count the range of its values already carries, so a rule reading the field only
+     * through that is no other rule.
+     */
+    boolean readFromByOthers(String field) {
+        return readByOthers.contains(field);
+    }
 
     /** Whether the record is shown to declare no rule at all: none is written and none was left
      *  out. An unread rule is a rule, and so is one that could not be reached. */
@@ -72,19 +92,41 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                     unread++;
                 } else {
                     statements.addAll(states);
-                    // The denial of a rule of a kind something is built for: it asks the opposite
-                    // of what the rules beside it are built to, and was read as nothing. The
-                    // statements this reading has no form for besides are most comparisons, which
-                    // ask nothing of what is built and are not counted.
-                    unread += (int) states.stream()
-                            .filter(one -> one instanceof InvariantStatement.Unread it
-                                    && it.denies())
-                            .count();
                 }
             }
         }
+        // Where the rules nothing is built for read from, whatever they say.
+        Set<String> readByOthers = new HashSet<>();
+        for (InvariantStatement one : statements) {
+            switch (one) {
+                case InvariantStatement.Unread it -> readFrom(it.said(), fields, readByOthers);
+                case InvariantStatement.Compares it -> {
+                    readFrom(it.states().left(), fields, readByOthers);
+                    readFrom(it.states().right(), fields, readByOthers);
+                }
+                case InvariantStatement.Applies it -> {
+                    if (EntryHeld.read(it.call(), core -> core) == null) {
+                        readFrom(it.call(), fields, readByOthers);
+                    }
+                }
+                case InvariantStatement.HoldsAnEntry _, InvariantStatement.BalancesSides _ -> { }
+            }
+        }
         return new RecordRules(Map.copyOf(fields), List.copyOf(statements), declared, unread,
-                everyRuleReached);
+                everyRuleReached, Set.copyOf(readByOthers));
+    }
+
+    /** The fields of the record {@code e} reads, other than as the thing a count is taken of. */
+    private static void readFrom(Core e, Map<BindingId, String> fields, Set<String> out) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.PreservedCall call
+                && NumericMeasures.isMeasure(call.operation())) {
+            return;
+        }
+        if (node instanceof Core.Read read && fields.containsKey(read.binding())) {
+            out.add(fields.get(read.binding()));
+        }
+        Core.forEachChild(node, child -> readFrom(child, fields, out));
     }
 
     /** The field the place {@code e} is, or null where it is no field of this record. */

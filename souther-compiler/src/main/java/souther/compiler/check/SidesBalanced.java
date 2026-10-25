@@ -192,7 +192,11 @@ public final class SidesBalanced {
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
         out.forEach((where, requirements) -> {
-            if (buildable(where, requirements) && elementsStandAlone(named, where, source)) {
+            // And a list no other rule reads from: it is built balanced, and a rule asking
+            // anything else of it, however it is written, is one it is built without knowing of.
+            // How many it holds is the range its count already has, and is not another rule.
+            if (buildable(where, requirements) && elementsStandAlone(named, where, source)
+                    && !rules.readFromByOthers(where.steps().getFirst())) {
                 held.put(where, List.copyOf(requirements));
             }
         });

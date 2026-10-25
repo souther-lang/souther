@@ -96,22 +96,17 @@ public sealed interface InvariantStatement {
      * done, and from "it states nothing" follows something about the author's model that is not
      * true.
      */
-    record Unread(InvariantStatementId id, boolean denies) implements InvariantStatement {
+    record Unread(InvariantStatementId id, Core said) implements InvariantStatement {
 
         public Unread {
             Objects.requireNonNull(id, "a statement nothing was made of is still some statement");
-        }
-
-        /** A statement nothing was made of, and which is not the denial of one that would have
-         *  been. */
-        public Unread(InvariantStatementId id) {
-            this(id, false);
+            Objects.requireNonNull(said, "and it says something, which is where it reads from");
         }
     }
 
-    // `denies` is whether the statement is the denial of a rule of a kind some consumer builds for
-    // (a map holding an entry, a list balanced between two cases of a field): written under a
-    // denial it is read as nothing, and what is built for the rules beside it is built without
-    // knowing it asks the opposite. Said apart from the statements this reading has no form for,
-    // which are most comparisons and ask nothing of what is built.
+    // `said` is what the statement was written as, with the bindings it crossed given their
+    // values. Nothing is made of it, so it is not read for what it states; it is kept for what it
+    // reads from. A consumer that builds a value holding what other statements ask must know that
+    // no statement it does not build for reads from that value, and this is what answers it for a
+    // statement of any shape: a denial, a denied choice, a rule written through a helper.
 }

@@ -441,6 +441,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/Type;", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "codegen/BodyGen", "walksInside", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "check/RecordRules", "readFrom",
+                "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/BlockReaches", "walk", "(" + core + "Ljava/util/Set;L" + c
                 + "core/BlockReaches$Accumulator;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/Evaluated", "inOrder", "(" + core + ")Ljava/util/List;",
