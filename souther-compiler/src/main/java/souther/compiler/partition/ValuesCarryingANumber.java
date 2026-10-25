@@ -109,7 +109,7 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
         }
         Partitions.FieldsChosen rest = Partitions.fieldsOf(record,
                 Partitions.rulesOver(built.worn(), record, reading.source()), reading, Set.of(),
-                composed);
+                composed, Partitions.RulesAround.NONE);
         return new Partitions.FieldsChosen(rest.fields(), met.and(rest.met()));
     }
 

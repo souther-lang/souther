@@ -119,7 +119,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 symbols(), ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                 Set.of(tag.refine(caseOf("Tag"))),
                 Requirements.NONE.and(tag, caseOf("NoTag")),
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         ConstructionPlan.ModelRefusal.Conflict against = assertInstanceOf(
                 ConstructionPlan.ModelRefusal.Conflict.class,
@@ -154,7 +154,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                         Set.of(tag),
                         Requirements.NONE.and(tag, caseOf("Tag")),
-                        ConstructionPlan.ContentsComposed.NONE, ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false));
 
         assertTrue(said.getMessage().contains("query.tag") && said.getMessage().contains("Tag"),
                 "the answer names the position said twice: " + said.getMessage());
@@ -192,7 +192,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         ScopedDeclarations.sumsOf(heldSymbols()), Set.of(),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false)))
                                 .and(absent, caseOf("Tag")),
-                        ConstructionPlan.ContentsComposed.NONE, ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false));
 
         assertTrue(said.getMessage().contains("query.tag@None"),
                 "the answer names the position that holds no value: " + said.getMessage());
@@ -216,7 +216,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         ScopedDeclarations.kindsOf(heldSymbols()),
                         ScopedDeclarations.sumsOf(heldSymbols()), Set.of(absent.then("value")),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false))),
-                        ConstructionPlan.ContentsComposed.NONE, ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false));
 
         assertTrue(said.getMessage().contains("query.tag@None.value"),
                 "the answer names the value fixed where nothing stands: " + said.getMessage());
@@ -235,7 +235,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 ConstructionPlan.of(typeOf(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbols()), symbols(),
                         ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
-                        decided, additional, ConstructionPlan.ContentsComposed.NONE, ANY),
+                        decided, additional, ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false),
                 "nothing here asks one position to be two things").plan();
     }
 

@@ -279,7 +279,22 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_CHARACTER_MATCHED,
             A_CHARACTER_MATCHED + IN_A_DESCRIPTOR,
             A_CHARACTER_MATCHED + "#of(Lsouther/compiler/core/Kernel;)L" + OWNER + ";",
-            A_CHARACTER_MATCHED + "#subject()I");
+            // And a predicate applied to a piece of a string, which the table reads as it reads
+            // one applied to a position: what the predicate holds of is its answer, and the
+            // reading of the pieces takes it as it came.
+            A_CHARACTER_MATCHED + "#statedBy(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
+                    + OWNER + "$Stated;",
+            A_CHARACTER_MATCHED + "#subject()I",
+            A_CHARACTER_MATCHED + "$Reading",
+            A_CHARACTER_MATCHED + "$Reading$Accepting",
+            A_CHARACTER_MATCHED
+                    + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
+            A_CHARACTER_MATCHED + "$Stated",
+            A_CHARACTER_MATCHED + "$Stated#reading()L" + OWNER + "$Reading;",
+            A_CHARACTER_MATCHED + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
+            A_CHARACTER_MATCHED + "$Stated#subject()Lsouther/compiler/core/Core;",
+            A_CHARACTER_MATCHED + "$WrittenText");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

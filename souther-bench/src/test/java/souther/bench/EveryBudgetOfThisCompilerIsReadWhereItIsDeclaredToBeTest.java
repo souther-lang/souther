@@ -485,7 +485,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
-                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/List;Lsouther/compiler/values/ValueSet;"
                             + "Ljava/util/Set;Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
@@ -606,6 +606,33 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$ValueTaking;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the same bound over one pass of the assignments"),
+            Map.entry("souther.compiler.partition.Generator#valueAtOnce("
+                            + "Lsouther/compiler/partition/MeasuredInput;I"
+                            + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;"
+                            + "Lsouther/compiler/inputs/Requirements;"
+                            + "Lsouther/compiler/partition/Generator$Handed;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/Generator$FoundOut;"
+                            + "Lsouther/compiler/partition/Generator$ValueTaking;"
+                            + "[Lsouther/compiler/partition/Generator$Composing;"
+                            + "Lsouther/compiler/partition/Generator$CasesUnderARule;)"
+                            + "Lsouther/compiler/partition/Generator$Outcome;",
+                    "stops planning under the cases a rule above names a field of where the count"
+                            + " runs out, and says so as the search stopped at that figure"),
+            Map.entry("souther.compiler.partition.Generator$CasesUnderARule#<init>()V",
+                    "begins the one count of the cases planned under for a rule above"),
+            Map.entry("souther.compiler.partition.Partitions$RulesAround$Shared#<init>()V",
+                    "begins the one count of the records composed under a rule above, for a value"
+                            + " built whole"),
+            Map.entry("souther.compiler.partition.Partitions#composed("
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + "Lsouther/compiler/check/RuleReadingContext;"
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/partition/Partitions$RulesAround;)"
+                            + "Lsouther/compiler/partition/Proposals;",
+                    "stops composing a record a rule above reads under where the count runs out,"
+                            + " and says so as the figure"),
             Map.entry("souther.compiler.partition.ConstructionPlan#node("
                             + "Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/inputs/TermPath;"
@@ -616,7 +643,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"
                             + "Lsouther/compiler/partition/ConstructionPlan$ContentsComposed;"
-                            + "Lsouther/compiler/partition/ConstructionPlan$WhatItMayHold;)"
+                            + "Lsouther/compiler/partition/ConstructionPlan$WhatItMayHold;"
+                            + "Lsouther/compiler/partition/ConstructionPlan$RulesUnder;)"
                             + "Lsouther/compiler/partition/ConstructionPlan$NodeResult;",
                     "stops descending where a value is still made of positions, and says which"
                             + " figure — on the position where it stopped, or as the whole plan"
@@ -674,14 +702,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // a sum over values written out — asks here before reading any of them, and past
             // either figure carries what it would have read out as a part nothing read, naming
             // the one it reached.
-            Map.entry("souther.compiler.partition.Pullback#splitInto("
-                            + "Lsouther/compiler/inputs/InputReads;J)"
+            Map.entry("souther.compiler.partition.Pullback#splitInto(JJ)"
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "counts the readings a split makes along one way down, and says which figure"
                             + " where they are past it"),
             Map.entry("souther.compiler.partition.Pullback#splitInto("
-                            + "Lsouther/compiler/inputs/InputReads;"
-                            + "Ljava/util/function/LongUnaryOperator;)"
+                            + "JLjava/util/function/LongUnaryOperator;)"
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "tells a count of the readings of a split how far the figures can tell, and"
                             + " asks the split of what it counted"),
@@ -855,6 +881,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;)V",
                     "looks for no more assignments than there is room for among the ways looked"
                             + " along, and says that figure when it leaves some"),
+            Map.entry("souther.compiler.partition.Cutting#linesOnOneQuantityPastTheFigure("
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/inputs/InputReading;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/coverage/Arrivals;)"
+                            + "Lsouther/compiler/partition/Cutting$Read;",
+                    "counts the lines one quantity is cut by against the readings figure, and"
+                            + " says that figure where a statement's lines are not worked out"),
             Map.entry("souther.compiler.partition.Cutting#asLines("
                             + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"

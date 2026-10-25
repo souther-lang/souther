@@ -3208,44 +3208,24 @@ public final class Adequacy {
             // that went elsewhere says that of the case it carried and not of the rule.
             // Nothing of the item is fixed here, so there is no number of one this is a candidate
             // out of: what the row has to be is the way's, and the way is asked below.
-            RuleSettlement first = whatTheWaysCameToOver(
-                    probe.attempt("a rule of the decision", Map.of(),
-                            souther.compiler.partition.NumbersAskedFor.ANYTHING,
-                            reaching, ruled.demands()),
-                    probe, taken, ruled);
-            if (first.requirement() instanceof RuleRequirement.Required) {
-                return first;
-            }
-            // The rows the walk offered first did not take the rule. The walk goes on to the
-            // next assignment of the values below for each row the run places at another rule,
-            // and what it finds there is a witness where there is one; where there is none,
-            // what the first rows did is what is said.
-            Generator.RowJudge atTheRule = row -> {
+            //
+            // The walk is held to the run: a row the run places at another rule is passed over for
+            // the next assignment of the values below, and where no row it reaches is placed at the
+            // rule, the first row whose run answered is what comes back and says where it went.
+            Generator.RowJudge atTheRule = Generator.RowJudge.preferring(row -> {
                 RowAsRead read = probe.read(row);
                 return read.watched() instanceof Generator.Watched.Ran
                         && taken.takenBy(read.asRun())
                                 instanceof RulesTaken.WhichRule.TookThis took
                         && took.rule().equals(ruled.rule());
-            };
-            RuleSettlement judged = whatTheWaysCameToOver(
-                    probe.attempt("a rule of the decision", Map.of(),
-                            souther.compiler.partition.NumbersAskedFor.ANYTHING,
-                            reaching, ruled.demands(), Optional.of(atTheRule)),
-                    probe, taken, ruled);
-            return judged.requirement() instanceof RuleRequirement.Required ? judged : first;
-        }
-
-        /**
-         * What the ways of standing the dependencies in settle about the rule, the proof first.
-         *
-         * <p>The proof, where every way came back with one, is asked of the ways together and
-         * before the fold: what that fold joins on is how much one way established about the
-         * rule, and a proof is not more of that — it is the one answer that is the rule's only
-         * where no way found anything else.
-         */
-        private static RuleSettlement whatTheWaysCameToOver(
-                List<Generator.BoundaryAttempt> ways, Coverages.Probe probe, RunPlacement taken,
-                souther.compiler.partition.DecisionReading.Ruled ruled) {
+            });
+            List<Generator.BoundaryAttempt> ways = probe.attempt("a rule of the decision", Map.of(),
+                    souther.compiler.partition.NumbersAskedFor.ANYTHING,
+                    reaching, ruled.demands(), Optional.of(atTheRule));
+            // The proof, where every way of standing the dependencies in came back with one. Asked
+            // of the ways together and before the fold below: what that fold joins on is how much
+            // one way established about the rule, and a proof is not more of that — it is the one
+            // answer that is the rule's only where no way found anything else.
             RuleSearch.CameToNothing proved = provedByEveryWay(ways);
             if (proved != null) {
                 return RuleSettlement.provedNothingTakesIt(proved);

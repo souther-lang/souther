@@ -29,6 +29,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
@@ -37,6 +38,7 @@ import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
+import souther.compiler.values.ValueSet;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
@@ -2816,18 +2818,28 @@ final class TermRealizations {
                                     SearchRegion within, UsualPlace usual) {
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+        // What the declarations leave the value on its order, and which of its values they admit:
+        // a place either refuses is one every row written at it is refused at.
+        NumericTerm.ValueOf value = orders.term() instanceof NumericTerm.ValueOf it && within != null
+                ? it : null;
+        OrderedRuns declared = value == null ? null : within.orderedRegionAt(value);
+        ValueSet admits = value == null ? ValueSet.ANY : within.admittedAt(value);
         switch (wanted) {
-            // A set of one number is that number, and there is nothing else it could have been.
+            // A set of one number is that number, and there is nothing else it could have been —
+            // and where the order the declarations leave the value holds it nowhere, the set holds
+            // no value of the position at all.
             case NumericSet.At one -> {
-                return Tried.theOne(one.value());
+                return declared == null || declared.admits(one.value())
+                        ? Tried.theOne(one.value())
+                        : new Tried(List.of(), new Remainder.Exhausted());
             }
             // Anything but the values a rule singled out. Which place beside them to try is a
             // witness somebody pays for, and what a witness may cost is named where witnesses are
             // paid for — so a caller that paid names one and this tries it. Nothing built at it is
             // an answer about that number: the set holds every other one, and none was looked at.
             case NumericSet.AwayFrom _ -> {
-                return new Tried(named == null ? List.of() : List.of(named),
-                        new Remainder.SomeOf(ofTheRun));
+                return new Tried(named == null || (declared != null && !declared.admits(named))
+                        ? List.of() : List.of(named), new Remainder.SomeOf(ofTheRun));
             }
             // A run, with or without values taken out of it, is looked in below — in the runs the
             // set makes up, so a place a run holds is never offered for one that has it taken out.
@@ -2848,47 +2860,96 @@ final class TermRealizations {
             }
             case null -> leaves = null;
         }
+        // In each run the declarations leave the value on its order, since between the ends of the
+        // first and the last are gaps every alternative refuses. Where the rules leave the number
+        // room and the declarations' runs hold nothing of it, the declarations leave no value
+        // there, which they say.
+        List<NumericDomain.Bounds> runs = LevelRealizer.runsOf(leaves, declared);
+        if (runs.isEmpty()) {
+            return new Tried(List.of(), new Remainder.Exhausted());
+        }
         // A value held to a class is a value of the class, so what is offered are its members: the
         // end of a run is one only by luck, and a place the class refuses is no candidate whatever
         // else is asked of it afterwards.
-        HeldClass members = orders.term() instanceof NumericTerm.ValueOf value && within != null
-                ? within.classAt(value) : HeldClass.NONE;
+        HeldClass members = value == null ? HeldClass.NONE : within.classAt(value);
         if (!(members instanceof HeldClass.None)) {
-            return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun, usual);
+            return membersOnTheOrder(wanted, orders, members, runs, admits, ofTheRun, usual);
         }
-        Place found = Criterion.Within.standingIn(wanted.region(orders.answered()),
-                orders.answered(), leaves == null ? null : leaves.min(),
-                leaves == null ? null : leaves.max(), usual);
-        return new Tried(found == null ? List.of() : List.of(found),
-                new Remainder.SomeOf(ofTheRun));
+        // One place of each run of the set inside each of those, standing for it — and where the
+        // one standing for it is a value the position's values refuse, one of the run they take,
+        // found among what the set and the order have in hand: the place standing for a run is
+        // chosen by where the number is usually near, and a rule singling a value out may single
+        // out that one. No machine is built for it, which a witness's own writer pays for. Where
+        // the order names no place for a run, nothing is put in its stead: an order declines on
+        // purpose, as above a string a rule stops short of, where every value would carry a
+        // character nobody wrote.
+        Carrier carrier = orders.answered();
+        LevelSpace space = LevelSpace.onACarrier(carrier);
+        List<Place> offered = new ArrayList<>();
+        for (NumericDomain.Bounds run : runs) {
+            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+                    run == null ? null : run.min(), run == null ? null : run.max())) {
+                if (!(space.standingFor(look, usual).level() instanceof Level.OnACarrier on)) {
+                    continue;
+                }
+                Place found = carrier.admitted(admits, on.at()) ? on.at()
+                        : takenInstead(look, carrier, admits, on.at());
+                if (!offered.contains(found)) {
+                    offered.add(found);
+                }
+            }
+        }
+        return new Tried(List.copyOf(offered), new Remainder.SomeOf(ofTheRun));
     }
 
     /**
-     * The members of {@code members} that the runs of {@code wanted} hold inside what the rules
-     * leave the number, nearest the end the search starts from, run by run.
+     * A place of {@code look} the position's values take in, found without a machine — or
+     * {@code refused} where none is in hand, which the row built at it is then refused at as it
+     * would have been.
+     */
+    private static Place takenInstead(LevelInterval look, Carrier carrier, ValueSet admits,
+                                      Place refused) {
+        OrderedInterval run = LevelRealizer.runOf(look, carrier);
+        Place taken = run == null ? null
+                : carrier.somewhereInHand(admits, run, PlacesApart.NONE);
+        return taken != null ? taken : refused;
+    }
+
+    /**
+     * The members of {@code members} that the runs of {@code wanted} hold inside each of
+     * {@code leaves} and that the position's values take in, nearest the end the search starts
+     * from, run by run.
      *
      * <p>More than one, so that what is refused of the first is not the end of the search: the next
      * member is the one a caller reads back and tries. A run holding more than are offered says so,
      * for the figure it was cut at.
+     *
+     * @param leaves the runs the declarations and the region leave the number, lowest first
      */
     private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
-                                           HeldClass members, NumericDomain.Bounds leaves,
-                                           Set<CompositionRepertoire> ofTheRun,
+                                           HeldClass members, List<NumericDomain.Bounds> leaves,
+                                           ValueSet admits, Set<CompositionRepertoire> ofTheRun,
                                            UsualPlace usual) {
         Carrier carrier = orders.answered();
         List<Place> offered = new ArrayList<>();
         boolean more = false;
-        for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
-                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max())) {
-            OrderedInterval run = LevelRealizer.runOf(look, carrier);
-            if (run == null) {
-                continue;
+        for (NumericDomain.Bounds within : leaves) {
+            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+                    within == null ? null : within.min(), within == null ? null : within.max())) {
+                OrderedInterval run = LevelRealizer.runOf(look, carrier);
+                if (run == null) {
+                    continue;
+                }
+                ClassMembers inside = members.standingIn(
+                        new NumericDomain.Bounds(run.low(), run.high()), carrier, usual,
+                        CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
+                for (Place each : inside.notApart(PlacesApart.NONE)) {
+                    if (carrier.admitted(admits, each)) {
+                        offered.add(each);
+                    }
+                }
+                more |= inside.stoppedShort();
             }
-            ClassMembers inside = members.standingIn(
-                    new NumericDomain.Bounds(run.low(), run.high()), carrier, usual,
-                    CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
-            offered.addAll(inside.notApart(PlacesApart.NONE));
-            more |= inside.stoppedShort();
         }
         return new Tried(offered, more
                 ? new Remainder.StoppedAt(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED)
@@ -3269,9 +3330,14 @@ final class TermRealizations {
         static final ElementsHeldTo NOTHING = new ElementsHeldTo(null, null);
 
         /**
-         * The elements {@code seeds} hold, written again with the fields of the element the way
-         * bounds standing inside those bounds — or {@code seeds} where it bounds none of them, the
-         * element is no record, or the elements are kept apart.
+         * The container of elements written inside what the way leaves their fields, in place of
+         * {@code seeds}: the elements {@code seeds} hold are written from the type alone, and a
+         * container holding them is no container the way asks for.
+         *
+         * <p>{@code seeds} stand where the way bounds no field of the element, the element is no
+         * record, or the elements are kept apart or are in a set. And they stand where no element
+         * could be composed inside the bounds, with what that composing met beside what building
+         * them did: the offer is then short of the way, and says so.
          */
         Proposals over(Proposals seeds, TypeView holder, int many, List<List<String>> keptApart,
                        RuleReadingContext reading) {
@@ -3304,13 +3370,14 @@ final class TermRealizations {
             Proposals element = Partitions.composedHeldTo(record,
                     Partitions.rulesOver(carrier.element(), record, ruleSource), reading, held);
             if (element.isEmpty()) {
-                return seeds;
+                return seeds.meeting(element.met());
             }
             List<FixtureTemplate> elements = new ArrayList<>();
             for (int i = 0; i < many; i++) {
                 elements.add(element.values().getFirst());
             }
-            return Proposals.of(List.of(FixtureTemplate.collection(elements))).meeting(seeds.met());
+            return Proposals.of(List.of(FixtureTemplate.collection(elements)))
+                    .meeting(seeds.met().and(element.met()));
         }
     }
 

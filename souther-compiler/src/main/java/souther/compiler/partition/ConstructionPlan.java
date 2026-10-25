@@ -369,6 +369,42 @@ final class ConstructionPlan {
                 narrowings = List.copyOf(narrowings);
             }
         }
+
+        /**
+         * A value above names a field under a position that holds nothing until a narrowing says
+         * what stands there, so the value there is planned under each narrowing in turn.
+         *
+         * <p>Not {@link Unnarrowed}, which is a question for the caller: there the caller asked for
+         * something under the position and has a reason to prefer one case. Here nobody asked, and
+         * any case will do — but no whole value does. A value chosen whole is built by its own
+         * declaration's rules, and the rule above is not one of them, so every row built at it may
+         * be refused by that rule. Planned under a case, the fields under the position are
+         * positions, and each is held to every value whose rules name it.
+         *
+         * @param cases what the position stands at, in the order the declarations write them
+         */
+        record UnderEachCase(TermPath at, List<Refinement> cases) implements Result {
+
+            public UnderEachCase {
+                cases = List.copyOf(cases);
+                if (cases.isEmpty()) {
+                    throw new IllegalArgumentException("a value planned under each case has one");
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether a value whose rules name a position says something of a position strictly under it.
+     *
+     * <p>Asked of a position a value would otherwise be chosen whole at, which is what a rule about
+     * a field under it is not met by ({@link Result.UnderEachCase}). The caller's to answer, as
+     * whose rules name a position is the reading's.
+     */
+    interface RulesUnder {
+
+        /** Whether some value naming {@code here} has a rule about a position strictly under it. */
+        boolean speakUnder(TermPath here);
     }
 
     /**
@@ -561,7 +597,7 @@ final class ConstructionPlan {
     static Result of(Type declared, TermPath at, NewtypeInners inners, Symbols symbols,
                      DeclarationKinds kinds, SumCases sums, Set<TermPath> decided,
                      Requirements additional, ContentsComposed contents,
-                     WhatItMayHold howMany) {
+                     WhatItMayHold howMany, RulesUnder rulesUnder) {
         Requirements required = additional;
         Set<TermPath> standing = new LinkedHashSet<>(decided);
         standing.addAll(contents.paths());
@@ -590,12 +626,14 @@ final class ConstructionPlan {
             }
         }
         return switch (node(declared, at, inners, symbols, kinds, sums, 0, decided, required,
-                contents, howMany)) {
+                contents, howMany, rulesUnder)) {
             case NodeResult.Made(Node root) -> new Result.Planned(new ConstructionPlan(root));
             case NodeResult.Refused(ModelRefusal why) -> new Result.Refused(why);
             case NodeResult.Beyond(Set<CompositionBudget> by) -> new Result.Beyond(by);
-            case NodeResult.Unnarrowed(TermPath where, List<Refinement> narrowings) ->
-                    new Result.Unnarrowed(where, narrowings);
+            case NodeResult.Unnarrowed(TermPath where, List<Refinement> narrowings,
+                                       boolean byTheRules) -> byTheRules
+                    ? new Result.UnderEachCase(where, narrowings)
+                    : new Result.Unnarrowed(where, narrowings);
         };
     }
 
@@ -661,8 +699,10 @@ final class ConstructionPlan {
         record Beyond(Set<CompositionBudget> by) implements NodeResult {}
 
         /** Nothing was, because what the caller asked for is under a position nothing stands at
-         *  until a narrowing says what does. */
-        record Unnarrowed(TermPath at, List<Refinement> narrowings) implements NodeResult {}
+         *  until a narrowing says what does — or, where {@code byTheRules}, because a rule of a
+         *  value above names something under it ({@link Result.UnderEachCase}). */
+        record Unnarrowed(TermPath at, List<Refinement> narrowings, boolean byTheRules)
+                implements NodeResult {}
     }
 
     /**
@@ -777,7 +817,8 @@ final class ConstructionPlan {
                                    DeclarationKinds kinds, SumCases sums,
                                    int depth,
                                    Set<TermPath> decided, Requirements required,
-                                   ContentsComposed contents, WhatItMayHold howMany) {
+                                   ContentsComposed contents, WhatItMayHold howMany,
+                                   RulesUnder rulesUnder) {
         // What the requirements leave standing here, worked out before anything is decided about
         // the position. Read once and in full: what is built, whether the search chooses it, and
         // where every path below it hangs all follow from it.
@@ -882,7 +923,7 @@ final class ConstructionPlan {
             if (valueAsked || !keyAsked) {
                 NodeResult inside = node(container.element(), here.element(), inners, symbols,
                         kinds, sums,
-                        depth + 1, decided, required, contents, howMany);
+                        depth + 1, decided, required, contents, howMany, rulesUnder);
                 if (!(inside instanceof NodeResult.Made(Node made))) {
                     return inside;
                 }
@@ -894,7 +935,7 @@ final class ConstructionPlan {
             Optional<Node> key = Optional.empty();
             if (keyAsked && container instanceof Shape.Mapping map) {
                 NodeResult keyed = node(map.key(), here.key(), inners, symbols, kinds, sums,
-                        depth + 1, decided, required, contents, howMany);
+                        depth + 1, decided, required, contents, howMany, rulesUnder);
                 if (!(keyed instanceof NodeResult.Made(Node filedUnder))) {
                     return keyed;
                 }
@@ -931,7 +972,16 @@ final class ConstructionPlan {
             // state.
             if (anythingIsAskedUnder(here, decided, required) || contents.reachesUnder(here)) {
                 return new NodeResult.Unnarrowed(here,
-                        narrowingsAt(settled, inners, symbols, kinds, sums));
+                        narrowingsAt(settled, inners, symbols, kinds, sums), false);
+            }
+            // And where nobody asked but a rule of a value above names a field under it, the
+            // value is planned under each narrowing in turn: chosen whole, it is built by its own
+            // declaration's rules and the rule above is not met.
+            if (rulesUnder.speakUnder(here)) {
+                List<Refinement> cases = narrowingsAt(settled, inners, symbols, kinds, sums);
+                if (!cases.isEmpty()) {
+                    return new NodeResult.Unnarrowed(here, cases, true);
+                }
             }
             return new NodeResult.Made(
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
@@ -946,7 +996,7 @@ final class ConstructionPlan {
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), inners, symbols, kinds,
                     sums, depth + 1,
-                    decided, required, contents, howMany)) {
+                    decided, required, contents, howMany, rulesUnder)) {
                 case NodeResult.Made(Node built) -> under.put(field.getKey(), built);
                 // The model settling that there is no value ends the walk. Nothing a field further
                 // along could say outranks it, and one proof is the whole of what a reader gets — a
@@ -968,8 +1018,12 @@ final class ConstructionPlan {
                 // has been sent to do work that cannot help, so the walk goes on to find out
                 // whether there is one. Which narrowing is owed does not change — it is still the
                 // first, in the order the declarations write them.
+                //
+                // And a question the caller has to answer comes before one the rules put: planning
+                // under each case for the rules would come back to the caller's question all the
+                // same, once for every case.
                 case NodeResult.Unnarrowed unnarrowed -> {
-                    if (owed == null) {
+                    if (owed == null || (owed.byTheRules() && !unnarrowed.byTheRules())) {
                         owed = unnarrowed;
                     }
                 }

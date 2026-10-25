@@ -57,6 +57,37 @@ class ARowRefusedByTheRunIsPassedOverForTheNextAssignmentTest {
                 () -> "and the rule that needs an element is taken by one: " + witnesses);
     }
 
+    /**
+     * No container here, so nothing is composed under a bound: the first assignment of the numbers
+     * sends the row to the other rule, and the rule is taken by an assignment the walk reaches
+     * after it.
+     */
+    @Test
+    void aRuleTheFirstAssignmentDoesNotReachIsTakenByTheNext() {
+        List<RuleSettlement> settled = settlementsOf("""
+                module example.cap
+
+                data Rate = Int
+                    invariant nonNegative = value >= 0
+
+                data Cap = Int
+                    invariant nonNegative = value >= 0
+
+                data Policy = { rate: Rate, cap: Cap }
+
+                behavior f : (days: Int, policy: Policy) -> Int
+
+                let f (days, policy) = {
+                    let accrued = days * policy.rate.value
+
+                    if accrued > policy.cap.value then policy.cap.value else accrued
+                }
+                """);
+
+        assertEquals(settled.size(), requiredOf(settled).size(),
+                () -> "every rule is taken by a row: " + settled);
+    }
+
     @Test
     void everyElementOfAContainerThatHoldsSeveralMeetsTheStatement() {
         List<RuleSettlement> settled = settlementsOf(A_NON_EMPTY_CONTAINER_OF_ELEMENTS_THAT_ALL_MEET
@@ -75,6 +106,33 @@ class ARowRefusedByTheRunIsPassedOverForTheNextAssignmentTest {
     void aStatementEveryElementMeetsAloneIsTakenByAnEmptyContainerToo() {
         List<RuleSettlement> settled = settlementsOf(A_NON_EMPTY_CONTAINER_OF_ELEMENTS_THAT_ALL_MEET
                 .replace(" && List.length(t.below) > 0", ""));
+
+        assertEquals(settled.size(), requiredOf(settled).size(),
+                () -> "every rule is taken by a row: " + settled);
+    }
+
+    /**
+     * The fields of an element that the type relates are chosen together: one at the least the way
+     * leaves it and the other where the relation then leaves it, and not each at its own least.
+     */
+    @Test
+    void anElementWhoseFieldsTheTypeRelatesMeetsTheStatementAndTheRelation() {
+        List<RuleSettlement> settled = settlementsOf("""
+                module example.related
+
+                data Span = { lo: Int, hi: Int }
+                    invariant total = lo + hi == 10
+                data Holder = { spans: List<Span> }
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior f : (t: Holder) -> Answer
+                let f (t) =
+                    if List.length(t.spans) > 0
+                        && List.all(s -> s.lo >= 3 && s.hi >= 3, t.spans)
+                    then Yes else No
+                """);
 
         assertEquals(settled.size(), requiredOf(settled).size(),
                 () -> "every rule is taken by a row: " + settled);

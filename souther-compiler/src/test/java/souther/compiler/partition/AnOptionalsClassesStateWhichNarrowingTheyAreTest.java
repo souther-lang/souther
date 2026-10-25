@@ -144,7 +144,7 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
                         read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
                         read.rules().sums(),
                         Set.of(), required, ConstructionPlan.ContentsComposed.NONE,
-                        ONE_AT_LEAST),
+                        ONE_AT_LEAST, _ -> false),
                 "nothing here asks one position to be two things").plan();
     }
 

@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.IntNegation;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
+
+import java.util.function.BiConsumer;
 
 /**
  * The count a written value stands for.
@@ -38,6 +41,30 @@ final class Counts {
             case Hir.Apply a when a.args().size() == 1 -> writtenIn(a.args().get(0));
             case null, default -> null;
         };
+    }
+
+    /**
+     * Every count a value settles, at the place under {@code at} it settles it: through the fields
+     * of a record built field by field, and through a name wrapping one.
+     *
+     * <p>What a rule of a value around the one written is told of it. A rule relating two fields of
+     * an inner record is asked what the first came to before the second is chosen, and the first
+     * is a field of whatever record it was built in.
+     */
+    static void writtenUnder(TermPath at, Hir.Expr written, BiConsumer<TermPath, Count> into) {
+        switch (written) {
+            case Hir.NewData data -> {
+                for (Hir.FieldInit each : data.inits()) {
+                    writtenUnder(at.then(each.written().canonical()), each.value(), into);
+                }
+            }
+            case Hir.Apply a when a.args().size() == 1 -> writtenUnder(at, a.args().get(0), into);
+            case null, default -> {
+                if (writtenIn(written) instanceof Count count) {
+                    into.accept(at, count);
+                }
+            }
+        }
     }
 
     private Counts() {}

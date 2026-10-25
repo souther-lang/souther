@@ -118,6 +118,13 @@ public enum CompositionBudget {
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
 
+    /** How many cases a value is planned under where a rule of a value above names a field under
+     *  a sum and nobody asked which case the value is. Each is a row composed whole, and what
+     *  multiplies here is the cases of every such sum the parameter holds, counted across all of
+     *  them; past it the cases left are not planned under, and the search is carried out with the
+     *  figure. */
+    CASES_A_RULE_ABOVE_IS_PLANNED_UNDER(8),
+
     /** How many ways a search looks along where conditions on the way to a border came out one of
      *  several ways, each a row is composed along whole. Every way of taking their open
      *  alternatives together where they are no more than this; past it, each open alternative
@@ -353,6 +360,13 @@ public enum CompositionBudget {
      * every application of every closure it is in and for every case of each side it compares, so
      * what multiplies is the nesting and what is counted is the product along one way down — and
      * so what one condition comes to does not turn on how many others beside it were read first.
+     *
+     * <p>What does not turn on an application is split once for all of them. A total over the
+     * elements a filter keeps, where nothing the filter or the elements read was handed to the
+     * closure, is the same total on every application, so the ways its elements are kept in are
+     * counted against the readings the comparison is one of apart from the applications. What each
+     * application adds is the comparison made in one of those ways, which splits nothing. A value
+     * that does turn on an application is another value on each, and is counted with all of them.
      *
      * <p>Not an {@code if} a comparison is read through. Its arms are read only where a run takes
      * them, so the ways down a chain of them are the ways a run can go, and one of those may pass
@@ -705,6 +719,9 @@ public enum CompositionBudget {
             case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
             case WAYS_UNDER_THE_CASES_TRIED ->
                     "how many ways under the cases of a sum a container is written are tried";
+            case CASES_A_RULE_ABOVE_IS_PLANNED_UNDER ->
+                    "how many cases of a sum a value is built as where a rule above it names a"
+                            + " field of its cases";
             case WAYS_A_WAY_IS_LOOKED_ALONG ->
                     "how many ways a row is looked for along where conditions on the way are"
                             + " one of several things";
@@ -828,6 +845,7 @@ public enum CompositionBudget {
                  SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
