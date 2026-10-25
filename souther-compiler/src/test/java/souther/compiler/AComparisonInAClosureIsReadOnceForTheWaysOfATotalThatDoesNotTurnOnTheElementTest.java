@@ -228,6 +228,26 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertTrue(named.contains("READINGS_OF_ONE_CONDITION"), named);
     }
 
+    /**
+     * A helper handed the parameter's field takes it under its own name, which stands at a
+     * position as the field does: the cases it splits are still as many as the values the
+     * parameter is handed.
+     */
+    @Test
+    void aHelperHandedTheParametersFieldIsSplitWithTheParametersApplications() {
+        int months = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        String report = report("""
+                behavior cap : (x: Int) -> Int
+                let cap (x) = Int.max(x, 0)
+                behavior g : (w: Window) -> Ok | No
+                let g (w) = {
+                    guard List.any(t -> List.any(s -> s <= cap(t.pay), [ 1 ]), %s) else No
+                    Ok
+                }
+                """.formatted(monthsRepeated(months)));
+        assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
     /** A helper that is handed nothing of the application is the same total on each. */
     @Test
     void aTotalFromAHelperHandedNothingOfTheApplicationIsReadWhateverTheTableLength() {

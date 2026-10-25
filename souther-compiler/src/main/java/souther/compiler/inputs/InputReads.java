@@ -149,14 +149,19 @@ public final class InputReads {
      *                 values it is handed: the applications of closures are among
      *                 {@code readings} as the product of these, the rest being the arms of
      *                 choices taken
+     * @param turnsOn  for each name given a value, the names an application handed one of the
+     *                 values written out that the value reads, as it was given ({@link
+     *                 #standingFor}): a name may stand at a position, which says nothing of which
+     *                 application chose it
      */
     private record Applied(Set<BindingId> handed, long readings, Taken taken,
                            Map<BindingId, Denotation> given,
                            Map<BindingId, PickedAtAnIndex> picked,
-                           Set<ValueName.Behavior> entered, Map<BindingId, Long> widths) {
+                           Set<ValueName.Behavior> entered, Map<BindingId, Long> widths,
+                           Map<BindingId, Set<BindingId>> turnsOn) {
 
-        static final Applied NONE =
-                new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of(), Map.of());
+        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of(),
+                Map.of(), Map.of());
 
         Applied {
             handed = Set.copyOf(handed);
@@ -164,6 +169,7 @@ public final class InputReads {
             picked = Map.copyOf(picked);
             entered = Set.copyOf(entered);
             widths = Map.copyOf(widths);
+            turnsOn = Map.copyOf(turnsOn);
             long applications = applicationsOf(widths.values());
             if (readings % applications != 0) {
                 throw new IllegalStateException("the applications of closures are among the"
@@ -202,7 +208,7 @@ public final class InputReads {
          * being those {@code widths} says, with {@code taken} for what was taken.
          */
         Applied as(long readings, Map<BindingId, Long> widths, Taken taken) {
-            return new Applied(handed, readings, taken, given, picked, entered, widths);
+            return new Applied(handed, readings, taken, given, picked, entered, widths, turnsOn);
         }
     }
 
@@ -499,19 +505,20 @@ public final class InputReads {
         if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
             return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
                     new Applied(handed, applied.readings(), applied.taken(), applied.given(),
-                            applied.picked(), applied.entered(), applied.widths()));
+                            applied.picked(), applied.entered(), applied.widths(),
+                            applied.turnsOn()));
         }
         if (namesSomething(value.value())) {
             Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
             given.put(binding, value);
             return new InputReads(names, narrower, declared, dependencies, new Applied(handed,
                     applied.readings(), applied.taken(), given, applied.picked(),
-                    applied.entered(), applied.widths()));
+                    applied.entered(), applied.widths(), applied.turnsOn()));
         }
         return new InputReads(names.handing(binding, value.value()), narrower, declared,
                 dependencies, new Applied(handed, applied.readings(), applied.taken(),
                         applied.given(), applied.picked(), applied.entered(),
-                        applied.widths()));
+                        applied.widths(), applied.turnsOn()));
     }
 
     /**
@@ -570,13 +577,13 @@ public final class InputReads {
     /**
      * What a name stands for, followed by how it was bound and not by where it stands: a name an
      * application handed a position stands at that position, and so does a name given that
-     * parameter's field, and which application chose the position is told by the parameter it was
-     * reached through.
+     * parameter's field, and which application chose the position is told by the parameters the
+     * value it was given reads ({@link #standingFor}), or by what a name it was bound to reads.
      */
     private void bindingRead(Core.Read read, Set<BindingId> met, Set<BindingId> into) {
-        Denotation given = applied.given().get(read.binding());
-        if (given != null) {
-            given.at().applicationsRead(given.value(), met, into);
+        Set<BindingId> turnsOn = applied.turnsOn().get(read.binding());
+        if (turnsOn != null) {
+            into.addAll(turnsOn);
         } else if (names.roleOf(read.binding()) instanceof BindingRole.Alias(var value)
                 && value != read) {
             applicationsRead(value, met, into);
@@ -843,7 +850,7 @@ public final class InputReads {
         through.forEach((binding, width) -> widths.merge(binding, width, (a, b) -> a * b));
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), readings, applied.taken(), applied.given(),
-                        applied.picked(), applied.entered(), widths));
+                        applied.picked(), applied.entered(), widths, applied.turnsOn()));
     }
 
     /**
@@ -1081,22 +1088,26 @@ public final class InputReads {
         for (Map.Entry<BindingId, TermPath> each : standing.entrySet()) {
             inside = inside.naming(each.getKey(), each.getValue());
         }
-        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+        InputReads reading = new InputReads(inside, alternatives, declared,
+                souther.compiler.carrier.Membership.none(),
+                new Applied(applied.handed(), applied.readings(), applied.taken(),
+                        applied.given(), applied.picked(), entered, applied.widths(),
+                        applied.turnsOn()));
         for (int i = 0; i < args.size(); i++) {
             Core.Binder parameter = body.parameters().get(i);
             if (parameter == null || parameter.binding() == null) {
                 continue;
             }
-            if (pathOf(args.get(i), newtypes) instanceof PathResolution.At(TermPath stands)) {
-                inside = inside.naming(parameter.binding(), stands);
-            } else {
-                given.put(parameter.binding(), new Denotation(args.get(i), this));
-            }
+            reading = reading.standingFor(parameter.binding(),
+                    new Denotation(args.get(i), this), newtypes);
         }
-        return new InputReads(inside, alternatives, declared,
-                souther.compiler.carrier.Membership.none(),
-                new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.picked(), entered, applied.widths()));
+        // An element a step stands at is one of the list its call walks, which is among what the
+        // call was handed.
+        List<Denotation> handedOver = args.stream().map(each -> new Denotation(each, this)).toList();
+        for (BindingId element : standing.keySet()) {
+            reading = reading.turningOn(element, handedOver);
+        }
+        return reading;
     }
 
     /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
@@ -1596,6 +1607,12 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
+        return namedByTheArm(scrutinee, arm, symbols, newtypes)
+                .turningOn(arm.binder().binding(), List.of(new Denotation(scrutinee, this)));
+    }
+
+    private InputReads namedByTheArm(Core scrutinee, Core.Case arm, Symbols symbols,
+                                     DeclarationNewtypes newtypes) {
         if (arm.binding() instanceof Core.ArmBinding.Payload) {
             WhatItHolds held = whatItHolds(scrutinee, symbols, newtypes);
             // Which element an index picks is said beside whatever the arm narrows the name to:
@@ -1933,12 +1950,14 @@ public final class InputReads {
         return switch (held) {
             case WhatItHolds.AnEntry(EntryLookedUp entry) -> new InputReads(
                     names.naming(name, entry.element()).selecting(name, entry), alternatives,
-                    declared, dependencies, applied);
+                    declared, dependencies, applied)
+                    .turningOn(name, List.of(new Denotation(entry.lookup(), this)));
             case WhatItHolds.AtAPosition(TermPath at) -> new InputReads(names.naming(name, at),
                     alternatives, declared, dependencies, applied);
             case WhatItHolds.AnEntryOfAnAnswer(AnAnswerAt place) -> new InputReads(
                     names.namingAPlaceInAnAnswer(name, place), alternatives, declared, dependencies,
-                    applied);
+                    applied).turningOn(name, place.arguments().stream()
+                            .map(each -> new Denotation(each, place.at())).toList());
             case WhatItHolds.MadeByAClosure(Denotation answered, var _) ->
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
@@ -1954,7 +1973,8 @@ public final class InputReads {
         picked.put(name, element);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(),
-                        applied.given(), picked, applied.entered(), applied.widths()));
+                        applied.given(), picked, applied.entered(), applied.widths(),
+                        applied.turnsOn()));
     }
 
     /**
@@ -1980,19 +2000,56 @@ public final class InputReads {
                 ? applied.picked().get(read.binding()) : null;
     }
 
-    /** This reading, with {@code name} standing for {@code value}: at its position where it stands
-     *  at one, and otherwise for the value read where it was. */
+    /**
+     * This reading, with {@code name} standing for {@code value}: at its position where it stands
+     * at one, and otherwise for the value read where it was.
+     *
+     * <p>The one place a name is given a value, by a call handing a parameter an argument or an
+     * arm binding what it holds. Which parameters of the applications on the way down the value
+     * reads is said here, where the value is in hand: a name at a position keeps no trace of the
+     * value it was given, and the position does not say which application chose it.
+     */
     private InputReads standingFor(BindingId name, Denotation value,
                                    DeclarationNewtypes newtypes) {
         if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
             return new InputReads(names.naming(name, at), alternatives, declared, dependencies,
-                    applied);
+                    applied).turningOn(name, List.of(value));
         }
         Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
         given.put(name, value);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.picked(), applied.entered(), applied.widths()));
+                        applied.picked(), applied.entered(), applied.widths(), applied.turnsOn()))
+                .turningOn(name, List.of(value));
+    }
+
+    /**
+     * This reading, with {@code name} known to turn on the parameters applications on the way down
+     * handed values that {@code values}, the ones it was given or found by, read.
+     *
+     * <p>Said wherever a name is given a position, and only there: a position is the same
+     * whichever application chose it, and what the name was found by is the one place that
+     * is not.
+     */
+    private InputReads turningOn(BindingId name, List<Denotation> values) {
+        Set<BindingId> reads = new HashSet<>();
+        for (Denotation each : values) {
+            if (!each.at().applied.handed().isEmpty()) {
+                each.at().applicationsRead(each.value(), new HashSet<>(), reads);
+            }
+        }
+        if (reads.isEmpty()) {
+            return this;
+        }
+        Map<BindingId, Set<BindingId>> turnsOn = new HashMap<>(applied.turnsOn());
+        turnsOn.merge(name, Set.copyOf(reads), (before, now) -> {
+            Set<BindingId> both = new HashSet<>(before);
+            both.addAll(now);
+            return Set.copyOf(both);
+        });
+        return new InputReads(names, alternatives, declared, dependencies,
+                new Applied(applied.handed(), applied.readings(), applied.taken(), applied.given(),
+                        applied.picked(), applied.entered(), applied.widths(), turnsOn));
     }
 
     /**
@@ -2519,7 +2576,9 @@ public final class InputReads {
                     && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)
                     && held.ofAnOption()) {
                 out = out.holding(param.binding(),
-                        out.whatItHolds(held.container(), symbols, newtypes), newtypes);
+                        out.whatItHolds(held.container(), symbols, newtypes), newtypes)
+                        .turningOn(param.binding(),
+                                List.of(new Denotation(held.container(), out)));
             }
         }
         return out;
