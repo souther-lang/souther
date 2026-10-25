@@ -251,8 +251,10 @@ public sealed interface ItemAssessment {
         public enum Ground {
 
             /** The model proves the point is inside what it admits, whether a rule or the type alone
-             *  is what shows it. The one ground that is about the model rather than about this run,
-             *  so it stands whatever a search afterwards makes of the point. */
+             *  is what shows it, and that the input it is a point of has a whole value to be in:
+             *  every position every value has, in any parameter, is shown to hold one by rules read
+             *  whole. The one ground that is about the model rather than about this run, so it
+             *  stands whatever a search afterwards makes of the point. */
             IT_IS_PROVED,
 
             /** A row this compilation read stands at the point, which is a value that went through
