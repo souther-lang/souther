@@ -1621,8 +1621,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
             case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
-            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtASubject(
-                    DecisionSubject.AnInput _), var _, var _, var _) -> true;
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
+                                          var _, var _, var _) -> true;
             case Proposition.InTheStrings _ -> false;
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && statesNoRelation(some.ofTheElement());

@@ -527,8 +527,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/ComparisonAssessment", "readsAnswer", "(" + core + "L" + c
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
-        row(out, c + "partition/PredicateReadings", "matchesAPattern", "(" + core + ")Z",
-                Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/ComparisonReadings", "walk", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;" + reads + "L" + c
                 + "partition/ClosureApplications;L" + c

@@ -1,6 +1,5 @@
 package souther.compiler.meaning;
 
-import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -101,8 +100,8 @@ public sealed interface Proposition {
             case Truth truth -> mayBeAnElementOf(truth.of(), container);
             case InCases cases -> mayBeAnElementOf(cases.of(), container);
             case Present present -> mayBeAnElementOf(present.of(), container);
-            case InTheStrings(InTheStrings.Strings.AtASubject(var at), var _, var _, var _) ->
-                    mayBeAnElementOf(at, container);
+            case InTheStrings(InTheStrings.Strings.AtAPosition(var at), var _, var _, var _) ->
+                    isAnElementOf(new DecisionSubject.AnInput(at), container);
             // A piece is whatever the statement it is read inside says it is, which is about the
             // string and no container's element.
             case InTheStrings _ -> false;
@@ -336,11 +335,12 @@ public sealed interface Proposition {
      * <p>Of a string a position holds, or of a piece of one: which of them is {@code of}. What
      * accepts says is the language and not the pattern that was written — the strings some piece
      * of a split string is in a pattern are the strings of another language, and that one is
-     * what a statement about the string is read as.
+     * what a statement about the string is read as. A statement and its denial hold the one
+     * language, so turning a statement over spells nothing again.
      *
      * @param key spelled from the rest when it is made, whatever is handed in
      */
-    record InTheStrings(Strings of, PatternMeaning accepts, boolean holds, String key)
+    record InTheStrings(Strings of, StringsLanguage accepts, boolean holds, String key)
             implements Proposition {
 
         /** The string a statement of this kind is about. */
@@ -348,18 +348,24 @@ public sealed interface Proposition {
 
             String spelled();
 
-            /** The string that stands at a subject. */
-            record AtASubject(DecisionSubject at) implements Strings {
+            /**
+             * The string that stands at a position of the input.
+             *
+             * <p>Of the input and of nothing a dependency answered: what the pieces of such a
+             * string are is read off the string, and a string that no row writes is no string a
+             * statement about its pieces divides.
+             */
+            record AtAPosition(TermPath at) implements Strings {
 
-                public AtASubject {
+                public AtAPosition {
                     if (at == null) {
-                        throw new IllegalArgumentException("a string stands at some subject");
+                        throw new IllegalArgumentException("a string stands at some position");
                     }
                 }
 
                 @Override
                 public String spelled() {
-                    return at.spelled();
+                    return at.toString();
                 }
             }
 
@@ -386,7 +392,7 @@ public sealed interface Proposition {
             return key.hashCode();
         }
 
-        public InTheStrings(Strings of, PatternMeaning accepts, boolean holds) {
+        public InTheStrings(Strings of, StringsLanguage accepts, boolean holds) {
             this(of, accepts, holds, null);
         }
 
@@ -394,7 +400,7 @@ public sealed interface Proposition {
             if (of == null || accepts == null) {
                 throw new IllegalArgumentException("a string is one of the strings of a language");
             }
-            key = (holds ? "" : "!") + of.spelled() + " in " + accepts;
+            key = (holds ? "" : "!") + of.spelled() + " in " + accepts.spelled();
         }
 
         @Override
@@ -1461,8 +1467,7 @@ public sealed interface Proposition {
             case Truth truth -> truth.of() instanceof DecisionSubject.AnAnswer;
             case InCases cases -> cases.of() instanceof DecisionSubject.AnAnswer;
             case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
-            case InTheStrings(InTheStrings.Strings.AtASubject(var at), var _, var _, var _) ->
-                    at instanceof DecisionSubject.AnAnswer;
+            // Of the input, and of no answer.
             case InTheStrings _ -> false;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;

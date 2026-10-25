@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
@@ -16,6 +15,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.StringsLanguage;
 
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
@@ -142,7 +142,7 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
      *                  not for the ones it holds
      * @param statement the rule, in the words of the pieces
      */
-    record OfPieces(TermPath at, PatternMeaning accepts, boolean outside,
+    record OfPieces(TermPath at, StringsLanguage accepts, boolean outside,
                     PredicateStatement statement) {}
 
     /**
@@ -268,31 +268,20 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         if (stated != null) {
             read(call, written.application(), behavior, stated, reads, out, reaches);
         } else if (call.type() == Type.Prim.BOOL && call.args().stream().anyMatch(each ->
-                Core.withoutStanding(each) instanceof Core.Block && matchesAPattern(each))) {
+                Core.withoutStanding(each).type() instanceof Type.FnOf)) {
             piecesRead(call, written.application(), behavior, read, reads, out, reaches);
         }
     }
 
-    /** Whether a string is matched against a pattern anywhere in {@code e}. */
-    private static boolean matchesAPattern(Core e) {
-        if (Core.withoutStanding(e) instanceof Core.PreservedCall call
-                && call.settled() instanceof Core.KernelFact.StringMatches) {
-            return true;
-        }
-        boolean[] found = {false};
-        ScopeStep.forEachChild(e, (child, _) -> found[0] |= matchesAPattern(child));
-        return found[0];
-    }
-
     /**
-     * A call that asks of the pieces of a string that some, or every, one of them is in a
-     * language, as a rule about that string.
+     * A call that asks of the pieces of a string that some, or every, one of them is held to a
+     * predicate, as a rule about that string.
      *
      * <p>The reading of the call is the reading of any condition ({@link Pullback}), and what it
      * comes to is taken from there: a rule written about the pieces is not read a second time by a
      * walk that knows what the quantifier is without knowing what the pieces are. What is found is
-     * a pattern the string at a position is in, and that is the rule's whether it is written as
-     * {@code List.any} of a pattern or as {@code List.all} of its denial.
+     * a language the string at a position is in, and that is the rule's whether it is written as
+     * {@code List.any} of a predicate or as {@code List.all} of its denial.
      */
     private static void piecesRead(Core.PreservedCall call, SourceConstructOrigin written,
                                    String behavior, InputReading read, InputReads reads,
@@ -303,7 +292,7 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         }
         Derivation.SomePieceInALanguage.Said says = found.says();
         PredicateStatement statement = new PredicateStatement.OfThePieces(says.inIt(),
-                says.someHolds(), says.separator(), says.written(), says.from(),
+                !found.denied(), says.separator(), says.operation(), says.written(), says.from(),
                 says.until().orElse(-1));
         // The call reads true for the strings the language leaves where the statement is of
         // them, which is how the same call written the other way round divides the same way.

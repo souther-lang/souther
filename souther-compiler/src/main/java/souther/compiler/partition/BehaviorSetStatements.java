@@ -333,9 +333,10 @@ public final class BehaviorSetStatements {
         // A call about the pieces of a string is about the string, which the reading of the call
         // already found at a position.
         if (each.ofPieces() instanceof PredicateReadings.OfPieces pieces) {
-            AdmittedPlan within = new AdmittedPlan.Pattern(PatternPlan.of(pieces.accepts()));
+            AdmittedPlan within =
+                    new AdmittedPlan.Pattern(PatternPlan.of(pieces.accepts().meaning()));
             AdmittedPlan outside =
-                    new AdmittedPlan.Pattern(PatternPlan.notMatching(pieces.accepts()));
+                    new AdmittedPlan.Pattern(PatternPlan.notMatching(pieces.accepts().meaning()));
             return new Outcome.OfADistinction(new Asked(each.origin(), pieces.statement(),
                     new NumericTerm.ValueOf(pieces.at()),
                     pieces.outside() ? outside : within, pieces.outside() ? within : outside));

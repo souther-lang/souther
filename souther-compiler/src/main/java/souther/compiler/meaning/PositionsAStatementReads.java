@@ -81,8 +81,8 @@ public final class PositionsAStatementReads {
             case Proposition.InCases cases -> reads(cases.of());
             case Proposition.Present present -> reads(present.of());
             case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtASubject(DecisionSubject at), var _, var _,
-                    var _) -> reads(at);
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at), var _, var _,
+                    var _) -> reads(new DecisionSubject.AnInput(at));
             // A piece is whatever the statement it is read inside says it is, and the string that
             // statement is about is no part of this statement to collect.
             case Proposition.InTheStrings _ -> false;

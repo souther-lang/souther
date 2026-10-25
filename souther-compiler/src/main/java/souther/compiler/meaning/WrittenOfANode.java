@@ -58,7 +58,7 @@ public final class WrittenOfANode {
             case Proposition.InCases cases -> reads(cases.of());
             case Proposition.Present present -> reads(present.of());
             case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtASubject(DecisionSubject at), var _, var _,
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at), var _, var _,
                     var _) -> reads(at);
             case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());

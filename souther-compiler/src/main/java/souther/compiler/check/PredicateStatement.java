@@ -74,26 +74,27 @@ public sealed interface PredicateStatement {
 
     /**
      * What is asked of the pieces of the string at the position: that some of them, or every one,
-     * or none, matches a pattern or does not.
+     * or none, is held to a predicate or is not.
      *
      * <p>Its own arm because the rule is about the pieces and the position holds the string they
      * are of. Said as an operation applied to the position, a document would call the strings
-     * with such a piece by a pattern none of them was matched against.
+     * with such a piece by a predicate none of them was held to.
      *
-     * @param inIt      whether a piece is asked to match the pattern, and not to fail it
+     * @param inIt      whether a piece is asked to meet the predicate, and not to fail it
      * @param someHolds whether it is some piece that is asked, and not none
      * @param separator the code point the string is parted at
-     * @param written   the pattern, as the author wrote it
+     * @param operation what the model calls the predicate, as an author writes it
+     * @param written   the text the author wrote in it
      * @param from      how many of the first pieces are not asked about
      * @param until     the index the pieces asked about stop before, or negative where they run
      *                  to the last
      */
-    record OfThePieces(boolean inIt, boolean someHolds, int separator, String written, int from,
-                       int until) implements PredicateStatement {
+    record OfThePieces(boolean inIt, boolean someHolds, int separator, String operation,
+                       String written, int from, int until) implements PredicateStatement {
 
         public OfThePieces {
-            if (written == null) {
-                throw new IllegalArgumentException("the pieces are asked to match some pattern");
+            if (operation == null || written == null) {
+                throw new IllegalArgumentException("the pieces are held to some predicate");
             }
         }
 
@@ -107,13 +108,13 @@ public sealed interface PredicateStatement {
             if (until >= 0) {
                 pieces = "List.take(" + (until - from) + ", " + pieces + ")";
             }
-            String pattern = CstLexer.literalOf(written);
+            String held = new Applying(operation, written).saidOf("piece");
             if (inIt) {
-                return (someHolds ? "some piece of " : "no piece of ") + pieces + " matches "
-                        + pattern;
+                return (someHolds ? "some piece of " : "no piece of ") + pieces + " satisfies "
+                        + held;
             }
             return (someHolds ? "some piece of " : "every piece of ") + pieces
-                    + (someHolds ? " does not match " : " matches ") + pattern;
+                    + (someHolds ? " fails " : " satisfies ") + held;
         }
     }
 

@@ -2590,27 +2590,31 @@ public sealed interface Derivation {
     }
 
     /**
-     * A piece of a string matched against a pattern that {@code accepts}: the piece being one of
-     * the strings the pattern means.
+     * A piece of a string held to a string predicate that {@code accepts}: the piece being one of
+     * the strings the predicate holds of — a pattern it matches, or text it starts with, ends with
+     * or holds.
      *
-     * <p>A pattern is matched against the whole of a string (spec §string-patterns), so the
-     * piece is in the language and not in a class of code points; a piece is as long as the
-     * separator leaves it, and a character, which is one code point, is {@link ACharacterInAClass}.
+     * <p>A predicate holds of the whole of a string, so the piece is in the language and not in a
+     * class of code points; a piece is as long as the separator leaves it, and a character, which
+     * is one code point, is {@link ACharacterInAClass}.
      * What this says of the pieces of a string is the statement about the string that some piece,
      * or every piece, is in it ({@link SomePieceInALanguage}).
      *
      * <p>The piece is the one {@code within} statements about some piece: the one the statement it
      * is read inside of is about.
      *
-     * @param written the pattern as the author wrote it, which is what a class the statement
-     *                makes is called by
+     * @param accepts   the strings the predicate holds of
+     * @param operation what the model calls the predicate, as an author writes it
+     * @param written   the text the author wrote in it, which is what a class the statement makes
+     *                  is called by
      */
-    record APieceInALanguage(PatternMeaning accepts, String written, int within)
-            implements Derivation {
+    record APieceInALanguage(StringsLanguage accepts, String operation, String written,
+                             int within) implements Derivation {
 
         public APieceInALanguage {
-            Objects.requireNonNull(accepts, "a piece is matched against some pattern");
-            Objects.requireNonNull(written, "the pattern was written somehow");
+            Objects.requireNonNull(accepts, "a piece is held to some predicate");
+            Objects.requireNonNull(operation, "the predicate was written as some operation");
+            Objects.requireNonNull(written, "the predicate was written with some text");
             if (within < 0) {
                 throw new IllegalArgumentException(
                         "a piece is of a statement some number of statements in: " + within);
@@ -2635,7 +2639,7 @@ public sealed interface Derivation {
      * statement is of, so the strings with no piece in it are the language's other side and not a
      * second language.
      *
-     * @param string     where the string the pieces are of stands
+     * @param string     the position of the input the string the pieces are of stands at
      * @param accepts    the strings with a piece in the window in the language, or with every piece
      *                   there in it
      * @param holds      whether the string is one of them
@@ -2643,25 +2647,30 @@ public sealed interface Derivation {
      *                   divides the string into
      * @param ofThePiece what was read of the piece, inside the statement
      */
-    record SomePieceInALanguage(DecisionSubject string, PatternMeaning accepts, boolean holds,
+    record SomePieceInALanguage(TermPath string, StringsLanguage accepts, boolean holds,
                                 Said says, Derivation ofThePiece) implements Derivation {
 
         /**
-         * What is asked of the pieces: which of them, in what, and how many of them.
+         * What is asked of the pieces: which of them, held to what, and how many of them.
          *
-         * @param inIt       whether a piece is asked to be in the language, and not out of it
-         * @param someHolds  whether it is some piece that is asked, and not none
-         * @param separator  the code point the string is parted at
-         * @param written    the pattern as the author wrote it
-         * @param from       how many of the first pieces are not asked about
-         * @param until      the index the pieces asked about stop before, or none where they run
-         *                   to the last
+         * <p>Of some piece being so held, which is what the quantifier of a law reads and the law
+         * turns over; that the statement is of none, or of every piece, is how {@link #holds}
+         * stands against what the reading of a call came to.
+         *
+         * @param inIt      whether a piece is asked to be in the language, and not out of it
+         * @param separator the code point the string is parted at
+         * @param operation what the model calls the predicate, as an author writes it
+         * @param written   the text the author wrote in it
+         * @param from      how many of the first pieces are not asked about
+         * @param until     the index the pieces asked about stop before, or none where they run to
+         *                  the last
          */
-        public record Said(boolean inIt, boolean someHolds, int separator, String written,
+        public record Said(boolean inIt, int separator, String operation, String written,
                            int from, OptionalInt until) {
 
             public Said {
-                Objects.requireNonNull(written, "the pattern was written somehow");
+                Objects.requireNonNull(operation, "the predicate was written as some operation");
+                Objects.requireNonNull(written, "the predicate was written with some text");
                 Objects.requireNonNull(until, "the pieces stop somewhere or run to the last");
             }
         }
@@ -2676,7 +2685,7 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.InTheStrings(
-                    new Proposition.InTheStrings.Strings.AtASubject(string), accepts, holds);
+                    new Proposition.InTheStrings.Strings.AtAPosition(string), accepts, holds);
         }
 
         @Override

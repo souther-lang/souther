@@ -1082,8 +1082,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         case Proposition.Present present -> alike(present.of(), apart);
                         case Proposition.InCases cases -> alike(cases.of(), apart);
                         case Proposition.InTheStrings(
-                                Proposition.InTheStrings.Strings.AtASubject(var at), var _, var _,
-                                var _) -> alike(at, apart);
+                                Proposition.InTheStrings.Strings.AtAPosition(var at), var _, var _,
+                                var _) -> alike(new DecisionSubject.AnInput(at), apart);
                         // A piece is whichever the statement it is read inside says it is.
                         case Proposition.InTheStrings _ -> false;
                         case Proposition.SameValue same ->
