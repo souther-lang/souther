@@ -156,14 +156,22 @@ public final class InputReads {
                 new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of(), 1);
 
         Applied {
+            if (applications < 1 || readings % applications != 0) {
+                throw new IllegalStateException("the applications of closures are among the"
+                        + " readings a reading is one of, and so a factor of them: "
+                        + applications + " of " + readings);
+            }
             handed = Set.copyOf(handed);
             given = Map.copyOf(given);
             picked = Map.copyOf(picked);
             entered = Set.copyOf(entered);
         }
 
-        /** The same, as one of {@code readings} readings, with {@code taken} for what was taken. */
-        Applied as(long readings, Taken taken) {
+        /**
+         * The same, as one of {@code readings} readings of which {@code applications} are the
+         * applications of closures, with {@code taken} for what was taken.
+         */
+        Applied as(long readings, long applications, Taken taken) {
             return new Applied(handed, readings, taken, given, picked, entered, applications);
         }
     }
@@ -788,17 +796,34 @@ public final class InputReads {
     }
 
     /**
-     * How many readings of one condition reading it here is one of, not counting the applications
-     * of closures on the way down: what a value that does not turn on an application is read in,
-     * once for all of them.
+     * How many readings of one condition a split of {@code values} is one of, when this is the
+     * reading being split: the readings this one is, less the applications of closures where no
+     * value split turns on which application it is.
+     *
+     * <p>A value no application hands anything to is the same value on each application, so the
+     * cases it is split into are the same cases, and are split once for all of them. One that does
+     * turn on an application is another value on each, and is split with all of them. What each
+     * application adds to the first is the comparison it makes in one of those cases, which splits
+     * nothing.
+     *
+     * <p>The one place this is decided, so that a split cannot be counted the one way here and the
+     * other where a sibling is: every split names the values it splits.
+     *
+     * @param values the values the split is of, each as it stands where it is read
      */
-    public long readingsApartFromApplications() {
+    public long readingsASplitIsOneOf(List<Denotation> values, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
+        for (Denotation each : values) {
+            if (each.at().turnsOnAnApplication(each.value(), symbols, newtypes)) {
+                return applied.readings();
+            }
+        }
         return applied.readings() / applied.applications();
     }
 
     /** Whether {@code e}, read here, turns on which application of a closure this reading is on
-     *  ({@link #turnsOnAnApplication}). */
-    public boolean turnsOnAnApplication(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+     *  ({@link #turnsOnAnApplication(Core.Read, Symbols, DeclarationNewtypes)}). */
+    private boolean turnsOnAnApplication(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
         return !applied.handed().isEmpty() && readsAnApplied(e, symbols, newtypes, new HashSet<>());
     }
 
@@ -828,7 +853,7 @@ public final class InputReads {
 
     private InputReads taking(Core node, TakenAs as, int readings) {
         return new InputReads(names, alternatives, declared, dependencies,
-                applied.as(applied.readings() * readings,
+                applied.as(applied.readings() * readings, applied.applications(),
                         new Taken(Core.withoutStanding(node), as, applied.taken())));
     }
 
@@ -915,11 +940,13 @@ public final class InputReads {
                 : at.applied.taken().under(applied.taken());
         // Carried already: the reading it stands in holds what this one took, and as many
         // readings. A reading made again would be one more value to hash wherever it is a key.
-        if (taken == at.applied.taken() && applied.readings() == at.applied.readings()) {
+        if (taken == at.applied.taken() && applied.readings() == at.applied.readings()
+                && applied.applications() == at.applied.applications()) {
             return value;
         }
         return new Denotation(value.value(), new InputReads(at.names, at.alternatives, at.declared,
-                at.dependencies, at.applied.as(applied.readings(), taken)));
+                at.dependencies,
+                at.applied.as(applied.readings(), applied.applications(), taken)));
     }
 
     /** The same, of an occurrence: its value and each thing it was kept by. */

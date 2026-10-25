@@ -20,8 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comparison inside a closure, one side of which is a total over the elements a filter keeps,
- * is read in the ways the elements are kept once for all the applications of the closure: the
- * total is the same on each of them, and only the constant it is compared with differs.
+ * has the ways the elements are kept in split once for all the applications of the closure when
+ * the total is the same on each of them, and only the constant it is compared with differs. One
+ * that turns on the application, in the filter or through a helper handed the application's value,
+ * is another total on each and is split with all of them.
  */
 class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheElementTest {
 
@@ -32,6 +34,19 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
             data Ok
             data No
             """;
+
+    /** The ways four months are each kept or dropped in. */
+    private static final int WAYS = 16;
+
+    /** How many constants walked against the total are more readings than one condition is read
+     *  in, once for each way. */
+    private static final int PAST_THE_READINGS =
+            CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
+
+    private static final String MONTHS = "[ w.first, w.second, w.third, w.fourth ]";
+
+    /** How many of the four months are kept. */
+    private static final String KEPT = "List.length(List.filter(r -> r.days >= 17, " + MONTHS + "))";
 
     private static String report(String body) {
         Compilation compilation = Compilation.ofSource(PREAMBLE + body, "Main");
@@ -49,44 +64,41 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
                 .collect(Collectors.joining(", ", "[ ", " ]"));
     }
 
-    private static String reachedBy(String applied, int rows) {
-        return report("""
+    /** {@code helpers} written before a behavior that asks whether some constant of a table of
+     *  {@code rows} is at most {@code total}. */
+    private static String walked(String helpers, String total, int rows) {
+        return helpers + """
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
                     guard List.any(t -> t <= %s, %s) else No
                     Ok
                 }
-                """.formatted(applied, table(rows)));
+                """.formatted(total, table(rows));
     }
 
-    private static final String MEAN = """
-            List.length(List.filter(r -> r.days >= 17,
-                [ w.first, w.second, w.third, w.fourth ]))""";
-
-    /** The ways four months are each kept or dropped in. */
-    private static final int WAYS = 16;
+    static String reachedBy(String total, int rows) {
+        return report(walked("", total, rows));
+    }
 
     @Test
     void aTableWalkedAgainstAFilteredTotalIsReadWhateverItsLength() {
-        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
-        String report = reachedBy(MEAN, rows);
+        String report = reachedBy(KEPT, PAST_THE_READINGS);
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
         assertTrue(report.contains("read as g/w.first.days"), report);
     }
 
     /**
-     * A table short enough to have been read before is drawn the same lines when it is longer than
-     * the figure allowed it to be.
+     * A table short enough to have been read before draws the lines it draws when it is longer
+     * than the figure allows.
      */
     @Test
     void aLongTableDrawsTheLinesAShortOneDoes() {
-        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
-        Set<String> long_ = linesOn(reachedBy(MEAN, rows));
+        Set<String> drawnByTheLongTable = linesOn(reachedBy(KEPT, PAST_THE_READINGS));
         for (int shorter : new int[] {1, 2, 8}) {
-            Set<String> drawn = linesOn(reachedBy(MEAN, shorter));
+            Set<String> drawn = linesOn(reachedBy(KEPT, shorter));
             assertFalse(drawn.isEmpty(), "rows " + shorter);
             Set<String> missing = new TreeSet<>(drawn);
-            missing.removeAll(long_);
+            missing.removeAll(drawnByTheLongTable);
             assertEquals(Set.of(), missing, "rows " + shorter);
         }
     }
@@ -97,19 +109,82 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
                 .collect(Collectors.toSet());
     }
 
-    /** A total whose ways turn on the constant of the application is another total on each. */
+    /** A filter that compares with the constant is another filter on each application. */
     @Test
-    void aTotalWhoseKeepingTurnsOnTheApplicationIsStillStoppedByTheFigure() {
-        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
-        String report = report("""
+    void aTotalWhoseFilterTurnsOnTheApplicationIsStillStoppedByTheFigure() {
+        String report = reachedBy("List.sum(List.map(r -> r.pay,"
+                + " List.filter(r -> r.days >= t, " + MONTHS + ")))", PAST_THE_READINGS);
+        assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
+    /** Handed the constant through a helper, the dependence is the same one. */
+    @Test
+    void aTotalWhoseHelperIsHandedTheApplicationIsStillStoppedByTheFigure() {
+        String helpers = """
+                let keptFrom (t: Int, w: Window): Int =
+                    List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= t, %s)))
+                """.formatted(MONTHS);
+        String report = report(walked(helpers, "keptFrom(t, w)", PAST_THE_READINGS));
+        assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
+    /**
+     * What is split is any value, and not only a total: a library operation defined by its cases
+     * is split into them, and is the same cases on every application when nothing the application
+     * was handed is among its arguments.
+     */
+    @Test
+    void aLibraryOperationOverTheApplicationsValueIsSplitWithAllOfThem() {
+        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        String report = reachedBy("Int.max(w.first.pay, t)", rows);
+        assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
+    /**
+     * Sharing the readings of a value no application is handed does not share the lines they
+     * draw: each application draws its own, and where all of them are on one quantity the stages
+     * after the reading are held to what the readings were. Cases that are each another quantity
+     * are not that many lines on any one.
+     */
+    @Test
+    void manyLinesOnOneQuantityAreNotWorkedOutHoweverTheyCameBy() {
+        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        String report = reachedBy("Int.abs(w.first.pay)", rows);
+        assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
+    /**
+     * Applications of a closure inside another, with a value chosen by cases read beside them and
+     * a value taken from a helper: the readings a split is counted among stay a whole number of
+     * the applications on every path, which a reading that cannot say how many it is one of
+     * refuses to be.
+     */
+    @Test
+    void closuresInsideClosuresWithChoicesAndHelpersKeepTheCountOfApplicationsWhole() {
+        String helpers = """
+                let spread (w: Window): Int = Int.abs(w.first.pay - w.second.pay)
+                let pick (w: Window, t: Int): Int = if w.third.pay > t then 1 else 0
+                """;
+        String report = report(helpers + """
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
-                    guard List.any(t -> t <= List.sum(List.map(r -> r.pay,
-                        List.filter(r -> r.days >= t, [ w.first, w.second, w.third, w.fourth ]))),
+                    guard List.any(t -> List.any(s -> s <= t + spread(w) + pick(w, t), [ 1, 2, 3 ]),
                         %s) else No
                     Ok
                 }
-                """.formatted(table(rows)));
-        assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
+                """.formatted(table(6)));
+        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+    }
+
+    /** A helper that is handed nothing of the application is the same total on each. */
+    @Test
+    void aTotalFromAHelperHandedNothingOfTheApplicationIsReadWhateverTheTableLength() {
+        String helpers = """
+                let kept (w: Window): Int =
+                    List.length(List.filter(r -> r.days >= 17, %s))
+                """.formatted(MONTHS);
+        String report = report(walked(helpers, "kept(w)", PAST_THE_READINGS));
+        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+        assertTrue(report.contains("read as g/w.first.days"), report);
     }
 }

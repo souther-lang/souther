@@ -47,6 +47,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -483,8 +484,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return readOnce(behavior, comparison, read, reads, answering,
                     conditions.comparison(comparison, reads, read), writtenIn);
         }
-        Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions,
-                writtenIn);
+        Read drawn = onEachApplication(behavior, comparison, read, reads, each, answering,
+                conditions, writtenIn);
         // Where an application is made, and where a line decides on it, is part of what the line
         // is; said in anything but what a row's own numbers answer, a row could not be asked
         // whether it is somewhere the line decides, and none of the lines is drawn.
@@ -558,7 +559,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * comparison, and a reading of it that stopped would stop the applications that are made.
      */
     private static Read onEachApplication(String behavior, StatedComparison comparison,
-                                          InputReading read,
+                                          InputReading read, InputReads reads,
                                           List<ClosureApplications.Application> each,
                                           Arrivals answering, WhatConditionsState conditions,
                                           Optional<ExpansionLineage> writtenIn) {
@@ -633,6 +634,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     ? new Read.AnswersNowhere(answeringNowhere)
                     : new Read.CutsNothing(settled);
         }
+        if (aQuantityHasMoreLinesThanAreWorkedOut(lines.keySet())) {
+            return new Read.Stopped(ComparisonAssessment.atEachOf(
+                    GuardThresholds.filedAt(comparison, read, reads, answering),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(LINES_ON_ONE_QUANTITY.figure())));
+        }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
         // case on any application.
@@ -643,6 +649,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return parts.getFirst().line();
         }
         return new Read.Several(parts);
+    }
+
+    /**
+     * How many lines one quantity is cut by, where a comparison inside a closure draws them on its
+     * applications, before where each decides is worked out. That is read as many times as the
+     * condition is: the lines are what it was read as.
+     *
+     * <p>Counted here and not along the readings that drew them. The readings of a value no
+     * application is handed are shared by all the applications ({@link
+     * souther.compiler.inputs.InputReads#readingsASplitIsOneOf}), so how many readings there are
+     * says nothing of how many lines come of them, and the work of saying where each decides
+     * grows faster than the lines on one quantity do. Past this figure it is not done, which is
+     * what the readings were held to before they were shared.
+     */
+    private static final CompositionBudget LINES_ON_ONE_QUANTITY =
+            CompositionBudget.READINGS_OF_ONE_CONDITION;
+
+    /** Whether some one quantity is cut by more lines than {@link #LINES_ON_ONE_QUANTITY} allows. */
+    private static boolean aQuantityHasMoreLinesThanAreWorkedOut(Set<ALineRead> lines) {
+        Map<BorderQuantity, Integer> onOne = new HashMap<>();
+        for (ALineRead each : lines) {
+            if (each.read() instanceof Read.Cuts cuts
+                    && onOne.merge(cuts.cutting().of(), 1, Integer::sum)
+                            > LINES_ON_ONE_QUANTITY.maximum()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The comparison as its author drew it, where its definition chooses nothing on the way. */
