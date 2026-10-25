@@ -1521,7 +1521,9 @@ public final class InvariantChecker {
             Map<RuleKey, FactSubject> keys, Map<FactSubject, List<List<String>>> keptApart,
             RuleReadingSource source) {
         Map<FactSubject, Set<FactSubject>> entryKeys = new LinkedHashMap<>();
-        EntryHeld.writtenOn(named, source).forEach((map, requirements) -> {
+        // Of the maps whose keys are free: a map the builders hold to an entry under a key they may
+        // not be able to for the key chosen is one whose key the rule does say something of.
+        EntryHeld.freelyKeyedOn(named, source).forEach((map, requirements) -> {
             for (FactSubject container : subjectsAt(map, atoms, keys)) {
                 for (EntryHeld.Requirement each : requirements) {
                     entryKeys.computeIfAbsent(container, _ -> new LinkedHashSet<>())

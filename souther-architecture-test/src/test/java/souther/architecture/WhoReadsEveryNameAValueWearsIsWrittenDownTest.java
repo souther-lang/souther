@@ -118,6 +118,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + TYPE
                             + "Ljava/util/function/Function;" + SOURCE + ")Ljava/util/List;",
                     THE_POSITION),
+            row(CHECK + "EntryHeld", "bareField",
+                    "(Ljava/lang/String;Lsouther/compiler/types/TypeSymbol$AtModule;" + SOURCE
+                            + ")Z",
+                    THE_POSITION),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
                             + "Denotations;" + SYMBOLS

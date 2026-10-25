@@ -16,7 +16,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule asking a map for an entry under the key standing in another field is a rule of the two
@@ -216,10 +215,56 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aCountThatIsAnIntervalLeavesTheMapRead() {
-        Map<String, List<String>> left = unansweredAtTheFields(
-                FIXED_ENTRY.formatted("invariant some = Map.size(rates) >= 1"));
+        assertEquals(Map.of("n.key", List.of(), "n.rates", List.of()),
+                unansweredAtTheFields("""
+                        module demo
 
-        assertTrue(left.get("n.rates").isEmpty());
+                        data N = { key: Int, rates: Map<Int, Int> }
+                            invariant held = Map.containsKey(key, rates)
+                            invariant some = Map.size(rates) >= 1
+                            invariant few = Map.size(rates) <= 3
+
+                        behavior probe : (n: N) -> Int
+                        let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                        """));
+    }
+
+    /**
+     * That a map can be built holding the entries asked of it is not that it can be for every key
+     * the key's own place admits. Two entries asked of a map that holds one are two keys, and the
+     * key beside the one required is a key no map holds.
+     */
+    @Test
+    void aKeyIsNotFreeWhereTheMapCannotHoldTheEntriesOfEveryKey() {
+        Map<String, List<String>> left = unansweredAtTheFields(FIXED_ENTRY.formatted("""
+                invariant one = Map.size(rates) == 1"""));
+
+        assertFalse(left.get("n.key").isEmpty(), "only the key nought has a map of one entry");
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /**
+     * And where another key is fixed by a rule of the record, the key beside it is not free either:
+     * one key asked for two numbers is no map.
+     */
+    @Test
+    void aKeyIsNotFreeBesideAnotherKeyTheRecordFixes() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { x: String, y: String, rates: Map<String, Int> }
+                    invariant fixedY = y == "a"
+                    invariant atX = atKey(x, rates, 1)
+                    invariant atY = atKey(y, rates, 2)
+
+                let atKey (k: String, m: Map<String, Int>, n: Int): Bool =
+                    Map.get(k, m)
+                        |> Option.map(r -> r == n)
+                        |> Option.withDefault(false)
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.x").isEmpty(), "the key a is the other key's");
+        assertFalse(left.get("n.rates").isEmpty());
     }
 
     /**

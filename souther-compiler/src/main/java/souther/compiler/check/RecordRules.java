@@ -36,10 +36,19 @@ import java.util.Set;
  * @param everyRuleReached whether every declaration whose rules govern the record was expanded
  * @param readings         the fields each statement reads from, other than to count what a field
  *                         holds
+ * @param countBoundedAbove the fields a rule leaves no more than some number of entries
  */
 record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements,
                    int declared, int unread, boolean everyRuleReached,
-                   List<Reading> readings) {
+                   List<Reading> readings, Set<String> countBoundedAbove) {
+
+    /**
+     * Whether a rule of the record leaves the field no more than some number of entries, which
+     * is what makes the entries a rule asks of it more than it can hold where they are all apart.
+     */
+    boolean countIsBoundedAbove(String field) {
+        return countBoundedAbove.contains(field);
+    }
 
     /** A statement and the fields of the record it reads from, whether or not it was recognised. */
     record Reading(InvariantStatement statement, Set<String> fields) {}
@@ -109,6 +118,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
         }
         // Where every statement reads from, whatever it says and whether or not it was recognised.
         List<Reading> readings = new ArrayList<>();
+        Set<String> boundedAbove = new HashSet<>();
         for (InvariantStatement one : statements) {
             Set<String> reads = new HashSet<>();
             switch (one) {
@@ -119,13 +129,13 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                             Core.withoutStanding(it.said()) instanceof Core.Binary bin
                                     ? StatedComparison.of(bin, it.positive()) : null;
                     if (compares != null) {
-                        readFromComparison(compares, fields, reads);
+                        readFromComparison(compares, fields, reads, boundedAbove);
                     } else {
                         readFrom(it.said(), fields, reads);
                     }
                 }
                 case InvariantStatement.Compares it ->
-                        readFromComparison(it.states(), fields, reads);
+                        readFromComparison(it.states(), fields, reads, boundedAbove);
                 case InvariantStatement.Applies it -> readFrom(it.call(), fields, reads);
                 case InvariantStatement.HoldsAnEntry it -> {
                     readFrom(it.held().container(), fields, reads);
@@ -137,7 +147,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
             readings.add(new Reading(one, Set.copyOf(reads)));
         }
         return new RecordRules(Map.copyOf(fields), List.copyOf(statements), declared, unread,
-                everyRuleReached, List.copyOf(readings));
+                everyRuleReached, List.copyOf(readings), Set.copyOf(boundedAbove));
     }
 
     /**
@@ -151,17 +161,24 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
      * ({@code Map.size(Map.remove(0, rates))}), which depends on what the field holds.
      */
     private static void readFromComparison(StatedComparison states,
-                                           Map<BindingId, String> fields, Set<String> out) {
+                                           Map<BindingId, String> fields, Set<String> out,
+                                           Set<String> boundedAbove) {
         Set<String> left = new HashSet<>();
         Set<String> right = new HashSet<>();
         readFrom(states.left(), fields, left);
         readFrom(states.right(), fields, right);
-        boolean interval = states.relationUnder(true) != Rel.NE
-                && ((isTheCountOfAField(states.left(), fields) && right.isEmpty())
-                || (isTheCountOfAField(states.right(), fields) && left.isEmpty()));
-        if (!interval) {
+        Rel rel = states.relationUnder(true);
+        boolean countOnTheLeft = isTheCountOfAField(states.left(), fields) && right.isEmpty();
+        boolean countOnTheRight = isTheCountOfAField(states.right(), fields) && left.isEmpty();
+        if (rel == Rel.NE || !(countOnTheLeft || countOnTheRight)) {
             out.addAll(left);
             out.addAll(right);
+            return;
+        }
+        // Counted from the count's side, a bound from below is the only one that leaves room.
+        Rel fromTheCount = countOnTheLeft ? rel : rel.turned();
+        if (fromTheCount != Rel.GE && fromTheCount != Rel.GT) {
+            boundedAbove.addAll(countOnTheLeft ? left : right);
         }
     }
 

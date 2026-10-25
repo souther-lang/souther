@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -184,12 +185,42 @@ public final class EntryHeld {
      */
     public static Map<RuleKey, List<Requirement>> writtenOn(TypeSymbol.AtModule named,
                                                             RuleReadingSource source) {
+        return heldOn(named, source).requirements();
+    }
+
+    /**
+     * The maps among {@link #writtenOn} that are built for whatever key is chosen: the keys
+     * stand where their own places admit them, and the entries asked of the map are held for each.
+     *
+     * <p>Not what {@link #writtenOn} answers. That a map can be built holding the entries asked of
+     * it is not that it can be for every key a key's own place admits: two entries asked of a map
+     * that holds one, or of two keys one of which the record fixes, are entries no map holds
+     * where the keys come together. The builders choose the keys apart and are right to offer what
+     * they build; a reading that calls the key free is right only where no choice of keys is out
+     * of the builders' reach, and for one key that is so whatever else stands.
+     */
+    public static Map<RuleKey, List<Requirement>> freelyKeyedOn(TypeSymbol.AtModule named,
+                                                                RuleReadingSource source) {
+        Held held = heldOn(named, source);
+        Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
+        held.requirements().forEach((where, requirements) -> {
+            if (held.keysFree().contains(where)) {
+                out.put(where, requirements);
+            }
+        });
+        return Map.copyOf(out);
+    }
+
+    /** The maps built, and of them the ones whose keys are free. */
+    private record Held(Map<RuleKey, List<Requirement>> requirements, Set<RuleKey> keysFree) {}
+
+    private static Held heldOn(TypeSymbol.AtModule named, RuleReadingSource source) {
         RecordRules rules = RecordRules.of(named, source);
         // Only a record all of whose rules were read: a map is built holding the entries the rules
         // ask of it, and a rule nothing was made of may ask others, or ask the map something the
         // entries held would break.
         if (rules == null || !rules.readInFull()) {
-            return Map.of();
+            return new Held(Map.of(), Set.of());
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
         // The maps a rule was read of that the builders cannot keep: a rule they know the shape
@@ -215,6 +246,7 @@ public final class EntryHeld {
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
+        Set<RuleKey> free = new HashSet<>();
         out.forEach((where, requirements) -> {
             // And a map no statement but those built for reads from: the map is built holding
             // what those ask of it, and a statement asking anything else of it, recognised or not
@@ -222,9 +254,56 @@ public final class EntryHeld {
             if (buildable(where, requirements) && !notKept.contains(where)
                     && !rules.readBesides(builtFor.get(where), where.steps().getFirst())) {
                 held.put(where, List.copyOf(requirements));
+                if (keysStayFree(where, requirements, rules, builtFor.get(where), named, source)) {
+                    free.add(where);
+                }
             }
         });
-        return Map.copyOf(held);
+        return new Held(Map.copyOf(held), Set.copyOf(free));
+    }
+
+    /**
+     * Whether the map at {@code map} can be built holding the entries {@code requirements} ask of
+     * it whatever the keys come to.
+     *
+     * <p>One key is asked for one entry, and any key is one the map can hold. Where there are
+     * several keys they may come to one value, to two that the record does not allow beside each
+     * other, or to more entries than the map may hold, and the keys are free only where nothing
+     * makes any of those so: no rule of the record other than these reads a key, no rule bounds
+     * the count from above, and no name stands between the places and their values, since a
+     * name's own rules decide what its places admit and are not read here.
+     */
+    private static boolean keysStayFree(RuleKey map, List<Requirement> requirements,
+                                        RecordRules rules, List<InvariantStatement> built,
+                                        TypeSymbol.AtModule named, RuleReadingSource source) {
+        Set<String> keys = new HashSet<>();
+        for (Requirement each : requirements) {
+            keys.add(each.key().steps().getFirst());
+        }
+        if (keys.size() <= 1) {
+            return true;
+        }
+        String field = map.steps().getFirst();
+        if (rules.countIsBoundedAbove(field) || !bareField(field, named, source)) {
+            return false;
+        }
+        for (String key : keys) {
+            if (rules.readBesides(built, key) || !bareField(key, named, source)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the field {@code field} of {@code named} is of a type that wraps no name, so that no
+     *  rule of a name stands between the field and the values its type has. */
+    private static boolean bareField(String field, TypeSymbol.AtModule named,
+                                     RuleReadingSource source) {
+        return TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(), source.kinds(),
+                source.sums()) instanceof Shape.Product(TypeSymbol _, var fields)
+                && fields.get(field) instanceof Type type
+                && TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                        source.sums()).wrappers().isEmpty();
     }
 
     /**
