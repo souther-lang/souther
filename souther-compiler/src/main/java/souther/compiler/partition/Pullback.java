@@ -1455,14 +1455,10 @@ final class Pullback {
      * Left to run on, a count of every combination of independent conditions is a work that no
      * figure bounds, done to find out that a figure was passed.
      *
+     * @param readingsAlready how many readings of one condition the split is one of
      * @param count the readings the split makes, or the limit it was asked to count to where they
      *              are that many or more
      */
-    private WhyUnread splitInto(InputReads reads, LongUnaryOperator count) {
-        return splitInto(reads.readings(), count);
-    }
-
-    /** The same, of a reading that is one of {@code readingsAlready} readings. */
     private WhyUnread splitInto(long readingsAlready, LongUnaryOperator count) {
         long mostAsked = Math.max(READINGS.maximum() / readingsAlready, readingsLeft) + 1;
         return splitInto(readingsAlready, count.applyAsLong(mostAsked));

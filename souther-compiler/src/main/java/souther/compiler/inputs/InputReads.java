@@ -802,12 +802,6 @@ public final class InputReads {
         return !applied.handed().isEmpty() && readsAnApplied(e, symbols, newtypes, new HashSet<>());
     }
 
-    /** The same, as one of {@code readings} readings of one condition. */
-    private InputReads readAs(long readings) {
-        return new InputReads(names, alternatives, declared, dependencies,
-                applied.as(readings, applied.taken()));
-    }
-
     /**
      * The same, taking {@code node} as {@code as}, as one of {@code readings} readings for each this
      * one is.

@@ -354,6 +354,13 @@ public enum CompositionBudget {
      * what multiplies is the nesting and what is counted is the product along one way down — and
      * so what one condition comes to does not turn on how many others beside it were read first.
      *
+     * <p>What does not turn on an application is split once for all of them. A total over the
+     * elements a filter keeps, where nothing the filter or the elements read was handed to the
+     * closure, is the same total on every application, so the ways its elements are kept in are
+     * counted against the readings the comparison is one of apart from the applications. What each
+     * application adds is the comparison made in one of those ways, which splits nothing. A value
+     * that does turn on an application is another value on each, and is counted with all of them.
+     *
      * <p>Not an {@code if} a comparison is read through. Its arms are read only where a run takes
      * them, so the ways down a chain of them are the ways a run can go, and one of those may pass
      * as many of them as the chain is long while the ways beside it end at the next; the product
