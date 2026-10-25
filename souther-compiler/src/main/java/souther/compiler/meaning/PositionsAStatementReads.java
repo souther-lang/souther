@@ -80,6 +80,12 @@ public final class PositionsAStatementReads {
             case Proposition.Truth truth -> reads(truth.of());
             case Proposition.InCases cases -> reads(cases.of());
             case Proposition.Present present -> reads(present.of());
+            case Proposition.InTheStrings(
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at), var _, var _,
+                    var _) -> reads(new DecisionSubject.AnInput(at));
+            // A piece is whatever the statement it is read inside says it is, and the string that
+            // statement is about is no part of this statement to collect.
+            case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All all -> all.parts().stream().allMatch(this::reads);

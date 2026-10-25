@@ -86,6 +86,8 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("a case", "match i.k with | A -> true | B -> false");
         out.put("a value being there",
                 "match Option.map(x -> x + 1, i.h.o) with | Some v -> true | None -> false");
+        out.put("a string being one of a language",
+                "List.any(t -> String.matches(\"[A-Z]{2}[0-9]\", t), String.split(\";\", i.s))");
         out.put("some element being a value", "List.contains(i.key, i.keys)");
         out.put("the last element of a value",
                 "match Map.get(i.key, List.indexBy(k -> k, i.keys)) with"
@@ -155,8 +157,8 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             }
             case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Unread _ -> { }
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _ -> { }
         }
     }
 
@@ -196,7 +198,12 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
                 assessment.whatEachPlaceIsLeftWith().forEach(left -> said.add(left.why()));
             }
         }
+        PredicateReadings predicates = PredicateReadings.of("f", analysis, null, read,
+                inputs.parameterReads(), ElementBindings.of(analysis, rules.newtypes()),
+                new RuleReachNumbering(read.symbols().module(), "f"));
         return new Walked(stated, said, walk.forks().stream()
-                .flatMap(each -> each.leftHere().stream()).toList());
+                .flatMap(each -> each.leftHere().stream())
+                .filter(each -> !ComparisonReadings.leftUnread(each, predicates).isEmpty())
+                .toList());
     }
 }

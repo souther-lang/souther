@@ -5265,6 +5265,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case A_PRODUCT_OF_TWO_NUMBERS ->
                                             "what two numbers come to multiplied";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
+                                    case A_STRING_IN_A_LANGUAGE ->
+                                            "a string being one of the strings of a language";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"
                                                     + " position";

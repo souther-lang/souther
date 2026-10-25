@@ -192,8 +192,9 @@ public final class WhereAnApplicationIsMade {
                     }
                     case Proposition.Always(boolean holds) when !holds -> { }
                     case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                         Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                         Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                         Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                         Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
+                         Proposition.Any _,
                          Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
                          Proposition.Unread _, Proposition.OnAnApplication _,
                          Proposition.SoManyHold _, Proposition.WhereItAnswers _ -> kept.add(met);

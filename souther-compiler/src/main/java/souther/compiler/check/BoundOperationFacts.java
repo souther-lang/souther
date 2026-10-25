@@ -787,6 +787,18 @@ public final class BoundOperationFacts {
     }
 
     /**
+     * Whether {@code operation} comes out true exactly where some element of a container it is
+     * handed meets what it asks of an element, or exactly where none does, as the law settling its
+     * truth says: the quantifiers over a container, and whatever is written like them.
+     */
+    public boolean quantifiesOverTheElementsItIsHanded(ValueName operation) {
+        return settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
+                        LawProposition.SomeElement<DeclaredArgument> _), var _)
+                && aspect == AnswerAspect.TRUTH;
+    }
+
+    /**
      * Where {@code operation} comes out true exactly where no two elements of a container it is
      * handed come to one answer of a closure it is handed: which argument is the container and
      * which the closure — or null where it states no such thing.

@@ -1011,6 +1011,10 @@ public sealed interface RowDemand {
         /** Two subjects of a row being one value. */
         TWO_SUBJECTS_ONE_VALUE,
 
+        /** A string being one of the strings a language holds, which a row's classes of the
+         *  position are composed for and no demand of the row writes toward. */
+        A_STRING_IN_A_LANGUAGE,
+
         /** A place on an order, of a term that is no one position. */
         AN_ORDER_OF_NO_ONE_POSITION
     }

@@ -170,8 +170,9 @@ public final class AnswerAsAnInput {
             case Proposition.Compared _, Proposition.Some _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                  Proposition.SomeReachable _ -> heldAt(inputNumbersIn(stated), pinned, positive);
+            // A statement of the input alone is about no answer, and was returned above.
             case Proposition.Always _, Proposition.Unread _, Proposition.LastToHold _,
-                 Proposition.Carried _ -> stated;
+                 Proposition.Carried _, Proposition.InTheStrings _ -> stated;
         };
     }
 
@@ -365,6 +366,11 @@ public final class AnswerAsAnInput {
                 DecisionSubject at = subject(of);
                 yield at == null ? null : new Proposition.Present(at, holds);
             }
+            // About a position of the input and of no answer, so it is the row's and was set aside
+            // above.
+            case Proposition.InTheStrings _ -> throw new IllegalStateException(
+                    "a statement of the input alone is the row's, and is not read as the answer's: "
+                            + stated);
             // Which element of a list the input holds is the last of its key is the row's ({@link
             // #isTheRows}); which element of a list the answer holds is, is the answer's to meet.
             case Proposition.LastToHold(DecisionSubject container, DecisionSubject position,
@@ -456,8 +462,9 @@ public final class AnswerAsAnInput {
         return switch (stated) {
             case Proposition.Always _, Proposition.Unread _, Proposition.Carried _ -> false;
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.LastToHold _, Proposition.SomeReachable _, Proposition.All _,
+                 Proposition.Any _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
                  Proposition.WhereItAnswers _ ->
                     !Proposition.aboutAnAnswer(stated)

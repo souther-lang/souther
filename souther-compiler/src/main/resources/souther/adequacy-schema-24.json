@@ -193,6 +193,7 @@
         "readings_of_a_combination_tried",
         "runs_for_one_reading",
         "candidates_a_repair_builds",
+        "assignments_a_repair_looks_at",
         "admitted_values_one_machine",
         "admitted_values_in_all",
         "ordered_extent_one_machine",
