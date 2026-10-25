@@ -62,8 +62,8 @@ class TheStringsAPieceOfWhichIsInALanguageAreThoseTheRuntimePartsToTest {
         for (int length = 1; length <= MOST_CODE_POINTS; length++) {
             List<String> next = new ArrayList<>();
             for (String each : layer) {
-                for (char symbol : ALPHABET.toCharArray()) {
-                    next.add(each + symbol);
+                for (int at = 0; at < ALPHABET.length(); at++) {
+                    next.add(each + ALPHABET.charAt(at));
                 }
             }
             all.addAll(next);
