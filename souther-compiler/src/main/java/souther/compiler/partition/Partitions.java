@@ -1772,7 +1772,7 @@ public final class Partitions {
      * <p>Except where a rule of a value around the record reads one of its places: then the record
      * is composed here, held to that rule as well, since the answer is about where it is built.
      * Each such composing is counted against the one count its outermost record was given
-     * ({@link RulesAround#spend}), whatever sum or record it is under — the cases of each nested
+     * ({@link RulesAround#reserve}), whatever sum or record it is under — the cases of each nested
      * sum multiply, and a count per sum would let the product past it.
      *
      * @param rulesOn the name whose rules the fields are chosen against ({@link #rulesOver})
@@ -1786,16 +1786,18 @@ public final class Partitions {
             return Proposals.NONE;
         }
         if (around.readAnything()) {
-            if (!around.hasLeft()) {
+            // Taken before the fields are chosen: a record built inside this one asks the same
+            // count, and one asked only afterwards lets every record on the way down pass it.
+            if (!around.reserve()) {
                 return Proposals.NONE.meeting(CompositionShortfall.of(
                         Set.of(CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER)));
             }
             FieldsChosen chosen = fieldsOf(record, rulesOn, reading, expanding, Map.of(), around);
-            // Counted where something was built: a record whose rules leave one of its fields no
+            // Given back where nothing was built: a record whose rules leave one of its fields no
             // value was settled before that, and a count spent on it is a case further on never
             // tried.
-            if (!chosen.leftNothing()) {
-                around.spend();
+            if (chosen.leftNothing()) {
+                around.refund();
             }
             return written(record, chosen, reading.source());
         }
@@ -2176,7 +2178,7 @@ public final class Partitions {
      * <p>One state for everything built under the outermost record ({@link Shared}): the count of
      * records built afresh, and what has been settled so far by where it stands. A record built
      * here is built afresh rather than borrowed from the revision, and under nested sums the cases
-     * tried multiply — so each is counted ({@link #spend}) against the count the outermost record
+     * tried multiply — so each is counted ({@link #reserve}) against the count the outermost record
      * began, and the figure stops the lot. And a number chosen anywhere in the value is told to
      * the rules of every value around it as they name its place ({@link #at}), so a rule relating
      * two fields of an inner record is asked about the second with the first in it.
@@ -2255,11 +2257,21 @@ public final class Partitions {
             return shared != null && shared.left > 0;
         }
 
-        /** Takes one from the count, for a value built here that the rules left room for. */
-        void spend() {
-            if (hasLeft()) {
-                shared.left--;
+        /**
+         * Takes one from the count for a value about to be built here, or says there is none.
+         * Taken before and not after, since what is built inside it asks the same count.
+         */
+        boolean reserve() {
+            if (!hasLeft()) {
+                return false;
             }
+            shared.left--;
+            return true;
+        }
+
+        /** Gives back the one {@link #reserve} took, for a value the rules left no room for. */
+        void refund() {
+            shared.left++;
         }
 
         /** Takes in that the number {@code count} stands at {@code path}. */

@@ -12153,6 +12153,9 @@ public final class Generator {
                                 Set.of(CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER)),
                                 new LinkedHashMap<>(), null);
                     }
+                    // Taken before the case is planned: a sum under it asks the same count, and one
+                    // asked only afterwards lets every sum on the way down pass it.
+                    cases.left--;
                     cases.leftNothing = false;
                     Outcome made = valueAtOnce(subject, p, decided, asked, settled, narrowed,
                             handed, check, found, taking, through, cases);
@@ -12162,8 +12165,8 @@ public final class Generator {
                     }
                     boolean searched = !cases.leftNothing;
                     cases.leftNothing = false;
-                    if (searched) {
-                        cases.left--;
+                    if (!searched) {
+                        cases.left++;
                     }
                     if (first == null || (searched && !firstSearched)) {
                         first = made;
