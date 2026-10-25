@@ -6,6 +6,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -135,8 +136,8 @@ class ASpaceIsToldWithTheSpacingOrNotAtAllTest {
     void anAtomToldTheSameThingAgainChangesNothing() {
         NumericDomain<String> told = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .told(Map.of("a", AN_INT));
-        assertTrue(told == told.told(Map.of("a", AN_INT)));
-        assertTrue(told == told.told(Map.of("a", SPACED_ONLY)),
+        assertSame(told, told.told(Map.of("a", AN_INT)));
+        assertSame(told, told.told(Map.of("a", SPACED_ONLY)),
                 "saying less than is known adds nothing");
     }
 }

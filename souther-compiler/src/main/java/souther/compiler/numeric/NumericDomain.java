@@ -1108,9 +1108,9 @@ public final class NumericDomain<A> {
      * <p>A row is values the atoms' orders hold, and a point of the rules past where an order
      * stops is no row: {@code a - b >= M} beside {@code b >= 1}, the greatest {@code Int} at
      * {@code M}, holds only an {@code a} past it. So whether the rules leave any row is asked
-     * inside where each atom's order stops, as this domain was told it
-     * ({@link #heldInsideTheirOrders}), and a system with an atom it was not told of is not shown
-     * to leave one: no point of it is known to be a row. The run answered is the rules' own and
+     * inside where each atom's order stops, as this domain was told it ({@link NumberSpace}), and a
+     * system with an atom whose ends it was not told is not shown to leave one: no point of it is
+     * known to be a row. The run answered is the rules' own and
      * runs on past an order's end as before; a caller reads that end as the order it is counted
      * on says.
      */
@@ -1357,7 +1357,7 @@ public final class NumericDomain<A> {
 
     /**
      * Whether the rules leave no row: nothing at all, or nothing inside where the orders this
-     * domain was told of stop ({@link #heldInsideTheirOrders}).
+     * domain was told of stop ({@link NumberSpace}).
      *
      * <p>True is a proof, as {@link #isBottom} is: a row holds each number inside its order, so
      * rules that leave nothing there leave a row nothing. {@code b >= 1} beside
