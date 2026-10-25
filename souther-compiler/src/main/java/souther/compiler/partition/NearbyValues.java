@@ -3,17 +3,28 @@ package souther.compiler.partition;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PieceDemand;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 
 /**
  * The values one step from a value a run was seen taking, for a search that looks beside where it
@@ -31,8 +42,249 @@ import java.util.function.Function;
  */
 final class NearbyValues {
 
+    /**
+     * A value that stood at a sum on the way to a leaf, and how far into the position that was: the
+     * case the value is, which a path to the leaf as a body reads it names as a narrowing.
+     */
+    private record Narrowing(int depth, ObservedValue value) {}
+
+    /** What a step from a scalar leaf is, given where the leaf stands, the sums on the way to it
+     *  and the position it is at. */
+    @FunctionalInterface
+    private interface Leaves {
+
+        Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                       List<Narrowing> along, TypeView view);
+    }
+
+    private static final Leaves WHOLE_NUMBERS = (prim, leaf, _, _, _) ->
+            prim == Type.Prim.INT && leaf instanceof ObservedValue.Integer whole
+                    ? stepsOf(whole) : none();
+
     /** The values one step from {@code value}, standing at a position of {@code type}. */
     static Iterator<ObservedValue> of(ObservedValue value, Type type, RuleReadingContext reading) {
+        return of(value, type, reading, null, List.of(), WHOLE_NUMBERS);
+    }
+
+    /**
+     * The values {@code value}, the one a run had at {@code parameter}, becomes where a string it
+     * holds is put as a string a body parts into pieces that are all ones it builds a newtype of
+     * ({@link PieceDemand}), and everything else stays as it was.
+     *
+     * <p>Only the strings that stand where a body parts a string: a demand is about one place of
+     * the input, and a string anywhere else is not what the body parts. Handed over one at a time,
+     * as the neighbours of a number are, and for as many pieces as the string was seen with and one
+     * more, which are the counts a rewrite of which pieces are kept can be told apart at.
+     */
+    static Iterator<ObservedValue> demanded(ObservedValue value, Type type,
+                                            RuleReadingContext reading, String parameter,
+                                            List<PieceDemand> demands, List<ObservedValue> row,
+                                            Consumer<Figure> stoppedAt) {
+        // What the row holds that a piece is taken from is the same wherever a demand is met, so
+        // it is read the first time it is asked for and not again.
+        Map<PieceDemand, List<String>> held = new HashMap<>();
+        return of(value, type, reading, TermPath.of(parameter), List.of(),
+                (prim, leaf, at, along, view) -> {
+            if (prim != Type.Prim.STRING || !(leaf instanceof ObservedValue.Text text)) {
+                return none();
+            }
+            List<PieceDemand> here = demands.stream()
+                    .filter(each -> standsAt(each.position(), at, along)).toList();
+            Set<String> offered = new HashSet<>(List.of(text.value()));
+            Iterator<String> strings = flat(here.iterator(), demand -> flat(
+                    shapesOf(text.value(), demand, held.computeIfAbsent(demand,
+                            each -> heldBy(each, reading, row, stoppedAt)), stoppedAt)
+                            .iterator(),
+                    shape -> made(Partitions.stringsPartedInto(view, reading, demand.attempted(),
+                            demand.separator(), demand.through(), shape), stoppedAt)));
+            return mapped(filtered(strings, offered::add), ObservedValue.Text::new);
+        });
+    }
+
+    /** The strings made, and the figure the making was refused at where it was. */
+    private static Iterator<String> made(Partitions.StringsPartedInto.Parted parted,
+                                         Consumer<Figure> stoppedAt) {
+        return switch (parted) {
+            case Partitions.StringsPartedInto.StringsMade made -> made.strings().iterator();
+            case Partitions.StringsPartedInto.StringsNotMade refused -> {
+                refused.refused().ifPresent(by -> stoppedAt.accept(Partitions.figureOf(by)));
+                yield none();
+            }
+        };
+    }
+
+    /**
+     * The strings of {@code row} a piece for {@code demand} may be made into: the ones that hold
+     * nowhere the string is parted and that the newtype admits.
+     *
+     * <p>Strings of the other inputs, which are looked up against the pieces of the string once it
+     * has been made into what is parted, so strings that string's pieces are made into and not
+     * pieces of the input ({@link PieceShape.MadeInto}).
+     *
+     * <p>Read only as far as it takes to know the figure is reached: one string past it says so, and
+     * the rest of the row is not asked.
+     */
+    private static List<String> heldBy(PieceDemand demand, RuleReadingContext reading,
+                                       List<ObservedValue> row, Consumer<Figure> stoppedAt) {
+        CompositionBudget taken = CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM;
+        int most = taken.maximum();
+        Set<String> held = new LinkedHashSet<>();
+        for (ObservedValue each : row) {
+            boolean more = eachText(each, text -> {
+                if (text.codePoints().noneMatch(part -> part == demand.separator())
+                        && Partitions.pieceAdmits(demand.attempted(), reading, text, stoppedAt)) {
+                    held.add(text);
+                }
+                return held.size() <= most;
+            });
+            if (!more) {
+                break;
+            }
+        }
+        if (held.size() > most) {
+            stoppedAt.accept(taken.figure());
+        }
+        return held.stream().limit(most).toList();
+    }
+
+    /**
+     * The ways a string is put together of pieces, parted at the separator of {@code demand}, so
+     * that some of them are ones the body builds its newtype of and the rest are as they were seen.
+     *
+     * <p>The nearest first: one piece made a string the newtype admits and no other changed, which
+     * is the string a body that goes on to look the piece up in data it was given answers
+     * differently on only where the rest is as it was. Then one piece made a string the row holds
+     * somewhere else and the newtype admits, which is where a body that looks the piece up in
+     * another input of the row can find it. Then every piece made one the newtype admits, for as
+     * many pieces as were seen and one more, up to the bound. A string seen in more pieces than the
+     * bound is changed at none of them, since the strings made of it are as long as it is and are
+     * as many.
+     */
+    private static List<List<PieceShape>> shapesOf(String seen, PieceDemand demand,
+                                                   List<String> held, Consumer<Figure> stoppedAt) {
+        CompositionBudget budget = CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF;
+        // The pieces of the string as it is parted, which is where it is made into the separator
+        // and not where it is written as one.
+        List<String> pieces = partsOf(seen, Partitions.partsAt(demand.separator(),
+                demand.through()));
+        List<List<PieceShape>> out = new ArrayList<>();
+        if (pieces.size() <= budget.maximum()) {
+            for (int changed = 0; changed < pieces.size(); changed++) {
+                out.add(changing(pieces, changed, new PieceShape.AnyTheTypeAdmits()));
+            }
+            for (String text : held) {
+                for (int changed = 0; changed < pieces.size(); changed++) {
+                    // The string itself first where the conversions leave it as it is: it is the
+                    // string of the input that is made into it which anybody would write, and the
+                    // strings made into it besides are what the meet is left to find if it is not
+                    // one the input admits.
+                    if (demand.through() != CaseMapping.NONE
+                            && Partitions.isUnchangedBy(text, demand.through())) {
+                        out.add(changing(pieces, changed, new PieceShape.AsSeen(text)));
+                    }
+                    out.add(changing(pieces, changed, new PieceShape.MadeInto(text)));
+                }
+            }
+        } else {
+            stoppedAt.accept(budget.figure());
+        }
+        if (pieces.size() + 1 > budget.maximum()) {
+            stoppedAt.accept(budget.figure());
+        }
+        for (int count = 1; count <= Math.min(pieces.size() + 1, budget.maximum()); count++) {
+            out.add(Collections.nCopies(count, new PieceShape.AnyTheTypeAdmits()));
+        }
+        return out;
+    }
+
+    /** {@code pieces} as they were seen, but for the one at {@code changed}, which is
+     *  {@code to}. */
+    private static List<PieceShape> changing(List<String> pieces, int changed, PieceShape to) {
+        List<PieceShape> shape = new ArrayList<>();
+        for (int at = 0; at < pieces.size(); at++) {
+            shape.add(at == changed ? to : new PieceShape.AsSeen(pieces.get(at)));
+        }
+        return shape;
+    }
+
+    /**
+     * Every string {@code value} holds, wherever in it, handed to {@code goOn} one at a time until
+     * it says to stop — and whether it did not.
+     */
+    private static boolean eachText(ObservedValue value, Predicate<String> goOn) {
+        switch (value) {
+            case ObservedValue.Text text -> {
+                return goOn.test(text.value());
+            }
+            case ObservedValue.Constructed made -> {
+                for (ObservedValue each : made.fields().values()) {
+                    if (!eachText(each, goOn)) {
+                        return false;
+                    }
+                }
+            }
+            case ObservedValue.Sequence held -> {
+                for (ObservedValue each : held.elements()) {
+                    if (!eachText(each, goOn)) {
+                        return false;
+                    }
+                }
+            }
+            case ObservedValue.Mapping held -> {
+                for (ObservedValue.Entry entry : held.entries()) {
+                    if (!eachText(entry.key(), goOn) || !eachText(entry.value(), goOn)) {
+                        return false;
+                    }
+                }
+            }
+            default -> { }
+        }
+        return true;
+    }
+
+    /** {@code text} cut at every code point {@code parts} says it is parted at. */
+    private static List<String> partsOf(String text, IntPredicate parts) {
+        List<String> pieces = new ArrayList<>();
+        StringBuilder piece = new StringBuilder();
+        text.codePoints().forEach(each -> {
+            if (parts.test(each)) {
+                pieces.add(piece.toString());
+                piece.setLength(0);
+            } else {
+                piece.appendCodePoint(each);
+            }
+        });
+        pieces.add(piece.toString());
+        return pieces;
+    }
+
+    /**
+     * Whether the leaf at {@code at} is the place {@code position} names, reached through the sums
+     * {@code along}.
+     *
+     * <p>The place is the same without the narrowings, and each narrowing is one the value the walk
+     * went through there meets: a place under the case of a sum is a place of the value only when
+     * the value is that case, and another case with a field of the same name is another place.
+     */
+    private static boolean standsAt(TermPath position, TermPath at, List<Narrowing> along) {
+        List<TermPath.Step> plain = new ArrayList<>();
+        for (TermPath.Step step : position.steps()) {
+            if (step instanceof TermPath.Step.Refine refine) {
+                int depth = plain.size();
+                if (along.stream().noneMatch(each -> each.depth() == depth
+                        && refine.cases().leaves(each.value()))) {
+                    return false;
+                }
+            } else {
+                plain.add(step);
+            }
+        }
+        return new TermPath(position.head(), plain).equals(at);
+    }
+
+    private static Iterator<ObservedValue> of(ObservedValue value, Type type,
+                                              RuleReadingContext reading, TermPath at,
+                                              List<Narrowing> along, Leaves leaves) {
         if (value.unread() != null) {
             return none();
         }
@@ -43,26 +295,27 @@ final class NearbyValues {
         if (inside == null || inside.unread() != null) {
             return none();
         }
-        return mapped(within(inside, view.shape(), reading),
+        return mapped(within(inside, view, reading, at, along, leaves),
                 near -> ObservedValue.wrapped(view.wrappers(), near));
     }
 
-    private static Iterator<ObservedValue> within(ObservedValue value, Shape shape,
-                                                  RuleReadingContext reading) {
-        return switch (shape) {
-            case Shape.Scalar scalar -> scalar.prim() == Type.Prim.INT
-                    && value instanceof ObservedValue.Integer whole ? stepsOf(whole) : none();
+    private static Iterator<ObservedValue> within(ObservedValue value, TypeView view,
+                                                  RuleReadingContext reading, TermPath at,
+                                                  List<Narrowing> along, Leaves leaves) {
+        return switch (view.shape()) {
+            case Shape.Scalar scalar -> leaves.beside(scalar.prim(), value, at, along, view);
             case Shape.Product product -> value instanceof ObservedValue.Constructed made
-                    && made.type().equals(product.name()) ? fieldsOf(made, product, reading)
-                    : none();
+                    && made.type().equals(product.name())
+                    ? fieldsOf(made, product, reading, at, along, leaves) : none();
             case Shape.Sequence sequence -> value instanceof ObservedValue.Sequence held
-                    ? elementsOf(held, sequence, reading) : none();
+                    ? elementsOf(held, sequence, reading, at, along, leaves) : none();
             // The case the value is, as a fixture writes a sum.
             case Shape.Sum sum -> value instanceof ObservedValue.Constructed made
                     && sum.reaches().cases().contains(made.type())
-                    ? of(value, Type.ref(made.type()), reading) : none();
+                    ? of(value, Type.ref(made.type()), reading, at, narrowed(along, at, value),
+                            leaves) : none();
             case Shape.Optional optional -> value instanceof ObservedValue.Absent ? none()
-                    : of(value, optional.element(), reading);
+                    : of(value, optional.element(), reading, at, along, leaves);
             // Nothing is beside these: a map's keys and a unit case are not a number, and a
             // position nothing writes a value at has no neighbour to write.
             case Shape.Mapping _, Shape.Unit _, Shape.Unresolved _, Shape.Cases _, Shape.Tuple _,
@@ -85,13 +338,15 @@ final class NearbyValues {
     /** Field by field in the order the declaration writes them. */
     private static Iterator<ObservedValue> fieldsOf(ObservedValue.Constructed made,
                                                     Shape.Product product,
-                                                    RuleReadingContext reading) {
+                                                    RuleReadingContext reading, TermPath at,
+                                                    List<Narrowing> along, Leaves leaves) {
         return flat(List.copyOf(product.fields().entrySet()).iterator(), field -> {
             ObservedValue held = made.field(field.getKey());
             if (held == null) {
                 return none();
             }
-            return mapped(of(held, field.getValue(), reading), near -> {
+            return mapped(of(held, field.getValue(), reading,
+                    at == null ? null : at.then(field.getKey()), along, leaves), near -> {
                 Map<String, ObservedValue> fields = new LinkedHashMap<>(made.fields());
                 fields.put(field.getKey(), near);
                 return new ObservedValue.Constructed(made.type(), fields);
@@ -101,13 +356,27 @@ final class NearbyValues {
 
     private static Iterator<ObservedValue> elementsOf(ObservedValue.Sequence held,
                                                       Shape.Sequence sequence,
-                                                      RuleReadingContext reading) {
-        return flat(indexes(held.elements().size()), at ->
-                mapped(of(held.elements().get(at), sequence.element(), reading), near -> {
+                                                      RuleReadingContext reading, TermPath at,
+                                                      List<Narrowing> along, Leaves leaves) {
+        TermPath each = at == null ? null : at.element();
+        return flat(indexes(held.elements().size()), index ->
+                mapped(of(held.elements().get(index), sequence.element(), reading, each, along,
+                        leaves), near -> {
                     List<ObservedValue> elements = new ArrayList<>(held.elements());
-                    elements.set(at, near);
+                    elements.set(index, near);
                     return new ObservedValue.Sequence(elements);
                 }));
+    }
+
+    /** {@code along}, and the sum {@code value} is the case of at {@code at}. */
+    private static List<Narrowing> narrowed(List<Narrowing> along, TermPath at,
+                                            ObservedValue value) {
+        if (at == null) {
+            return along;
+        }
+        List<Narrowing> out = new ArrayList<>(along);
+        out.add(new Narrowing(at.steps().size(), value));
+        return out;
     }
 
     private static Iterator<Integer> indexes(int count) {
@@ -128,6 +397,35 @@ final class NearbyValues {
 
     private static <T> Iterator<T> none() {
         return Collections.emptyIterator();
+    }
+
+    /** The ones of {@code from} that {@code keep} says yes to, asked as they are reached. */
+    private static <A> Iterator<A> filtered(Iterator<A> from, Predicate<A> keep) {
+        return new Iterator<>() {
+            private A next;
+            private boolean ready;
+
+            @Override
+            public boolean hasNext() {
+                while (!ready && from.hasNext()) {
+                    A candidate = from.next();
+                    if (keep.test(candidate)) {
+                        next = candidate;
+                        ready = true;
+                    }
+                }
+                return ready;
+            }
+
+            @Override
+            public A next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                ready = false;
+                return next;
+            }
+        };
     }
 
     /** What {@code how} makes of each, made when it is asked for. */

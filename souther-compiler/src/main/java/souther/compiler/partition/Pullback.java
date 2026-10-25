@@ -81,6 +81,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.HowTheElementsAreAsked;
+import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -1709,6 +1710,65 @@ final class Pullback {
     }
 
     /**
+     * The piece of a string of the input that {@code attempt} builds a newtype of, where the value
+     * it is handed is one — or nothing where it is not.
+     *
+     * <p>The flow the clauses of the newtype are read over: the value is the piece, the piece is of
+     * the string the split was handed, and that string stands at a position of the input, read in
+     * {@code reads} as any other value is, through the names, closures and arms above it. Only a
+     * string that is the position itself or a case conversion of it is read, since what another
+     * operation answers is no string whose pieces the position's strings are parted into.
+     */
+    static List<PieceDemand> ofThePiecesAttempted(Core.IfConstructed attempt, InputReads reads,
+                                                  InputReading read) {
+        return new Pullback(read, Optional.empty()).piecesAttempted(attempt, reads);
+    }
+
+    private List<PieceDemand> piecesAttempted(Core.IfConstructed attempt, InputReads reads) {
+        Core.Construct built = attempt.construct();
+        if (built.values().size() != 1 || !read.rules().newtypes().of(built.typeName().key())) {
+            return List.of();
+        }
+        Pieces piece = pieceThatWasKeptByIndex(built.values().getFirst().value(), reads);
+        if (piece == null || piece.separator().isEmpty()) {
+            return List.of();
+        }
+        Quantity string = valueOfTheInput(
+                piece.split().args().get(piece.parted().string().position()), piece.at());
+        CaseMapping through = string == null ? null : conversionOf(string);
+        if (through == null) {
+            return List.of();
+        }
+        List<NumericTerm> made = switch (string) {
+            case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+            case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+            default -> List.of();
+        };
+        if (made.size() != 1 || made.getFirst().placesReadOff().size() != 1) {
+            return List.of();
+        }
+        return List.of(new PieceDemand(made.getFirst().placesReadOff().getFirst(), through,
+                piece.separator().getAsInt(), built.type()));
+    }
+
+    /**
+     * What case conversions make of the position {@code string} is made of — none where it is the
+     * position itself — or null where it is made of anything else, which is no string whose pieces
+     * the position's strings are parted into.
+     */
+    private static CaseMapping conversionOf(Quantity string) {
+        return switch (string) {
+            case DecisionAtom.OfTheInput _ -> CaseMapping.NONE;
+            case Quantity.WhatAnOperationAnswers answers -> {
+                CaseMapping inner = answers.of().size() == 1
+                        ? conversionOf(answers.of().getFirst()) : null;
+                yield inner == null ? null : CaseMapping.applying(answers.operation(), inner);
+            }
+            default -> null;
+        };
+    }
+
+    /**
      * What a run entering each arm of the choice {@code fork} is ({@link Choice#of}) states, where
      * {@code fork} is read in {@code reads}.
      *
@@ -2044,11 +2104,10 @@ final class Pullback {
     }
 
     /**
-     * The pieces {@code e}, read in {@code at}, is one of — where it is a parameter a walk
-     * hands each element of what an operation answering the pieces of a string was given, or
-     * of what only kept some of those — or null where it is not.
+     * The container {@code e}, read in {@code at}, is an element of, as it stands — or null where
+     * {@code e} is no element of one.
      */
-    private Pieces pieceThatIs(Core e, InputReads at, boolean ofTheFirstToo) {
+    private Denotation theContainerOfTheElement(Core e, InputReads at) {
         Denotation standing = at.standing(e, read.rules().symbols(), read.rules().newtypes());
         Core container = standing.at().containerOfTheElement(standing.value());
         // An element of what a walk answered stands as the walk's answer on its element, which
@@ -2059,11 +2118,51 @@ final class Pullback {
             container = named.at().containerOfTheElement(named.value());
             in = named.at();
         }
-        if (container == null) {
+        return container == null ? null
+                : in.standing(container, read.rules().symbols(), read.rules().newtypes());
+    }
+
+    /**
+     * The pieces {@code e}, read in {@code at}, is one of, whichever of them an operation kept by
+     * their index — or null where it is not one.
+     *
+     * <p>Which piece it is is not said: that the value is a piece of this string, and the string
+     * is the one the split was handed, is all a reader asking where a value comes from needs. A
+     * statement about the kept pieces is about their indexes and is read by {@link #pieceThatIs},
+     * which stops at an operation keeping by index.
+     */
+    private Pieces pieceThatWasKeptByIndex(Core e, InputReads at) {
+        Denotation made = theContainerOfTheElement(e, at);
+        while (made != null) {
+            Beneath beneath = beneath(made, false);
+            if (beneath != null) {
+                made = beneath.at();
+                continue;
+            }
+            if (!(Core.withoutStanding(made.value()) instanceof Core.PreservedCall call)) {
+                break;
+            }
+            BoundOperationFacts.KeptByIndex kept = DefaultBoundOperationFacts.get()
+                    .holdsTheElementsByIndex(call.declared().operation());
+            if (kept == null) {
+                break;
+            }
+            made = made.at().standing(call.args().get(kept.list().position()),
+                    read.rules().symbols(), read.rules().newtypes());
+        }
+        return made == null ? null : piecesOf(made);
+    }
+
+    /**
+     * The pieces {@code e}, read in {@code at}, is one of — where it is a parameter a walk
+     * hands each element of what an operation answering the pieces of a string was given, or
+     * of what only kept some of those — or null where it is not.
+     */
+    private Pieces pieceThatIs(Core e, InputReads at, boolean ofTheFirstToo) {
+        Denotation whole = theContainerOfTheElement(e, at);
+        if (whole == null) {
             return null;
         }
-        Denotation whole = in.standing(container, read.rules().symbols(),
-                read.rules().newtypes());
         Beneath beneath = beneath(whole, false);
         Denotation made = beneath == null ? whole : beneath.at();
         Pieces direct = ofTheFirstToo ? piecesOrTheFirstOf(made) : piecesOf(made);
