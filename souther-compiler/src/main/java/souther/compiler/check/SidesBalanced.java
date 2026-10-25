@@ -172,7 +172,10 @@ public final class SidesBalanced {
     public static Map<RuleKey, List<Requirement>> writtenOn(TypeSymbol.AtModule named,
                                                             RuleReadingSource source) {
         RecordRules rules = RecordRules.of(named, source);
-        if (rules == null) {
+        // Only a record all of whose rules were read: the list is built balanced and nothing else
+        // is asked of it, and a rule nothing was made of may keep its elements apart, bound how
+        // many it holds or relate it to another field.
+        if (rules == null || !rules.readInFull()) {
             return Map.of();
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();

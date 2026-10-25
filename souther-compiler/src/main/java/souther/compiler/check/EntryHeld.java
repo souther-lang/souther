@@ -183,7 +183,10 @@ public final class EntryHeld {
     public static Map<RuleKey, List<Requirement>> writtenOn(TypeSymbol.AtModule named,
                                                             RuleReadingSource source) {
         RecordRules rules = RecordRules.of(named, source);
-        if (rules == null) {
+        // Only a record all of whose rules were read: a map is built holding the entries the rules
+        // ask of it, and a rule nothing was made of may ask others, or ask the map something the
+        // entries held would break.
+        if (rules == null || !rules.readInFull()) {
             return Map.of();
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();

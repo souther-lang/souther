@@ -183,6 +183,39 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
                 """).isEmpty());
     }
 
+    /**
+     * A rule of the record itself that could not be read may keep the elements apart, bound how
+     * many it holds or relate the list to another field, and nothing is built for the balance
+     * beside it: not found among the rules read is not absent from the rules.
+     */
+    @Test
+    void aRecordWithARuleNoReadingTookInLeavesTheBalanceUnanswered() {
+        assertFalse(unansweredAtTheList("""
+                module demo
+
+                import List ( fold, length )
+
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                data Side = Debit | Credit
+                data Posting = { side: Side, amount: Amount }
+
+                let loop (d: Decimal): Bool = loop(d)
+
+                let sideTotal (wanted: Side, postings: List<Posting>): Decimal =
+                    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.amount.value) else acc,
+                         0.0m, postings)
+
+                data N = { postings: List<Posting> }
+                    invariant balanced =
+                        Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
+                    invariant unreadable = loop(0.0m)
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = 1
+                """).isEmpty());
+    }
+
     /** What stands unanswered at the list of the input of {@code probe}. */
     private static List<String> unansweredAtTheList(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
