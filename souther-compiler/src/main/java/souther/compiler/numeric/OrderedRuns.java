@@ -31,8 +31,8 @@ public final class OrderedRuns {
     private final List<OrderedInterval> runs;
 
     /**
-     * An interval holding nothing, as the reading came to it, where nothing is left; null
-     * otherwise.
+     * An interval holding nothing, as the reading came to it, where nothing is left and an interval
+     * said so; null otherwise.
      *
      * <p>Kept for {@link #hull}: a reader of ends asks for an interval, and one holding nothing is
      * how an interval says nothing is left. Which ends it has is no part of what this holds, so it
@@ -43,6 +43,15 @@ public final class OrderedRuns {
     private OrderedRuns(List<OrderedInterval> runs, OrderedInterval nothing) {
         this.runs = List.copyOf(runs);
         this.nothing = nothing;
+    }
+
+    /**
+     * No value of the order at all, as a reading says it that reached no interval to say it with —
+     * the numbers of a position admitting no assignment, say. There are no ends around nothing, so
+     * {@link #hull} has none to give.
+     */
+    public static OrderedRuns nothing() {
+        return new OrderedRuns(List.of(), null);
     }
 
     /** The values of one interval, which is one run, or none where it holds nothing. */
@@ -104,10 +113,17 @@ public final class OrderedRuns {
 
     /**
      * The ends around every run, which is every value of the runs and those between them — an
-     * interval holding nothing where nothing is left.
+     * interval holding nothing where nothing is left and an interval said so.
+     *
+     * @throws IllegalStateException where nothing is left and no interval said it
+     *                               ({@link #nothing()}): a reader of ends asking that is asking
+     *                               where a position stops of one that has no values
      */
     public OrderedInterval hull() {
         if (holdsNothing()) {
+            if (nothing == null) {
+                throw new IllegalStateException("no ends around a position no value stands at");
+            }
             return nothing;
         }
         return isOneRun() ? runs.getFirst()

@@ -37,7 +37,6 @@ import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
-import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.CaseMapping;
@@ -2874,22 +2873,27 @@ final class TermRealizations {
         if (!(members instanceof HeldClass.None)) {
             return membersOnTheOrder(wanted, orders, members, runs, admits, ofTheRun, usual);
         }
-        // One place of each run of the set inside each of those, standing for it, and looked for
-        // away from the values the position's values keep out: the place standing for a run is
+        // One place of each run of the set inside each of those, standing for it — and where the
+        // one standing for it is a value the position's values refuse, one of the run they take,
+        // found among what the set and the order have in hand: the place standing for a run is
         // chosen by where the number is usually near, and a rule singling a value out may single
-        // out that one. Where the order names no place for a run, nothing is put in its stead: an
-        // order declines on purpose, as above a string a rule stops short of, where every value
-        // would carry a character nobody wrote.
+        // out that one. No machine is built for it, which a witness's own writer pays for. Where
+        // the order names no place for a run, nothing is put in its stead: an order declines on
+        // purpose, as above a string a rule stops short of, where every value would carry a
+        // character nobody wrote.
         Carrier carrier = orders.answered();
         LevelSpace space = LevelSpace.onACarrier(carrier);
-        LevelRegion region = keptOut(wanted.region(carrier), carrier, admits);
         List<Place> offered = new ArrayList<>();
         for (NumericDomain.Bounds run : runs) {
-            for (LevelInterval look : Criterion.Within.runsInside(region, carrier,
+            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
                     run == null ? null : run.min(), run == null ? null : run.max())) {
-                if (space.standingFor(look, usual).level() instanceof Level.OnACarrier on
-                        && !offered.contains(on.at())) {
-                    offered.add(on.at());
+                if (!(space.standingFor(look, usual).level() instanceof Level.OnACarrier on)) {
+                    continue;
+                }
+                Place found = carrier.admitted(admits, on.at()) ? on.at()
+                        : takenInstead(look, carrier, admits, on.at());
+                if (!offered.contains(found)) {
+                    offered.add(found);
                 }
             }
         }
@@ -2897,22 +2901,16 @@ final class TermRealizations {
     }
 
     /**
-     * {@code region} without the places of the values {@code admits} keeps out, where it keeps out
-     * finitely many and the order places them — which is a set whose values are in hand, so no
-     * machine is built to find what is left.
+     * A place of {@code look} the position's values take in, found without a machine — or
+     * {@code refused} where none is in hand, which the row built at it is then refused at as it
+     * would have been.
      */
-    private static LevelRegion keptOut(LevelRegion region, Carrier carrier, ValueSet admits) {
-        if (!(admits instanceof ValueSet.Cofinite cofinite)) {
-            return region;
-        }
-        LevelRegion out = region;
-        for (Value each : cofinite.excluded()) {
-            Place at = carrier.placeOf(each);
-            if (at != null) {
-                out = out.without(new Level.OnACarrier(carrier, at));
-            }
-        }
-        return out;
+    private static Place takenInstead(LevelInterval look, Carrier carrier, ValueSet admits,
+                                      Place refused) {
+        OrderedInterval run = LevelRealizer.runOf(look, carrier);
+        Place taken = run == null ? null
+                : carrier.somewhereInHand(admits, run, PlacesApart.NONE);
+        return taken != null ? taken : refused;
     }
 
     /**

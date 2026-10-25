@@ -2354,11 +2354,12 @@ public final class Partitions {
             return base.done();
         }
         Carrier carrier = declared.carrier();
-        NumericDomain.Bounds range = TypeBounds.admissible(declared, within);
+        // Displaced inside the first run, where the first value was chosen: the ends around every
+        // run hold the gaps between them, and a value displaced into one is no second value but
+        // one every alternative refuses.
+        NumericDomain.Bounds range = TypeBounds.admissible(declared, limits.runs().getFirst());
         Place step = displaced(range, carrier, reading.today());
-        // Displaced inside the ends around what the order leaves, which may be a gap between two
-        // runs: a value there is no second value but one every alternative refuses.
-        if (step == null || (limits.ordered() != null && !limits.ordered().admits(step))) {
+        if (step == null) {
             return base.done();
         }
         FixtureTemplate value = standing(view, carrier, step, ruleSource);

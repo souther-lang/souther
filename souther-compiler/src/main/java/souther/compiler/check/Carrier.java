@@ -1263,36 +1263,56 @@ public sealed interface Carrier extends ValueOrder {
      * @param meter what building the machine a set of strings needs may cost
      */
     default Place somewhereIn(ValueSet set, OrderedInterval range, PlacesApart apart, Meter meter) {
+        Place inHand = somewhereInHand(set, range, apart);
+        // Where the order's own candidates answered, that is the value: they read better in a row
+        // than anything worked out of a machine, and the common case is a position whose rules say
+        // nothing about its values.
+        //
+        // And where they did not, they are not a proof for a set of strings. What they are is a
+        // handful, and a run away from that handful holds values none of them names — so the
+        // question goes to the crossing below, which answers it exactly. Read as an answer, a rule
+        // stating a run of the strings came back as one nothing could write a value in.
+        if (inHand != null || !(this instanceof Text)) {
+            return inHand;
+        }
+        OrderedInterval held = extent().meet(range);
+        if (held.holdsNothing()) {
+            return null;
+        }
+        return switch (set) {
+            // The values kept out are in hand and the ones left are not, and a language names its
+            // strings and does not list them: what is left of either inside the run and away from
+            // the places held apart is a machine — which is the crossing between a set of strings
+            // and a run of the order, and the reading of extents is where that is made.
+            case ValueSet.Cofinite it -> writableIn(it, held, apart, meter);
+            case ValueSet.Matching it -> writableIn(it, held, apart, meter);
+            case ValueSet.Finite _, ValueSet.WholeRuns _ -> null;
+        };
+    }
+
+    /**
+     * The same crossing where it needs no machine: a place this order holds inside {@code range}
+     * that {@code set} admits and none of {@code apart} stands at, found among the values the set
+     * has in hand or the order's own candidates — or null where neither holds one.
+     *
+     * <p>For a caller with no allowance to spend on a machine. Null is not that the run holds no
+     * such value, since a set of strings may hold one only a machine finds ({@link #somewhereIn});
+     * it is that nothing in hand does.
+     */
+    default Place somewhereInHand(ValueSet set, OrderedInterval range, PlacesApart apart) {
         OrderedInterval held = extent().meet(range);
         if (held.holdsNothing()) {
             return null;
         }
         return switch (set) {
             // Named outright, so the first of them this order places inside the run and holds apart
-            // from none. No machine for a set that already has its values in hand.
+            // from none.
             case ValueSet.Finite it -> it.values().stream().map(this::placeOf)
                     .filter(at -> at != null && held.admits(at) && !apart.has(at))
                     .findFirst().orElse(null);
-            case ValueSet.Cofinite it -> {
-                Place cheap = firstHeldIn(held, anchorIn(range), it.excluded(), apart);
-                // Where the order's own candidates answered, that is the value: they read better in
-                // a row than anything worked out of a machine, and the common case is a position
-                // whose rules say nothing about its values.
-                //
-                // And where they did not, they are not a proof. What they are is a handful, and a run
-                // away from that handful holds values none of them names — so the question goes to
-                // the crossing below, which answers it exactly. Read as an answer, a rule stating a
-                // run of the strings came back as one nothing could write a value in.
-                yield cheap != null || !(this instanceof Text) ? cheap
-                        : writableIn(it, held, apart, meter);
-            }
-            // The one shape whose values are not in hand: a language names its strings and does not
-            // list them, so what is left of it inside the run and away from the places held apart
-            // is a machine — which is the crossing between a set of strings and a run of the order,
-            // and the reading of extents is where that is made. A language is a set of strings, so
-            // no order but the strings holds one.
-            case ValueSet.Matching it ->
-                    this instanceof Text ? writableIn(it, held, apart, meter) : null;
+            case ValueSet.Cofinite it -> firstHeldIn(held, anchorIn(range), it.excluded(), apart);
+            // The one shape whose values are not in hand, and so none of them is.
+            case ValueSet.Matching _ -> null;
             // Each run met with the run of the order in turn, and walked from its first number as
             // a run of the order is. Whole numbers, so only an order counted in ones holds them as
             // a run.

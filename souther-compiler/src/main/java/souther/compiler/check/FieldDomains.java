@@ -1308,12 +1308,8 @@ public final class FieldDomains {
         /** The same limits, where the rules leave the value nothing at all. */
         static ConstructionLimits leavingNothing(Held held, AdmissibleSet admits,
                                                  HeldClass heldTo) {
-            return new ConstructionLimits(null, OrderedRuns.of(NO_VALUE), held, admits, heldTo);
+            return new ConstructionLimits(null, OrderedRuns.nothing(), held, admits, heldTo);
         }
-
-        /** An interval holding nothing, for a position whose rules contradict on its numbers. */
-        private static final OrderedInterval NO_VALUE = new OrderedInterval(
-                Endpoint.exclusive(Count.of(0)), Endpoint.exclusive(Count.of(0)));
 
         /**
          * Where a value is chosen in, lowest first: each run the order leaves, or where the value
