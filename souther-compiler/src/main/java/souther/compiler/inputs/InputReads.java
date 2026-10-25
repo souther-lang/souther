@@ -498,6 +498,10 @@ public final class InputReads {
      * ({@link #calling}): its names are that reading's and not these.
      */
     public InputReads handing(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
+        return handedAs(binding, value, newtypes).turningOn(binding, List.of(value));
+    }
+
+    private InputReads handedAs(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
         Map<BindingId, List<ReadMeaning.Occurrence>> narrower = new LinkedHashMap<>(alternatives);
         narrower.remove(binding);
         Set<BindingId> handed = new HashSet<>(applied.handed());
@@ -566,7 +570,8 @@ public final class InputReads {
         if (e instanceof Core.Read read) {
             if (applied.handed().contains(read.binding())) {
                 into.add(read.binding());
-            } else if (met.add(read.binding())) {
+            }
+            if (met.add(read.binding())) {
                 bindingRead(read, met, into);
             }
             return;

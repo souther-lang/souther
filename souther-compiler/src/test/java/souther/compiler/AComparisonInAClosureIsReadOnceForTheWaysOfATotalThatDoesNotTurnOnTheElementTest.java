@@ -248,6 +248,32 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
 
+    /** A split of a value read off the inner closure's parameter, over {@code inner} elements. */
+    private static String innerParameterSplit(String inner) {
+        int outer = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 4 + 1;
+        return report("""
+                behavior g : (w: Window) -> Ok | No
+                let g (w) = {
+                    guard List.any(t -> List.any(s -> 1 <= Int.max(s, w.second.pay), %s),
+                        %s) else No
+                    Ok
+                }
+                """.formatted(inner, monthsRepeated(outer)));
+    }
+
+    /**
+     * An inner closure's parameter is handed one of its container's elements, and which they are
+     * is another thing on each application of the closure outside: a split that reads it is among
+     * the applications through both parameters. A container that is the same on each is not.
+     */
+    @Test
+    void anInnerParameterIsSplitWithTheOuterApplicationsItsContainerTurnsOn() {
+        String turning = innerParameterSplit("[ t.pay, t.pay + 1 ]");
+        assertTrue(turning.contains("READINGS_OF_ONE_CONDITION"), turning);
+        String alike = innerParameterSplit("[ w.first.pay, w.first.pay + 1 ]");
+        assertFalse(alike.contains("READINGS_OF_ONE_CONDITION"), alike);
+    }
+
     /** A helper that is handed nothing of the application is the same total on each. */
     @Test
     void aTotalFromAHelperHandedNothingOfTheApplicationIsReadWhateverTheTableLength() {
