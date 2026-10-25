@@ -29,8 +29,8 @@ import java.util.Set;
 record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
-    public SearchRegion leavingOut(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
-        return parts.isEmpty() ? this : new ReadRegion(within.leavingOut(parts));
+    public SearchRegion withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+        return parts.isEmpty() ? this : new ReadRegion(within.withoutTheRelationOf(parts));
     }
 
     @Override

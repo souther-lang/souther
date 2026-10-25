@@ -60,12 +60,14 @@ class ARegionLeavesARuleOutOnlyOfTheParameterItWasShownForTest {
         assertEquals(FLOOR, floorOfTheSum(region, "x"));
         assertEquals(FLOOR, floorOfTheSum(region, "y"));
 
-        SearchRegion withoutForX = region.leavingOut(Map.of("x", partsOfTheRule(compilation)));
+        SearchRegion withoutForX =
+                region.withoutTheRelationOf(Map.of("x", partsOfTheRule(compilation)));
         assertNull(floorOfTheSum(withoutForX, "x"), "the rule is put aside where it was shown");
         assertEquals(FLOOR, floorOfTheSum(withoutForX, "y"),
                 "and is in force for the parameter it was not shown for");
 
-        SearchRegion withoutForY = region.leavingOut(Map.of("y", partsOfTheRule(compilation)));
+        SearchRegion withoutForY =
+                region.withoutTheRelationOf(Map.of("y", partsOfTheRule(compilation)));
         assertEquals(FLOOR, floorOfTheSum(withoutForY, "x"));
         assertNull(floorOfTheSum(withoutForY, "y"));
     }
@@ -73,15 +75,86 @@ class ARegionLeavesARuleOutOnlyOfTheParameterItWasShownForTest {
     @Test
     void nothingLeftOutIsTheRegionItself() {
         SearchRegion region = regionOf(Compilation.ofSource(PAIRS, "Main"));
-        assertSame(region, region.leavingOut(Map.of()));
+        assertSame(region, region.withoutTheRelationOf(Map.of()));
+    }
+
+    private static final String BAND = """
+            module example.pairs
+
+            data Band = { a: Int, b: Int }
+                invariant a >= -30
+                invariant a <= 30
+                invariant b >= 210
+                invariant b <= 220
+                invariant a + b >= 100
+                invariant a + b <= 201
+
+            data Done
+
+            behavior take : (x: Band) -> Done
+            """;
+
+    /**
+     * Left out is the relation and not what each place was left by itself: the sum rule is what
+     * keeps {@code a} below nought, and the region without it still holds {@code a} there, so
+     * the sum of the two reaches the top of the two runs and not the top of the two boxes.
+     */
+    @Test
+    void whatEachPlaceWasLeftIsKeptWhenTheRelationBetweenThemIsLeftOut() {
+        Compilation compilation = Compilation.ofSource(BAND, "Main");
+        SearchRegion region = regionOf(compilation);
+        NumericTerm.ValueOf a = new NumericTerm.ValueOf(TermPath.of("x").then("a"));
+        Endpoint top = Endpoint.inclusive(Count.of(-9));
+        assertEquals(top, runOf(region, a).max(), "the rules leave a nothing above -9");
+
+        SearchRegion without = region.withoutTheRelationOf(
+                Map.of("x", partsOfTheRule(compilation, "Band")));
+        assertNull(region.wholeRunOf(a), "the original region does not answer the run as whole");
+        assertEquals(runOf(region, a), without.wholeRunOf(a),
+                "the region without the relation answers the run it kept as whole");
+        assertEquals(runOf(region, a), runOf(without, a),
+                "a keeps the run it was left with the relation in force");
+        Endpoint sumTop = Endpoint.inclusive(Count.of(211));
+        assertEquals(sumTop, ceilingOfTheSum(without, "x"),
+                "the sum reaches what the two runs reach, which is past what the rule allows");
+        assertEquals(Endpoint.inclusive(Count.of(201)), ceilingOfTheSum(region, "x"));
+    }
+
+    /** The run the region leaves the one field. */
+    private static NumericDomain.Bounds runOf(SearchRegion region, NumericTerm.ValueOf field) {
+        return switch (region.projectionOf(LinearForm.atom(field))) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds runs) -> runs;
+            default -> throw new AssertionError("these rules leave a value for " + field);
+        };
+    }
+
+    /** Where the sum of the parameter's two fields stops, or null where nothing stops it. */
+    private static Endpoint ceilingOfTheSum(SearchRegion region, String parameter) {
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(new NumericTerm.ValueOf(TermPath.of(parameter).then("a")), ExactRatio.ONE);
+        coefs.put(new NumericTerm.ValueOf(TermPath.of(parameter).then("b")), ExactRatio.ONE);
+        return switch (region.projectionOf(new LinearForm<>(ExactRatio.ZERO, coefs))) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds runs) -> runs.max();
+            default -> throw new AssertionError("these rules leave a value for " + parameter);
+        };
     }
 
     private static Set<PartId<RuleRef.Invariant>> partsOfTheRule(Compilation compilation) {
-        DeclarationMeaning.Product pair = (DeclarationMeaning.Product) ClauseReadings.meaningOf(
-                compilation.db(), MODULE, TypeSymbols.declared(new TypeKey(MODULE, "Pair")));
+        return partsOfTheRule(compilation, "Pair");
+    }
+
+    /** The parts of the clauses of {@code declaration} that relate two of its fields. */
+    private static Set<PartId<RuleRef.Invariant>> partsOfTheRule(Compilation compilation,
+                                                                 String declaration) {
+        DeclarationMeaning.Product product = (DeclarationMeaning.Product) ClauseReadings.meaningOf(
+                compilation.db(), MODULE, TypeSymbols.declared(new TypeKey(MODULE, declaration)));
         Set<PartId<RuleRef.Invariant>> parts = new LinkedHashSet<>();
-        for (ClauseMeaning each : pair.clauses()) {
-            parts.addAll(((ClauseMeaning.Stated) each).parts().ids());
+        for (ClauseMeaning each : product.clauses()) {
+            ClauseMeaning.Stated stated = (ClauseMeaning.Stated) each;
+            if (stated.affine() instanceof ClauseAffineMeaning.Exact exact
+                    && exact.conjuncts().getFirst().form().coefs().size() == 2) {
+                parts.addAll(stated.parts().ids());
+            }
         }
         return parts;
     }

@@ -1,9 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -34,7 +36,42 @@ public sealed interface ClauseAffineMeaning {
                 throw new IllegalArgumentException("a clause that states something is some comparisons");
             }
             conjuncts = List.copyOf(conjuncts);
+            if (!weighSameAlike(conjuncts)) {
+                throw new IllegalArgumentException(
+                        "the comparisons of an exact clause are of one form: " + conjuncts);
+            }
         }
+    }
+
+    /**
+     * The meaning of a clause that comes to {@code conjuncts} exactly: {@link Exact} where they
+     * are of one form, and {@link Unread} where they are not, which a reader of one form cannot
+     * take them for.
+     */
+    static ClauseAffineMeaning ofComparisons(List<Comparison> conjuncts) {
+        return conjuncts.isEmpty() || !weighSameAlike(conjuncts) ? UNREAD : new Exact(conjuncts);
+    }
+
+    /** Whether every comparison weighs the same places as the first, each by the same number of
+     *  times as the others: they are the one form up to a factor. */
+    private static boolean weighSameAlike(List<Comparison> conjuncts) {
+        Map<RuleKey, ExactRatio> first = conjuncts.getFirst().form().coefs();
+        for (Comparison each : conjuncts) {
+            Map<RuleKey, ExactRatio> other = each.form().coefs();
+            if (!first.keySet().equals(other.keySet())) {
+                return false;
+            }
+            ExactRatio factor = null;
+            for (Map.Entry<RuleKey, ExactRatio> weighed : first.entrySet()) {
+                ExactRatio here = other.get(weighed.getKey()).dividedBy(weighed.getValue()).orNull();
+                if (here == null || here.isZero()
+                        || (factor != null && factor.compareTo(here) != 0)) {
+                    return false;
+                }
+                factor = here;
+            }
+        }
+        return true;
     }
 
     /** What the clause states is more than this can say, or something it cannot. */

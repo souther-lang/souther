@@ -17,6 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A clause publishes the comparisons it states exactly, or says it is unread.
@@ -62,6 +63,24 @@ class AClauseStatesExactlyItsComparisonsOrIsUnreadTest {
                 new LinearForm<>(ExactRatio.of(constant),
                         Map.of(RuleKey.of("a"), ExactRatio.of(weightOfA),
                                 RuleKey.of("b"), ExactRatio.of(weightOfB))), rel);
+    }
+
+    /** Exact is a claim that the comparisons weigh the same places alike, so a value that says
+     *  otherwise cannot be made, whoever makes it. */
+    @Test
+    void comparisonsOfDifferentFormsAreNotMadeExact() {
+        assertThrows(IllegalArgumentException.class, () -> new ClauseAffineMeaning.Exact(
+                List.of(sum(-100, Rel.GE, 1, 1), sum(-100, Rel.LE, 1, 2))));
+        assertThrows(IllegalArgumentException.class, () -> new ClauseAffineMeaning.Exact(
+                List.of(sum(0, Rel.GE, 1, 1), new ClauseAffineMeaning.Comparison(
+                        new LinearForm<>(ExactRatio.ZERO,
+                                Map.of(RuleKey.of("a"), ExactRatio.ONE)), Rel.GE))));
+        assertEquals(ClauseAffineMeaning.UNREAD, ClauseAffineMeaning.ofComparisons(
+                List.of(sum(-100, Rel.GE, 1, 1), sum(-100, Rel.LE, 1, 2))));
+        assertEquals(new ClauseAffineMeaning.Exact(List.of(sum(-100, Rel.GE, 1, 1),
+                        sum(-200, Rel.LE, 2, 2))),
+                ClauseAffineMeaning.ofComparisons(
+                        List.of(sum(-100, Rel.GE, 1, 1), sum(-200, Rel.LE, 2, 2))));
     }
 
     @Test

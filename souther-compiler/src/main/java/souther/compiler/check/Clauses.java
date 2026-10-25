@@ -576,13 +576,7 @@ final class Clauses {
                     || conjuncts.isEmpty()) {
                 return ClauseAffineMeaning.UNREAD;
             }
-            Map<RuleKey, ExactRatio> first = conjuncts.getFirst().form().coefs();
-            for (ClauseAffineMeaning.Comparison each : conjuncts) {
-                if (!weighsAlike(first, each.form().coefs())) {
-                    return ClauseAffineMeaning.UNREAD;
-                }
-            }
-            return new ClauseAffineMeaning.Exact(conjuncts);
+            return ClauseAffineMeaning.ofComparisons(conjuncts);
         }
 
         /** Whether every part of {@code shape} that holds with it is a comparison, added to
@@ -710,24 +704,6 @@ final class Clauses {
                 case LT -> Rel.GT;
                 case EQ, NE -> rel;
             };
-        }
-
-        /** Whether {@code other} weighs the same places as {@code form} does, each by the same
-         *  number of times as the others. */
-        private static boolean weighsAlike(Map<RuleKey, ExactRatio> form,
-                                           Map<RuleKey, ExactRatio> other) {
-            if (!form.keySet().equals(other.keySet())) {
-                return false;
-            }
-            ExactRatio factor = null;
-            for (Map.Entry<RuleKey, ExactRatio> each : form.entrySet()) {
-                ExactRatio here = other.get(each.getKey()).dividedBy(each.getValue()).orNull();
-                if (here == null || here.isZero() || (factor != null && factor.compareTo(here) != 0)) {
-                    return false;
-                }
-                factor = here;
-            }
-            return true;
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */

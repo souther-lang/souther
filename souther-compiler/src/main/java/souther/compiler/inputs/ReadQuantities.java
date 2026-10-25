@@ -438,8 +438,15 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * This reading with the rules {@code parts} name left out of what the declarations say of the
-     * parameter they are listed under, and what a caller fixed or took in kept.
+     * This reading without the relation the rules {@code parts} name hold between the places they
+     * read, under the parameter they are listed under, and what a caller fixed or took in kept.
+     *
+     * <p>The rules are left out of what is read again, and what was worked out of each place by
+     * itself ({@code byPath}) is kept as it was: the run a place is left with the rules in force
+     * is the run it still has. That is the contract and not an accident of what is shared — the
+     * proof that a row near a line is in the original region needs each place held to its own
+     * ends and to nothing else the rule said, and a region read from declarations that never had
+     * the rule would widen the ends it gave each place as well.
      *
      * <p>Per parameter, since a rule of a declaration is a rule of every value of it: left out of
      * one parameter it stays in another that holds a value of the same declaration.
@@ -447,7 +454,7 @@ final class ReadQuantities implements Quantities {
      * <p>A reading of its own, with nothing shared with this one that was worked out from the rules:
      * the contexts and what was answered under them are made again from the rules that are left.
      */
-    ReadQuantities leavingOut(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+    ReadQuantities withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
         Map<TermPath, OpenedRules> rest = new LinkedHashMap<>();
         byRoot.forEach((root, opened) -> {
             Set<PartId<RuleRef.Invariant>> here = parts.get(root.head());

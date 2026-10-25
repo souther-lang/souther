@@ -7,7 +7,6 @@ import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -195,7 +194,30 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
      * @param oneClause whether the interval is one rule joining its two ends, or two rules
      */
     private record Case(String form, String inTheGuard, IntBinaryOperator valueOf, int[] a,
-                        int[] b, int from, int to, int below, boolean oneClause) {
+                        int[] b, int from, int to, int below, boolean oneClause,
+                        Reading reading) {
+
+        /** What a case promises: what the report says of the guard, and not only that it is sound. */
+        enum Reading {
+            /** The guard is read, and a row is owed at the points a walk of every pair finds. */
+            READ,
+            /** The guard is not read: the rule is not shown to leave room, and still ties. */
+            NOT_READ,
+            /** The rules settle the guard, so there is nothing to read; only soundness is asked. */
+            SETTLED
+        }
+
+        /** The step the form moves in: its values are the multiples of it. */
+        int step() {
+            int x = Math.abs(valueOf.applyAsInt(1, 0));
+            int y = Math.abs(valueOf.applyAsInt(0, 1));
+            while (y != 0) {
+                int rest = x % y;
+                x = y;
+                y = rest;
+            }
+            return x;
+        }
 
         String source() {
             String interval = oneClause
@@ -206,8 +228,15 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
                     "    guard " + inTheGuard + " < " + below + " else High");
         }
 
-        /** The points some pair the rules leave has a value of the form at. */
+        /**
+         * The points some pair the rules leave has a value of the form at. The points are levels
+         * of the form, which takes the multiples of its step: the last level below the line, the
+         * first at or past it, those below the one and those past the other.
+         */
         Map<String, String> walk() {
+            int step = step();
+            int lastBelow = Math.floorDiv(below - 1, step) * step;
+            int firstPast = -Math.floorDiv(-below, step) * step;
             boolean on = false;
             boolean off = false;
             boolean in = false;
@@ -218,10 +247,10 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
                     if (value < from || value > to) {
                         continue;
                     }
-                    on |= value == below - 1;
-                    off |= value == below;
-                    in |= value <= below - 2;
-                    out |= value >= below + 1;
+                    on |= value == lastBelow;
+                    off |= value == firstPast;
+                    in |= value < lastBelow;
+                    out |= value > firstPast;
                 }
             }
             Map<String, String> points = new TreeMap<>();
@@ -248,47 +277,73 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
     @Test
     void whatTheRulesAndTheBoundsLeaveTogetherIsWhatAWalkOfEveryPairFinds() {
         int[] zeroToTen = {0, 10};
+        int[] belowAndAbove = {-30, 30};
+        int[] farOff = {210, 220};
+        IntBinaryOperator sum = (x, y) -> x + y;
         List<Case> cases = List.of(
                 // the bounds leave the first field only the upper part of what it would otherwise take
-                new Case("a + b", "p.a + p.b", (x, y) -> x + y, new int[] {0, 4}, new int[] {5, 7},
-                        9, 11, 10, false),
-                new Case("a + b", "p.a + p.b", (x, y) -> x + y, new int[] {0, 4}, new int[] {5, 7},
-                        9, 11, 10, true),
+                new Case("a + b", "p.a + p.b", sum, new int[] {0, 4}, new int[] {5, 7},
+                        9, 11, 10, false, Case.Reading.READ),
+                new Case("a + b", "p.a + p.b", sum, new int[] {0, 4}, new int[] {5, 7},
+                        9, 11, 10, true, Case.Reading.READ),
+                // the rule's interval is cut out of the boxes of the two fields, which are far
+                // apart: no value of the first field below nought has a partner above the
+                // interval, and the boxes alone would put the sum past it
+                new Case("a + b", "p.a + p.b", sum, belowAndAbove, farOff, 100, 201, 200, false,
+                        Case.Reading.READ),
+                new Case("a + b", "p.a + p.b", sum, belowAndAbove, farOff, 100, 201, 200, true,
+                        Case.Reading.READ),
+                new Case("a + b", "p.a + p.b", sum, belowAndAbove, new int[] {215, 220},
+                        100, 201, 200, false, Case.Reading.READ),
+                new Case("a + b", "p.a + p.b", sum, belowAndAbove, farOff, 100, 201, 181, false,
+                        Case.Reading.READ),
+                // the line is at the rule's own end, where the rule holds nothing on one side
+                new Case("a + b", "p.a + p.b", sum, belowAndAbove, farOff, 100, 201, 201, false,
+                        Case.Reading.NOT_READ),
                 // an interval of one value, and one value of it either side
-                new Case("a + b", "p.a + p.b", (x, y) -> x + y, zeroToTen, zeroToTen, 10, 10, 10,
-                        false),
+                new Case("a + b", "p.a + p.b", sum, zeroToTen, zeroToTen, 10, 10, 10, false,
+                        Case.Reading.SETTLED),
                 new Case("a - b", "p.a - p.b", (x, y) -> x - y, zeroToTen, new int[] {0, 3},
-                        4, 6, 5, true),
-                // a weighted sum, whose values the second field steps over
+                        4, 6, 5, true, Case.Reading.READ),
+                // a form weighing the fields apart, whose values one field steps over
+                new Case("3 * a - 2 * b", "3 * p.a - 2 * p.b", (x, y) -> 3 * x - 2 * y,
+                        new int[] {0, 6}, new int[] {0, 6}, -3, 6, 2, false, Case.Reading.READ),
+                new Case("a + 3 * b", "p.a + 3 * p.b", (x, y) -> x + 3 * y, new int[] {0, 9},
+                        new int[] {0, 3}, 5, 12, 9, false, Case.Reading.READ),
+                new Case("2 * a + 3 * b", "2 * p.a + 3 * p.b", (x, y) -> 2 * x + 3 * y,
+                        new int[] {0, 5}, new int[] {0, 5}, 8, 12, 10, false,
+                        Case.Reading.NOT_READ),
                 new Case("a + 2 * b", "p.a + 2 * p.b", (x, y) -> x + 2 * y, new int[] {0, 3},
-                        new int[] {2, 6}, 9, 11, 10, false),
+                        new int[] {2, 6}, 9, 11, 10, false, Case.Reading.NOT_READ),
                 new Case("a + 2 * b", "p.a + 2 * p.b", (x, y) -> x + 2 * y, zeroToTen, zeroToTen,
-                        5, 6, 6, true),
+                        5, 6, 6, true, Case.Reading.NOT_READ),
                 // the form takes only even values, and the interval's ends are odd
                 new Case("2 * a + 2 * b", "2 * p.a + 2 * p.b", (x, y) -> 2 * x + 2 * y, zeroToTen,
-                        zeroToTen, 9, 11, 10, false));
-        int compared = 0;
-        List<String> left = new ArrayList<>();
+                        zeroToTen, 9, 11, 10, false, Case.Reading.SETTLED),
+                new Case("4 * a + 6 * b", "4 * p.a + 6 * p.b", (x, y) -> 4 * x + 6 * y,
+                        new int[] {0, 5}, new int[] {0, 5}, 10, 20, 14, false,
+                        Case.Reading.NOT_READ));
         for (Case each : cases) {
             String report = reportOf(each.source());
             int line = lineWith(each.source(), "guard");
             Map<String, String> found = pointsOf(report, line);
             Map<String, String> walked = each.walk();
+            String shown = each.reading() + "\n" + each.source() + "\n" + report;
             for (String point : walked.keySet()) {
                 assertFalse(found.get(point).equals("owed") && walked.get(point).equals("none"),
-                        "a row is owed at " + point + " where no pair has one\n" + each.source()
-                                + "\n" + report);
+                        "a row is owed at " + point + " where no pair has one\n" + shown);
             }
-            if (each.leavesTheGuardUndecided() && !report.contains(NOT_READ)) {
-                assertEquals(walked, found, each.source() + "\n" + report);
-                compared++;
+            switch (each.reading()) {
+                case READ -> {
+                    assertTrue(each.leavesTheGuardUndecided(),
+                            "a case read and compared leaves the guard open\n" + shown);
+                    assertFalse(report.contains(NOT_READ), shown);
+                    assertEquals(walked, found, shown);
+                }
+                case NOT_READ -> assertTrue(report.contains(NOT_READ), shown);
+                case SETTLED -> assertFalse(each.leavesTheGuardUndecided(), shown);
             }
-            left.add(each.form() + " " + each.from() + ".." + each.to() + " below " + each.below()
-                    + (each.leavesTheGuardUndecided() ? " undecided" : " decided")
-                    + (report.contains(NOT_READ) ? " not read" : " read") + " " + found);
         }
-        assertTrue(compared >= 3, "only " + compared + " of the cases were read and compared: "
-                + left);
     }
 
     /** Rules that leave no pair are refused where they are written, so no guard is ever read over
@@ -296,7 +351,7 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
     @Test
     void rulesThatLeaveNoPairAreRefusedWhateverComesAfterThem() {
         Case empty = new Case("a + b", "p.a + p.b", (x, y) -> x + y, new int[] {0, 4},
-                new int[] {0, 4}, 9, 11, 10, false);
+                new int[] {0, 4}, 9, 11, 10, false, Case.Reading.SETTLED);
         Compilation compilation = Compilation.ofSource(empty.source(), "Main");
         compilation.answerEverything();
         assertTrue(compilation.errors().stream()

@@ -1117,8 +1117,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Roomy room = offItsLine ? Roomy.NONE : rulesLeavingRoomAroundTheLine(read);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, withoutWhatARowAtTheLineNeeds(sources, room, read), carriers,
-                        beside.along().leavingOut(room.parts()),
-                        beside.declared().leavingOut(room.parts()),
+                        beside.along().withoutTheRelationOf(room.parts()),
+                        beside.declared().withoutTheRelationOf(room.parts()),
                         beside.conditions(), remainders, beside.stating(), heldWhole,
                         beside.narrowing(), byTheFormat != null);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
@@ -2150,14 +2150,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * is remembered of the declarations, since which rules a row at this line needs is a question
      * of this line.
      *
-     * <p>What the exclusion rests on is that a row at the line has the form within a step of the
-     * line, where each of the rule's comparisons holds whatever else the row says, so the rule
-     * takes away no row the line asks for and the fields it relates are bounded by what bounds each
-     * of them alone. That is shown only for a rule that satisfies all of: the clause is exactly
-     * such comparisons; each of them holds on both sides of the line over the greatest weight; the
-     * rule is applied at the one place of its parameter; and what keeps the bounds of a place from
-     * being the whole of what the rules leave it is this rule's relation and nothing else
-     * ({@link #certifiedBut}). A rule that fails one stays in the reading and ties as it did.
+     * <p>What the exclusion rests on is three things. A row at
+     * the line has the form within a step of the line, where each of the rule's comparisons holds
+     * whatever else the row says, so a point of the region without the rule that lies there is a
+     * row of the region with it. The run each field has is the one the original reading derived
+     * of it with the rule in force ({@link SearchRegion#withoutTheRelationOf}), so the region
+     * without the rule never gives a field a value the rule took from it. And nothing else ties
+     * the fields: what keeps the bounds of a place from being the whole of what the rules leave it
+     * is this rule's relation and nothing else ({@link #certifiedAsideFromTheRelationOf}).
+     *
+     * <p>That holds only for a rule that satisfies all of: the clause is exactly such
+     * comparisons; each of them holds on both sides of the line over the greatest weight; and the
+     * rule is applied at the one place of its parameter. A rule that fails one stays in the
+     * reading and ties as it did.
      */
     private Roomy rulesLeavingRoomAroundTheLine(InputReading read) {
         TakenConstraint.Affine asked = askedAsAStatement();
@@ -2165,7 +2170,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return Roomy.NONE;
         }
         Set<Object> nodes = new LinkedHashSet<>();
-        Set<RuleRef> refs = new LinkedHashSet<>();
+        Map<String, Set<RuleRef>> refs = new LinkedHashMap<>();
         Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
         for (Side side : sides) {
             for (FilingCoordinate place : placesAsked(side)) {
@@ -2175,7 +2180,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read);
                         if (stated != null) {
                             nodes.add(rule);
-                            refs.add(new RuleRef.Invariant(stated.ref()));
+                            refs.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
+                                    .add(new RuleRef.Invariant(stated.ref()));
                             parts.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
                                     .addAll(stated.parts().ids());
                         }
@@ -2200,10 +2206,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param parts every rule each of them was written as, under the parameter it was shown for,
      *              which is what a region is read again without
      */
-    private record Roomy(Set<Object> rules, Set<RuleRef> refs,
+    private record Roomy(Set<Object> rules, Map<String, Set<RuleRef>> refs,
                          Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
 
-        static final Roomy NONE = new Roomy(Set.of(), Set.of(), Map.of());
+        static final Roomy NONE = new Roomy(Set.of(), Map.of(), Map.of());
+
+        /** The rules put aside for the parameter {@code head}, and for no other. */
+        Set<RuleRef> refsOf(String head) {
+            return refs.getOrDefault(head, Set.of());
+        }
     }
 
     /** The clause {@code rule} is of where it states exactly comparisons of the form
@@ -4097,7 +4108,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // where no end of its order cuts them.
         Named named = namedByTheDeclarations(value.position(), read);
         if (named == Named.UNSEEN || (named == Named.BY_A_RULE
-                && (!certifiedBut(at.projection(), except) || !wholeOnItsOrder(value, read)))) {
+                && (!certifiedAsideFromTheRelationOf(at.projection(), except)
+                        || !wholeOnItsOrder(value, read)))) {
             return null;
         }
         boolean byARule = named == Named.BY_A_RULE;
@@ -4120,10 +4132,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether the bounds are shown to be the whole of what the rules leave, taking no account of
-     * the rules in {@code except}: those the bounds cannot state because they relate the position
-     * to another, and nothing else is left unproved.
+     * the relation of the rules in {@code except}: those the bounds cannot state because they
+     * relate the position to another, and nothing else is left unproved.
+     *
+     * <p>That is a statement about the ends the bounds place and nothing more: that the run of a
+     * region without those relations differs from the run of the declarations by those relations
+     * alone. It is not that every value of the run has a partner in the places the rule names, so
+     * it does not make the run one the original region realizes. What a row in the original
+     * region is, for the rows a line asks for, is shown by the rule's comparisons holding there
+     * ({@link #rulesLeavingRoomAroundTheLine}); the values past those rest on the bounds the
+     * original reading derived with the relation, which the region without it keeps
+     * ({@link SearchRegion#withoutTheRelationOf}).
      */
-    private static boolean certifiedBut(ProjectionEvidence projection, Set<RuleRef> except) {
+    private static boolean certifiedAsideFromTheRelationOf(ProjectionEvidence projection,
+                                                           Set<RuleRef> except) {
         return projection.isCertified() || (!except.isEmpty()
                 && projection instanceof ProjectionEvidence.NotCertified unproved
                 && unproved.causes().stream().allMatch(cause ->
@@ -4150,7 +4172,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Side side = sides.get(i);
             if (sources.get(i) == null && side.kept() == null
                     && side.atOnePosition() instanceof NumericTerm.ValueOf value) {
-                Source relaxed = worksOut(value, read, room.refs());
+                Source relaxed = worksOut(value, read, room.refsOf(value.position().head()));
                 if (relaxed != null) {
                     out.set(i, relaxed);
                 }
@@ -4204,7 +4226,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean onlyItsEnds(Position at, NumericTerm.ValueOf value, boolean byARule,
                                        Set<RuleRef> except) {
-        if (!certifiedBut(at.projection(), except)) {
+        if (!certifiedAsideFromTheRelationOf(at.projection(), except)) {
             return false;
         }
         for (PositionBounds each : at.bounds()) {
