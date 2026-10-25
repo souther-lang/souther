@@ -195,6 +195,39 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
 
+    private static String monthsRepeated(int times) {
+        return IntStream.range(0, times).mapToObj(i -> "w.first")
+                .collect(Collectors.joining(", ", "[ ", " ]"));
+    }
+
+    /** What the closure over the months reads of its parameter, said directly or through a name. */
+    private static String readingTheParameter(String bound, String read, int months) {
+        return report("""
+                behavior g : (w: Window) -> Ok | No
+                let g (w) = {
+                    guard List.any(t -> {
+                        %s
+                        List.any(s -> s <= Int.max(%s, 0), [ 1 ])
+                    }, %s) else No
+                    Ok
+                }
+                """.formatted(bound, read, monthsRepeated(months)));
+    }
+
+    /**
+     * A name given the parameter's field is the parameter's field: the cases of a value split are
+     * as many as the values the parameter is handed whether it is said directly or through the
+     * name, which is a position either way.
+     */
+    @Test
+    void aNameGivenTheParametersFieldIsSplitWithTheParametersApplicationsAsTheFieldIs() {
+        int months = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        String direct = readingTheParameter("", "t.pay", months);
+        assertTrue(direct.contains("READINGS_OF_ONE_CONDITION"), direct);
+        String named = readingTheParameter("let x = t.pay", "x", months);
+        assertTrue(named.contains("READINGS_OF_ONE_CONDITION"), named);
+    }
+
     /** A helper that is handed nothing of the application is the same total on each. */
     @Test
     void aTotalFromAHelperHandedNothingOfTheApplicationIsReadWhateverTheTableLength() {

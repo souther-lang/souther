@@ -183,11 +183,6 @@ public final class InputReads {
             return product;
         }
 
-        /** How many of {@code readings} are the applications of closures. */
-        long applications() {
-            return applicationsOf(widths.values());
-        }
-
         /**
          * How many of {@code readings} are the applications of closures through parameters other
          * than {@code turnedOn}.
@@ -546,13 +541,12 @@ public final class InputReads {
      * value however it is read: a reader naming a value by its binding would name values of
      * different applications alike.
      */
-    public boolean turnsOnAnApplication(Core.Read name, Symbols symbols,
-                                        DeclarationNewtypes newtypes) {
+    public boolean turnsOnAnApplication(Core.Read name) {
         if (applied.handed().isEmpty()) {
             return false;
         }
         Set<BindingId> turnedOn = new HashSet<>();
-        applicationsRead(name, symbols, newtypes, new HashSet<>(), turnedOn);
+        applicationsRead(name, new HashSet<>(), turnedOn);
         return !turnedOn.isEmpty();
     }
 
@@ -561,21 +555,32 @@ public final class InputReads {
      * {@code e} reads, itself or through the names it was given. The applications through the
      * parameters left out are ones it is the same value on.
      */
-    private void applicationsRead(Core e, Symbols symbols, DeclarationNewtypes newtypes,
-                                  Set<BindingId> met, Set<BindingId> into) {
+    private void applicationsRead(Core e, Set<BindingId> met, Set<BindingId> into) {
         if (e instanceof Core.Read read) {
             if (applied.handed().contains(read.binding())) {
                 into.add(read.binding());
-                return;
-            }
-            if (met.add(read.binding())
-                    && meaningOf(read, symbols, newtypes) instanceof ReadMeaning.Through through) {
-                through.denotes().at().applicationsRead(through.denotes().value(), symbols,
-                        newtypes, met, into);
+            } else if (met.add(read.binding())) {
+                bindingRead(read, met, into);
             }
             return;
         }
-        Core.forEachChild(e, child -> applicationsRead(child, symbols, newtypes, met, into));
+        Core.forEachChild(e, child -> applicationsRead(child, met, into));
+    }
+
+    /**
+     * What a name stands for, followed by how it was bound and not by where it stands: a name an
+     * application handed a position stands at that position, and so does a name given that
+     * parameter's field, and which application chose the position is told by the parameter it was
+     * reached through.
+     */
+    private void bindingRead(Core.Read read, Set<BindingId> met, Set<BindingId> into) {
+        Denotation given = applied.given().get(read.binding());
+        if (given != null) {
+            given.at().applicationsRead(given.value(), met, into);
+        } else if (names.roleOf(read.binding()) instanceof BindingRole.Alias(var value)
+                && value != read) {
+            applicationsRead(value, met, into);
+        }
     }
 
     /**
@@ -858,12 +863,10 @@ public final class InputReads {
      *
      * @param values the values the split is of, each as it stands where it is read
      */
-    public long readingsASplitIsOneOf(List<Denotation> values, Symbols symbols,
-                                      DeclarationNewtypes newtypes) {
+    public long readingsASplitIsOneOf(List<Denotation> values) {
         Set<BindingId> turnedOn = new HashSet<>();
         for (Denotation each : values) {
-            each.at().applicationsRead(each.value(), symbols, newtypes, new HashSet<>(), turnedOn);
-        }
+            each.at().applicationsRead(each.value(), new HashSet<>(), turnedOn);        }
         return applied.readings() / applied.applicationsNotThrough(turnedOn);
     }
 

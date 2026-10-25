@@ -1453,8 +1453,7 @@ final class Pullback {
     /** How many readings of one condition splitting {@code splitting}, read under {@code reads},
      *  is one of. */
     private long readingsASplitIsOneOf(InputReads reads, Denotation... splitting) {
-        return reads.readingsASplitIsOneOf(List.of(splitting), read.rules().symbols(),
-                read.rules().newtypes());
+        return reads.readingsASplitIsOneOf(List.of(splitting));
     }
 
     /** {@code closure} and the values {@code occurrences} stand for, which a split into the
@@ -7822,8 +7821,7 @@ final class Pullback {
                 }
                 // A binding whose value turns on which application this is holds another value on
                 // the next, and its name would name them alike.
-                if (at.turnsOnAnApplication(name, read.rules().symbols(),
-                        read.rules().newtypes())) {
+                if (at.turnsOnAnApplication(name)) {
                     return null;
                 }
                 // What a fold filing an end of each key's numbers finds under the key is the end
