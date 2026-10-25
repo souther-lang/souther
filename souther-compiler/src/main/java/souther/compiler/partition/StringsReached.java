@@ -1,12 +1,15 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 
@@ -29,66 +32,143 @@ import java.util.function.IntPredicate;
  * worked out from: this travels in an answer, whose equality is what a later reading is compared
  * on, and a language is a machine nobody compares.
  *
- * <p>The strings of a position are a bound on its values ({@link TextExtents}), so what is
- * established here is a claim that every such number is the number of some value, and a number not
- * shown to be is not proved writable. That is not a claim that no value has it.
+ * <p>Four things are kept apart, because each is a different claim and the strings of a position
+ * ({@link TextExtents}) are a bound on its values, which proves none of the others by itself. A
+ * position's values are bounded by its strings. A value is shown to exist at a position when its
+ * strings show one. A number of it is reached only if, besides that, the rules around the
+ * position were read whole ({@link ProjectionEvidence}) and no rule on another number of the same
+ * position keeps the two apart: a length of nought and a sum of sixty-five are each a number of
+ * some string and of no one string together. And an input holds a value only where its positions
+ * that every value has do; a position inside a collection or a case need hold none.
  *
- * @param inputHoldsAValue whether every position is shown to hold a value. A row at an edge is a
- *                         whole value of the input, so a position that may hold none leaves every
- *                         edge of it unproved
- * @param unrestricted     the positions whose strings no rule restricts, which have a value of
- *                         every length, every sum of code points and every count of a class
+ * @param mandatoryPositionsHoldAValue whether every position that every value of the input has is
+ *                         shown to hold a value. A row at an edge is a whole value of the input, so
+ *                         a position such a value must have and that may hold none leaves every edge
+ *                         of the input unproved. It says nothing of the positions between which a
+ *                         rule relates, and an input they leave empty is another question's
+ * @param countsReached    the positions whose strings have a value of every sum of code points
+ *                         and every count of a class, which no rule on the position bounds at all
  * @param lengthsReached   the lengths of a position the rules leave it, where every one is the
- *                         length of some value
+ *                         length of some value and no rule on another number of the position
+ *                         bounds it
  */
-public record StringsReached(boolean inputHoldsAValue, Set<TermPath> unrestricted,
+public record StringsReached(boolean mandatoryPositionsHoldAValue, Set<TermPath> countsReached,
                              Set<NumericTerm> lengthsReached) {
 
     /** An input none of whose positions is a string. */
     public static final StringsReached NONE = new StringsReached(true, Set.of(), Set.of());
 
+    private static final String STRING = "String";
+
     public StringsReached {
-        unrestricted = Set.copyOf(unrestricted);
+        countsReached = Set.copyOf(countsReached);
         lengthsReached = Set.copyOf(lengthsReached);
     }
 
     /** What the strings at {@code positions} reach. */
     static StringsReached of(List<Position> positions) {
         boolean holds = true;
-        Set<TermPath> unrestricted = new LinkedHashSet<>();
+        Set<TermPath> counts = new LinkedHashSet<>();
         Set<NumericTerm> lengths = new LinkedHashSet<>();
         for (Position each : positions) {
             ValueSet admitted = each.admitted().approximation();
-            holds &= TextExtents.shownToHoldAValue(admitted);
-            if (TextExtents.reachesEveryCount(admitted)) {
-                unrestricted.add(each.path());
+            // A position none of whose strings is shown to be a value leaves the input none. A rule
+            // not read is another account's: it makes the position's own edges unproved and leaves
+            // a search for the rest of the row to say what it could not write.
+            if (isMandatory(each.path())) {
+                holds &= TextExtents.shownToHoldAValue(admitted) && !each.nothingExists();
+            }
+            // Only a string has a length, and the other numbers of a position that has one are
+            // numbers of its strings. What the strings reach is read off a set that is a bound, so
+            // it is claimed only of a position whose rules were read whole.
+            boolean isString = each.bounds().stream().anyMatch(b -> isLength(b.term()));
+            if (!isString || !isReadWhole(each) || each.nothingExists()) {
+                continue;
+            }
+            if (TextExtents.reachesEveryCount(admitted) && bindsNothing(each, null)) {
+                counts.add(each.path());
             }
             for (PositionBounds bounds : each.bounds()) {
-                if (isLength(bounds.term()) && reachesEveryLengthLeft(admitted, bounds)) {
+                if (isLength(bounds.term()) && bindsNothing(each, bounds)
+                        && reachesEveryLengthLeft(admitted, bounds)) {
                     lengths.add(bounds.term());
                 }
             }
         }
-        return new StringsReached(holds, unrestricted, lengths);
+        return new StringsReached(holds, counts, lengths);
+    }
+
+    /**
+     * Whether what the strings of {@code at} are and what they come to are the whole of what the
+     * rules leave it: the set of its values was read in full, or the bounds were shown to be the
+     * whole of the rules. A set that may be wider has a value in it that a rule not read refuses,
+     * and the strings of it prove no value exists.
+     */
+    private static boolean isReadWhole(Position at) {
+        return at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete
+                || at.projection() instanceof ProjectionEvidence.CertifiedExact;
+    }
+
+    /**
+     * Whether every value of the input has something at {@code path}: it is reached by fields
+     * alone. A place inside a collection holds nothing when the collection does, and a place in a
+     * case is not there in a value of another.
+     */
+    private static boolean isMandatory(TermPath path) {
+        return path.steps().stream().allMatch(step -> step instanceof TermPath.Step.Field);
+    }
+
+    /**
+     * Whether no rule of {@code at} bounds a number other than {@code own}. Where one does, a
+     * number reached when asked alone may be reached by no string that keeps the rule's number
+     * where it is held.
+     */
+    private static boolean bindsNothing(Position at, PositionBounds own) {
+        for (PositionBounds other : at.bounds()) {
+            if (other != own && !leavesEveryCount(other.rangeLeft())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@code left} rules out no whole number from nought up, which is every number a
+     * string has of any of its measures. Nought is the floor of all of them, so a range starting
+     * there says nothing a number did not already.
+     */
+    private static boolean leavesEveryCount(NumericDomain.Bounds left) {
+        if (left == null) {
+            return true;
+        }
+        // An end that is not a count is a number of something other than a string's, which this
+        // knows nothing of: it is taken as a rule.
+        if (left.max() != null) {
+            return false;
+        }
+        return left.min() == null
+                || (left.min().at() instanceof Count count
+                        && count.exactly().compareTo(ExactRatio.of(0)) <= 0);
     }
 
     /**
      * Whether every number {@code term} can take of the strings where it is read is the number of
-     * some value there. True of a term that is not a number of a string: what it reaches is
-     * another reading's.
+     * some value there. True of a term this has no say in: what it reaches is another reading's.
      */
     public boolean reaches(NumericTerm term) {
-        if (isLength(term)) {
-            return lengthsReached.contains(term)
-                    || unrestricted.contains(((NumericTerm.FromOnePosition) term).position());
-        }
-        // Any other number a string operation answers is shown only of strings nothing restricts.
-        if (term instanceof NumericTerm.CodePointClassCount
-                || term instanceof NumericTerm.CodePointValueSum
-                || (term instanceof NumericTerm.TakenOf other && isOfAString(other))) {
-            return unrestricted.contains(((NumericTerm.FromOnePosition) term).position());
-        }
-        return true;
+        return switch (term) {
+            case NumericTerm.TakenOf taken when isLength(taken) -> lengthsReached.contains(term)
+                    || countsReached.contains(taken.position());
+            // Any other number a string operation answers is shown only of strings nothing binds.
+            case NumericTerm.TakenOf taken when isOfAString(taken) ->
+                    countsReached.contains(taken.position());
+            case NumericTerm.CodePointClassCount count -> countsReached.contains(count.position());
+            case NumericTerm.CodePointValueSum sum -> countsReached.contains(sum.position());
+            case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
+                 NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> true;
+        };
     }
 
     private static boolean isLength(NumericTerm term) {
@@ -100,8 +180,6 @@ public record StringsReached(boolean inputHoldsAValue, Set<TermPath> unrestricte
     private static boolean isOfAString(NumericTerm.TakenOf taken) {
         return taken.operation().alias().equals(STRING);
     }
-
-    private static final String STRING = "String";
 
     /**
      * Whether every length the rules leave the number {@code bounds} is about is the length of a

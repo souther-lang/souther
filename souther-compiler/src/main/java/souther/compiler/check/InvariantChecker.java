@@ -3948,8 +3948,13 @@ public final class InvariantChecker {
                 }
                 return placed ? new Run.Bounding(value) : new Run.NotBounding();
             }
-            case TextExtent.NoNamedRun _, TextExtent.NotEstablished _ -> {
+            case TextExtent.NoNamedRun _ -> {
                 return new Run.NotBounding();
+            }
+            // The strings are a run, and an end of it is no value a line can be drawn at. That is
+            // not the rule drawing no line: it is what was not established about the run.
+            case TextExtent.NotEstablished _ -> {
+                return new Run.Undecided(List.of(new BlockReason.OrderedExtentEndIsNoValue()));
             }
             case TextExtent.NotBuilt it -> {
                 return new Run.Undecided(

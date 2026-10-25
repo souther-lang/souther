@@ -72,6 +72,69 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
             let f (s) = 1
             """;
 
+    /** The code points are bounded by a rule and the length is measured by the body. */
+    private static final String ZERO_SUM = """
+            module example.zerosum
+
+            data Silent = String
+                invariant List.sum(String.codePoints(value)) == 0
+
+            behavior f : (s: Silent) -> Int
+
+            let f (s) =
+                if String.length(s.value) >= 3 then 1 else 0
+            """;
+
+    /** A rule the reading cannot take in refuses every string, and the format alone leaves them all. */
+    private static final String UNREAD_REFUSES_ALL = """
+            module example.unread
+
+            data Nothing = String
+                invariant String.reverse(value) /= String.reverse(value)
+
+            behavior f : (s: Nothing) -> Int
+
+            let f (s) =
+                if String.length(s.value) >= 3 then 1 else 0
+            """;
+
+    /** No value of the element exists, and the empty list is a value of the input all the same. */
+    private static final String NO_ELEMENT_EXISTS = """
+            module example.noelement
+
+            data Never = String
+                invariant String.matches("a\\\\x{301}.*", value)
+
+            data Holder = { items: List<Never>, n: Int }
+
+            behavior f : (h: Holder) -> Int
+
+            let f (h) =
+                if h.n >= 10 then 1 else 0
+            """;
+
+    @Test
+    void aLengthIsNotProvedWhereARuleBoundsTheCodePointsApart() {
+        List<BorderAssessment.Point> points = owedPoints(ZERO_SUM, "example.zerosum");
+        assertTrue(onNumberNamed(points, "3").findAny().isPresent(),
+                "the body draws a line on the length: " + labels(points));
+        assertFalse(provedAny(onNumberNamed(points, "3").toList()),
+                "a string of three code points has a sum of more than nought");
+    }
+
+    @Test
+    void nothingIsProvedOfAPositionWhoseRulesWereNotReadInFull() {
+        List<BorderAssessment.Point> points = owedPoints(UNREAD_REFUSES_ALL, "example.unread");
+        assertFalse(provedAny(points), "a rule not read may refuse every string the format leaves");
+    }
+
+    @Test
+    void aPositionNoRowNeedsToHoldAValueIsNotWhatKeepsAnotherFromTheProof() {
+        List<BorderAssessment.Point> points = owedPoints(NO_ELEMENT_EXISTS, "example.noelement");
+        assertFalse(points.isEmpty(), "the body draws a line on n");
+        assertTrue(provedAny(points), "the empty list is a value, so a row at the edge is written");
+    }
+
     @Test
     void aStringNoRuleIsWrittenAboutReachesEveryLength() {
         List<BorderAssessment.Point> points = owedPoints(ANY, "example.any");
@@ -95,8 +158,11 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
 
     @Test
     void aRunWhoseEndIsNotAValueStaysAmongTheRulesThatDrewNoLine() {
-        assertTrue(human(MARKED).contains("no line: invariant Marked"),
-                "the rule restricts the position and places no line, and that is said");
+        String report = human(MARKED);
+        assertFalse(report.contains("no line: invariant Marked"),
+                "the strings are a run, so this is not a rule that draws no line: " + report);
+        assertTrue(report.contains("no line can be drawn on here"),
+                "what was not established about the run is said: " + report);
     }
 
     private static String human(String model) {
@@ -105,6 +171,17 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
         compilation.answerEverything();
         return souther.compiler.report.AdequacyReport.of(compilation).human(
                 souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /** The points a line on a number whose name holds {@code fragment} is owed. A rule on one
+     *  number draws lines of its own, and those are not what the body asked about. */
+    private static java.util.stream.Stream<BorderAssessment.Point> onNumberNamed(
+            List<BorderAssessment.Point> points, String fragment) {
+        return points.stream().filter(p -> String.valueOf(p.asked()).contains(fragment));
+    }
+
+    private static List<String> labels(List<BorderAssessment.Point> points) {
+        return points.stream().map(p -> String.valueOf(p.asked())).toList();
     }
 
     private static boolean provedAny(List<BorderAssessment.Point> points) {

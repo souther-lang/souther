@@ -314,7 +314,7 @@ public final class Partitions {
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return strings.inputHoldsAValue() && strings.reaches(term)
+            return strings.mandatoryPositionsHoldAValue() && strings.reaches(term)
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.
