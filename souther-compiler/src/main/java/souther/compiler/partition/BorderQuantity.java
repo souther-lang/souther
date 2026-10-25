@@ -1073,7 +1073,8 @@ public sealed interface BorderQuantity
                             : "in " + counted.admitted());
                 }
                 case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> stated.key();
             };
@@ -1086,8 +1087,9 @@ public sealed interface BorderQuantity
                 // A count is written as a comparison, which binds tighter than a join.
                 case Proposition.SoManyHold _, Proposition.Always _, Proposition.Some _,
                      Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> said(part);
             };
         }

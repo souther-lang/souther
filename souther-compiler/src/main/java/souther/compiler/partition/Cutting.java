@@ -1414,8 +1414,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
+                 Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
@@ -1664,10 +1665,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.WhereItAnswers where ->
                     statesNoRelation(where.answers()) && statesNoRelation(where.states());
             // Settled, a relation, two values being one, or something nobody read: each is read
-            // as what it is ({@link #readOnce}).
+            // as what it is ({@link #readOnce}). And which strings a string is one of, which is
+            // read where the rules about a position's strings are, and is no line of numbers.
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
                  Proposition.Unread _, Proposition.LastToHold _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _ -> false;
+                 Proposition.SomeReachable _, Proposition.InTheStrings _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
