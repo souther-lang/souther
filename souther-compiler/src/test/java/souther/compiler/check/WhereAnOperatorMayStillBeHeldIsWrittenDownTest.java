@@ -380,6 +380,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),
+            new Held("souther.compiler.check.Clauses.ReadsOfAClause.conjunctsOf",
+                    "asks whether a clause is a conjunction of comparisons and nothing else, and"
+                            + " which relation each states, so that a clause stating anything"
+                            + " besides is unread rather than read as the part of it that is a"
+                            + " comparison"),
+            new Held("souther.compiler.check.Clauses.ReadsOfAClause.arithmetic",
+                    "asks whether a side of such a comparison is whole numbers added, taken away"
+                            + " and scaled by written numbers, the only arithmetic a clause is"
+                            + " published as exactly"),
 
             // Which operand runs when, asked of the operator itself rather than of what it
             // composes: the two are answered by the same two operators and are not one question.

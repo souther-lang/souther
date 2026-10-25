@@ -7,7 +7,9 @@ import souther.compiler.check.ConstraintState;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
@@ -432,6 +434,21 @@ final class ReadQuantities implements Quantities {
         return fixed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
                         assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
+    }
+
+    /**
+     * This reading with the rules {@code parts} name left out of what the declarations say, and
+     * what a caller fixed or took in kept.
+     *
+     * <p>A reading of its own, with nothing shared with this one that was worked out from the rules:
+     * the contexts and what was answered under them are made again from the rules that are left.
+     */
+    ReadQuantities leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+        Map<TermPath, OpenedRules> rest = new LinkedHashMap<>();
+        byRoot.forEach((root, opened) -> rest.put(root,
+                new OpenedRules(PlacedRules.leavingOut(opened.rules(), parts), opened.opening())));
+        return new ReadQuantities(rest, roots, byPath, cases, typeAt, fixed, ruleReading, assumed,
+                heldAgainst, new Contexts(), null, null, new ConcurrentHashMap<>());
     }
 
     /**

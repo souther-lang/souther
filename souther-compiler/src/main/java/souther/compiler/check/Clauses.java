@@ -2,13 +2,18 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -395,6 +400,18 @@ final class Clauses {
         return fieldsReadBy(clause, named).reads();
     }
 
+    /**
+     * Whether {@code clause} states exactly comparisons of one sum of the places it reads
+     * ({@link ClauseAffineMeaning}), named as the rules of the value name them.
+     */
+    ClauseAffineMeaning affineMeaning(Core clause, TypeSymbol.AtModule named) {
+        Map<BindingId, String> declared = new HashMap<>();
+        bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
+        return new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
+                new HashMap<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>())
+                .exactly(clause);
+    }
+
     /** Both answers about what {@code clause} reads, from one walk of it. */
     private FieldsRead fieldsReadBy(Core clause, TypeSymbol.AtModule named) {
         return readsFields.computeIfAbsent(clause, read -> {
@@ -526,12 +543,156 @@ final class Clauses {
 
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
+            reads.add(new ClauseRead(keyOf(at), kind, run));
+        }
+
+        /** What the rules of the value call the place {@code at}. */
+        private RuleKey keyOf(Location at) {
             List<String> steps = new ArrayList<>();
             if (!wraps) {
                 steps.add(fields.get(at.root()));
             }
             steps.addAll(at.path());
-            reads.add(new ClauseRead(new RuleKey(steps), kind, run));
+            return new RuleKey(steps);
+        }
+
+        /**
+         * The clause as the comparisons of one sum it comes to exactly, or {@link
+         * ClauseAffineMeaning#UNREAD} where any part of it is something else.
+         *
+         * <p>Every part is accounted for: a conjunction of comparisons whose sides are whole numbers
+         * added, taken away and scaled by written numbers, over places of the value. A part that is
+         * a choice, a denial, a call, a binding or a product of two places is no comparison of that
+         * kind, and the clause holds back more than the others say.
+         */
+        ClauseAffineMeaning exactly(Core clause) {
+            List<ClauseAffineMeaning.Comparison> conjuncts = new ArrayList<>();
+            if (!conjunctsOf(clause, conjuncts) || conjuncts.isEmpty()) {
+                return ClauseAffineMeaning.UNREAD;
+            }
+            Map<RuleKey, ExactRatio> first = conjuncts.getFirst().form().coefs();
+            for (ClauseAffineMeaning.Comparison each : conjuncts) {
+                if (!weighsAlike(first, each.form().coefs())) {
+                    return ClauseAffineMeaning.UNREAD;
+                }
+            }
+            return new ClauseAffineMeaning.Exact(conjuncts);
+        }
+
+        private boolean conjunctsOf(Core e, List<ClauseAffineMeaning.Comparison> out) {
+            if (!(Core.withoutStanding(e) instanceof Core.Binary b)) {
+                return false;
+            }
+            if (b.op() == BinOp.AND) {
+                return conjunctsOf(b.left(), out) && conjunctsOf(b.right(), out);
+            }
+            Rel rel = switch (b.op()) {
+                case EQ -> Rel.EQ;
+                case NE -> Rel.NE;
+                case LT -> Rel.LT;
+                case LE -> Rel.LE;
+                case GT -> Rel.GT;
+                case GE -> Rel.GE;
+                default -> null;
+            };
+            if (rel == null) {
+                return false;
+            }
+            LinearForm<RuleKey> left = affineOf(b.left());
+            LinearForm<RuleKey> right = affineOf(b.right());
+            LinearForm<RuleKey> between = left == null || right == null ? null
+                    : left.minus(right).orNull();
+            if (between == null || between.coefs().isEmpty()) {
+                return false;
+            }
+            ClauseAffineMeaning.Comparison said = canonical(between, rel);
+            if (said == null) {
+                return false;
+            }
+            out.add(said);
+            return true;
+        }
+
+        /**
+         * The comparison {@code form rel 0} with the first place by name weighing one, so that
+         * {@code 100 <= a + b} and {@code 2 * a + 2 * b >= 200} are the one comparison
+         * {@code a + b - 100 >= 0}. Null where the exact arithmetic cannot hold it.
+         */
+        private static ClauseAffineMeaning.Comparison canonical(LinearForm<RuleKey> form, Rel rel) {
+            RuleKey first = form.coefs().keySet().stream()
+                    .min(Comparator.comparing(key -> String.join(".", key.steps()))).orElseThrow();
+            ExactRatio weight = form.coefs().get(first);
+            LinearForm<RuleKey> scaled = form.dividedBy(weight.abs()).orNull();
+            if (scaled == null) {
+                return null;
+            }
+            return weight.signum() < 0
+                    ? new ClauseAffineMeaning.Comparison(scaled.negate(), turnedAround(rel))
+                    : new ClauseAffineMeaning.Comparison(scaled, rel);
+        }
+
+        /** The relation that holds of the negation of a value where {@code rel} holds of it. */
+        private static Rel turnedAround(Rel rel) {
+            return switch (rel) {
+                case GE -> Rel.LE;
+                case GT -> Rel.LT;
+                case LE -> Rel.GE;
+                case LT -> Rel.GT;
+                case EQ, NE -> rel;
+            };
+        }
+
+        /** {@code e} as whole numbers added and scaled over places, or null where it is not. */
+        private LinearForm<RuleKey> affineOf(Core e) {
+            Core bare = Core.withoutStanding(e);
+            if (bare.type() != Type.INT) {
+                return null;
+            }
+            return switch (bare) {
+                case Core.Int number -> LinearForm.constant(ExactRatio.of(number.value()));
+                case Core.Neg negated -> {
+                    LinearForm<RuleKey> operand = affineOf(negated.operand());
+                    yield operand == null ? null : operand.negate();
+                }
+                case Core.Binary arithmetic -> arithmetic(arithmetic);
+                default -> {
+                    Location at = locationOf(bare);
+                    yield at == null ? null : LinearForm.atom(keyOf(at));
+                }
+            };
+        }
+
+        private LinearForm<RuleKey> arithmetic(Core.Binary b) {
+            LinearForm<RuleKey> left = affineOf(b.left());
+            LinearForm<RuleKey> right = affineOf(b.right());
+            if (left == null || right == null) {
+                return null;
+            }
+            return switch (b.op()) {
+                case ADD -> left.plus(right).orNull();
+                case SUB -> left.minus(right).orNull();
+                case MUL -> left.coefs().isEmpty() ? right.times(left.constant()).orNull()
+                        : right.coefs().isEmpty() ? left.times(right.constant()).orNull() : null;
+                default -> null;
+            };
+        }
+
+        /** Whether {@code other} weighs the same places as {@code form} does, each by the same
+         *  number of times as the others. */
+        private static boolean weighsAlike(Map<RuleKey, ExactRatio> form,
+                                           Map<RuleKey, ExactRatio> other) {
+            if (!form.keySet().equals(other.keySet())) {
+                return false;
+            }
+            ExactRatio factor = null;
+            for (Map.Entry<RuleKey, ExactRatio> each : form.entrySet()) {
+                ExactRatio here = other.get(each.getKey()).dividedBy(each.getValue()).orNull();
+                if (here == null || here.isZero() || (factor != null && factor.compareTo(here) != 0)) {
+                    return false;
+                }
+                factor = here;
+            }
+            return true;
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */

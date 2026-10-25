@@ -61,15 +61,18 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
      *     ones reached through what the declaration spreads
      * @param reads the places of the declaration's value its form reads, and what it reads at each
      * @param parts the rules its author wrote it as, and how they are joined
+     * @param affine whether it states exactly comparisons of one sum of the places it reads, and
+     *     which; a fact about the clause's whole meaning, never a bound it implies
      */
     record Stated(Clause.Ref ref, TermMeaning states, Set<String> fieldsRead,
-                  Set<ClauseRead> reads, Parts parts)
+                  Set<ClauseRead> reads, Parts parts, ClauseAffineMeaning affine)
             implements ClauseMeaning {
 
         public Stated {
             Objects.requireNonNull(ref, "a clause that states something is some clause");
             Objects.requireNonNull(states, "a clause that has a form states what the form says");
             Objects.requireNonNull(parts, "a clause is written as some rules");
+            Objects.requireNonNull(affine, "a clause is exactly some comparisons or is not");
             fieldsRead = Set.copyOf(fieldsRead);
             reads = Set.copyOf(reads);
             if (fieldsRead.isEmpty() != reads.isEmpty()) {
@@ -116,6 +119,18 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
             public One {
                 Objects.requireNonNull(id, "a rule an author wrote is some part of a clause");
             }
+        }
+
+        /** The name of every rule the clause was written as, in the order it was written. */
+        default List<PartId<RuleRef.Invariant>> ids() {
+            return switch (this) {
+                case One it -> List.of(it.id());
+                case Both it -> {
+                    List<PartId<RuleRef.Invariant>> out = new ArrayList<>(it.left().ids());
+                    out.addAll(it.right().ids());
+                    yield List.copyOf(out);
+                }
+            };
         }
 
         /**
