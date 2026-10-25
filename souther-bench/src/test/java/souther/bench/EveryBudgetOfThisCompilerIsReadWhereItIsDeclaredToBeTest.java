@@ -853,6 +853,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;)V",
                     "looks for no more assignments than there is room for among the ways looked"
                             + " along, and says that figure when it leaves some"),
+            Map.entry("souther.compiler.partition.Cutting#linesOnOneQuantityPastTheFigure("
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/inputs/InputReading;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/coverage/Arrivals;)"
+                            + "Lsouther/compiler/partition/Cutting$Read;",
+                    "counts the lines one quantity is cut by against the readings figure, and"
+                            + " says that figure where a statement's lines are not worked out"),
             Map.entry("souther.compiler.partition.Cutting#asLines("
                             + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"
