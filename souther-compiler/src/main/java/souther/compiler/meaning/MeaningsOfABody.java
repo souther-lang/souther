@@ -4,6 +4,7 @@ import souther.compiler.check.ClauseName;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -30,15 +31,20 @@ import java.util.Set;
  *
  * @param stated    what is stated at each site read to one statement, and how
  * @param ambiguous the sites whose copies state different things
+ * @param piecesAttempted the pieces of a string of the input that the body builds a newtype of,
+ *                  in the order the walk met them
  */
-public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
+public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
+                              Set<PieceDemand> piecesAttempted) {
 
     /** A body nothing was read of. */
-    public static final MeaningsOfABody NONE = new MeaningsOfABody(Map.of(), Set.of());
+    public static final MeaningsOfABody NONE =
+            new MeaningsOfABody(Map.of(), Set.of(), Set.of());
 
     public MeaningsOfABody {
         stated = Map.copyOf(stated);
         ambiguous = Set.copyOf(ambiguous);
+        piecesAttempted = Collections.unmodifiableSet(new LinkedHashSet<>(piecesAttempted));
     }
 
     /**
@@ -221,6 +227,12 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
 
         private final Map<Site, Meaning> stated = new LinkedHashMap<>();
         private final Set<Site> ambiguous = new HashSet<>();
+        private final Set<PieceDemand> piecesAttempted = new LinkedHashSet<>();
+
+        /** {@code demands}, met where a construction is attempted of the pieces of a string. */
+        public void metAsPieces(List<PieceDemand> demands) {
+            piecesAttempted.addAll(demands);
+        }
 
         /** {@code meaning}, met at {@code site}. */
         public void met(Site site, Meaning meaning) {
@@ -241,6 +253,7 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
          * site does. A site with copies on some application is still a site with copies.
          */
         public void metOnEachApplication(List<MeaningsOfABody> each) {
+            each.forEach(one -> piecesAttempted.addAll(one.piecesAttempted()));
             Set<Site> sites = new LinkedHashSet<>();
             each.forEach(one -> {
                 sites.addAll(one.stated().keySet());
@@ -260,7 +273,7 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
 
         /** What was filed. */
         public MeaningsOfABody filed() {
-            return new MeaningsOfABody(stated, ambiguous);
+            return new MeaningsOfABody(stated, ambiguous, piecesAttempted);
         }
     }
 

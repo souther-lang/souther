@@ -7,6 +7,7 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
+import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.ast.Hir;
@@ -779,6 +780,10 @@ public final class Generator {
                              WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                             // The strings past this many pieces were never offered, so what the
+                             // search came to is about the strings it tried.
+                             PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                             STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
                              // The divisors past this one were never asked for, so what the search
@@ -2151,6 +2156,15 @@ public final class Generator {
                             break;
                         }
                     }
+                    // And at the pieces of the strings the rows seen going through it held, where
+                    // the bodies part a string and go on to attempt a construction of each piece.
+                    // Before the rows below are moved, because the runs are one budget and these
+                    // are read off the body: a few strings, each one change from a row seen,
+                    // where moving a row asks for as many as composing a value takes.
+                    for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
+                        seen = demandedFrom(arm.seenThrough().get(at), axes, purposes, looking,
+                                check, answers, read.piecesAttempted());
+                    }
                     // And from the rows seen going through it, which is where a run through the
                     // arm is known to start whatever a reading of the way in could state — an arm
                     // decided by a relation between inputs, which no class of either holds a side
@@ -2193,6 +2207,11 @@ public final class Generator {
                             && at < one.answeredOn().size(); at++) {
                         seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
                                 answers);
+                    }
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
+                        seen = demandedFrom(one.answeredOn().get(at), axes, purposes, looking,
+                                check, answers, read.piecesAttempted());
                     }
                     yield seen;
                 }
@@ -2290,6 +2309,49 @@ public final class Generator {
     private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
                                        List<Purpose> purposes, ReplacementWitness looking,
                                        CandidateCheck check, List<StoodInAnswer> answers) {
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, _) -> NearbyValues.of(value, type, reading));
+    }
+
+    /** The values a candidate puts at the position of one parameter, given the value the run had
+     *  there. */
+    @FunctionalInterface
+    private interface Beside {
+
+        Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading,
+                                   String parameter);
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found beside the inputs
+     * of a row a run was seen going through, at the strings it held where a body parts one and
+     * builds a newtype of its pieces ({@link PieceDemand}).
+     *
+     * <p>Each such string is put as one whose pieces are all ones the newtype is written to
+     * admit, which the position's own rules are met with: a rewrite of which pieces are kept
+     * answers differently only where a piece it keeps and the body does not, or the other way, is
+     * one the construction goes on with. No class of the input holds that, since what the
+     * construction admits is stated of a value made from the string. Which candidate answers, and
+     * whether it answers differently, is what running it says.
+     */
+    private static GeneratedRow demandedFrom(List<ObservedValue> seen,
+                                             MeasuredInput.MeasuredAxes axes,
+                                             List<Purpose> purposes, ReplacementWitness looking,
+                                             CandidateCheck check, List<StoodInAnswer> answers,
+                                             List<PieceDemand> demands) {
+        if (demands.isEmpty()) {
+            return null;
+        }
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, parameter) ->
+                        NearbyValues.demanded(value, type, reading, parameter, demands, seen,
+                                looking::composingStoppedAt));
+    }
+
+    private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
+                                       List<Purpose> purposes, ReplacementWitness looking,
+                                       CandidateCheck check, List<StoodInAnswer> answers,
+                                       Beside how) {
         MeasuredInput subject = axes.subject();
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
@@ -2303,8 +2365,9 @@ public final class Generator {
             kept.add(value);
         }
         for (int moved = 0; moved < seen.size(); moved++) {
-            Iterator<ObservedValue> nearer = NearbyValues.of(seen.get(moved),
-                    subject.types().get(moved), subject.ruleReading());
+            Iterator<ObservedValue> nearer = how.of(seen.get(moved),
+                    subject.types().get(moved), subject.ruleReading(),
+                    subject.parameters().get(moved));
             while (nearer.hasNext()) {
                 ObservedValue near = nearer.next();
                 if (!(ObservedFixtures.of(near, subject.types().get(moved),
@@ -9555,6 +9618,11 @@ public final class Generator {
                 case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
             }
             return null;
+        }
+
+        /** Composing the rows the search looked through stopped at {@code figure}. */
+        void composingStoppedAt(Figure figure) {
+            composingStopped(List.of(figure));
         }
 
         /** The inputs of the row a composing took, or null ({@link #tookFrom}). */

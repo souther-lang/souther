@@ -88,6 +88,16 @@ public enum WorkFigure {
     RULE_SETS_IN_ALL("how much building the machines for the sets each rule of a position admits"
             + " may make and look at"),
 
+    /** States one machine for the strings that part into pieces of a type may have, and what
+     *  making it may look at. */
+    STRINGS_PARTED_ONE_MACHINE("how many states one machine for the strings that part into"
+            + " pieces of a type may have, and how much making it may look at"),
+
+    /** What building the machines for the strings that part into pieces of a type may make and
+     *  look at. */
+    STRINGS_PARTED_IN_ALL("how much building the machines for the strings that part into pieces"
+            + " of a type may make and look at"),
+
     /** How many steps the run of one row may take. */
     EVALUATION_STEPS("how many steps the run of one row may take"),
 

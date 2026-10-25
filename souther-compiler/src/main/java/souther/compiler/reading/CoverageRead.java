@@ -19,6 +19,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.meaning.PieceDemand;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.types.ConstructOccurrence;
 
@@ -242,6 +243,11 @@ public final class CoverageRead {
      *                       each the largest such part on its way down, in the order the walk met
      *                       them. Read on the same walk as the ways in, so the inputs said to reach
      *                       one are the inputs every other reading here says reach it
+     * @param piecesAttempted the strings of the input the bodies part and build a newtype of the
+     *                       pieces of, each with where it stands, what it is parted at and the
+     *                       type attempted. Read on the same walk as the conditions, so a string
+     *                       reached through a name, a closure or an arm is the one the conditions
+     *                       say it is
      */
     public record Read(List<Interaction> interactions,
                        List<WhyNotJoined> notJoined,
@@ -250,9 +256,11 @@ public final class CoverageRead {
                        List<WayIn> answeredBy,
                        Map<WayIn, Set<WrittenWithout>> saidInPart,
                        java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock,
-                       List<NothingAnsweredHere> answersNothing) {
+                       List<NothingAnsweredHere> answersNothing,
+                       List<PieceDemand> piecesAttempted) {
 
         public Read {
+            piecesAttempted = List.copyOf(piecesAttempted);
             interactions = List.copyOf(interactions);
             notJoined = List.copyOf(notJoined);
             taken = List.copyOf(taken);
@@ -374,7 +382,7 @@ public final class CoverageRead {
         return new Read(found, meetings.notJoined(), arms.found(behavior),
                 List.copyOf(walked.taken),
                 List.copyOf(walked.answeredBy), walked.saidInPart, arms.restOfTheBlock(behavior),
-                walked.answersNothing);
+                walked.answersNothing, List.copyOf(meanings.piecesAttempted()));
     }
 
     /**
