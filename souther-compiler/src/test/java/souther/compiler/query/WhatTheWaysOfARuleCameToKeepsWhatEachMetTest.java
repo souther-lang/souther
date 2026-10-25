@@ -160,6 +160,29 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
         }
     }
 
+    /**
+     * What each way went without is what the rule's answer went without, the row refused
+     * included, whichever way was walked first.
+     */
+    @Test
+    void whatARowRefusedWentWithoutIsSaidBesideTheWayThatStoppedShort() {
+        Generator.BoundaryAttempt refusedWithout = new Generator.BoundaryAttempt.Built(
+                new Generator.GeneratedRow(
+                        new Generator.Purpose.ForAPoint("a rule of the decision"), List.of()),
+                CompositionAccount.ofTheInput(List.of(gap(0))), true);
+        Generator.BoundaryAttempt stopped = new Generator.BoundaryAttempt.Stopped(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.wordFor(
+                                Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))),
+                CompositionShortfall.of(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)),
+                CompositionAccount.ofTheInput(List.of(gap(1))));
+
+        assertEquals(List.of(gap(0), gap(1)),
+                cameTo(List.of(refusedWithout, stopped)).account().onTheWay());
+        assertEquals(cameTo(List.of(refusedWithout, stopped)),
+                cameTo(List.of(stopped, refusedWithout)));
+    }
+
     @Test
     void aWayThatLookedAtEverythingDoesNotHideARowRefused() {
         RuleSettlement settled = cameTo(List.of(refused(), new Generator.BoundaryAttempt.Unresolved(

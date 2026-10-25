@@ -3283,6 +3283,10 @@ public final class Adequacy {
                     case Generator.BoundaryAttempt.Built built -> {
                         RuleSettlement here = run.apply(built);
                         if (built.refused()) {
+                            // What it was composed without is what the rule is arrived at without
+                            // if what the ways left unlooked at is the answer in its place.
+                            without = without == null ? built.unrepresented()
+                                    : without.alongside(built.unrepresented());
                             refusedSettlement = refusedSettlement == null
                                     || establishes(here) > establishes(refusedSettlement)
                                     ? here : refusedSettlement;
