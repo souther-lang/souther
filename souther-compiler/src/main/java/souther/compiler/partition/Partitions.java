@@ -36,6 +36,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.RuleAddress;
@@ -1941,6 +1942,63 @@ public final class Partitions {
     }
 
     /**
+     * What {@code within} leaves the number of each field of an element of {@code container}, for
+     * the fields that hold one and are left less than their type holds.
+     *
+     * <p>Asked of the fields that hold a number and of no other: the region answers for numbers,
+     * and a field of text or of a container has none to be asked of. And of the fields of the
+     * element itself — a field of a record in the element is the record's own, which the ends
+     * are not read for.
+     *
+     * @param record    the type of the element
+     * @param container the container the way bounds the elements of, which a parameter roots
+     */
+    static Map<String, NumericDomain.Bounds> leftTheFieldsOfAnElement(
+            TypeSymbol.AtModule record, TermPath container, SearchRegion within,
+            RuleReadingContext reading) {
+        RuleReadingSource ruleSource = reading.source();
+        if (!(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums())
+                instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))) {
+            return Map.of();
+        }
+        Map<String, NumericDomain.Bounds> held = new LinkedHashMap<>();
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            TypeView view = TypeView.of(field.getValue(), ruleSource.inners(),
+                    ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+            if (DeclaredBounds.of(view, reading) != null
+                    && within.projectionOf(
+                            new NumericTerm.ValueOf(container.element().then(field.getKey())))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
+                    && !bounds.saysNothing()) {
+                held.put(field.getKey(), bounds);
+            }
+        }
+        return held;
+    }
+
+    /**
+     * A record whose fields stand inside {@code held} as well as inside what its rules leave them,
+     * each chosen as {@link #composed} chooses one: in the order the record declares them, against
+     * the rules with the fields before it settled into them.
+     *
+     * <p>For a record that is an element of a container composed under what every element is to
+     * meet: the bounds are what the way leaves a number of each element. They narrow the field as
+     * the record's own rules do, so a rule relating two fields is asked of the second with the
+     * first in it — a field chosen inside its bounds alone would be chosen against {@code a + b}
+     * with {@code a} open, and would be written where the record's rules refuse it.
+     *
+     * @param held by field name, what the way leaves that field's number
+     */
+    static Proposals composedHeldTo(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                                    RuleReadingContext reading,
+                                    Map<String, NumericDomain.Bounds> held) {
+        return written(record,
+                fieldsOf(record, rulesOn, reading, Set.of(), Map.of(), RulesAround.NONE, held),
+                reading.source());
+    }
+
+    /**
      * Values of {@code record} no two of which are alike, up to {@code many} of them, or none
      * where no field of it has two values to differ at.
      *
@@ -2080,6 +2138,23 @@ public final class Partitions {
     static FieldsChosen fieldsOf(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                                  RuleReadingContext reading, Set<TypeSymbol> expanding,
                                  Map<String, FixtureTemplate> given, RulesAround around) {
+        return fieldsOf(record, rulesOn, reading, expanding, given, around, Map.of());
+    }
+
+    /**
+     * The same, with some fields held to where a search leaves them besides.
+     *
+     * <p>A field is chosen inside what its record's rules leave it, what the rules around it leave
+     * it, and {@code held}: the three are met, and the field is chosen in what they leave
+     * together.
+     *
+     * @param held by field name, the ends a search holds that field's number to, which no rule of
+     *             the declarations says
+     */
+    static FieldsChosen fieldsOf(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                                 RuleReadingContext reading, Set<TypeSymbol> expanding,
+                                 Map<String, FixtureTemplate> given, RulesAround around,
+                                 Map<String, NumericDomain.Bounds> held) {
         RuleReadingSource ruleSource = reading.source();
         // What the record is made of, read where a position's reading is made. A walk from the
         // declaration to its fields is that same reading taken a second time, and the two part
@@ -2119,7 +2194,8 @@ public final class Partitions {
         // to where they are under the field.
         PlacesTheRulesRead read = PlacesTheRulesRead.of(Type.ref(rulesOn), ruleSource);
         SequencedMap<String, FixtureTemplate> chosen = new LinkedHashMap<>();
-        if (!fields.keySet().containsAll(given.keySet())) {
+        if (!fields.keySet().containsAll(given.keySet())
+                || !fields.keySet().containsAll(held.keySet())) {
             return FieldsChosen.NONE;
         }
         CompositionShortfall met = CompositionShortfall.NONE;
@@ -2127,7 +2203,8 @@ public final class Partitions {
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
                 FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()))
-                        .meet(within.at(field.getKey()));
+                        .meet(within.at(field.getKey()))
+                        .meet(heldTo(held.get(field.getKey())));
                 // A field the rules leave no value at leaves the record none, which is settled
                 // here and said as itself: nothing was built and nothing was tried.
                 if (limits.leavesNothing()) {
@@ -2162,6 +2239,14 @@ public final class Partitions {
             left = rules.composing(FieldDomains.atValues(within.settledUnder(within.here())));
         }
         return new FieldsChosen(chosen, met);
+    }
+
+    /** What a search leaves a field besides the rules, as the limits a field is chosen in: none
+     *  where it holds the field to nothing. */
+    private static FieldDomains.ConstructionLimits heldTo(NumericDomain.Bounds bounds) {
+        return bounds == null ? FieldDomains.ConstructionLimits.NONE
+                : FieldDomains.ConstructionLimits.of(bounds, null, null,
+                        FieldDomains.ConstructionLimits.NONE.admits(), HeldClass.NONE);
     }
 
     /**

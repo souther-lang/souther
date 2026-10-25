@@ -111,7 +111,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
             let fee (days, policy) = {
                 let accrued = days * policy.rate.value
 
-                if accrued > policy.cap.value then policy.cap.value else accrued
+                if accrued >= policy.cap.value then policy.cap.value else accrued
             }
 
             example fee

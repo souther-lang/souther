@@ -44,6 +44,9 @@ public final class CasesLeft {
     /** The atoms, each once, in the one order {@link #compareAtoms} sets. */
     private final List<Refinement> atoms;
 
+    /** The hash of {@link #atoms}, or nought before it was worked out. */
+    private int hash;
+
     private CasesLeft(List<Refinement> atoms) {
         // One atom is already each once, in order and of one kind, and it is what nearly every
         // caller hands over: a reading asks whether the case a root was opened under holds for
@@ -207,9 +210,23 @@ public final class CasesLeft {
         return other instanceof CasesLeft that && atoms.equals(that.atoms);
     }
 
+    /**
+     * The hash of the atoms, which reaches each atom's type name, worked out the first time it is
+     * asked. A position's cases are the key of the sets and maps the walk over a row keeps, so one
+     * instance is hashed many times.
+     *
+     * <p>One word, so a thread that sees it sees all of it. Nought stands for not worked out, which
+     * leaves a set that hashes to nought worked out each time it is asked: the same answer without
+     * the saving.
+     */
     @Override
     public int hashCode() {
-        return atoms.hashCode();
+        int had = hash;
+        if (had == 0) {
+            had = atoms.hashCode();
+            hash = had;
+        }
+        return had;
     }
 
     @Override

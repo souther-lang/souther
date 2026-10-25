@@ -224,6 +224,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "inReserve",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/List;)Ljava/util/List;",
                     THE_POSITION),
+            row(PARTITION + "Partitions", "leftTheFieldsOfAnElement",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + INPUTS + "TermPath;L"
+                            + INPUTS + "SearchRegion;" + CONTEXT + ")Ljava/util/Map;",
+                    THE_POSITION),
             row(PARTITION + "Partitions", "measureAt",
                     "(Ljava/util/List;L" + PARTITION + "PositionMeasurements;L" + PARTITION
                             + "Axis;L" + INPUTS + "NumericTerm$FromOnePosition;Ljava/util/List;"
@@ -249,8 +253,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "holdingExactly",
-                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;" + CONTEXT + ")"
-                            + REALIZATION,
+                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;L" + PARTITION
+                            + "TermRealizations$ElementsHeldTo;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "namesOf",
                     "(" + TYPE + SOURCE + ")L" + PARTITION + "WornNames;", THE_POSITION),
