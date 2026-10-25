@@ -95,6 +95,82 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
                 unansweredBelowTheInput(record("c == a * b") + BEHAVIOR));
     }
 
+    /**
+     * The places are free only where the number cannot come to what the defined place refuses.
+     *
+     * <p>{@code c == a * b} beside {@code c == 1} leaves no {@code a} of nought, so the rule that
+     * defines {@code c} restricts both factors together with the one that holds it. Taken in because
+     * the rule is a definition, the question stood answered while the pair was not free.
+     */
+    @Test
+    void aDefinitionBesideARuleHoldingTheDefinedPlaceLeavesItsFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data N = { a: Int, b: Int, c: Int }
+                    invariant defined = c == a * b
+                    invariant pinned = c == 1
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a of nought has no b to make c one");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
+    @Test
+    void aDefinitionOfAPlaceThatAdmitsLessThanTheNumberCanComeToLeavesItsFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data Small = Int
+                    invariant value >= 0 && value <= 10
+
+                data N = { a: Int, b: Int, c: Small }
+                    invariant c.value == a * b
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a product past ten has no c beside it");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
+    @Test
+    void aDefinitionOfAPlaceThatAdmitsEverythingTheNumberCanComeToLeavesItsFactorsFree() {
+        assertEquals(Map.of("n.a", List.of(), "n.b", List.of(), "n.c", List.of()),
+                unansweredBelowTheInput("""
+                        module demo
+
+                        data Count = Int
+                            invariant value >= 0
+
+                        data N = { a: Count, b: Count, c: Count }
+                            invariant c.value == a.value * b.value
+                        """ + BEHAVIOR));
+    }
+
+    /**
+     * A number that is made of a place that another number defines is known once that one is.
+     *
+     * <p>{@code d == c * b} with {@code c == a * b}: settling {@code a} and {@code b} settles
+     * {@code c}, and only then are the places {@code d} is made of at numbers.
+     */
+    @Test
+    void aNumberMadeOfADefinedPlaceStandsAtWhatItComesToOnceThatPlaceDoes() {
+        FieldDomains read = fieldsOf("""
+                module demo
+
+                data N = { a: Int, b: Int, c: Int, d: Int }
+                    invariant c == a * b
+                    invariant d == c * b
+                """);
+        Map<RuleKey, Count> fixed = new LinkedHashMap<>();
+        fixed.put(RuleKey.of("a"), new Count(new BigDecimal(3)));
+        fixed.put(RuleKey.of("b"), new Count(new BigDecimal(4)));
+
+        FieldDomains.Composing composing = read.composing(FieldDomains.atValues(fixed));
+
+        assertEquals(0, new BigDecimal(12).compareTo(pointOf(composing.at(RuleKey.of("c")).values())));
+        assertEquals(0, new BigDecimal(48).compareTo(pointOf(composing.at(RuleKey.of("d")).values())));
+    }
+
     @Test
     void aProductThatDefinesNoPlaceStaysUnanswered() {
         Map<String, List<String>> left = unansweredBelowTheInput(record("a * b >= 3") + BEHAVIOR);

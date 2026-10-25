@@ -258,6 +258,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ComputedNumber.operated",
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),
+            new Held("souther.compiler.check.ComputedNumber.bounded",
+                    "does what each of those three does to the range its operands lie in"),
             new Held("souther.compiler.check.ComputedNumber.evaluate",
                     "does what each of those three does to the numbers its operands come to"),
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated.operator",

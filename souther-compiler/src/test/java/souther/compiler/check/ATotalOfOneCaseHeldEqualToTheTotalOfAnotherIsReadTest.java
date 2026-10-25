@@ -82,6 +82,41 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
                 .isEmpty());
     }
 
+    /**
+     * Two pairs of sides held equal over one list are two equations over the same elements, and the
+     * builders solve one: the second is a rule they are never told, so it is not called read.
+     */
+    @Test
+    void twoPairsOfSidesOverOneListStayUnanswered() {
+        assertFalse(unansweredAtTheList("""
+                module demo
+
+                import List ( fold, length )
+
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                data Side = Debit | Credit
+                data Posting = { side: Side, amount: Amount, fee: Amount }
+
+                let amounts (wanted: Side, postings: List<Posting>): Decimal =
+                    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.amount.value) else acc,
+                         0.0m, postings)
+
+                let fees (wanted: Side, postings: List<Posting>): Decimal =
+                    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.fee.value) else acc,
+                         0.0m, postings)
+
+                data N = { postings: List<Posting> }
+                    invariant amountsBalance =
+                        Decimal.compare(amounts(Debit, postings), amounts(Credit, postings)) == 0
+                    invariant feesBalance =
+                        Decimal.compare(fees(Debit, postings), fees(Credit, postings)) == 0
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = 1
+                """).isEmpty());
+    }
+
     /** What stands unanswered at the list of the input of {@code probe}. */
     private static List<String> unansweredAtTheList(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

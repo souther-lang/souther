@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,13 +41,17 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
             Pattern.compile("side = (\\w+), amount = Amount\\(([0-9.]+)m\\)");
 
     private static String journal(int least) {
+        return journal(least, "value >= 0.0m");
+    }
+
+    private static String journal(int least, String amountRule) {
         return """
                 module demo
 
                 import List ( fold, length )
 
                 data Amount = Decimal
-                    invariant value >= 0.0m
+                    invariant %s
                 data Side = Debit | Credit
                 data Posting = { side: Side, amount: Amount }
 
@@ -58,7 +63,42 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
                     invariant enough = length(postings) >= %d
                     invariant balanced =
                         Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
-                """.formatted(least);
+                """.formatted(amountRule, least);
+    }
+
+    /**
+     * Every amount is one the element's type admits, whatever the type holds it to.
+     *
+     * <p>The unit is a whole number inside what the amount admits and so is every multiple of it
+     * that is added, so a type that admits nothing below ten is given amounts from ten up and not
+     * the one a count would have given it.
+     */
+    @Test
+    void everyAmountIsOneTheAmountTypeAdmits() {
+        for (int least : new int[] {2, 3, 5}) {
+            String list = composed(journal(least, "value >= 10.0m")).fields().get("postings").text();
+            Matcher found = ELEMENT.matcher(list);
+            Map<String, BigDecimal> totals = new LinkedHashMap<>();
+            while (found.find()) {
+                BigDecimal amount = new BigDecimal(found.group(2));
+                assertTrue(amount.compareTo(BigDecimal.TEN) >= 0, list);
+                totals.merge(found.group(1), amount, BigDecimal::add);
+            }
+            assertEquals(0, totals.get("Debit").compareTo(totals.get("Credit")), list);
+        }
+    }
+
+    /** A type that admits too little for the sides to balance is no list, and no list is offered. */
+    @Test
+    void anAmountTypeThatAdmitsLessThanTheSidesNeedIsNotBuilt() {
+        assertNull(composedOrNot(journal(3, "value >= 0.0m && value <= 1.0m")).fields(),
+                "three postings need an amount of two on one side");
+    }
+
+    /** A count past what a proposal may hold is not built, and is not built a little at a time. */
+    @Test
+    void aCountPastWhatAProposalMayHoldIsNotBuilt() {
+        assertNull(composedOrNot(journal(100_000_000)).fields());
     }
 
     @Test
@@ -81,15 +121,18 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
     }
 
     private static Partitions.FieldsChosen composed(String source) {
+        Partitions.FieldsChosen chosen = composedOrNot(source);
+        assertNotNull(chosen.fields(), "the record is one something can be composed of");
+        return chosen;
+    }
+
+    private static Partitions.FieldsChosen composedOrNot(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule record = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
-        Partitions.FieldsChosen chosen =
-                Partitions.fieldsOf(record, record, reading, Set.of(), Map.of());
-        assertNotNull(chosen.fields(), "the record is one something can be composed of");
-        return chosen;
+        return Partitions.fieldsOf(record, record, reading, Set.of(), Map.of());
     }
 }

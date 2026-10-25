@@ -88,6 +88,47 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
         assertFalse(left.get("n.rates").isEmpty());
     }
 
+    private static final String TWO_ENTRIES = """
+            module demo
+
+            data N = { x: String, y: String, rates: Map<String, Int> }
+                invariant atX = atKey(x, rates, 1)
+                invariant atY = atKey(y, rates, 2)
+
+            let atKey (k: String, m: Map<String, Int>, n: Int): Bool =
+                Map.get(k, m)
+                    |> Option.map(r -> r == n)
+                    |> Option.withDefault(false)
+            """;
+
+    /**
+     * Two entries asked of one map, each under a key of its own and a number of its own, are read
+     * at every field, the number being handed to a helper as an argument.
+     */
+    @Test
+    void twoEntriesAskedOfOneMapAreReadAtTheKeysAndTheMap() {
+        assertEquals(Map.of("n.x", List.of(), "n.y", List.of(), "n.rates", List.of()),
+                unansweredAtTheFields(TWO_ENTRIES + BEHAVIOR));
+    }
+
+    /**
+     * A key that is not a field of the record is a key the builders are never told of, because a
+     * record's fields are chosen one at a time and a key is chosen before the map it is a key of.
+     * The rule is left standing rather than called read.
+     */
+    @Test
+    void aKeyThatIsNotAFieldOfTheRecordLeavesTheMapUnanswered() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data Inner = { k: String }
+                data N = { inner: Inner, rates: Map<String, Int> }
+                    invariant has = Map.containsKey(inner.k, rates)
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.rates").isEmpty(), "nothing builds a map for a key it cannot reach");
+    }
+
     /** What stands unanswered at each field of the input of {@code probe}, by field. */
     private static Map<String, List<String>> unansweredAtTheFields(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -100,7 +141,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
         for (Position each : InputDomain.of(sigs.get("probe"), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none()).positions()) {
             String path = each.path().toString();
-            if (path.equals("n.base") || path.equals("n.rates")) {
+            if (path.startsWith("n.") && path.indexOf('.', 2) < 0 && !path.contains("[")) {
                 out.put(path, each.unansweredQuestions().stream()
                         .map(question -> question.rule().toString()).toList());
             }

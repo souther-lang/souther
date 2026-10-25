@@ -99,33 +99,16 @@ public final class SidesBalanced {
                 && first.binding().equals(second.binding());
     }
 
-    /** What {@code e} is, with the names bound on the way to it read as what they were given. */
-    private static Core resolved(Core e, Map<BindingId, Core> given) {
-        Core here = Core.withoutStanding(e);
-        while (true) {
-            if (here instanceof Core.LetIn let) {
-                given.put(let.binder().binding(), let.value());
-                here = Core.withoutStanding(let.body());
-            } else if (here instanceof Core.Widen widened) {
-                here = Core.withoutStanding(widened.value());
-            } else if (here instanceof Core.Read read && given.containsKey(read.binding())) {
-                here = Core.withoutStanding(given.get(read.binding()));
-            } else {
-                return here;
-            }
-        }
-    }
-
     /** A total of a list, adding one number of an element where a field of it is a case. */
     private static Side side(Core e, Map<BindingId, Core> given) {
-        Core walk = resolved(e, given);
+        Core walk = LetBound.resolved(e, given);
         if (!(AnOperationApplied.of(walk) instanceof AnOperationApplied(var operation, var args))
                 || !operation.equals(FOLD) || args.size() != 4
-                || !(resolved(args.get(0), given) instanceof Core.Block step)
+                || !(LetBound.resolved(args.get(0), given) instanceof Core.Block step)
                 || step.params().size() != 2
-                || !(resolved(args.get(1), given) instanceof Core.Decimal seed)
+                || !(LetBound.resolved(args.get(1), given) instanceof Core.Decimal seed)
                 || seed.value().signum() != 0
-                || !(resolved(args.get(2), given) instanceof Core.Read list)) {
+                || !(LetBound.resolved(args.get(2), given) instanceof Core.Read list)) {
             return null;
         }
         BindingId total = step.params().get(0).binding();
@@ -145,7 +128,7 @@ public final class SidesBalanced {
             named = at.left();
         }
         if (field == null || field.size() != 1
-                || !(resolved(named, given) instanceof Core.UnitValue unit)) {
+                || !(LetBound.resolved(named, given) instanceof Core.UnitValue unit)) {
             return null;
         }
         // The number added to the total, in either order.
@@ -217,7 +200,27 @@ public final class SidesBalanced {
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
-        out.forEach((where, requirements) -> held.put(where, List.copyOf(requirements)));
+        out.forEach((where, requirements) -> {
+            if (buildable(where, requirements)) {
+                held.put(where, List.copyOf(requirements));
+            }
+        });
         return Map.copyOf(held);
+    }
+
+    /**
+     * Whether a list can be built whose sides balance as {@code requirements} ask of it.
+     *
+     * <p>The one answer to what the builders of a record can keep, which is what a rule must be
+     * for a reading to call it read. The list is a field of the record, the number an element adds
+     * is one of its fields or a name's value, and the list is asked to balance one pair of sides:
+     * two pairs are two equations over the same elements, and nothing here solves them together.
+     */
+    private static boolean buildable(RuleKey list, List<Requirement> requirements) {
+        if (list.steps().size() != 1 || requirements.size() != 1) {
+            return false;
+        }
+        List<String> number = requirements.getFirst().number();
+        return number.size() == 1 || (number.size() == 2 && number.get(1).equals("value"));
     }
 }

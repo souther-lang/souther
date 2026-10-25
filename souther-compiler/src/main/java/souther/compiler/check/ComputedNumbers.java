@@ -1,12 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,11 +20,11 @@ import java.util.Set;
  * what the rules come to once the places are at numbers.
  *
  * <p>A computed number is an atom of the interval algebra like any other, and a clause comparing it
- * is a rule between atoms. What the algebra cannot know is how the atom is made of the places, which
- * is why the places a clause is written over are not constrained by a rule that only names the atom.
- * The two things said here are the ones that make it known: a clause that defines a place as such a
- * number leaves the places it is made of free ({@link #definedFrom}), and a number made of places
- * that each stand at one number stands at the number it comes to ({@link #settled}).
+ * is a rule between atoms. What the algebra cannot know is how the atom is made of the places. Two
+ * things are said here for it: a place defined as such a number leaves the places it is made of free
+ * only where the number cannot come to anything the place's other rules refuse
+ * ({@link #leavesFree}), and a number made of places that each stand at one number stands at the
+ * number it comes to ({@link #settled}).
  */
 final class ComputedNumbers {
 
@@ -34,42 +36,108 @@ final class ComputedNumbers {
     }
 
     /**
-     * The places {@code constraint} defines a place from, or none where it does not define one.
+     * A place and the number it is defined as: {@code defined == number}, the number made of places
+     * other than the one it defines.
      *
-     * <p>Defining is {@code x == e}, with {@code e} computed from places other than {@code x}: a
-     * relation that says what {@code x} comes to beside the places and says nothing of any one of
-     * them. A comparison of a computed number with a written one, or two computed numbers in one
-     * rule, relates the places among themselves, and is not read through this.
+     * @param defined the place
+     * @param atom    the atom standing for the number
      */
-    static Set<FactSubject> definedFrom(NumericConstraint constraint) {
+    record Definition(FactSubject defined, FactSubject atom, ComputedNumber number) {
+
+        /** The places the number is made of. */
+        Set<FactSubject> operands() {
+            Set<FactSubject> out = new LinkedHashSet<>();
+            number.places().forEach(place -> out.add(FactSubject.of(place)));
+            return out;
+        }
+    }
+
+    /** A definition and the rule that states it. */
+    record Defining(RuleRef.Invariant rule, Definition definition) {}
+
+    /** The definitions {@code owed} states for {@code rule}. */
+    static List<Defining> definingIn(RuleRef.Invariant rule, Predicates.Owed owed) {
+        List<Defining> out = new ArrayList<>();
+        for (Predicates.Part each : owed.parts()) {
+            if (each instanceof Predicates.Part.Carried carried
+                    && carried.clause().numeric() != null) {
+                Definition definition = definitionIn(carried.clause().numeric());
+                if (definition != null) {
+                    out.add(new Defining(rule, definition));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * {@code constraint} read as defining a place as a number made of others, or null where it does
+     * not.
+     *
+     * <p>A comparison of a computed number with a written one, or two computed numbers in one rule,
+     * relates the places among themselves, and is not read through this.
+     */
+    static Definition definitionIn(NumericConstraint constraint) {
         Map<FactSubject, ExactRatio> weights = constraint.form().coefs();
         if (constraint.rel() != Rel.EQ || !constraint.form().constant().isZero()
                 || weights.size() != 2) {
-            return Set.of();
+            return null;
         }
         List<FactSubject> atoms = new ArrayList<>(weights.keySet());
         ExactRatio first = weights.get(atoms.get(0));
         ExactRatio second = weights.get(atoms.get(1));
         if (first.negated().compareTo(second) != 0) {
-            return Set.of();
+            return null;
         }
-        Set<FactSubject> from = definition(atoms.get(0), atoms.get(1));
-        return from.isEmpty() ? definition(atoms.get(1), atoms.get(0)) : from;
+        Definition definition = definition(atoms.get(0), atoms.get(1));
+        return definition != null ? definition : definition(atoms.get(1), atoms.get(0));
     }
 
-    /** The places {@code computed} is made of, where it is made of places other than
-     *  {@code defined}, and {@code defined} is itself a place. */
-    private static Set<FactSubject> definition(FactSubject defined, FactSubject computed) {
+    private static Definition definition(FactSubject defined, FactSubject computed) {
         if (!aPlace(defined.identity())) {
-            return Set.of();
+            return null;
         }
         ComputedNumber number = ComputedNumber.of(computed.identity(), ComputedNumbers::aPlace);
-        if (number == null || number.places().contains(defined.identity())) {
-            return Set.of();
+        return number == null || number.places().contains(defined.identity()) ? null
+                : new Definition(defined, computed, number);
+    }
+
+    /**
+     * Whether {@code definition}'s places are left as free as they were by the rule defining a
+     * place from them, given everything {@code numbers} holds.
+     *
+     * <p>Free where the number lies, whatever the places are, inside what the defined place may be:
+     * any places then have a value of the defined place beside them, and the rule restricts none.
+     * Not free where the place has been held to less by another rule ({@code c == a * b} beside
+     * {@code c == 1} leaves no {@code a} of nought), or where the number reaches past what the place
+     * admits, because then some places have none.
+     */
+    static boolean leavesFree(Definition definition, NumericDomain<FactSubject> numbers) {
+        ComputedNumber.Range image = definition.number()
+                .lies(place -> rangeOf(numbers.boundsOf(FactSubject.of(place))));
+        NumericDomain.Bounds allowed = numbers.boundsOf(definition.defined());
+        return reachesNoFurtherThan(image.low(), allowed.min(), true)
+                && reachesNoFurtherThan(image.high(), allowed.max(), false);
+    }
+
+    private static ComputedNumber.Range rangeOf(NumericDomain.Bounds bounds) {
+        return new ComputedNumber.Range(
+                bounds.min() == null ? null : Count.number(bounds.min().at()).exactly(),
+                bounds.max() == null ? null : Count.number(bounds.max().at()).exactly());
+    }
+
+    /** Whether an end of the number's range is inside the end of the range the place allows. */
+    private static boolean reachesNoFurtherThan(ExactRatio end, Endpoint allowed,
+                                                boolean fromBelow) {
+        if (allowed == null) {
+            return true;
         }
-        Set<FactSubject> from = new LinkedHashSet<>();
-        number.places().forEach(place -> from.add(FactSubject.of(place)));
-        return from;
+        if (end == null) {
+            return false;
+        }
+        int against = end.compareTo(Count.number(allowed.at()).exactly());
+        int inside = fromBelow ? against : -against;
+        return inside > 0 || (inside == 0 && allowed.inclusive());
     }
 
     /**
@@ -86,21 +154,34 @@ final class ComputedNumbers {
     }
 
     /**
-     * {@code state} with each of {@code numbers} equal to what it comes to, for a caller that
-     * settles one state's places many times and has asked which numbers there are once.
+     * The same, for a caller that settles one state's places many times and has asked which
+     * numbers there are once.
+     *
+     * <p>Taken to where nothing more settles. A place a number is made of may itself stand at what
+     * another number comes to, which is only known once that one is settled, so the numbers are
+     * asked again over what the settling so far left until a pass settles none. Each pass settles a
+     * number it has not, so there are no more passes than numbers.
      */
     static ConstraintState<FactSubject> settled(ConstraintState<FactSubject> state,
                                                 List<Computed> numbers) {
         ConstraintState<FactSubject> out = state;
-        NumericDomain<FactSubject> domain = state.numbers();
-        // Each number is made of places and never of another number, so settling one does not
-        // change what any other is made of and the order they are taken in says nothing.
-        for (Computed each : numbers) {
-            ExactRatio comesTo =
-                    each.number().comesTo(place -> standingAt(domain, FactSubject.of(place)));
-            Optional<Count> at = comesTo == null ? null : Count.written(comesTo).orNull();
-            if (at != null && at.isPresent()) {
-                out = ConstraintState.settling(out, each.atom(), at.get(), each.spacing());
+        Set<FactSubject> done = new HashSet<>();
+        boolean moved = true;
+        while (moved) {
+            moved = false;
+            NumericDomain<FactSubject> domain = out.numbers();
+            for (Computed each : numbers) {
+                if (done.contains(each.atom())) {
+                    continue;
+                }
+                ExactRatio comesTo = each.number()
+                        .comesTo(place -> standingAt(domain, FactSubject.of(place)));
+                Optional<Count> at = comesTo == null ? null : Count.written(comesTo).orNull();
+                if (at != null && at.isPresent()) {
+                    out = ConstraintState.settling(out, each.atom(), at.get(), each.spacing());
+                    done.add(each.atom());
+                    moved = true;
+                }
             }
         }
         return out;

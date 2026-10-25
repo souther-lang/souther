@@ -19,6 +19,8 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A record whose rules ask a map for an entry under the key standing in another field is composed
@@ -92,16 +94,56 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
                 chosen.fields().get("rates").text());
     }
 
+    private static final String TWO_ENTRIES = """
+            module demo
+
+            data N = { x: String, y: String, rates: Map<String, Int> }
+                invariant atX = atKey(x, rates, 1)
+                invariant atY = atKey(y, rates, 2)
+
+            let atKey (k: String, m: Map<String, Int>, n: Int): Bool =
+                Map.get(k, m)
+                    |> Option.map(r -> r == n)
+                    |> Option.withDefault(false)
+            """;
+
+    /** Two entries asked of one map under two keys are both in the map built. */
+    @Test
+    void aMapAskedForTwoEntriesHoldsBothOfThem() {
+        Partitions.FieldsChosen chosen = composedGiven(TWO_ENTRIES,
+                Map.of("x", FixtureTemplate.string("a"), "y", FixtureTemplate.string("b")));
+
+        String rates = chosen.fields().get("rates").text();
+        assertTrue(rates.contains("(\"a\", 1)"), rates);
+        assertTrue(rates.contains("(\"b\", 2)"), rates);
+    }
+
+    /**
+     * Two numbers asked of one key are no map at all, and the record is not composed: choosing the
+     * map as any other would be offering one the rules refuse.
+     */
+    @Test
+    void aMapAskedForTwoNumbersUnderOneKeyIsNotBuilt() {
+        Partitions.FieldsChosen chosen = composedGiven(TWO_ENTRIES,
+                Map.of("x", FixtureTemplate.string("a"), "y", FixtureTemplate.string("a")));
+
+        assertNull(chosen.fields(), "no map holds both a one and a two under the key a");
+    }
+
     private static Partitions.FieldsChosen composed(String source) {
+        Partitions.FieldsChosen chosen = composedGiven(source, Map.of());
+        assertNotNull(chosen.fields(), "the record is one something can be composed of");
+        return chosen;
+    }
+
+    private static Partitions.FieldsChosen composedGiven(String source,
+                                                         Map<String, FixtureTemplate> given) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule record = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
-        Partitions.FieldsChosen chosen =
-                Partitions.fieldsOf(record, record, reading, Set.of(), Map.of());
-        assertNotNull(chosen.fields(), "the record is one something can be composed of");
-        return chosen;
+        return Partitions.fieldsOf(record, record, reading, Set.of(), given);
     }
 }

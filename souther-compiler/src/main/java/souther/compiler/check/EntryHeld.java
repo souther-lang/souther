@@ -105,12 +105,12 @@ public final class EntryHeld {
                 && Core.withoutStanding(args.getFirst()) instanceof Core.Block block
                 && block.params().size() == 1
                 && lookup(args.get(1)) instanceof AnOperationApplied(var _, var lookedUp)) {
-            BigDecimal is = valueIs(block.body(), block.params().getFirst().binding());
+            BigDecimal is = valueIs(block.body(), block.params().getFirst().binding(), followed);
             return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
         }
         // The lookup matched on directly, the present arm stating what the value is.
         if (lookup(scrutinee) instanceof AnOperationApplied(var _, var lookedUp)) {
-            BigDecimal is = valueIs(present.body(), payload.binder().binding());
+            BigDecimal is = valueIs(present.body(), payload.binder().binding(), followed);
             return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
         }
         return null;
@@ -126,7 +126,8 @@ public final class EntryHeld {
      * The number {@code statement} says the value bound to {@code value} is, or null where it says
      * anything else of it.
      */
-    private static BigDecimal valueIs(Core statement, BindingId value) {
+    private static BigDecimal valueIs(Core statement, BindingId value,
+                                      Function<Core, Core> followed) {
         if (!(Core.withoutStanding(statement) instanceof Core.Binary same)
                 || same.op() != BinOp.EQ) {
             return null;
@@ -137,18 +138,18 @@ public final class EntryHeld {
         if (AnOperationApplied.of(left) instanceof AnOperationApplied(var operation, var args)
                 && operation.equals(COMPARE) && args.size() == 2
                 && right instanceof Core.Int nought && nought.value() == 0) {
-            BigDecimal first = writtenNumber(args.get(1));
-            BigDecimal second = writtenNumber(args.get(0));
+            BigDecimal first = writtenNumber(args.get(1), followed);
+            BigDecimal second = writtenNumber(args.get(0), followed);
             if (isTheValue(args.get(0), value) && first != null) {
                 return first;
             }
             return isTheValue(args.get(1), value) ? second : null;
         }
-        BigDecimal written = writtenNumber(right);
+        BigDecimal written = writtenNumber(right, followed);
         if (isTheValue(left, value) && written != null) {
             return written;
         }
-        written = writtenNumber(left);
+        written = writtenNumber(left, followed);
         return isTheValue(right, value) ? written : null;
     }
 
@@ -163,8 +164,9 @@ public final class EntryHeld {
         };
     }
 
-    private static BigDecimal writtenNumber(Core e) {
-        return switch (Core.withoutStanding(e)) {
+    /** The number {@code e} is, read through the names bound to it, or null where it is none. */
+    private static BigDecimal writtenNumber(Core e, Function<Core, Core> followed) {
+        return switch (Core.withoutStanding(followed.apply(Core.withoutStanding(e)))) {
             case Core.Decimal decimal -> decimal.value();
             case Core.Int whole -> BigDecimal.valueOf(whole.value());
             default -> null;
@@ -214,7 +216,39 @@ public final class EntryHeld {
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
-        out.forEach((where, requirements) -> held.put(where, List.copyOf(requirements)));
+        out.forEach((where, requirements) -> {
+            if (buildable(where, requirements)) {
+                held.put(where, List.copyOf(requirements));
+            }
+        });
         return Map.copyOf(held);
+    }
+
+    /**
+     * Whether a map can be built holding every entry {@code requirements} ask of it.
+     *
+     * <p>The one answer to what the builders of a record can keep, which is what a rule must be
+     * for a reading to call it read: a rule the builders cannot keep is a rule left to the decoder
+     * that runs it. The map and every key are fields of the record, since the builders choose a
+     * record's fields one at a time and a key is chosen before the map it is a key of; and one
+     * key is not asked for two numbers, since no map holds two values under it.
+     */
+    private static boolean buildable(RuleKey map, List<Requirement> requirements) {
+        if (map.steps().size() != 1) {
+            return false;
+        }
+        Map<RuleKey, BigDecimal> valueUnder = new HashMap<>();
+        for (Requirement each : requirements) {
+            if (each.key().steps().size() != 1 || each.key().equals(map)) {
+                return false;
+            }
+            if (each.valueIs() != null) {
+                BigDecimal had = valueUnder.putIfAbsent(each.key(), each.valueIs());
+                if (had != null && had.compareTo(each.valueIs()) != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

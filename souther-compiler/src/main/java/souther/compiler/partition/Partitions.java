@@ -68,6 +68,7 @@ import souther.compiler.types.TypeReachName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -2082,7 +2083,7 @@ public final class Partitions {
                         : null;
                 List<SidesBalanced.Requirement> sides = rules.sidesBalancedAt(RuleKey.of(name));
                 if (holding == null && !sides.isEmpty()) {
-                    holding = balancedSides(field.getValue(), sides, limits, reading);
+                    holding = balancedSides(field.getValue(), sides.getFirst(), limits, reading);
                 }
                 // The first value, with what was met in front of it: a field's later values are
                 // values nothing here takes.
@@ -2121,12 +2122,14 @@ public final class Partitions {
     }
 
     /**
-     * A map of {@code type} holding the entries the rules ask of it, under the keys already chosen,
-     * or null where this does not build for what they ask.
+     * A map of {@code type} holding every entry the rules ask of it, under the keys already
+     * chosen, or nothing where no such map can be written.
      *
-     * <p>Null leaves the field to be chosen as any other. That is for a key not yet chosen, a map
-     * the position does not declare, two entries each asked for a value of its own, and a value the
-     * position cannot be written as the number asked for.
+     * <p>Never a fallback to choosing the field as any other: the rules asking these entries were
+     * read as kept by this ({@link EntryHeld#writtenOn} is the one list both go by), and a map
+     * chosen without them is a map the rule refuses. Nothing is what it answers for a map the
+     * position does not declare, a key not chosen, a number the position cannot write, and two
+     * numbers asked of one key.
      */
     private static Proposals holdingTheEntriesAskedFor(Type type,
                                                        List<EntryHeld.Requirement> asked,
@@ -2137,34 +2140,25 @@ public final class Partitions {
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         if (!(view.shape() instanceof Shape.Mapping map)) {
-            return null;
+            return Proposals.NONE;
         }
-        Witnesses.Filed filed = null;
-        List<FixtureTemplate> keysOnly = new ArrayList<>();
+        List<Witnesses.Filed> entries = new ArrayList<>();
         for (EntryHeld.Requirement each : asked) {
-            FixtureTemplate key = each.key().steps().size() == 1
-                    ? chosen.get(each.key().steps().getFirst()) : null;
-            if (key == null) {
-                return null;
+            FixtureTemplate key = chosen.get(each.key().steps().getFirst());
+            FixtureTemplate value = each.valueIs() == null ? null
+                    : writtenNumberAt(map.value(), each.valueIs(), reading);
+            if (key == null || (each.valueIs() != null && value == null)) {
+                return Proposals.NONE;
             }
-            if (each.valueIs() == null) {
-                keysOnly.add(key);
-                continue;
-            }
-            FixtureTemplate value = writtenNumberAt(map.value(), each.valueIs(), reading);
-            if (filed != null || value == null) {
-                return null;
-            }
-            filed = new Witnesses.Filed(key, value);
+            entries.add(new Witnesses.Filed(key, value));
         }
-        Proposals made = Witnesses.holding(map,
-                filed == null ? List.of() : List.of(filed.value()), List.of(), filed, keysOnly,
-                List.of(), heldRange(type, reading, limits.held()), reading);
+        Proposals made = Witnesses.holdingEntries(map, entries,
+                heldRange(type, reading, limits.held()), reading);
         List<FixtureTemplate> worn = new ArrayList<>();
         for (FixtureTemplate each : made.values()) {
             FixtureTemplate under = WornNames.under(view.wrappers(), each, source);
             if (under == null) {
-                return null;
+                return Proposals.NONE.meeting(made.met());
             }
             worn.add(under);
         }
@@ -2173,68 +2167,112 @@ public final class Partitions {
 
     /**
      * A list of {@code type} whose elements at the two cases the rule names add up to one another,
-     * or null where this does not build for what it asks.
+     * or nothing where no such list can be written.
      *
      * <p>As many elements as the rules require, at least two, split between the two cases; each
      * element at one case adds as many units as the other case has elements, so the totals are
-     * the product of the two counts whichever the counts are. Null leaves the field to be chosen
-     * as any other: two requirements on one list, an element that is no record, a number reached
-     * through anything but a name's value, and a count the rules do not leave room for.
+     * the product of the two counts whichever the counts are. The unit is a whole number the
+     * element's number admits, and so is every multiple of it that is added, which is what the
+     * rules of the element say of it and not a number chosen beside them.
+     *
+     * <p>Never a fallback to choosing the field as any other: the rule asking the sides to balance
+     * was read as kept by this ({@link SidesBalanced#writtenOn} is the one list both go by), and a
+     * list chosen without it is a list the rule refuses. Nothing is what it answers for an element
+     * that is no record, a number the element cannot write or admits no multiple of, and a count
+     * past what a proposal may hold.
      */
-    private static Proposals balancedSides(Type type, List<SidesBalanced.Requirement> asked,
+    private static Proposals balancedSides(Type type, SidesBalanced.Requirement rule,
                                            FieldDomains.ConstructionLimits limits,
                                            RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
-        if (asked.size() != 1
-                || !(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
+        if (!(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
                 || kind != Shape.Sequence.Kind.LIST) {
-            return null;
+            return Proposals.NONE;
         }
-        SidesBalanced.Requirement rule = asked.getFirst();
         TypeView elementView = TypeView.of(element, source.inners(), source.symbols(),
                 source.kinds(), source.sums());
         if (!(elementView.shape() instanceof Shape.Product product)
                 || !(product.name() instanceof TypeSymbol.AtModule record)
                 || !product.fields().containsKey(rule.field())
                 || !product.fields().containsKey(rule.number().getFirst())
-                || rule.number().size() > 2
                 || !(source.symbols().scope().reach(rule.one())
                         instanceof TypeReachName.Written one)
                 || !(source.symbols().scope().reach(rule.other())
                         instanceof TypeReachName.Written other)) {
-            return null;
+            return Proposals.NONE;
         }
         DeclaredBounds.CountRange room = heldRange(type, reading, limits.held());
         int count = Math.max(2, room.least());
         if (count > room.most()) {
-            return null;
+            return Proposals.NONE;
+        }
+        CompositionBudget past = Witnesses.pastTheElements(count);
+        if (past != null) {
+            return Proposals.NONE.meeting(CompositionShortfall.of(List.of(past)));
         }
         int onOne = count / 2;
         int onOther = count - onOne;
+        Type numberType = product.fields().get(rule.number().getFirst());
+        // A number of the kind this writes, before its ends are read: a date has ends and no unit.
+        if (writtenNumberAt(numberType, BigDecimal.ONE, reading) == null) {
+            return Proposals.NONE;
+        }
+        TypeSymbol.AtModule rulesOn = rulesOver(elementView.wrappers(), record, source);
+        BigDecimal unit = unitAdmitted(
+                FieldDomains.of(rulesOn, reading).composing(Map.of())
+                        .at(RuleKey.of(rule.number().getFirst())).values(),
+                BigDecimal.valueOf(Math.max(onOne, onOther)));
+        if (unit == null || writtenNumberAt(numberType, unit, reading) == null) {
+            return Proposals.NONE;
+        }
         List<FixtureTemplate> elements = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             boolean atOne = i < onOne;
-            FixtureTemplate amount = writtenNumberAt(product.fields().get(rule.number().getFirst()),
-                    BigDecimal.valueOf(atOne ? onOther : onOne), reading);
-            if (amount == null) {
-                return null;
-            }
-            Proposals composed = composed(record,
-                    rulesOver(elementView.wrappers(), record, source), reading, Set.of(),
-                    Map.of(rule.field(), FixtureTemplate.unitCase(atOne ? one : other),
-                            rule.number().getFirst(), amount));
+            FixtureTemplate amount = writtenNumberAt(numberType,
+                    unit.multiply(BigDecimal.valueOf(atOne ? onOther : onOne)), reading);
+            Proposals composed = amount == null ? Proposals.NONE
+                    : composed(record, rulesOn, reading, Set.of(),
+                            Map.of(rule.field(), FixtureTemplate.unitCase(atOne ? one : other),
+                                    rule.number().getFirst(), amount));
             FixtureTemplate each = composed.isEmpty() ? null
                     : WornNames.under(elementView.wrappers(), composed.values().getFirst(), source);
             if (each == null) {
-                return null;
+                return Proposals.NONE;
             }
             elements.add(each);
         }
         FixtureTemplate list = WornNames.under(view.wrappers(),
                 FixtureTemplate.collection(elements), source);
-        return list == null ? null : Proposals.ofNullable(list);
+        return Proposals.ofNullable(list);
+    }
+
+    /**
+     * The least whole number such that it and every whole multiple of it up to {@code times} times
+     * is inside {@code admitted}, or null where there is none.
+     *
+     * <p>One and up, so that no side is nought: a side of nothing balances anything. Where the
+     * number is bounded from below the unit is the least whole number inside the bound, and where it
+     * is bounded from above the greatest multiple has to be inside that too.
+     */
+    private static BigDecimal unitAdmitted(NumericDomain.Bounds admitted, BigDecimal times) {
+        BigDecimal unit = BigDecimal.ONE;
+        if (admitted != null && admitted.min() != null) {
+            BigDecimal low = Count.number(admitted.min().at()).at();
+            BigDecimal whole = low.setScale(0, RoundingMode.CEILING);
+            if (whole.compareTo(low) == 0 && !admitted.min().inclusive()) {
+                whole = whole.add(BigDecimal.ONE);
+            }
+            unit = whole.max(unit);
+        }
+        if (admitted != null && admitted.max() != null) {
+            int against = unit.multiply(times).compareTo(Count.number(admitted.max().at()).at());
+            if (against > 0 || (against == 0 && !admitted.max().inclusive())) {
+                return null;
+            }
+        }
+        return unit;
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

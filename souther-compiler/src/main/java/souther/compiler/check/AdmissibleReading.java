@@ -99,15 +99,19 @@ final class AdmissibleReading {
      * which is what an alternative holding it turns on.
      */
     private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** The rules about a container and a place beside it that the builders of the record keep. */
+    private final StatedByClauses.BuiltFor builtFor;
+
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                               Symbols symbols, SumCases sums,
-                              Allowance<FactSubject> allowed) {
+                              Allowance<FactSubject> allowed, StatedByClauses.BuiltFor builtFor) {
         this.terms = terms;
         this.byName = byName;
         this.chains = chains;
         this.symbols = symbols;
         this.sums = sums;
         this.allowed = allowed;
+        this.builtFor = builtFor;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of.
@@ -117,8 +121,8 @@ final class AdmissibleReading {
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
     static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                                 Symbols symbols, SumCases sums,
-                                Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed);
+                                Allowance<FactSubject> allowed, StatedByClauses.BuiltFor builtFor) {
+        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed, builtFor);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -278,14 +282,18 @@ final class AdmissibleReading {
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
-        // A rule about a container and a place beside it: it says how the container's entries or
-        // elements stand and leaves the values of the place beside it as they were, so the
-        // container alone is short of it.
+        // A rule about a container and a place beside it that the builders keep: it says how the
+        // container's entries or elements stand and leaves the values of the place beside it as
+        // they were, so the container alone is short of it. One they do not keep is a form this
+        // did not read, at every place it names.
         EntryAt entry = entryHeldAt(part, at);
         FactSubject sides = entry == null ? sidesBalancedAt(part, at) : null;
-        if (entry != null || sides != null) {
-            return shortOf(part, Set.of(entry != null ? entry.container() : sides),
+        if (entry != null && builtFor.keepsAnEntry(entry.container(), entry.key())) {
+            return shortOf(part, Set.of(entry.container()),
                     UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
+        }
+        if (sides != null && builtFor.balances(sides)) {
+            return shortOf(part, Set.of(sides), UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
         }
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER

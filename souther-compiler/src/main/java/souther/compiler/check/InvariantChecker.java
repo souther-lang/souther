@@ -897,6 +897,10 @@ public final class InvariantChecker {
             read = false;
             gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
         }
+        // The places a rule defines as a number made of others, to be asked once every rule of
+        // the value has been taken in: whether the rule leaves what it is made of free turns on
+        // what the other rules hold of both.
+        List<ComputedNumbers.Defining> definitions = new ArrayList<>();
         for (ClauseMeaning declared :
                 opened ? c.clauses.declared(named) : List.<ClauseMeaning>of()) {
             // Where this clause becomes a rule of the model something can be attributed to.
@@ -951,6 +955,7 @@ public final class InvariantChecker {
             // position itself; `value * value >= 4` comes back about an atom standing for the
             // product, which is not the position and is not a reading of it.
             Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
+            definitions.addAll(ComputedNumbers.definingIn(origin, owed));
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
         }
@@ -1051,7 +1056,8 @@ public final class InvariantChecker {
         StatedByClauses.Reading reader = StatedByClauses
                 .readingOf(c.terms, positions, symbols, alternatives, allowed, c.answers,
                         c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers),
-                        keptApartAt(named, atoms, keys, typeAt, world.source()));
+                        keptApartAt(named, atoms, keys, typeAt, world.source()),
+                        builtFor(named, atoms, keys, world.source()));
         // What each clause said and what each part of it said, kept as they were read and
         // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
         // read and on machines nobody has made at this point, and every one of these questions
@@ -1177,6 +1183,14 @@ public final class InvariantChecker {
                 || heldApart(values) <= expansion
                 : "a reading of " + named.name() + " expanded to " + heldApart(values)
                         + " alternatives past a counted " + expansion;
+        // The places the rules define from others, with everything the rules hold in hand: the
+        // places a definition is made of are free where the number cannot come to what the
+        // defined place refuses, and then the definition says nothing of any of them.
+        for (ComputedNumbers.Defining each : definitions) {
+            if (ComputedNumbers.leavesFree(each.definition(), k.numbers())) {
+                took.freedByDefinition(each.rule(), each.definition().operands());
+            }
+        }
         // And which of the clauses place an edge, asked once the positions have names to be
         // recognised by.
         Reading reading = c.directsIn(accounted, at, numbers, took,
@@ -1471,6 +1485,42 @@ public final class InvariantChecker {
                     path.then(field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
+    }
+
+    /**
+     * The rules about a container and a place beside it that the builders of {@code named} keep,
+     * by the subjects the positions are filed under: the same rules, read the same way, as the
+     * builders are told ({@link FieldDomains#entriesHeldAt}, {@link FieldDomains#sidesBalancedAt}).
+     */
+    private static StatedByClauses.BuiltFor builtFor(
+            TypeSymbol.AtModule named, Map<RuleKey, FactSubject> atoms,
+            Map<RuleKey, FactSubject> keys, RuleReadingSource source) {
+        Map<FactSubject, Set<FactSubject>> entryKeys = new LinkedHashMap<>();
+        EntryHeld.writtenOn(named, source).forEach((map, requirements) -> {
+            for (FactSubject container : subjectsAt(map, atoms, keys)) {
+                for (EntryHeld.Requirement each : requirements) {
+                    entryKeys.computeIfAbsent(container, _ -> new LinkedHashSet<>())
+                            .addAll(subjectsAt(each.key(), atoms, keys));
+                }
+            }
+        });
+        Set<FactSubject> lists = new LinkedHashSet<>();
+        SidesBalanced.writtenOn(named, source).keySet()
+                .forEach(list -> lists.addAll(subjectsAt(list, atoms, keys)));
+        return new StatedByClauses.BuiltFor(entryKeys, lists);
+    }
+
+    /** Every subject the position at {@code path} is filed under. */
+    private static List<FactSubject> subjectsAt(RuleKey path, Map<RuleKey, FactSubject> atoms,
+                                                Map<RuleKey, FactSubject> keys) {
+        List<FactSubject> out = new ArrayList<>();
+        if (keys.get(path) != null) {
+            out.add(keys.get(path));
+        }
+        if (atoms.get(path) != null) {
+            out.add(atoms.get(path));
+        }
+        return out;
     }
 
     /**
@@ -2560,7 +2610,8 @@ public final class InvariantChecker {
             for (FactSubject name : names) {
                 if (here.contains(name)) {
                     took.record(rule, name);
-                } else if (!constrained.contains(name)) {
+                } else if (!constrained.contains(name)
+                        && !took.isFreedByDefinition(rule, name)) {
                     standing.add(name);
                     left = true;
                 }
