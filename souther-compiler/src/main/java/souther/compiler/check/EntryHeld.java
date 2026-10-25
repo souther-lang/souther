@@ -288,7 +288,7 @@ public final class EntryHeld {
             return false;
         }
         for (String key : keys) {
-            if (rules.readBesides(built, key) || !bareField(key, named, source)) {
+            if (rules.readAtAll(built, key) || !bareField(key, named, source)) {
                 return false;
             }
         }

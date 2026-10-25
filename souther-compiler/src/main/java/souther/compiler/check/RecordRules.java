@@ -51,7 +51,26 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
     }
 
     /** A statement and the fields of the record it reads from, whether or not it was recognised. */
-    record Reading(InvariantStatement statement, Set<String> fields) {}
+    record Reading(InvariantStatement statement, Set<String> fields, Set<String> counted) {}
+
+    /**
+     * Whether a statement other than {@code built} reads from the field {@code field} in any way,
+     * how many it holds included.
+     *
+     * <p>The question for a field that is a value and not a container the statements were built
+     * for. That a bound on how many a field holds is the range its count already carries is true
+     * of a container, whose builder is handed the range; the length of a key is the key's own
+     * value, and a bound on it says which keys there are.
+     */
+    boolean readAtAll(Collection<InvariantStatement> built, String field) {
+        for (Reading each : readings) {
+            if ((each.fields().contains(field) || each.counted().contains(field))
+                    && !built.contains(each.statement())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * Whether a statement other than {@code built} reads from the field {@code field}, other than
@@ -121,6 +140,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
         Set<String> boundedAbove = new HashSet<>();
         for (InvariantStatement one : statements) {
             Set<String> reads = new HashSet<>();
+            Set<String> counted = new HashSet<>();
             switch (one) {
                 case InvariantStatement.Unread it -> {
                     // A comparison the calls-only reading made nothing of is still a comparison,
@@ -129,13 +149,13 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                             Core.withoutStanding(it.said()) instanceof Core.Binary bin
                                     ? StatedComparison.of(bin, it.positive()) : null;
                     if (compares != null) {
-                        readFromComparison(compares, fields, reads, boundedAbove);
+                        readFromComparison(compares, fields, reads, counted, boundedAbove);
                     } else {
                         readFrom(it.said(), fields, reads);
                     }
                 }
                 case InvariantStatement.Compares it ->
-                        readFromComparison(it.states(), fields, reads, boundedAbove);
+                        readFromComparison(it.states(), fields, reads, counted, boundedAbove);
                 case InvariantStatement.Applies it -> readFrom(it.call(), fields, reads);
                 case InvariantStatement.HoldsAnEntry it -> {
                     readFrom(it.held().container(), fields, reads);
@@ -144,7 +164,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                 case InvariantStatement.BalancesSides it -> readFrom(it.balanced().list(), fields,
                         reads);
             }
-            readings.add(new Reading(one, Set.copyOf(reads)));
+            readings.add(new Reading(one, Set.copyOf(reads), Set.copyOf(counted)));
         }
         return new RecordRules(Map.copyOf(fields), List.copyOf(statements), declared, unread,
                 everyRuleReached, List.copyOf(readings), Set.copyOf(boundedAbove));
@@ -162,7 +182,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
      */
     private static void readFromComparison(StatedComparison states,
                                            Map<BindingId, String> fields, Set<String> out,
-                                           Set<String> boundedAbove) {
+                                           Set<String> counted, Set<String> boundedAbove) {
         Set<String> left = new HashSet<>();
         Set<String> right = new HashSet<>();
         readFrom(states.left(), fields, left);
@@ -175,6 +195,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
             out.addAll(right);
             return;
         }
+        counted.addAll(countOnTheLeft ? left : right);
         // Counted from the count's side, a bound from below is the only one that leaves room.
         Rel fromTheCount = countOnTheLeft ? rel : rel.turned();
         if (fromTheCount != Rel.GE && fromTheCount != Rel.GT) {

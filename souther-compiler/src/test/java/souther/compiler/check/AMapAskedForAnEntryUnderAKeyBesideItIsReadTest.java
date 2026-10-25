@@ -268,6 +268,31 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     }
 
     /**
+     * A bound on how many a field holds is the count the range of a container already carries, and
+     * is not that of a key: the length of a key is the key's own value, and a key the record
+     * allows only the empty string is a key the other is not.
+     */
+    @Test
+    void aLengthOfAnotherKeyIsARuleReadingIt() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { x: String, y: String, rates: Map<String, Int> }
+                    invariant fixedY = String.length(y) == 0
+                    invariant atX = atKey(x, rates, 1)
+                    invariant atY = atKey(y, rates, 2)
+
+                let atKey (k: String, m: Map<String, Int>, n: Int): Bool =
+                    Map.get(k, m)
+                        |> Option.map(r -> r == n)
+                        |> Option.withDefault(false)
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.x").isEmpty(), "the empty string is the other key's");
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /**
      * A count of a map made from the field is not the count the field's range carries: the
      * map without the key nought has as many entries as the field only where it holds no such
      * entry, so the rule says the key is not nought.
