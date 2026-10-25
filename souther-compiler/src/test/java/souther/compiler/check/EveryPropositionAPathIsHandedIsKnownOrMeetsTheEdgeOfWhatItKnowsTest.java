@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
+
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
@@ -143,6 +145,10 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                 CasesLeft.of(Refinement.of(new Case.Presence(true))), true));
         out.put("a value being there",
                 new Proposition.Present(new DecisionSubject.AnInput(optional), true));
+        out.put("a string in a language", new Proposition.InTheStrings(
+                new Proposition.InTheStrings.Strings.AtASubject(
+                        new DecisionSubject.AnInput(TermPath.of("s"))),
+                PatternMeaning.text("ab"), true));
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));

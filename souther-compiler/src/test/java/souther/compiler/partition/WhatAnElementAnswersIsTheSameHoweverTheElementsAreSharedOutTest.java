@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
+
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementKey;
@@ -103,6 +105,13 @@ class WhatAnElementAnswersIsTheSameHoweverTheElementsAreSharedOutTest {
         decided.put(Proposition.Present.class, new Boolean[] {
             sameWhereverTheyAreWritten(new Proposition.Present(at(CURRENCY), true)),
             sameWhereverTheyAreWritten(new Proposition.Present(at(FORECASTS), true))});
+        decided.put(Proposition.InTheStrings.class, new Boolean[] {
+            sameWhereverTheyAreWritten(new Proposition.InTheStrings(
+                    new Proposition.InTheStrings.Strings.AtASubject(at(AMOUNT)),
+                    PatternMeaning.text("ab"), true)),
+            sameWhereverTheyAreWritten(new Proposition.InTheStrings(
+                    new Proposition.InTheStrings.Strings.AtASubject(at(FLOOR)),
+                    PatternMeaning.text("ab"), true))});
         decided.put(Proposition.InCases.class, new Boolean[] {
             sameWhereverTheyAreWritten(new Proposition.InCases(at(CURRENCY), cases, true)),
             sameWhereverTheyAreWritten(new Proposition.InCases(at(FLOOR), cases, true))});

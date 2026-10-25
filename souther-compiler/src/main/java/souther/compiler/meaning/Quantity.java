@@ -100,8 +100,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     case Relation.Ordered ordered -> isIn(ordered.term());
                 };
                 case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                     Proposition.Carried _, Proposition.Unread _ -> false;
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.Unread _ -> false;
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
                      Proposition.WhereItAnswers _ ->
@@ -1080,6 +1081,11 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         case Proposition.Truth truth -> alike(truth.of(), apart);
                         case Proposition.Present present -> alike(present.of(), apart);
                         case Proposition.InCases cases -> alike(cases.of(), apart);
+                        case Proposition.InTheStrings(
+                                Proposition.InTheStrings.Strings.AtASubject(var at), var _, var _,
+                                var _) -> alike(at, apart);
+                        // A piece is whichever the statement it is read inside says it is.
+                        case Proposition.InTheStrings _ -> false;
                         case Proposition.SameValue same ->
                                 alike(same.one(), apart) && alike(same.other(), apart);
                         // Which element holding the value is the last to, what some element of a

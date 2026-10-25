@@ -330,6 +330,16 @@ public final class BehaviorSetStatements {
                                DeclarationNewtypes newtypes,
                                souther.compiler.coverage.Arrivals answering) {
         // Where the rule's subject stands, read where the rule stands.
+        // A call about the pieces of a string is about the string, which the reading of the call
+        // already found at a position.
+        if (each.ofPieces() instanceof PredicateReadings.OfPieces pieces) {
+            AdmittedPlan within = new AdmittedPlan.Pattern(PatternPlan.of(pieces.accepts()));
+            AdmittedPlan outside =
+                    new AdmittedPlan.Pattern(PatternPlan.notMatching(pieces.accepts()));
+            return new Outcome.OfADistinction(new Asked(each.origin(), pieces.statement(),
+                    new NumericTerm.ValueOf(pieces.at()),
+                    pieces.outside() ? outside : within, pieces.outside() ? within : outside));
+        }
         PathResolution stands = each.reads().pathOf(each.subject(), newtypes);
         if (!(stands instanceof PathResolution.At at)) {
             return saidWithoutADenominator(each, stands, symbols, newtypes, answering);

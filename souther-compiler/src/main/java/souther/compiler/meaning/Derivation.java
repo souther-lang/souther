@@ -1061,6 +1061,9 @@ public sealed interface Derivation {
                     case SomePieceEqualling(Derivation ofThePiece, var _) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
+                    case SomePieceInALanguage(var _, var _, var _, var _, Derivation ofThePiece) ->
+                            positionOf(some.container()) == null
+                                    && reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
@@ -1835,9 +1838,9 @@ public sealed interface Derivation {
                 case Proposition.Any any -> any.parts();
                 // A count turning on the element is met by some element as one statement.
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
-                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _,
+                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.SoManyHold _,
                      Proposition.WhereItAnswers _ -> List.of(element);
             };
@@ -2499,10 +2502,10 @@ public sealed interface Derivation {
                 case Proposition.SoManyHold counted -> counted.statements().stream()
                         .allMatch(part -> onlyOfACharacter(within, part, named));
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _,
-                     Proposition.WhereItAnswers _ -> false;
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> false;
             };
         }
 
@@ -2541,10 +2544,10 @@ public sealed interface Derivation {
                     yield counted.admitted().contains(holding);
                 }
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _,
-                     Proposition.WhereItAnswers _ ->
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
                         throw new IllegalStateException(element
                                 + " is not made of the counts of one character");
             };
@@ -2578,6 +2581,102 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             return Proposition.compared(new Relation.Affine(
                     LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ofThePiece);
+        }
+    }
+
+    /**
+     * A piece of a string matched against a pattern that {@code accepts}: the piece being one of
+     * the strings the pattern means.
+     *
+     * <p>A pattern is matched against the whole of a string (spec §string-patterns), so the
+     * piece is in the language and not in a class of code points; a piece is as long as the
+     * separator leaves it, and a character, which is one code point, is {@link ACharacterInAClass}.
+     * What this says of the pieces of a string is the statement about the string that some piece,
+     * or every piece, is in it ({@link SomePieceInALanguage}).
+     *
+     * <p>The piece is the one {@code within} statements about some piece: the one the statement it
+     * is read inside of is about.
+     *
+     * @param written the pattern as the author wrote it, which is what a class the statement
+     *                makes is called by
+     */
+    record APieceInALanguage(PatternMeaning accepts, String written, int within)
+            implements Derivation {
+
+        public APieceInALanguage {
+            Objects.requireNonNull(accepts, "a piece is matched against some pattern");
+            Objects.requireNonNull(written, "the pattern was written somehow");
+            if (within < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is of a statement some number of statements in: " + within);
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.InTheStrings(
+                    new Proposition.InTheStrings.Strings.OfAPiece(within), accepts, true);
+        }
+    }
+
+    /**
+     * Some piece of the string at {@code string}, or no piece of it, in a language — the
+     * statement about the string that is the strings with such a piece in a window of the pieces,
+     * {@code accepts}.
+     *
+     * <p>Said of the string at its position and not of a piece: which piece it is not one of the
+     * numbers of the input, but whether the string is one of the strings with such a piece is
+     * what divides the position into classes. {@code holds} is the side of that language the
+     * statement is of, so the strings with no piece in it are the language's other side and not a
+     * second language.
+     *
+     * @param string     where the string the pieces are of stands
+     * @param accepts    the strings with a piece in the window in the language, or with every piece
+     *                   there in it
+     * @param holds      whether the string is one of them
+     * @param says       the statement in the words of the pieces, for a reader that names what it
+     *                   divides the string into
+     * @param ofThePiece what was read of the piece, inside the statement
+     */
+    record SomePieceInALanguage(DecisionSubject string, PatternMeaning accepts, boolean holds,
+                                Said says, Derivation ofThePiece) implements Derivation {
+
+        /**
+         * What is asked of the pieces: which of them, in what, and how many of them.
+         *
+         * @param inIt       whether a piece is asked to be in the language, and not out of it
+         * @param someHolds  whether it is some piece that is asked, and not none
+         * @param separator  the code point the string is parted at
+         * @param written    the pattern as the author wrote it
+         * @param from       how many of the first pieces are not asked about
+         * @param until      the index the pieces asked about stop before, or none where they run
+         *                   to the last
+         */
+        public record Said(boolean inIt, boolean someHolds, int separator, String written,
+                           int from, OptionalInt until) {
+
+            public Said {
+                Objects.requireNonNull(written, "the pattern was written somehow");
+                Objects.requireNonNull(until, "the pieces stop somewhere or run to the last");
+            }
+        }
+
+        public SomePieceInALanguage {
+            Objects.requireNonNull(string, "the pieces are of a string");
+            Objects.requireNonNull(accepts, "the string is one of the strings of a language");
+            Objects.requireNonNull(says, "the statement is said of the pieces");
+            Objects.requireNonNull(ofThePiece, "a piece is read as being in the language");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.InTheStrings(
+                    new Proposition.InTheStrings.Strings.AtASubject(string), accepts, holds);
         }
 
         @Override

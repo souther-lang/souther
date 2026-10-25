@@ -1379,8 +1379,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
+                 Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
@@ -1620,6 +1621,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
             case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtASubject(
+                    DecisionSubject.AnInput _), var _, var _, var _) -> true;
+            case Proposition.InTheStrings _ -> false;
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && statesNoRelation(some.ofTheElement());
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);

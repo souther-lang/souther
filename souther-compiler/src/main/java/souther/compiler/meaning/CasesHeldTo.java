@@ -106,9 +106,10 @@ public final class CasesHeldTo {
                     one(of, new Held.ATruth(holds));
             // A count of statements holds no value to anything here: less than it may, never more.
             case Proposition.InCases _, Proposition.Present _, Proposition.Truth _,
-                 Proposition.Compared _, Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                 Proposition.Unread _, Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
+                 Proposition.Compared _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SoManyHold _ ->
                     new LinkedHashMap<>();
         };
     }

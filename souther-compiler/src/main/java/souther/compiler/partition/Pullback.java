@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
@@ -100,6 +101,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.regex.StringsByTheirPieces;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.CaseMapping;
@@ -300,8 +302,8 @@ final class Pullback {
                     partsOf(where.states(), into);
                 }
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
-                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _ -> {
                     into.add(stated.key());
                     into.add(stated.denied().key());
@@ -331,6 +333,8 @@ final class Pullback {
      * these, and names which ({@link Quantity.CodePointsOfAPiece}).
      */
     private final Map<Pieces, Integer> parting = new HashMap<>();
+    /** The text of each pattern a piece was matched against, as the author wrote it. */
+    private final Map<PatternMeaning, String> patternsWritten = new HashMap<>();
     /** What entering each arm of a fork derives on this reading, by the fork and its names
      *  ({@link #keeping}). */
     private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
@@ -879,6 +883,8 @@ final class Pullback {
                         .orElse(null),
                 () -> applied == null ? null
                         : new ALawRead(applied, e, reads).aCharacterInAClass(),
+                () -> applied == null ? null
+                        : new ALawRead(applied, e, reads).aPieceInALanguage(),
                 () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
                 () -> acrossAWalk(e, AnswerAspect.TRUTH, reads),
                 () -> acrossARecursion(e, AnswerAspect.TRUTH, reads),
@@ -1420,6 +1426,7 @@ final class Pullback {
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
     private static final ValueName.Stdlib TAKE = ValueName.Stdlib.operation("List", "take");
+    private static final ValueName.Stdlib DROP = ValueName.Stdlib.operation("List", "drop");
 
     /**
      * Why {@code more} readings of the condition, made at one place where it splits, are not
@@ -1724,6 +1731,50 @@ final class Pullback {
         return new Pullback(read, Optional.empty()).piecesAttempted(attempt, reads);
     }
 
+    /**
+     * The string at a position of the input that {@code call} comes out true for exactly when it
+     * is one of the strings of {@code accepts}, where {@code call} asks of the pieces of a string
+     * that some, or every, one of a window of them is in a language — or nothing where it asks
+     * anything else.
+     *
+     * @param at      where the string the pieces are of stands
+     * @param accepts the language of the strings, which {@code call} comes out true for where
+     *                {@code holds} and false for otherwise
+     * @param says    what is asked of the pieces
+     */
+    record StringByItsPieces(TermPath at, PatternMeaning accepts, boolean holds,
+                             Derivation.SomePieceInALanguage.Said says) {}
+
+    /**
+     * What the truth of {@code call}, read in {@code reads}, comes to as a statement about the
+     * string whose pieces it asks about ({@link StringByItsPieces}) — one reading of it, as any
+     * condition is read, and never a second one of the same call.
+     */
+    static StringByItsPieces ofTheStringByItsPieces(Core call, InputReads reads,
+                                                    InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        Proposition stated = reading.observe(call, AnswerAspect.TRUTH, reads)
+                .concludes(Optional.empty());
+        if (!(stated instanceof Proposition.InTheStrings(
+                Proposition.InTheStrings.Strings.AtASubject(DecisionSubject.AnInput(
+                        TermPath at)), PatternMeaning accepts, boolean holds, var _))) {
+            return null;
+        }
+        // The call may state the denial of what the pieces were read as: every piece being in a
+        // language is no piece being out of it, and is said as that.
+        for (Met each : reading.met) {
+            if (each.step() instanceof Derivation.SomePieceInALanguage found
+                    && found.accepts().equals(accepts)) {
+                Derivation.SomePieceInALanguage.Said says = found.says();
+                return new StringByItsPieces(at, accepts, holds,
+                        found.holds() == holds ? says : new Derivation.SomePieceInALanguage.Said(
+                                says.inIt(), !says.someHolds(), says.separator(), says.written(),
+                                says.from(), says.until()));
+            }
+        }
+        return null;
+    }
+
     private List<PieceDemand> piecesAttempted(Core.IfConstructed attempt, InputReads reads) {
         Core.Construct built = attempt.construct();
         if (built.values().size() != 1 || !read.rules().newtypes().of(built.typeName().key())) {
@@ -2025,20 +2076,26 @@ final class Pullback {
      * <p>{@code first} is how many of the first pieces a container holds when only those were
      * taken, and nought where it holds them all: whether some of the first few meets a statement
      * is not whether some piece does, and the first one and the first two are not the same few.
+     *
+     * <p>{@code from} is how many of the first pieces were dropped, so that the container holds
+     * the pieces from that index to {@code first}, or to the last where that is nought. Taking
+     * and dropping do not commute: the pieces left of {@code drop(1, take(2, p))} are the second
+     * alone, and of {@code take(2, drop(1, p))} the second and the third.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
                           BoundOperationFacts.Pieces parted, OptionalInt separator,
-                          int first) {
+                          int from, int first) {
 
         @Override
         public boolean equals(Object other) {
             return other instanceof Pieces that && split == that.split && at.equals(that.at)
-                    && first == that.first;
+                    && from == that.from && first == that.first;
         }
 
         @Override
         public int hashCode() {
-            return 31 * (31 * System.identityHashCode(split) + at.hashCode()) + first;
+            return 31 * (31 * (31 * System.identityHashCode(split) + at.hashCode()) + from)
+                    + first;
         }
     }
 
@@ -2073,7 +2130,7 @@ final class Pullback {
             }
             separatedBy = OptionalInt.of(written.value().codePointAt(0));
         }
-        return new Pieces(call, operation, container.at(), parted, separatedBy, 0);
+        return new Pieces(call, operation, container.at(), parted, separatedBy, 0, 0);
     }
 
     /**
@@ -2099,8 +2156,52 @@ final class Pullback {
         Pieces taken = piecesOf(container.at().standing(call.args().get(1),
                 read.rules().symbols(), read.rules().newtypes()));
         return taken == null ? null : new Pieces(taken.split(), taken.operation(), taken.at(),
-                taken.parted(), taken.separator(),
+                taken.parted(), taken.separator(), 0,
                 (int) Math.min(number.value(), Integer.MAX_VALUE));
+    }
+
+    /**
+     * The pieces {@code container} is, or the window of them that {@code List.take} and
+     * {@code List.drop} left of the pieces, in the order they were applied — or null where it is
+     * none, or where the window holds no piece at all.
+     *
+     * <p>Each count is a number written as one, and a drop of none is the pieces as they were.
+     * The window of what is taken from a window ends at the count past where that began, and what
+     * is dropped from a window begins at the count past where that did, which is why the two are
+     * read from the pieces outward.
+     */
+    private Pieces piecesInAWindow(Denotation container) {
+        Pieces whole = piecesOf(container);
+        if (whole != null) {
+            return whole;
+        }
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                || !(call.declared().operation() instanceof ValueName.Stdlib operation)
+                || (!TAKE.equals(operation) && !DROP.equals(operation))) {
+            return null;
+        }
+        Denotation count = container.at().standing(call.args().get(0),
+                read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(count.value()) instanceof Core.Int number)
+                || number.value() < 0) {
+            return null;
+        }
+        Pieces inner = piecesInAWindow(container.at().standing(call.args().get(1),
+                read.rules().symbols(), read.rules().newtypes()));
+        if (inner == null) {
+            return null;
+        }
+        int by = (int) Math.min(number.value(), Integer.MAX_VALUE / 2);
+        if (TAKE.equals(operation)) {
+            int until = Math.min(inner.from() + by,
+                    inner.first() == 0 ? Integer.MAX_VALUE : inner.first());
+            return until <= inner.from() ? null : new Pieces(inner.split(), inner.operation(),
+                    inner.at(), inner.parted(), inner.separator(), inner.from(), until);
+        }
+        int from = inner.from() + by;
+        return inner.first() != 0 && from >= inner.first() ? null : new Pieces(inner.split(),
+                inner.operation(), inner.at(), inner.parted(), inner.separator(), from,
+                inner.first());
     }
 
     /**
@@ -2159,13 +2260,21 @@ final class Pullback {
      * of what only kept some of those — or null where it is not.
      */
     private Pieces pieceThatIs(Core e, InputReads at, boolean ofTheFirstToo) {
+        return pieceThatIs(e, at, ofTheFirstToo ? this::piecesOrTheFirstOf : this::piecesOf);
+    }
+
+    /**
+     * The same, of the pieces {@code held} says a container holds, so that a window of them is
+     * one a piece is of ({@link #piecesInAWindow}).
+     */
+    private Pieces pieceThatIs(Core e, InputReads at, Function<Denotation, Pieces> held) {
         Denotation whole = theContainerOfTheElement(e, at);
         if (whole == null) {
             return null;
         }
         Beneath beneath = beneath(whole, false);
         Denotation made = beneath == null ? whole : beneath.at();
-        Pieces direct = ofTheFirstToo ? piecesOrTheFirstOf(made) : piecesOf(made);
+        Pieces direct = held.apply(made);
         if (direct != null) {
             return direct;
         }
@@ -3684,16 +3793,21 @@ final class Pullback {
                 parting.remove(pieces);
             }
             Proposition element = trying.of(answered);
+            Derivation inALanguage = somePieceInALanguage(pieces, within, element, answered);
+            if (inALanguage != null) {
+                return inALanguage;
+            }
             // Some piece being the same value as one of the input is that value being one of the
             // pieces, which relates it to the string and divides neither where the string has a
             // piece for every value to be or not to be. What leaves the statement is that, and
             // never the piece, which the statement binds.
-            Quantity.IsAmongThePieces among = valueBeingOneOfThePieces(element, within, pieces);
+            Quantity.IsAmongThePieces among = pieces.from() > 0 ? null
+                    : valueBeingOneOfThePieces(element, within, pieces);
             if (among != null) {
                 return leaf(new Derivation.SomePieceEqualling(answered, among),
                         askedAt != null ? askedAt : new Denotation(e, reads));
             }
-            CodePoints held = pieces.first() > 0 ? null
+            CodePoints held = pieces.from() > 0 || pieces.first() > 0 ? null
                     : Derivation.SomePieceMeeting.held(pieces.separator(), within, element);
             if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
@@ -3712,6 +3826,46 @@ final class Pullback {
                     callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.parted().string())),
                     pieces.separator(), within, ofTheString, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
+        }
+
+        /**
+         * Some piece of the window of the pieces meeting what is asked of it, where all that is
+         * asked of a piece is that it is in a language ({@link Derivation.APieceInALanguage}) —
+         * as the statement it is about the string those pieces are of, at the position it stands
+         * at ({@link Derivation.SomePieceInALanguage}). Or null where something else is asked of
+         * a piece, or the string stands at no position.
+         *
+         * <p>Whether some piece meets it or none does is the quantifier's, which the law that
+         * reads this applies to what this concludes ({@link Derivation.ALawQuantifies}); so this
+         * is always that some piece does. Some piece out of the language is the denial of every
+         * piece being in it, which is the other language, and not the denial of some piece being
+         * in it.
+         */
+        private Derivation somePieceInALanguage(Pieces pieces, int within, Proposition element,
+                                                Derivation answered) {
+            if (pieces.separator().isEmpty()
+                    || !(element instanceof Proposition.InTheStrings(
+                            Proposition.InTheStrings.Strings.OfAPiece(int of),
+                            PatternMeaning piece, boolean inIt, var _))
+                    || of != within) {
+                return null;
+            }
+            DecisionSubject string = subjectOf(
+                    pieces.split().args().get(pieces.parted().string().position()), pieces.at());
+            if (string == null) {
+                return null;
+            }
+            int separator = pieces.separator().getAsInt();
+            int until = pieces.first() == 0 ? StringsByTheirPieces.TO_THE_LAST : pieces.first();
+            PatternMeaning language = inIt
+                    ? StringsByTheirPieces.someIn(piece, separator, pieces.from(), until)
+                    : StringsByTheirPieces.everyIn(piece, separator, pieces.from(), until);
+            Derivation.SomePieceInALanguage.Said says = new Derivation.SomePieceInALanguage.Said(
+                    inIt, true, separator, patternsWritten.getOrDefault(piece, ""),
+                    pieces.from(), pieces.first() == 0 ? OptionalInt.empty()
+                            : OptionalInt.of(pieces.first()));
+            return leaf(new Derivation.SomePieceInALanguage(string, language, inIt, says,
+                    answered), askedAt != null ? askedAt : new Denotation(e, reads));
         }
 
         /**
@@ -3878,7 +4032,7 @@ final class Pullback {
                 // writes. Only whether some piece meets a statement is asked of them: how many of
                 // the pieces do depends on how the separator stands in the string, which no number
                 // of the input says.
-                Pieces pieces = counting ? null : piecesOrTheFirstOf(at);
+                Pieces pieces = counting ? null : piecesInAWindow(at);
                 if (pieces != null) {
                     ElementAt each = new ElementAt.APiece(pieces);
                     settle(pending, each, null, located);
@@ -3997,6 +4151,34 @@ final class Pullback {
             Integer within = piece == null ? null : parting.get(piece);
             return within == null || piece.separator().isPresent() ? null
                     : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within), e, reads);
+        }
+
+        /**
+         * The call, a pattern matched against a piece of a string parted at a code point, as the
+         * piece being one of the strings the pattern means ({@link Derivation.APieceInALanguage})
+         * — or null where it is no such call: another predicate, or a subject that is not a piece
+         * of the string a statement about some piece being read is about.
+         *
+         * <p>A piece of a window of the pieces counts: which pieces the statement is about is the
+         * window's, and the language the piece is in is not changed by it.
+         */
+        Derivation aPieceInALanguage() {
+            if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)
+                    || !(call.settled() instanceof Core.KernelFact.StringMatches matches)
+                    || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
+                return null;
+            }
+            StringPredicates predicate =
+                    StringPredicates.of(read.rules().symbols().kernelOf(operation));
+            Pieces piece = predicate == null ? null : pieceThatIs(
+                    call.args().get(predicate.subject()), reads, Pullback.this::piecesInAWindow);
+            Integer within = piece == null ? null : parting.get(piece);
+            if (within == null || piece.separator().isEmpty()) {
+                return null;
+            }
+            patternsWritten.putIfAbsent(matches.meaning(), matches.written());
+            return leaf(new Derivation.APieceInALanguage(matches.meaning(), matches.written(),
+                    within), e, reads);
         }
 
         /**

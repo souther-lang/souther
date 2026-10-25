@@ -57,6 +57,10 @@ public final class WrittenOfANode {
             case Proposition.Truth truth -> reads(truth.of());
             case Proposition.InCases cases -> reads(cases.of());
             case Proposition.Present present -> reads(present.of());
+            case Proposition.InTheStrings(
+                    Proposition.InTheStrings.Strings.AtASubject(DecisionSubject at), var _, var _,
+                    var _) -> reads(at);
+            case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All all -> all.parts().stream().allMatch(this::reads);
