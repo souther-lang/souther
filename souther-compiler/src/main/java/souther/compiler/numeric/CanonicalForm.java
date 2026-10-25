@@ -191,6 +191,23 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
         return new CanonicalForm<>(out);
     }
 
+    /**
+     * Whether this is {@code other} with every coefficient turned around, asked without building
+     * that form ({@code equals(other.negated())} builds and checks one).
+     */
+    public boolean isNegationOf(CanonicalForm<?> other) {
+        if (coefs.size() != other.coefs().size()) {
+            return false;
+        }
+        for (Map.Entry<?, ExactRatio> each : other.coefs().entrySet()) {
+            ExactRatio mine = coefs.get(each.getKey());
+            if (mine == null || !mine.equals(each.getValue().negated())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {
