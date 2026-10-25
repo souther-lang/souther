@@ -485,7 +485,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
-                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/List;Lsouther/compiler/values/ValueSet;"
                             + "Ljava/util/Set;Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
