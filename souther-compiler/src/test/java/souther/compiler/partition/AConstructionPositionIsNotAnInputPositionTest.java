@@ -107,7 +107,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
                 TermPath.of(read.only().name()), read.rules().inners(), read.rules().symbols(),
                 read.rules().kinds(), read.rules().sums(), Set.of(),
                 required, ConstructionPlan.ContentsComposed.NONE,
-                ANY);
+                ANY, _ -> false);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
                 "nothing here asks one position to be two things").plan();
     }

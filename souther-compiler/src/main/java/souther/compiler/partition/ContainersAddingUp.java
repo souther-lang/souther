@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.NumericMeasures;
@@ -14,6 +15,7 @@ import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -2163,6 +2165,17 @@ final class ContainersAddingUp {
                 // A narrowing to state, and the walk states each of them. Asked again rather than
                 // planned around: a second narrowing may stand under the first, and which one that
                 // is depends on the case this settled on.
+                // And a case the element's own rules want stated because one of them names a field
+                // under it: stated the same way, each in turn.
+                case ConstructionPlan.Result.UnderEachCase(TermPath where, List<Refinement> cases) -> {
+                    if (!alsoAt.isEmpty() && !fixed.isAtOrUnder(where)) {
+                        narrowingBeyondTheFirst = true;
+                        continue;
+                    }
+                    for (Refinement narrowing : cases) {
+                        asking.add(narrowed(fixed, where, narrowing));
+                    }
+                }
                 case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
                     // A position nothing stands under is not a way that was tried and refused.
                     // Kept as itself so that a reader is told there was never a way down rather
@@ -2276,12 +2289,17 @@ final class ContainersAddingUp {
             decided.add(asked);
             decided.addAll(inside.among().keySet());
             decided.addAll(apart);
+            // The element's own rules are the ones it is built to: what is above a container says
+            // of the container and not of what stands in it.
+            FieldDomains rules = ConstructionRules.rulesOf(element, reading);
             return ConstructionPlan.of(element, at, reading.source().inners(),
                     reading.source().symbols(),
                     reading.source().kinds(), reading.source().sums(), decided,
                     inside.required(), ConstructionPlan.ContentsComposed.NONE,
                     (_, building) -> ConstructionPlan.ItMayHold.counting(
-                            Partitions.heldRange(building, reading, null)));
+                            Partitions.heldRange(building, reading, null)),
+                    here -> RuleAddress.of(at, here) instanceof RuleAddress address
+                            && rules.namesUnder(address.key()));
         }
 
         /** The way the last answer is about. */

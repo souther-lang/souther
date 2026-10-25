@@ -1305,6 +1305,34 @@ public final class FieldDomains {
                     left, held, admits, heldTo);
         }
 
+        /**
+         * What these limits and {@code other} leave the position together, which is what two
+         * values' rules naming one position leave it.
+         *
+         * <p>Each answer is an over-approximation of the values a row may write there, so the
+         * meet is too: it narrows by each value's rules and never takes out a value both admit.
+         * Every part is met, and the order's region in whatever shape it comes to.
+         */
+        public ConstructionLimits meet(ConstructionLimits other) {
+            NumericDomain.Bounds bounds = values == null ? other.values
+                    : other.values == null ? values : values.meet(other.values);
+            OrderedRuns both = ordered == null ? other.ordered
+                    : other.ordered == null ? ordered : ordered.meet(other.ordered);
+            return of(bounds, both, meet(held, other.held), admits.narrower(other.admits),
+                    heldTo.and(other.heldTo));
+        }
+
+        /** Both answers about how many a collection holds: how many the two leave together, and
+         *  every run either keeps the elements apart at. */
+        private static Held meet(Held one, Held other) {
+            if (one == null || other == null) {
+                return one == null ? other : one;
+            }
+            List<List<String>> apart = new ArrayList<>(one.keptApart());
+            apart.addAll(other.keptApart());
+            return new Held(one.bounds().meet(other.bounds()), List.copyOf(apart));
+        }
+
         /** The same limits, where the rules leave the value nothing at all. */
         static ConstructionLimits leavingNothing(Held held, AdmissibleSet admits,
                                                  HeldClass heldTo) {
@@ -2062,6 +2090,19 @@ public final class FieldDomains {
     public NumberAt<RuleKey> countedAt(RuleKey path) {
         Counted counted = countAt.get(path);
         return counted == null ? null : NumberAt.takenAsItStands(path, counted.by());
+    }
+
+    /**
+     * Whether these rules name a position strictly under {@code path}, which a value built whole at
+     * {@code path} by its own declaration's rules is built without.
+     */
+    public boolean namesUnder(RuleKey path) {
+        for (RuleKey each : namedBy.values()) {
+            if (!each.equals(path) && each.isAtOrUnder(path)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

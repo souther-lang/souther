@@ -186,6 +186,62 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         assertFalse(block.contains("no row for"), block);
     }
 
+    /**
+     * A rule of the value above a sum about a field its cases share holds a value of the sum built
+     * for a row that decides nothing under it — the value is planned under a case, and its field is
+     * held to that rule as well as to the case's own.
+     */
+    @Test
+    void aRuleAboveASumHoldsTheCaseAValueIsBuiltAs() {
+        String block = blockOf(ABOVE_A_SUM.replace("CASE", "limit >= 0")
+                .replace("q.limit > 100 || q.limit < 0", "q.limit > 100")
+                .replace("behavior f : (h: Holder) -> Bool", "behavior f : (h: Holder, n: Int) -> Bool")
+                .replace("let f (h) = true", "let f (h, n) = if n >= 3 then true else false"));
+
+        assertTrue(block.contains("fills ON point"), block);
+        assertTrue(block.contains("A { limit = 101"), block);
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /**
+     * And so does a value of the sum built whole, as the elements of a list beside the first are:
+     * the case is built field by field, each field held to the rule above as well.
+     */
+    @Test
+    void aRuleAboveASumHoldsTheCaseOfAnElementBuiltWhole() {
+        String block = blockOf(ABOVE_A_SUM.replace("CASE", "limit >= 0")
+                .replace("q.limit > 100 || q.limit < 0", "q.limit > 100")
+                .replace("behavior f : (h: Holder) -> Bool", """
+                        data Holders = List<Holder>
+                            invariant nonEmpty = List.length(value) >= 1
+
+                        behavior f : (hs: Holders, n: Int) -> Bool""")
+                .replace("let f (h) = true", "let f (hs, n) = if n >= 3 then true else false"));
+
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /** The same of a record inside a record built whole: a rule naming the inner record's field
+     *  holds it there. */
+    @Test
+    void aRuleNamingAFieldOfAnInnerRecordHoldsItWhenTheOuterIsBuiltWhole() {
+        String block = blockOf("""
+                module example.gap
+
+                data Paging = { limit: Int }
+                    invariant own = limit >= 0
+                data Holder = { p: Paging }
+                    invariant above = p.limit > 100
+                data Holders = List<Holder>
+                    invariant nonEmpty = List.length(value) >= 1
+
+                behavior f : (hs: Holders, n: Int) -> Bool
+                let f (hs, n) = if n >= 3 then true else false
+                """);
+
+        assertFalse(block.contains("no row for"), block);
+    }
+
     /** One declaration's choice cut to one run by a rule beside it is written in that run. */
     @Test
     void aChoiceCutToOneRunByTheRuleBesideItIsWrittenInThatRun() {

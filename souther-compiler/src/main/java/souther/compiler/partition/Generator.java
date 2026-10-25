@@ -778,6 +778,9 @@ public final class Generator {
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
+                             // The cases past it were never planned under, so what the search came
+                             // to is about the cases it tried.
+                             CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                              // The strings past this many pieces were never offered, so what the
@@ -11785,8 +11788,12 @@ public final class Generator {
                                    Requirements additional, Handed handed, CandidateCheck check,
                                    FoundOut found, ValueTaking taking) {
         Composing[] made = {null};
+        // One count of the cases planned under for a rule above, across both walks and every sum
+        // they plan under: what multiplies is the cases of each such sum, and a count per sum would
+        // let the product past it.
+        int[] casesLeft = {CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum()};
         Outcome first = valueAtOnce(subject, p, decided, asked, settled, additional, handed, check,
-                found, taking, made);
+                found, taking, made, casesLeft);
         if (first instanceof Outcome.Built || first instanceof Outcome.PassedOver
                 || first instanceof Outcome.Halted || made[0] == null
                 || made[0].notHeld().isEmpty()) {
@@ -11796,7 +11803,7 @@ public final class Generator {
         Map<TermPath, List<FixtureTemplate>> offered = offeredApart(subject, decided, made[0],
                 found);
         return offered == null ? first : valueAtOnce(subject, p, offered, asked, settled,
-                additional, handed, check, found, taking, new Composing[1]);
+                additional, handed, check, found, taking, new Composing[1], casesLeft);
     }
 
     /**
@@ -11922,7 +11929,7 @@ public final class Generator {
                                        Map<TermPath, Place> settled,
                                        Requirements additional, Handed handed,
                                        CandidateCheck check, FoundOut found, ValueTaking taking,
-                                       Composing[] through) {
+                                       Composing[] through, int[] casesLeft) {
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -11987,7 +11994,8 @@ public final class Generator {
                 (at, building) -> new ConstructionPlan.ItMayHold(
                         within(heldRange(rules, at, building, subject.ruleReading()),
                                 sized.get(at)),
-                        ElementsKeptApart.heldBy(rules.heldAt(at))));
+                        ElementsKeptApart.heldBy(rules.heldAt(at))),
+                rules::speaksUnder);
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
@@ -12035,6 +12043,39 @@ public final class Generator {
                                         + narrowings.stream().map(Refinement::spelled)
                                                 .collect(java.util.stream.Collectors.joining(" or "))
                                         + ", and nothing said which of them the value under it is");
+            }
+            // A rule of a value above names a field under a position that holds nothing until a
+            // narrowing says what stands there, and nobody asked which. Planned under each case in
+            // turn, so the field is a position held to that rule, and the first that composes is
+            // the answer. A case whose plan composes nothing says nothing of the next one, so what
+            // comes back where none composes is what the first case came to, unless the figure
+            // stopped the rest.
+            case ConstructionPlan.Result.UnderEachCase(TermPath where, List<Refinement> cases) -> {
+                Outcome first = null;
+                for (Refinement each : cases) {
+                    if (!(additional.merge(where.refine(each).requirements())
+                            instanceof Requirements.Merge.Merged(Requirements under))) {
+                        continue;
+                    }
+                    if (casesLeft[0] == 0) {
+                        return new Outcome.Stopped(CompositionShortfall.of(
+                                Set.of(CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER)),
+                                new LinkedHashMap<>(), null);
+                    }
+                    casesLeft[0]--;
+                    Outcome made = valueAtOnce(subject, p, decided, asked, settled, under, handed,
+                            check, found, taking, through, casesLeft);
+                    if (made instanceof Outcome.Built || made instanceof Outcome.PassedOver
+                            || made instanceof Outcome.Halted) {
+                        return made;
+                    }
+                    if (first == null) {
+                        first = made;
+                    }
+                }
+                return first != null ? first
+                        : new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                "`" + where + "` stands at no case the row can be");
             }
         }
         // A position a container of this value is handed the value at, which this plan holds no
