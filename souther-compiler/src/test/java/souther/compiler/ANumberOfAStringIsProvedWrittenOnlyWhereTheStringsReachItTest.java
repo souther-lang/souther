@@ -114,6 +114,19 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 if h.n >= 10 then 1 else 0
             """;
 
+    /** The same two, as two parameters: a row is a value of every parameter. */
+    private static final String UNREAD_PARAMETER = """
+            module example.twoparams
+
+            data Never = String
+                invariant String.reverse(value) /= String.reverse(value)
+
+            behavior f : (bad: Never, n: Int) -> Int
+
+            let f (bad, n) =
+                if n >= 10 then 1 else 0
+            """;
+
     /** No value of the element exists, and the empty list is a value of the input all the same. */
     private static final String NO_ELEMENT_EXISTS = """
             module example.noelement
@@ -151,6 +164,15 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 "the body draws a line on n: " + labels(points));
         assertFalse(provedAny(onNumberNamed(points, "10").toList()),
                 "label may hold no value, and no row is written without one");
+    }
+
+    @Test
+    void aNumberBesideAParameterWhoseRulesWereNotReadIsNotProvedWritten() {
+        List<BorderAssessment.Point> points = owedPoints(UNREAD_PARAMETER, "example.twoparams");
+        assertTrue(onNumberNamed(points, "10").findAny().isPresent(),
+                "the body draws a line on n: " + labels(points));
+        assertFalse(provedAny(onNumberNamed(points, "10").toList()),
+                "bad may hold no value, and a row is a value of every parameter");
     }
 
     @Test
