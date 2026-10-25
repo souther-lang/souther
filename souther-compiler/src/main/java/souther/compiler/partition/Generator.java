@@ -3626,7 +3626,6 @@ public final class Generator {
             Attempt noRoom = classesLeaveNoRoom(axes, candidate.where(), held);
             if (noRoom != null) {
                 turnedAway++;
-                known.built(candidate, noRoom);
                 foundOut = foundOut.and(noRoom.found());
                 last = noRoom;
                 return Taken.AND_MORE;

@@ -65,7 +65,6 @@ final class NearestAssignments {
     static final class Looks {
 
         private long left;
-        private boolean spent;
 
         Looks(long most) {
             this.left = most;
@@ -74,7 +73,6 @@ final class NearestAssignments {
         /** Takes one look, and says whether there was one left to take. */
         boolean take() {
             if (left == 0) {
-                spent = true;
                 return false;
             }
             left--;
@@ -84,11 +82,6 @@ final class NearestAssignments {
         /** How many looks are left to take. */
         long left() {
             return left;
-        }
-
-        /** Whether a look was asked for after the last was taken. */
-        boolean spent() {
-            return spent;
         }
     }
 

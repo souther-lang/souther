@@ -296,7 +296,7 @@ class NearestAssignmentsTest {
                     return true;
                 });
         assertEquals(NearestAssignments.Ended.OUT_OF_LOOKS, ended);
-        assertTrue(looks.spent());
+        assertEquals(0, looks.left());
         assertTrue(seen[0] <= 1000, "an assignment is at least a look: " + seen[0]);
     }
 
@@ -314,7 +314,7 @@ class NearestAssignmentsTest {
                     }));
         }
         assertEquals(4, seen.size());
-        assertTrue(!looks.spent());
+        assertTrue(looks.left() > 0, "some looks were left: " + looks.left());
     }
 
     private static NearestAssignments.Together together(int axes) {
