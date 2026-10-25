@@ -66,7 +66,7 @@ class ARowAJudgeRefusedDoesNotEndTheLookingOverPairsOfNumbersTest {
     private static Generator.BoundaryAttempt none() {
         return new Generator.BoundaryAttempt.Unresolved(
                 new Generator.UnresolvedCombination(List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                        Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
                 CompositionAccount.NOTHING);
     }
 

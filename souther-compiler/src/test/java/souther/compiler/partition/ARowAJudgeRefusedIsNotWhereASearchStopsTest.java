@@ -38,15 +38,48 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
     }
 
     @Test
-    void aWayThatBuiltNoRowIsNotHeldBack() {
+    void aWayThatLookedAtEveryCandidateAndBuiltNoRowIsNotHeldBack() {
         List<Generator.BoundaryAttempt> held = new ArrayList<>();
-        Generator.BoundaryAttempt none = new Generator.BoundaryAttempt.Unresolved(
-                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                CompositionAccount.NOTHING);
 
-        assertFalse(Generator.builtLeavingNothingOut(none, held));
+        assertFalse(Generator.builtLeavingNothingOut(
+                unresolved(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED), held));
         assertTrue(held.isEmpty());
+    }
+
+    /**
+     * An {@code Unresolved} is a word, and a word may say candidates were not all looked at: it is
+     * held back beside a row refused as a search a figure stopped is, and what each word says is
+     * the word's, not read off the shape that carries it.
+     */
+    @Test
+    void aWayWhoseWordSaysCandidatesWereNotAllLookedAtIsHeldBackBesideARowRefused() {
+        List<Generator.BoundaryAttempt> held = new ArrayList<>();
+        Generator.BoundaryAttempt untried = unresolved(
+                Generator.UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED);
+        Generator.BoundaryAttempt complete = unresolved(
+                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+
+        assertFalse(Generator.builtLeavingNothingOut(built(true), held));
+        assertFalse(Generator.builtLeavingNothingOut(untried, held));
+
+        assertSame(untried, Generator.heldBack(held, complete));
+    }
+
+    @Test
+    void aWordProvingNothingCanStandThereLookedAtEverything() {
+        for (Generator.UnresolvedCombination.Reason each
+                : Generator.UnresolvedCombination.Reason.values()) {
+            if (each.provesInfeasible()) {
+                assertFalse(each.leavesSomethingUntried(), each::name);
+            }
+        }
+    }
+
+    private static Generator.BoundaryAttempt unresolved(
+            Generator.UnresolvedCombination.Reason reason) {
+        return new Generator.BoundaryAttempt.Unresolved(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"), reason),
+                CompositionAccount.NOTHING);
     }
 
     @Test
@@ -77,7 +110,8 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
         assertFalse(Generator.builtLeavingNothingOut(built(true), held));
         assertFalse(Generator.builtLeavingNothingOut(stopped, held));
 
-        assertSame(stopped, Generator.heldBack(held, null),
+        assertSame(stopped, Generator.heldBack(held,
+                        unresolved(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED)),
                 "a row refused does not stand in the place of a search that was stopped");
     }
 

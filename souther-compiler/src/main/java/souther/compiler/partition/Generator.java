@@ -732,6 +732,33 @@ public final class Generator {
             }
 
             /**
+             * Whether a search that came back with this word did not look at every candidate there
+             * was, which a row built beside it must not be held over.
+             *
+             * <p>Asked of the word and answered for each, with no default: a reason added is a
+             * case here, decided when it is added, and not a word that joins whichever side a
+             * reader's condition leaves it on. The searches that looked at everything are the ones
+             * that proved nothing could stand there, the one whose candidates were all refused, and
+             * the one whose rows all reach an {@code unreachable}; each of the others is this
+             * compiler falling short of the candidates, or of reading them.
+             */
+            public boolean leavesSomethingUntried() {
+                return switch (this) {
+                    case NO_VALUE_CAN_STAND_THERE, ONE_POSITION_CANNOT_BE_BOTH,
+                         A_CONDITION_NEVER_COMES_OUT_THAT_WAY, ALL_CANDIDATES_REJECTED,
+                         EVERY_ROW_THERE_REACHES_AN_UNREACHABLE -> false;
+                    case NOTHING_COMPOSES_ONE, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
+                         THE_SEARCH_LEFT_SOMETHING_UNTRIED, NOTHING_STANDS_IN_FOR_A_DEPENDENCY,
+                         A_TABLE_IS_WHAT_THIS_NEEDS, NOTHING_TO_BUILD_AGAINST,
+                         NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
+                         THE_ROWS_WERE_NOT_READ, THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE,
+                         THE_WAY_IN_PLACES_AT_NO_CLASS, NO_CANDIDATE_WAS_OFFERED,
+                         NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> true;
+                };
+            }
+
+            /**
              * The word a search these budgets stopped comes back with.
              *
              * <p>One way only. Which budget stopped a search is what the search hands over, and this
@@ -5107,11 +5134,22 @@ public final class Generator {
         CompositionAccount unrepresented();
 
         /**
-         * Whether this is a search that a figure or a plan stopped, which left something unlooked
-         * at: no row, and not the model refusing every row it was shown.
+         * Whether this is a search that came to no row and left something unlooked at: stopped by
+         * a figure or a plan, or saying in its word or its offer that candidates were not all
+         * looked at. A row built is not one, and neither is a search that proved nothing could
+         * stand there or whose candidates were all refused.
+         *
+         * <p>Read from what each shape says, and never from the shape alone: an {@code Unresolved}
+         * is the word a search came back with, and whether that word is a search that looked at
+         * everything is the word's to say ({@link UnresolvedCombination.Reason#leavesSomethingUntried}).
          */
         default boolean stoppedShort() {
-            return this instanceof NoRow && !(this instanceof Unresolved);
+            return switch (this) {
+                case Built _ -> false;
+                case Unresolved it -> it.why().reason().leavesSomethingUntried()
+                        || !it.why().alsoShort().isEmpty();
+                case Stopped _, Unexhausted _, Limited _, Unplanned _ -> true;
+            };
         }
 
         /**
@@ -5541,13 +5579,14 @@ public final class Generator {
     /**
      * The attempt that stands where none of these came back whole and reached: the first row built
      * that a judge did not refuse, short of the way as it may be, since the run of a row that took
-     * what was asked took it however it was composed; otherwise, where only rows a judge refused
-     * were built, the first search a figure or a plan stopped, since a row refused is no answer
-     * that nothing was left to find; otherwise the first row built, which says where its run
-     * went; otherwise {@code none}.
+     * what was asked took it however it was composed; otherwise, where rows a judge refused were
+     * built, the first search that left something unlooked at
+     * ({@link BoundaryAttempt#stoppedShort}), since a row refused is no answer that nothing was
+     * left to find; otherwise the first row built, which says where its run went; otherwise
+     * {@code none}, which is what the way as it stands came to and is what is said where no row
+     * was built.
      */
-    static BoundaryAttempt heldBack(List<BoundaryAttempt> builtShort,
-                                            BoundaryAttempt none) {
+    static BoundaryAttempt heldBack(List<BoundaryAttempt> builtShort, BoundaryAttempt none) {
         BoundaryAttempt refused = null;
         BoundaryAttempt stopped = null;
         for (BoundaryAttempt each : builtShort) {
