@@ -62,6 +62,11 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                 "the values both admit, and short of what either was short of",
                 "ALineDrawnOnASharedNameFallsUnderEachCaseTest"
                         + ".aClauseThatComesToNoLineNamesTheSharedFieldUnderEachCase"));
+        table.put("runsApartAt", new Decided(Above.ASKED,
+                "the runs both leave, met — a gap either leaves is one the position has, as a value "
+                        + "either refuses is one `admits` leaves out",
+                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
+                        + ".theRunsAChoiceAboveLeavesStandUnderEachCaseMetWithTheCasesOwn"));
         table.put("placedAt", new Decided(Above.ASKED, "both, kept apart by the rule that drew each",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
         table.put("noLineAt", new Decided(Above.ASKED, "both",

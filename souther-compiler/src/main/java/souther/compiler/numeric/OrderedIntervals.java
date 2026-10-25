@@ -26,9 +26,15 @@ import java.util.Set;
  * joining with everything is everything.
  *
  * <p><b>One direction only.</b> This exists to decide that a position holds no value, so every
- * operation that cannot be exact widens. A choice between two ranges is the ends around both, which
- * admits values neither alternative does; a state that narrowed there would refuse a model somebody
- * can write.
+ * operation that cannot be exact widens. A choice between two ranges at one position is the two of
+ * them ({@link OrderedRuns}), and what is lost is how the positions of one alternative go together:
+ * {@code (a < 0 && b == 0) || (a > 100 && b == 1)} leaves {@code a} two runs and {@code b} two
+ * values, and every pairing of them, which admits values neither alternative does. A state that
+ * narrowed there would refuse a model somebody can write.
+ *
+ * <p>The ends around a position's runs are what every reader of the ends is handed ({@link
+ * #statedAt}, {@link #valuesAt}), since a line falls at the outermost end either way; the runs are
+ * {@link #runsAt}'s, for a reader choosing a value.
  *
  * <p>Apart from {@link NumericDomain}, which relates positions to each other by the sums a model adds
  * and subtracts them in, and can only do so over numbers. This relates no two positions and holds
@@ -52,13 +58,35 @@ public final class OrderedIntervals<A> {
      * them are the record's. A part added here arrives in each of them the day it is declared, which
      * is what keeps a state that differs from telling a caller it does not.
      */
-    private record Parts<A>(Map<A, OrderedInterval> ranges, boolean nothing) {
+    private record Parts<A>(Map<A, OrderedInterval> ranges, Map<A, OrderedRuns> apart,
+                            boolean nothing) {
 
         private Parts {
             // Kept in the order the positions were read. What is written out of these has to come
             // out the same on two runs of the compiler, and the iteration order of an immutable
             // copy does not.
             ranges = Collections.unmodifiableMap(new LinkedHashMap<>(ranges));
+            apart = apart.isEmpty() ? Map.of()
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(apart));
+        }
+
+        /**
+         * The parts of {@code runs} at each position: the ends around them in {@code ranges}, and
+         * the runs themselves beside those where there are more than one.
+         *
+         * <p>Two maps and one answer. Most positions are one run, and a meet of two of those is
+         * the interval arithmetic it always was; the runs are kept only where a choice left a gap.
+         */
+        static <A> Parts<A> of(Map<A, OrderedRuns> runs, boolean nothing) {
+            Map<A, OrderedInterval> ranges = new LinkedHashMap<>();
+            Map<A, OrderedRuns> apart = new LinkedHashMap<>();
+            runs.forEach((position, held) -> {
+                ranges.put(position, held.hull());
+                if (!held.isOneRun()) {
+                    apart.put(position, held);
+                }
+            });
+            return new Parts<>(ranges, apart, nothing);
         }
     }
 
@@ -80,7 +108,7 @@ public final class OrderedIntervals<A> {
      * ({@code AReadingIsWhatItsOperationsReachTest}) — a state handed out of a field here would be
      * a way in that no operation of this named.
      */
-    private static final Parts<?> NOTHING_READ = new Parts<>(Map.of(), false);
+    private static final Parts<?> NOTHING_READ = new Parts<>(Map.of(), Map.of(), false);
 
     /** Nothing read, so every position holds every value its order has. */
     @SuppressWarnings("unchecked")
@@ -90,11 +118,17 @@ public final class OrderedIntervals<A> {
 
     /** One position said to lie inside {@code range}. */
     public static <A> OrderedIntervals<A> at(A position, OrderedInterval range) {
-        return new OrderedIntervals<>(new Parts<>(Map.of(position, range), false));
+        return new OrderedIntervals<>(new Parts<>(Map.of(position, range), Map.of(), false));
     }
 
     private Map<A, OrderedInterval> ranges() {
         return parts.ranges();
+    }
+
+    /** The runs at a position these rules bounded, which is its one range where there is one. */
+    private OrderedRuns runsHeldAt(A position) {
+        OrderedRuns apart = parts.apart().get(position);
+        return apart != null ? apart : OrderedRuns.of(ranges().get(position));
     }
 
     private boolean nothing() {
@@ -181,6 +215,17 @@ public final class OrderedIntervals<A> {
     }
 
     /**
+     * The runs these rules leave {@code position}, as written, or null where they put no end on it.
+     *
+     * <p>{@link #statedAt} is the ends around them. Two runs are what a reader choosing a value has
+     * to know and a reader drawing a line does not, so they are a separate question and the ends
+     * stay the answer every reader of ends already had.
+     */
+    public OrderedRuns runsAt(A position) {
+        return ranges().containsKey(position) ? runsHeldAt(position) : null;
+    }
+
+    /**
      * The positions these rules leave holding less than every value of their own order.
      *
      * <p>Where an end becomes a line, which is the one thing a reader of the ends is really asking
@@ -246,10 +291,18 @@ public final class OrderedIntervals<A> {
         if (ranges().isEmpty() && !nothing()) {
             return other;
         }
-        Map<A, OrderedInterval> out = new LinkedHashMap<>(ranges());
-        other.ranges().forEach((position, range) ->
-                out.merge(position, range, OrderedInterval::meet));
-        return new OrderedIntervals<>(new Parts<>(out, nothing() || other.nothing()));
+        boolean nothingEither = nothing() || other.nothing();
+        if (parts.apart().isEmpty() && other.parts.apart().isEmpty()) {
+            Map<A, OrderedInterval> out = new LinkedHashMap<>(ranges());
+            other.ranges().forEach((position, range) ->
+                    out.merge(position, range, OrderedInterval::meet));
+            return new OrderedIntervals<>(new Parts<>(out, Map.of(), nothingEither));
+        }
+        Map<A, OrderedRuns> out = new LinkedHashMap<>();
+        ranges().keySet().forEach(position -> out.put(position, runsHeldAt(position)));
+        other.ranges().keySet().forEach(position ->
+                out.merge(position, other.runsHeldAt(position), OrderedRuns::meet));
+        return new OrderedIntervals<>(Parts.of(out, nothingEither));
     }
 
     /**
@@ -271,7 +324,9 @@ public final class OrderedIntervals<A> {
     public <B> OrderedIntervals<B> renamed(java.util.function.Function<A, B> naming) {
         Map<B, OrderedInterval> out = new LinkedHashMap<>();
         ranges().forEach((position, range) -> out.put(naming.apply(position), range));
-        return new OrderedIntervals<>(new Parts<>(out, nothing()));
+        Map<B, OrderedRuns> apart = new LinkedHashMap<>();
+        parts.apart().forEach((position, runs) -> apart.put(naming.apply(position), runs));
+        return new OrderedIntervals<>(new Parts<>(out, apart, nothing()));
     }
 
     /**
@@ -309,14 +364,15 @@ public final class OrderedIntervals<A> {
                 both.put(position, statedAt(position).meet(other.statedAt(position)));
             }
         }
-        return new OrderedIntervals<>(new Parts<>(both, true));
+        return new OrderedIntervals<>(new Parts<>(both, Map.of(), true));
     }
 
     /**
      * Either reading holding, both alternatives being ones somebody can take.
      *
      * <p>Over the positions both spoke about, since a position one of them left open is one the two
-     * of them together leave open.
+     * of them together leave open. At each of those, the runs of either side, so a gap between them
+     * is one the choice leaves and the ends around both are only what {@link #statedAt} says.
      *
      * <p>Which alternatives those are is not decided here, for the reason {@link #bothDead} gives:
      * a branch nobody can be in is shown by what every language left, and a choice settled from the
@@ -326,21 +382,20 @@ public final class OrderedIntervals<A> {
      *
      * <p>An assertion and not a branch, because a caller passing a side nobody can take is this
      * compiler disagreeing with itself rather than anything a model says. With assertions off the
-     * hull is taken over what the two spoke about, which admits everything either of them did: an
-     * empty range at a position both named contributes nothing to the hull, and a position only the
+     * runs are taken over what the two spoke about, which admits everything either of them did: an
+     * empty range at a position both named contributes no run, and a position only the
      * live side named is left out and so left open. What is lost is what the dead side proved, and
      * no end is invented — which is the direction this state is only ever allowed to move in.
      */
     public OrderedIntervals<A> joinLive(OrderedIntervals<A> other) {
         assert !isBottom() && !other.isBottom()
                 : "a choice of two live alternatives was asked of " + this + " and " + other;
-        Map<A, OrderedInterval> out = new LinkedHashMap<>();
-        ranges().forEach((position, range) -> {
-            OrderedInterval there = other.ranges().get(position);
-            if (there != null) {
-                out.put(position, range.join(there));
+        Map<A, OrderedRuns> out = new LinkedHashMap<>();
+        ranges().keySet().forEach(position -> {
+            if (other.ranges().containsKey(position)) {
+                out.put(position, runsHeldAt(position).join(other.runsHeldAt(position)));
             }
         });
-        return new OrderedIntervals<>(new Parts<>(out, false));
+        return new OrderedIntervals<>(Parts.of(out, false));
     }
 }

@@ -2854,11 +2854,24 @@ final class TermRealizations {
         if (!(members instanceof HeldClass.None)) {
             return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun, usual);
         }
-        Place found = Criterion.Within.standingIn(wanted.region(orders.answered()),
-                orders.answered(), leaves == null ? null : leaves.min(),
-                leaves == null ? null : leaves.max(), usual);
-        return new Tried(found == null ? List.of() : List.of(found),
-                new Remainder.SomeOf(ofTheRun));
+        // In each run a choice of ranges in the declarations left the value, since between the
+        // ends of the first and the last are gaps every alternative refuses. A class holding
+        // nothing of any of them is one the declarations leave no value in, which they say.
+        List<NumericDomain.Bounds> runs = LevelRealizer.runsOf(leaves,
+                orders.term() instanceof NumericTerm.ValueOf value && within != null
+                        ? within.runsAt(value) : null);
+        if (runs.isEmpty()) {
+            return new Tried(List.of(), new Remainder.Exhausted());
+        }
+        for (NumericDomain.Bounds run : runs) {
+            Place found = Criterion.Within.standingIn(wanted.region(orders.answered()),
+                    orders.answered(), run == null ? null : run.min(),
+                    run == null ? null : run.max(), usual);
+            if (found != null) {
+                return new Tried(List.of(found), new Remainder.SomeOf(ofTheRun));
+            }
+        }
+        return new Tried(List.of(), new Remainder.SomeOf(ofTheRun));
     }
 
     /**

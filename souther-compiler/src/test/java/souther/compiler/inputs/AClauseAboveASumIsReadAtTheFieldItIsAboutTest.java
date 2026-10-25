@@ -8,6 +8,9 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -441,6 +444,45 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                             .refine(caseNamed(sum, each)).then("limit")).projection(),
                     () -> "the only value that wrote anything is `Holder`, under case " + each);
         }
+    }
+
+    /**
+     * A choice of ranges the value above leaves the shared field is a gap in it under each case,
+     * met with what the case's own rules leave it.
+     */
+    @Test
+    void theRunsAChoiceAboveLeavesStandUnderEachCaseMetWithTheCasesOwn() {
+        InputDomain sum = reading("""
+                module g
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                    invariant small = limit <= 150
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: Q }
+                    invariant apart = q.limit > 100 || q.limit < 0
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """);
+
+        for (String each : List.of("A", "B")) {
+            OrderedRuns runs = sum.at(TermPath.of("h").then("q").refine(caseNamed(sum, each))
+                    .then("limit")).runsApart();
+            assertNotNull(runs, "the gap the value above leaves is one the field has, under " + each);
+            assertEquals(2, runs.runs().size(), runs::toString);
+            assertTrue(runs.runs().getFirst().high().at().sameAs(Count.of(-1)), runs::toString);
+        }
+        Endpoint underA = sum.at(TermPath.of("h").then("q").refine(caseNamed(sum, "A"))
+                .then("limit")).runsApart().runs().getLast().high();
+        assertTrue(underA != null && underA.at().sameAs(Count.of(150)),
+                "and under `A` the upper run stops where `A`'s own rule stops it: " + underA);
+        assertNull(sum.at(TermPath.of("h").then("q").refine(caseNamed(sum, "B"))
+                        .then("limit")).runsApart().runs().getLast().high(),
+                "and under `B`, which has no rule of its own, it runs on");
     }
 
     /** The narrowing that names this case of the sum standing at {@code sum}. */

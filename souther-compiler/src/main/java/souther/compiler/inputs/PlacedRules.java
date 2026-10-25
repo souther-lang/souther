@@ -20,6 +20,8 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -244,6 +246,26 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         }
         NumericDomain.Bounds outer = alsoReaching.outer().leftAt(above, kind);
         return here == null ? outer : outer == null ? here : here.meet(outer);
+    }
+
+    /**
+     * The runs a choice of ranges left the position at {@code path}, or null where the rules leave
+     * it one: this value's own, met with those of the value it was narrowed out of, as
+     * {@link #admits} meets what each admits — and with where the position stops, since a value
+     * whose rules leave it one run says so in its ends and not here.
+     */
+    OrderedRuns runsApartAt(TermPath path) {
+        OrderedRuns here = rules.runsApartAt(under(path));
+        TermPath above = alsoAt(path);
+        OrderedRuns outer = above == null ? null : alsoReaching.outer().runsApartAt(above);
+        OrderedRuns runs = here == null ? outer : outer == null ? here : here.meet(outer);
+        if (runs == null) {
+            return null;
+        }
+        NumericDomain.Bounds left = leftAt(path, new NumberAt.OfWhatNumber.OfItsOwnValue());
+        OrderedRuns met = left == null ? runs
+                : runs.meet(OrderedRuns.of(new OrderedInterval(left.min(), left.max())));
+        return met.isOneRun() ? null : met;
     }
 
     /**

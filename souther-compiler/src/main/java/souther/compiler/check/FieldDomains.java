@@ -10,6 +10,7 @@ import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Today;
 import souther.compiler.numeric.ValueTransformation;
@@ -98,7 +99,7 @@ public final class FieldDomains {
                     Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE,
                     RevisionKnowledge.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
-                    SettledOrderEnvelope.nothing());
+                    SettledOrderEnvelope.nothing(), Map.of());
 
     private final Map<RuleKey, NumericDomain.Bounds> byName;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -161,6 +162,14 @@ public final class FieldDomains {
      * holding it and {@link #leftAt} picks between them off the coordinate it was handed.
      */
     private final SettledOrderEnvelope settledOrder;
+    /**
+     * The runs a choice of ranges left a position, at each position it left more than one.
+     *
+     * <p>Not the envelope above, whose ends hold the gap between the runs: this is read where a
+     * value is chosen ({@link Composing#at}), and a value chosen between the envelope's ends may be
+     * one every alternative refuses.
+     */
+    private final Map<RuleKey, OrderedRuns> runsApart;
     /** Which choice an author is sent to for a line on one of those numbers that nothing placed —
      *  see {@link #endsLeftOpenAt}. */
     private final Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen;
@@ -328,7 +337,9 @@ public final class FieldDomains {
                          StringFacts stringMachines, RevisionKnowledge revision,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
-                         BoundaryState derived, SettledOrderEnvelope settledOrder) {
+                         BoundaryState derived, SettledOrderEnvelope settledOrder,
+                         Map<RuleKey, OrderedRuns> runsApart) {
+        this.runsApart = runsApart;
         this.endsLeftOpen = endsLeftOpen;
         this.boundsLeftOpen = boundsLeftOpen;
         this.derived = derived;
@@ -605,7 +616,7 @@ public final class FieldDomains {
                 // borrows its work from.
                 reading.readings().revision(),
                 seeded.endsLeftOpen(), seeded.boundsLeftOpen(), seeded.derived(),
-                seeded.settledOrder());
+                seeded.settledOrder(), seeded.runsApart());
     }
 
     /**
@@ -1025,7 +1036,7 @@ public final class FieldDomains {
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
         return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt, this::admits,
-                this::classAt);
+                this::classAt, this::runsApartAt);
     }
 
     /**
@@ -1157,17 +1168,24 @@ public final class FieldDomains {
          *  before it still holds every value left after it. */
         private final Function<RuleKey, HeldClass> classAt;
 
+        /** The runs a choice of ranges left each place, or null where it left one, as the reading
+         *  this was taken off has them ({@link FieldDomains#runsApart}). Met with where the value
+         *  stops under the settling, which only takes values away. */
+        private final Function<RuleKey, OrderedRuns> runsApartAt;
+
         private Composing(ConstraintState<FactSubject> constraints,
                           Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                           Function<RuleKey, List<List<String>>> keptApartAt,
                           Function<RuleKey, AdmissibleSet> admits,
-                          Function<RuleKey, HeldClass> classAt) {
+                          Function<RuleKey, HeldClass> classAt,
+                          Function<RuleKey, OrderedRuns> runsApartAt) {
             this.constraints = constraints;
             this.atomAt = atomAt;
             this.countAt = countAt;
             this.keptApartAt = keptApartAt;
             this.admits = admits;
             this.classAt = classAt;
+            this.runsApartAt = runsApartAt;
         }
 
         /**
@@ -1188,18 +1206,22 @@ public final class FieldDomains {
             }
             // The value itself is chosen by what a caller builds it of, and nothing here says where
             // it stops — but the class its rules hold it to is its own, and a whole newtype nobody
-            // reads is chosen out of the class as a field is.
+            // reads is chosen out of the class as a field is. So are the runs a choice of ranges
+            // leaves it, which no end a caller builds it between can say.
             if (path.isTheValueItself()) {
                 HeldClass own = classAt.apply(path);
-                return own instanceof HeldClass.None ? ConstructionLimits.NONE
-                        : new ConstructionLimits(null, null, ConstructionLimits.NONE.admits(), own);
+                OrderedRuns runs = runsApartAt.apply(path);
+                return own instanceof HeldClass.None && runs == null ? ConstructionLimits.NONE
+                        : ConstructionLimits.of(null, runs, null,
+                                ConstructionLimits.NONE.admits(), own);
             }
             NumericDomain.Bounds values = boundsOn(atomAt.get(path));
             Counted counted = countAt.get(path);
             NumericDomain.Bounds held = counted == null ? null : boundsOn(counted.atom());
             List<List<String>> apart = keptApartAt.apply(path);
-            return new ConstructionLimits(values, held == null && apart.isEmpty() ? null
-                    : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart),
+            return ConstructionLimits.of(values, runsApartAt.apply(path),
+                    held == null && apart.isEmpty() ? null
+                            : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart),
                     admits.apply(path), classAt.apply(path));
         }
 
@@ -1223,14 +1245,18 @@ public final class FieldDomains {
      * have to read the declaration once per position it chooses.
      *
      * @param values where the value standing at the position stops, or null where nothing stops it
+     * @param runs   the runs between those ends a choice of ranges left the value, lowest first,
+     *               where it left two or more; none where the value is one run, which
+     *               {@code values} already is. A value between the ends and in no run is one every
+     *               alternative refuses
      * @param held   how many a collection there holds, or null where no rule counts it
      * @param admits which values may stand at the position, read in full and naming none where the
      *               rules say nothing about which
      * @param heldTo the class the value there is held to besides where it stops: a value chosen
      *               between the ends is one of the class, or the rules refuse it
      */
-    public record ConstructionLimits(NumericDomain.Bounds values, Held held,
-                                     AdmissibleSet admits, HeldClass heldTo) {
+    public record ConstructionLimits(NumericDomain.Bounds values, List<NumericDomain.Bounds> runs,
+                                     Held held, AdmissibleSet admits, HeldClass heldTo) {
 
         public ConstructionLimits {
             if (admits == null || heldTo == null) {
@@ -1238,6 +1264,43 @@ public final class FieldDomains {
                         "a position says which values may stand there, every one of them included,"
                                 + " and which class they are of, which is none where it is none");
             }
+            runs = List.copyOf(runs);
+            if (runs.size() == 1) {
+                throw new IllegalArgumentException(
+                        "one run is where the value stops, and is said as that: " + runs);
+            }
+        }
+
+        /**
+         * The limits of a value {@code runs} leaves in runs apart, met with where {@code values}
+         * stops it — as one run where only one of them reaches between those ends, and with the ends
+         * around the runs that do as where the value stops.
+         *
+         * @param runs the runs a choice of ranges left the position, or null where it left one
+         */
+        public static ConstructionLimits of(NumericDomain.Bounds values, OrderedRuns runs,
+                                            Held held, AdmissibleSet admits, HeldClass heldTo) {
+            if (runs == null) {
+                return new ConstructionLimits(values, List.of(), held, admits, heldTo);
+            }
+            List<NumericDomain.Bounds> parts = runs.partsOf(values);
+            // A settling that leaves no run is a contradiction the rules are told of by whoever
+            // builds the value, and where it stops is left as the settling says.
+            if (parts.isEmpty()) {
+                return new ConstructionLimits(values, List.of(), held, admits, heldTo);
+            }
+            if (parts.size() == 1) {
+                return new ConstructionLimits(parts.getFirst(), List.of(), held, admits, heldTo);
+            }
+            return new ConstructionLimits(
+                    new NumericDomain.Bounds(parts.getFirst().min(), parts.getLast().max()),
+                    parts, held, admits, heldTo);
+        }
+
+        /** {@link #runs} as one set of runs, or null where the value is one run. */
+        public OrderedRuns runsApart() {
+            return runs.isEmpty() ? null : OrderedRuns.of(runs.stream()
+                    .map(run -> new OrderedInterval(run.min(), run.max())).toList());
         }
 
         /**
@@ -1286,7 +1349,7 @@ public final class FieldDomains {
 
         /** A position the rules reach in no way. */
         public static final ConstructionLimits NONE =
-                new ConstructionLimits(null, null, AdmissibleSet.complete(ValueSet.ANY),
+                new ConstructionLimits(null, List.of(), null, AdmissibleSet.complete(ValueSet.ANY),
                         HeldClass.NONE);
     }
 
@@ -1978,6 +2041,18 @@ public final class FieldDomains {
     public NumberAt<RuleKey> countedAt(RuleKey path) {
         Counted counted = countAt.get(path);
         return counted == null ? null : NumberAt.takenAsItStands(path, counted.by());
+    }
+
+    /**
+     * The runs a choice of ranges left the value at {@code path}, lowest first, or null where it
+     * left one — which is every position no choice of ranges spoke of.
+     *
+     * <p>Beside {@link #admits} and read off the same reading of the clauses. What a position
+     * admits is a set of values, and the runs are on the position's order: a date has no value in a
+     * set and a run of days is still a run of its order.
+     */
+    public OrderedRuns runsApartAt(RuleKey path) {
+        return runsApart.get(path);
     }
 
     /**

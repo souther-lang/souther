@@ -63,6 +63,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -2268,7 +2269,6 @@ public final class Partitions {
     static Proposals representativesHolding(TypeView view, RuleReadingContext reading,
                                             FieldDomains.ConstructionLimits limits,
                                             Set<TypeSymbol> expanding) {
-        NumericDomain.Bounds within = limits.values();
         FieldDomains.Held held = limits.held();
         RuleReadingSource ruleSource = reading.source();
         Proposals.Gathering candidates = Proposals.Gathering.distinct();
@@ -2291,8 +2291,19 @@ public final class Partitions {
                     ElementsKeptApart.heldBy(held), reading, expanding)
                     .map(bare -> RepresentativeSource.under(spelled.names(), bare)));
         }
-        candidates.addAll(representativesOf(view, reading, within, expanding));
+        // Of each run a choice of ranges left the value, lowest first, where it left more than one:
+        // a value between the ends of the first and the last is one every alternative refuses
+        // where it falls between two runs.
+        for (NumericDomain.Bounds run : runsOf(limits)) {
+            candidates.addAll(representativesOf(view, reading, run, expanding));
+        }
         return candidates.done();
+    }
+
+    /** The runs a value is chosen in: those {@code limits} keeps apart, or where the value stops
+     *  where it is one run. */
+    private static List<NumericDomain.Bounds> runsOf(FieldDomains.ConstructionLimits limits) {
+        return limits.runs().isEmpty() ? Collections.singletonList(limits.values()) : limits.runs();
     }
 
     /**
@@ -2371,14 +2382,18 @@ public final class Partitions {
         }
         FieldDomains.ConstructionLimits.ValuesNamed named = limits.valuesNamed();
         ValueSet admits = named.asASet();
-        NumericDomain.Bounds run = TypeBounds.admissible(declared, limits.values());
         Carrier carrier = declared.carrier();
-        ClassMembers members = held.standingIn(run, carrier, carrier.usualPlace(reading.today()),
-                named.keptOut() + 1);
-        for (BigInteger each : members.values()) {
-            Place at = new Count(new BigDecimal(each));
-            if (declared.carrier().admitted(admits, at)) {
-                return standing(view, declared.carrier(), at, reading.source());
+        // In each run the value may be in, since a member between two of them is one every
+        // alternative refuses.
+        for (NumericDomain.Bounds within : runsOf(limits)) {
+            NumericDomain.Bounds run = TypeBounds.admissible(declared, within);
+            ClassMembers members = held.standingIn(run, carrier,
+                    carrier.usualPlace(reading.today()), named.keptOut() + 1);
+            for (BigInteger each : members.values()) {
+                Place at = new Count(new BigDecimal(each));
+                if (declared.carrier().admitted(admits, at)) {
+                    return standing(view, declared.carrier(), at, reading.source());
+                }
             }
         }
         return null;

@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
@@ -218,6 +219,19 @@ public interface SearchRegion {
      */
     default HeldClass classAt(NumericTerm.ValueOf place) {
         return HeldClass.NONE;
+    }
+
+    /**
+     * The runs a choice of ranges in its declarations left the value at {@code place}, lowest
+     * first, or null where they leave it one ({@link Position#runsApart}).
+     *
+     * <p>{@link #projectionOf} is the ends around them, and a search choosing the value inside
+     * those ends is held to these as well: a value in a gap between two of them is one every
+     * alternative refuses. A region that reads no declarations says nothing of them, which is what
+     * the default is.
+     */
+    default OrderedRuns runsAt(NumericTerm.ValueOf place) {
+        return null;
     }
 
     /**

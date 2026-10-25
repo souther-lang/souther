@@ -18,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
@@ -375,6 +376,14 @@ public final class LevelRealizer {
                               WitnessSearch looking, ValuesTried tried) {
         HeldClass members = one.term() instanceof NumericTerm.ValueOf value
                 ? within.classAt(value) : HeldClass.NONE;
+        // An item in a gap a choice of ranges in the declarations left between two runs is one
+        // every alternative refuses, which they say. Offered there, each place would be refused
+        // when the row is built and the item reported as one nothing was found for.
+        if (one.term() instanceof NumericTerm.ValueOf value
+                && inNoDeclaredRun(one.where(), one.of(), runs.get(one.term()),
+                        within.runsAt(value))) {
+            return new Realization.Impossible();
+        }
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         // A place the rules refuse once it stands with the rest of the row is not offered again
         // here: the places a point is offered are the ones before it that were not refused, and a
@@ -2597,8 +2606,10 @@ public final class LevelRealizer {
             // is composed from.
             case Criterion.Within within -> {
                 ValueSet admits = looking.toComposeFrom(term, region).toCrossTheRunWith();
+                OrderedRuns declared = term instanceof NumericTerm.ValueOf value
+                        ? region.runsAt(value) : null;
                 yield admits == null ? null
-                        : someValueIn(within, carrier, bounds, admits, members, apart,
+                        : someValueIn(within, carrier, bounds, declared, admits, members, apart,
                                 looking::meter, stoppedBy);
             }
         };
@@ -2610,6 +2621,33 @@ public final class LevelRealizer {
         // one of them, which is the carrier's question rather than the item's.
         Place onTheGrid = carrier.onTheGrid(offered);
         return onTheGrid != null && accepts(where, carrier, onTheGrid) ? onTheGrid : null;
+    }
+
+    /**
+     * Whether the item holds no place of {@code carrier} inside any of {@code declared} — false
+     * where nothing was declared apart, since then the region's own answer is the whole of it.
+     */
+    private static boolean inNoDeclaredRun(Criterion where, Carrier carrier,
+                                           NumericDomain.Bounds bounds, OrderedRuns declared) {
+        if (declared == null) {
+            return false;
+        }
+        return switch (where) {
+            case Criterion.AtTheLevel at -> {
+                Place place = at.at().asAPlace();
+                yield place != null
+                        && declared.runs().stream().noneMatch(run -> run.admits(place));
+            }
+            case Criterion.Within within -> declared.partsOf(bounds).stream()
+                    .allMatch(part -> within.runsInside(carrier, part.min(), part.max())
+                            .isEmpty());
+        };
+    }
+
+    /** The parts of {@code bounds} inside each of {@code declared}, lowest first; {@code bounds}
+     *  alone where nothing was declared apart ({@link OrderedRuns#partsOf}). */
+    static List<NumericDomain.Bounds> runsOf(NumericDomain.Bounds bounds, OrderedRuns declared) {
+        return declared == null ? Collections.singletonList(bounds) : declared.partsOf(bounds);
     }
 
     /**
@@ -2633,13 +2671,22 @@ public final class LevelRealizer {
      * crossing cost would be taken off what the second may spend, and whether a run is answered
      * would follow from where it came in the order they are looked at. Which order that is is a
      * searching policy and no answer about the values ({@link LevelRegion}).
+     *
+     * <p>Where a choice of ranges in the declarations left the value runs apart, the item is
+     * crossed with each of them: {@code bounds} is the ends around them, and an end of the item
+     * that falls in a gap is a place every alternative refuses.
+     *
+     * @param declared the runs the declarations left the value, or null where they left one
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
-                                     NumericDomain.Bounds bounds, ValueSet admits,
-                                     HeldClass members, PlacesApart apart,
+                                     NumericDomain.Bounds bounds, OrderedRuns declared,
+                                     ValueSet admits, HeldClass members, PlacesApart apart,
                                      Supplier<Meter> allowance, Set<CompositionBudget> stoppedBy) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
-        List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
+        List<LevelInterval> runs = new ArrayList<>();
+        for (NumericDomain.Bounds each : runsOf(bounds, declared)) {
+            runs.addAll(within.runsInside(carrier, each.min(), each.max()));
+        }
         // A value held to a class is a value of the class, so the places are drawn from it. What
         // walks the run does not know the class, and a place it names that is outside it is one the
         // rules refuse: the second walk below is no way to a member the first did not reach.

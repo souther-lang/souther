@@ -16,6 +16,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ConditionJoin;
@@ -529,7 +530,8 @@ public final class InvariantChecker {
                   StringFacts stringMachines,
                   Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                   Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
-                  BoundaryState derived, SettledOrderEnvelope settledOrder) {
+                  BoundaryState derived, SettledOrderEnvelope settledOrder,
+                  Map<RuleKey, OrderedRuns> runsApart) {
 
         /** The atom each count is recorded against, for a reader that wants the subject and not
          *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
@@ -1298,6 +1300,7 @@ public final class InvariantChecker {
                 notSeparated.add(field);
             }
         }
+        Map<RuleKey, List<FactSubject>> aliases = aliasesOf(atoms, keys);
         return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
                 written, Map.copyOf(spacing), admitted, unreadAt, notSeparated,
@@ -1313,7 +1316,10 @@ public final class InvariantChecker {
                 // nothing carried out of it. Both names each position answers to, because a clause
                 // is filed under whichever the reading that read it recognised — asked of one, what
                 // a choice left a position would turn on how the rule was spelled.
-                answered.whole().confinement().envelopeOver(aliasesOf(atoms, keys)));
+                answered.whole().confinement().envelopeOver(aliases),
+                // And the runs a choice of ranges left a position, where it left a gap, for whoever
+                // chooses a value there: the envelope's ends hold the gap between them.
+                Map.copyOf(answered.whole().confinement().runsApartOver(aliases)));
     }
 
     /**

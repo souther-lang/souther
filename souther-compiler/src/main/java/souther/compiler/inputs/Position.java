@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.regex.Language;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -209,6 +210,17 @@ public sealed interface Position permits ReadPosition {
      * dividing it.
      */
     AdmissibleSet admitted();
+
+    /**
+     * The runs a choice of ranges left the position's value, lowest first, or null where its rules
+     * leave it one.
+     *
+     * <p>Beside {@link #admitted} and not in it: those are values, and these are runs of the order
+     * the value is compared on, which a date has and a set of values does not hold. Between the
+     * ends of the first and the last the bounds of the value say nothing of the gaps, and a value
+     * chosen in one is a value every alternative refuses.
+     */
+    OrderedRuns runsApart();
 
     /**
      * The questions the rules written about this position raise that nothing answered, each naming

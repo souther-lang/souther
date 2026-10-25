@@ -21,6 +21,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
@@ -2259,6 +2260,13 @@ final class ReadQuantities implements Quantities {
      */
     public HeldClass classAt(NumericTerm.ValueOf place) {
         return classFixedAt(place, true);
+    }
+
+    /** The runs the position {@code place} is the value of was read to leave it, or null where
+     *  it was read to leave one or no position is there. */
+    public OrderedRuns runsAt(NumericTerm.ValueOf place) {
+        Position at = byPath.get(place.position());
+        return at == null ? null : at.runsApart();
     }
 
     /**
