@@ -8,7 +8,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -272,6 +275,48 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertTrue(turning.contains("READINGS_OF_ONE_CONDITION"), turning);
         String alike = innerParameterSplit("[ w.first.pay, w.first.pay + 1 ]");
         assertFalse(alike.contains("READINGS_OF_ONE_CONDITION"), alike);
+    }
+
+    /**
+     * However the outer parameter's field comes to be the value split — read off the parameter,
+     * given a name, handed to a behavior, one of the elements of a container it makes, answered by
+     * a walk over a container — the cases are as many as the values the parameter is handed. A
+     * value that turns on nothing the parameter is handed is not.
+     */
+    @Test
+    void aValueTurnsOnTheOuterParameterHoweverItWasReachedFrom() {
+        int months = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        Map<String, String> reached = new LinkedHashMap<>();
+        reached.put("read off it", "1 <= Int.max(t.pay, 0)");
+        reached.put("given a name", "{ let x = t.pay\n 1 <= Int.max(x, 0) }");
+        reached.put("handed to a behavior", "1 <= cap(t.pay)");
+        reached.put("an element of a container it makes",
+                "List.any(s -> 1 <= Int.max(s, 0), [ t.pay ])");
+        reached.put("an element of what a walk made of it",
+                "List.any(s -> 1 <= Int.max(s, 0), List.map(r -> r.pay + t.pay, [ w.first ]))");
+        reached.put("answered by a walk over a container",
+                "1 <= Int.max(List.fold((acc, r) -> acc + r.pay + t.pay, 0, [ w.first ]), 0)");
+        List<String> notStopped = new ArrayList<>();
+        for (Map.Entry<String, String> each : reached.entrySet()) {
+            if (!outerParameterSplit(each.getValue(), months).contains("READINGS_OF_ONE_CONDITION")) {
+                notStopped.add(each.getKey());
+            }
+        }
+        assertEquals(List.of(), notStopped, "reached from the parameter and not stopped");
+        String alike = outerParameterSplit("1 <= Int.max(w.first.pay, 0)", months);
+        assertFalse(alike.contains("READINGS_OF_ONE_CONDITION"), alike);
+    }
+
+    private static String outerParameterSplit(String body, int months) {
+        return report("""
+                behavior cap : (x: Int) -> Int
+                let cap (x) = Int.max(x, 0)
+                behavior g : (w: Window) -> Ok | No
+                let g (w) = {
+                    guard List.any(t -> %s, %s) else No
+                    Ok
+                }
+                """.formatted(body, monthsRepeated(months)));
     }
 
     /** A helper that is handed nothing of the application is the same total on each. */
