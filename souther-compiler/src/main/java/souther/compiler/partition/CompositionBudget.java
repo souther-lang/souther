@@ -80,8 +80,17 @@ public enum CompositionBudget {
     /** How many ways of sharing a size out among the values a count's elements are drawn from
      *  are looked at, over every size tried. The ways grow with the size and with how many ways
      *  an element answers the statements, and each is checked against every count before any is
-     *  built. */
+     *  built. Where the elements are shared out kind by kind ({@link SharingsAmongKinds}), a
+     *  way is counted whole or part, once it is not dropped for giving no count asked for. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
+
+    /** How many whole numbers a total is tried at, where what an element answers turns on the total
+     *  of the container it is in: for a way the statements can stand to be shown to be met by an
+     *  element, and for one sharing of a container's elements. The totals either can come to are
+     *  an interval over the rationals, which is exact; the whole numbers in it are walked from the
+     *  one nearest nought and from either end, and one that no whole number tried meets is not
+     *  shown to have none. */
+    TOTALS_A_COUNT_IS_TRIED_AT(8),
 
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a
@@ -663,6 +672,9 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case TOTALS_A_COUNT_IS_TRIED_AT ->
+                    "how many whole numbers a total is tried at for a count of the elements that"
+                            + " turns on it";
             case COUNTS_OF_KEYS_TRIED ->
                     "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
@@ -786,7 +798,7 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                 SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,

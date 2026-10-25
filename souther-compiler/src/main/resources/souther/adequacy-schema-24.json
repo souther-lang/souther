@@ -133,6 +133,7 @@
         "elements_a_count_is_composed_with",
         "containers_a_count_is_offered",
         "shares_a_count_is_tried_at",
+        "totals_a_count_is_tried_at",
         "counts_of_keys_tried",
         "values_an_element_is_chosen_among",
         "ways_down_to_a_total_tried",
