@@ -14,7 +14,9 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -27,24 +29,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A list whose rules hold the total of one case of a field equal to the total of another is
- * composed with the totals equal and neither of them nought, however many elements the rules ask
- * for.
+ * composed with the totals equal, whatever the element's number admits and however many elements
+ * the rules ask for.
  *
- * <p>An element at a case adds as many units as the other case has elements, so the two totals are
- * the product of the two counts. Composed element by element against the rules of the element
- * alone, the totals met only where the elements happened to cancel, and an empty side is a total of
- * nought that balances anything.
+ * <p>The numbers an element adds are numbers its own type admits, taken from the type and not made
+ * beside it, and the totals are equal because numbers were found that make them so. A type that
+ * admits a set of numbers is balanced from that set, one that admits only negative numbers or only
+ * nought is balanced by them, and a type whose numbers balance nothing gives no list.
  */
 class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
 
     private static final Pattern ELEMENT =
-            Pattern.compile("side = (\\w+), amount = Amount\\(([0-9.]+)m\\)");
+            Pattern.compile("side = (\\w+), amount = Amount\\((-?[0-9.]+)m\\)");
 
     private static String journal(int least) {
-        return journal(least, "value >= 0.0m");
+        return journal(least, "value >= 0.0m", "");
     }
 
-    private static String journal(int least, String amountRule) {
+    private static String journal(int least, String amountRule, String more) {
         return """
                 module demo
 
@@ -63,36 +65,98 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
                     invariant enough = length(postings) >= %d
                     invariant balanced =
                         Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
-                """.formatted(amountRule, least);
+                    %s
+                """.formatted(amountRule, least, more);
     }
 
-    /**
-     * Every amount is one the element's type admits, whatever the type holds it to.
-     *
-     * <p>The unit is a whole number inside what the amount admits and so is every multiple of it
-     * that is added, so a type that admits nothing below ten is given amounts from ten up and not
-     * the one a count would have given it.
-     */
-    @Test
-    void everyAmountIsOneTheAmountTypeAdmits() {
-        for (int least : new int[] {2, 3, 5}) {
-            String list = composed(journal(least, "value >= 10.0m")).fields().get("postings").text();
-            Matcher found = ELEMENT.matcher(list);
-            Map<String, BigDecimal> totals = new LinkedHashMap<>();
-            while (found.find()) {
-                BigDecimal amount = new BigDecimal(found.group(2));
-                assertTrue(amount.compareTo(BigDecimal.TEN) >= 0, list);
-                totals.merge(found.group(1), amount, BigDecimal::add);
-            }
-            assertEquals(0, totals.get("Debit").compareTo(totals.get("Credit")), list);
+    /** The amounts of each side of a composed list, and how many elements it has. */
+    private record Sides(Map<String, List<BigDecimal>> amounts, int elements) {
+
+        BigDecimal total(String side) {
+            return amounts.getOrDefault(side, List.of()).stream().reduce(BigDecimal.ZERO,
+                    BigDecimal::add);
         }
     }
 
-    /** A type that admits too little for the sides to balance is no list, and no list is offered. */
+    private static Sides sidesOf(String list) {
+        Map<String, List<BigDecimal>> amounts = new LinkedHashMap<>();
+        Matcher found = ELEMENT.matcher(list);
+        int elements = 0;
+        while (found.find()) {
+            amounts.computeIfAbsent(found.group(1), _ -> new ArrayList<>())
+                    .add(new BigDecimal(found.group(2)));
+            elements++;
+        }
+        return new Sides(amounts, elements);
+    }
+
+    @Test
+    void theTotalsOfTheTwoCasesAreEqualAndNotNoughtWhateverTheCount() {
+        for (int least : new int[] {2, 3, 4, 5, 7, 9, 20}) {
+            String list = composed(journal(least)).fields().get("postings").text();
+            Sides sides = sidesOf(list);
+            assertEquals(Set.of("Debit", "Credit"), sides.amounts().keySet(),
+                    "both sides hold an element, or one side's total is nought: " + list);
+            assertEquals(0, sides.total("Debit").compareTo(sides.total("Credit")), list);
+            assertTrue(sides.total("Debit").signum() > 0, list);
+            assertTrue(sides.elements() >= least, "at least " + least + " postings: " + list);
+        }
+    }
+
+    /** Every amount is one the amount type admits, whatever the type holds it to. */
+    @Test
+    void everyAmountIsOneTheAmountTypeAdmits() {
+        for (int least : new int[] {2, 3, 5}) {
+            Sides sides = sidesOf(composed(journal(least, "value >= 10.0m", ""))
+                    .fields().get("postings").text());
+            sides.amounts().values().forEach(each -> each.forEach(amount ->
+                    assertTrue(amount.compareTo(BigDecimal.TEN) >= 0, amount.toString())));
+            assertEquals(0, sides.total("Debit").compareTo(sides.total("Credit")));
+        }
+    }
+
+    /**
+     * A type that admits three numbers and not the one between two of them is balanced from the
+     * three: one debit of four against credits of one and three, which no one number repeated makes.
+     */
+    @Test
+    void aTypeThatAdmitsASetOfNumbersIsBalancedFromThatSet() {
+        String list = composed(journal(3,
+                "value == 1.0m || value == 3.0m || value == 4.0m", ""))
+                .fields().get("postings").text();
+        Sides sides = sidesOf(list);
+
+        sides.amounts().values().forEach(each -> each.forEach(amount -> assertTrue(
+                Set.of(1, 3, 4).contains(amount.intValueExact()), list)));
+        assertEquals(0, sides.total("Debit").compareTo(sides.total("Credit")), list);
+    }
+
+    /** Positive numbers are what is tried first and no condition: a side of negatives balances. */
+    @Test
+    void aTypeThatAdmitsOnlyNegativeNumbersIsBalancedByThem() {
+        String list = composed(journal(3, "value < 0.0m", "")).fields().get("postings").text();
+        Sides sides = sidesOf(list);
+
+        sides.amounts().values().forEach(each -> each.forEach(amount ->
+                assertTrue(amount.signum() < 0, list)));
+        assertEquals(0, sides.total("Debit").compareTo(sides.total("Credit")), list);
+    }
+
+    @Test
+    void aTypeThatAdmitsOnlyNoughtIsBalancedByNought() {
+        String list = composed(journal(2, "value == 0.0m", "")).fields().get("postings").text();
+        Sides sides = sidesOf(list);
+
+        assertEquals(2, sides.elements(), list);
+        assertEquals(0, sides.total("Debit").signum(), list);
+        assertEquals(0, sides.total("Credit").signum(), list);
+    }
+
+    /** A type whose numbers balance nothing is no list, and no list is offered. */
     @Test
     void anAmountTypeThatAdmitsLessThanTheSidesNeedIsNotBuilt() {
-        assertNull(composedOrNot(journal(3, "value >= 0.0m && value <= 1.0m")).fields(),
-                "three postings need an amount of two on one side");
+        // One debit and two credits: no number of 1 balances 2 of them, and 1 is all there is.
+        assertNull(composedOrNot(journal(3, "value == 1.0m", "")).fields());
     }
 
     /** A count past what a proposal may hold is not built, and is not built a little at a time. */
@@ -101,23 +165,14 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
         assertNull(composedOrNot(journal(100_000_000)).fields());
     }
 
+    /**
+     * Elements that are also to be kept apart are not made by this: they differ in their side and
+     * their amount and nothing else, and what keeps them apart in the rest is not asked.
+     */
     @Test
-    void theTotalsOfTheTwoCasesAreEqualAndNotNoughtWhateverTheCount() {
-        for (int least : new int[] {2, 3, 4, 5, 7}) {
-            String list = composed(journal(least)).fields().get("postings").text();
-            Map<String, BigDecimal> totals = new LinkedHashMap<>();
-            Matcher found = ELEMENT.matcher(list);
-            int elements = 0;
-            while (found.find()) {
-                totals.merge(found.group(1), new BigDecimal(found.group(2)), BigDecimal::add);
-                elements++;
-            }
-            assertEquals(Set.of("Debit", "Credit"), totals.keySet(),
-                    "both sides hold an element, or one side's total is nought: " + list);
-            assertEquals(0, totals.get("Debit").compareTo(totals.get("Credit")), list);
-            assertTrue(totals.get("Debit").signum() > 0, list);
-            assertTrue(elements >= least, "at least " + least + " postings: " + list);
-        }
+    void aListThatIsAlsoKeptApartIsNotBuilt() {
+        assertNull(composedOrNot(journal(3, "value >= 0.0m",
+                "invariant apart = List.allDistinctBy(.amount, postings)")).fields());
     }
 
     private static Partitions.FieldsChosen composed(String source) {

@@ -106,13 +106,33 @@ final class ComputedNumbers {
      * Whether {@code definition}'s places are left as free as they were by the rule defining a
      * place from them, given everything {@code numbers} holds.
      *
-     * <p>Free where the number lies, whatever the places are, inside what the defined place may be:
-     * any places then have a value of the defined place beside them, and the rule restricts none.
-     * Not free where the place has been held to less by another rule ({@code c == a * b} beside
-     * {@code c == 1} leaves no {@code a} of nought), or where the number reaches past what the place
-     * admits, because then some places have none.
+     * <p>Free where two things are shown. Nothing else ties any of the places to another position
+     * ({@link NumericDomain#relationsOf}): a range is a box and says nothing of how two positions go
+     * together, so independence is shown by there being no rule that relates them and never by where
+     * their ranges lie ({@code c == a * b} beside {@code c == a + 1} puts no end on {@code c} and
+     * still holds {@code a} and {@code b} to two pairs). And the number lies, whatever the places
+     * are, inside what the defined place admits: any places then have a value of the defined place
+     * beside them, and the rule restricts none ({@code c == 1} leaves no {@code a} of nought).
+     * Where either is not shown the places stay unanswered, which is the rule left unread and not a
+     * claim about them.
+     *
+     * <p>Where the places' rules put it, and not where their types end. A whole number past the
+     * width of its type ends the run that makes it and is no value of any place, but the ends of an
+     * order are kept beside the ranges of the interval algebra and not in them, so they are not
+     * reasoned about here: a product of two unbounded whole numbers is taken to lie inside an
+     * unbounded place, and the builders find the pairs whose product the type holds when they
+     * settle the places.
      */
     static boolean leavesFree(Definition definition, NumericDomain<FactSubject> numbers) {
+        // Nothing but the definition ties the defined place or the number to another position, and
+        // nothing ties a place the number is made of to any. A range is a box and says nothing of
+        // how two positions go together, so a place related to another by some other rule is not
+        // shown free by where its range lies: the relation is the part that is not read.
+        if (numbers.relationsOf(definition.defined()) != 1
+                || numbers.relationsOf(definition.atom()) != 1
+                || definition.operands().stream().anyMatch(each -> numbers.relationsOf(each) != 0)) {
+            return false;
+        }
         ComputedNumber.Range image = definition.number()
                 .lies(place -> rangeOf(numbers.boundsOf(FactSubject.of(place))));
         NumericDomain.Bounds allowed = numbers.boundsOf(definition.defined());

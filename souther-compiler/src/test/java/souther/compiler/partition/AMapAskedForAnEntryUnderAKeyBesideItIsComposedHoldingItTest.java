@@ -119,6 +119,49 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
     }
 
     /**
+     * Two keys asked for two numbers are chosen apart, whatever each would have been alone.
+     *
+     * <p>Chosen on their own both are the first string there is, and a map cannot hold two numbers
+     * under it. That the first choice collides is no reason the type has no such map, so the key
+     * chosen second passes over the one chosen first.
+     */
+    @Test
+    void keysAskedForDifferentNumbersAreChosenApart() {
+        Partitions.FieldsChosen chosen = composed(TWO_ENTRIES);
+
+        String x = chosen.fields().get("x").text();
+        String y = chosen.fields().get("y").text();
+        assertTrue(!x.equals(y), x + " and " + y + " are one key");
+        String rates = chosen.fields().get("rates").text();
+        assertTrue(rates.contains("(" + x + ", 1)"), rates);
+        assertTrue(rates.contains("(" + y + ", 2)"), rates);
+    }
+
+    private static final String POSITIVE_RATES = """
+            module demo
+
+            data Rate = Decimal
+                invariant value > 0.0m
+
+            data N = { base: String, rates: Map<String, Rate> }
+                invariant atNought = atRate(base, rates)
+
+            let atRate (k: String, rates: Map<String, Rate>): Bool =
+                Map.get(k, rates)
+                    |> Option.map(r -> Decimal.compare(r.value, 0.0m) == 0)
+                    |> Option.withDefault(false)
+            """;
+
+    /**
+     * A number the value's type does not admit is not written under the name and offered: the map
+     * would hold a rate the type refuses, and there is no map the rule asks for.
+     */
+    @Test
+    void aNumberTheValueTypeRefusesIsNotWrittenUnderItsName() {
+        assertNull(composedGiven(POSITIVE_RATES, Map.of()).fields());
+    }
+
+    /**
      * Two numbers asked of one key are no map at all, and the record is not composed: choosing the
      * map as any other would be offering one the rules refuse.
      */

@@ -104,6 +104,17 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many relations of those counts have their ways of standing taken"
                             + " together; past it the counts are composed as elsewhere"),
 
+            // The numbers a type offers to balance the sides of a list, and the size past which
+            // the sides are made of one number repeated. A list these do not reach is not offered,
+            // which leaves the question unanswered and claims nothing of the type; no composing
+            // of a row at an item runs to them and stops.
+            Map.entry("souther.compiler.partition.Partitions.AMOUNTS_TRIED",
+                    "how many of the numbers a type admits are tried to balance the sides of a"
+                            + " list; a list past them is not offered, and nothing is claimed"),
+            Map.entry("souther.compiler.partition.Partitions.MOST_SEARCHED",
+                    "how many elements a side is searched over before it is made of one number"
+                            + " repeated, which is a choice of way and no stop"),
+
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",

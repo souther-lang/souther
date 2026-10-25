@@ -170,33 +170,20 @@ public final class SidesBalanced {
      */
     public static Map<RuleKey, List<Requirement>> writtenOn(TypeSymbol.AtModule named,
                                                             RuleReadingSource source) {
-        Map<BindingId, String> fields = new HashMap<>();
-        source.bindings().of(named).forEach((name, binding) -> fields.put(binding, name));
-        if (fields.isEmpty()
-                || source.kinds().of(named.key()) != DeclarationKind.PRODUCT
-                || source.newtypes().of(named.key())) {
+        RecordRules rules = RecordRules.of(named, source);
+        if (rules == null) {
             return Map.of();
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
-        InvariantStatements statements = InvariantStatements.ofTheCalls(source);
-        for (DeclaredClauses.OnAName written : DeclaredClauses.of(List.of(named), source)) {
-            for (DeclaredClauses.Conjunct each : written.conjuncts()) {
-                List<InvariantStatement> states = statements.of(each.part());
-                if (states == null) {
-                    continue;
-                }
-                for (InvariantStatement one : states) {
-                    if (!(one instanceof InvariantStatement.BalancesSides it)) {
-                        continue;
-                    }
-                    RuleKey where = ElementsApart.placeOf(it.balanced().list(), fields, true);
-                    if (where != null) {
-                        out.computeIfAbsent(where, _ -> new ArrayList<>())
-                                .add(new Requirement(it.balanced().field(),
-                                        it.balanced().number(), it.balanced().one(),
-                                        it.balanced().other()));
-                    }
-                }
+        for (InvariantStatement one : rules.statements()) {
+            if (!(one instanceof InvariantStatement.BalancesSides it)) {
+                continue;
+            }
+            RuleKey where = rules.fieldAt(it.balanced().list());
+            if (where != null) {
+                out.computeIfAbsent(where, _ -> new ArrayList<>())
+                        .add(new Requirement(it.balanced().field(), it.balanced().number(),
+                                it.balanced().one(), it.balanced().other()));
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();

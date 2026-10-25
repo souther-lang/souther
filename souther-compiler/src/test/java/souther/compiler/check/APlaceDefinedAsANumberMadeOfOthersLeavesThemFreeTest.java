@@ -116,6 +116,43 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
         assertFalse(left.get("n.b").isEmpty());
     }
 
+    /**
+     * A range is a box, and a rule that ties the defined place to another position puts no end on
+     * it that shows the tie: {@code c == a + 1} beside {@code c == a * b} leaves only the pairs of
+     * {@code a} and {@code b} with {@code a * (b - 1) == 1}, and says nothing in c's range.
+     */
+    @Test
+    void aDefinitionBesideARuleTyingTheDefinedPlaceToAnotherLeavesItsFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data N = { a: Int, b: Int, c: Int }
+                    invariant defined = c == a * b
+                    invariant tied = c == a + 1
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a of nought or one has no b to make c both");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
+    /** And so is a factor that another rule ties to the other, whatever ranges they are left. */
+    @Test
+    void aDefinitionWhoseFactorsAreTiedToEachOtherLeavesThemUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+
+                data N = { a: Count, b: Count, c: Count }
+                    invariant defined = c.value == a.value * b.value
+                    invariant together = a.value + b.value <= 10
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a of ten leaves b of nought");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
     @Test
     void aDefinitionOfAPlaceThatAdmitsLessThanTheNumberCanComeToLeavesItsFactorsUnanswered() {
         Map<String, List<String>> left = unansweredBelowTheInput("""

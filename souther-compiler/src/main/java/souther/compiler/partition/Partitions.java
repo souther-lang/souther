@@ -32,6 +32,7 @@ import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
@@ -68,7 +69,6 @@ import souther.compiler.types.TypeReachName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -2070,6 +2070,7 @@ public final class Partitions {
         }
         List<String> order = new ArrayList<>(fields.keySet());
         order.sort(Comparator.comparingInt(name -> standsAsAKeyOf(name, asked) ? 0 : 1));
+        Map<String, Set<String>> apart = keysThatMustDiffer(asked);
         Map<String, FixtureTemplate> chosenByName = new LinkedHashMap<>();
         for (String name : order) {
             Map.Entry<String, Type> field = Map.entry(name, fields.get(name));
@@ -2086,17 +2087,28 @@ public final class Partitions {
                     holding = balancedSides(field.getValue(), sides.getFirst(), limits, reading);
                 }
                 // The first value, with what was met in front of it: a field's later values are
-                // values nothing here takes.
+                // values nothing here takes. Except past the values already chosen for the keys
+                // this one may not be: two keys asked for two numbers are two keys, and a value
+                // the first took is the next one's to pass over.
+                Set<String> taken = new LinkedHashSet<>();
+                apart.getOrDefault(name, Set.of()).forEach(other -> {
+                    if (chosenByName.containsKey(other)) {
+                        taken.add(chosenByName.get(other).text());
+                    }
+                });
                 Proposals stands = holding != null ? holding.firstOf(1)
+                        : !taken.isEmpty() ? Witnesses.distinctValuesOf(field.getValue(),
+                                taken.size() + 1, limits.held(), limits.admits(), reading, inside)
                         : Witnesses.firstWhatThePlaceAdmits(
                         field.getValue(), limits, reading, inside,
                         () -> representativesHolding(field.getValue(), reading, limits, inside))
                         .firstOf(1);
                 met = met.and(stands.met());
-                if (stands.isEmpty()) {
+                at = stands.values().stream().filter(each -> !taken.contains(each.text()))
+                        .findFirst().orElse(null);
+                if (at == null) {
                     return new FieldsChosen(null, met);
                 }
-                at = stands.values().getFirst();
             }
             chosenByName.put(field.getKey(), at);
             // Settled, and the rules read again with it in them. A field chosen against the rules as
@@ -2112,6 +2124,27 @@ public final class Partitions {
             chosen.put(name, chosenByName.get(name));
         }
         return new FieldsChosen(chosen, met);
+    }
+
+    /**
+     * For each field standing as a key, the fields standing as keys it may not be the same value
+     * as: those asked for another number under the same map.
+     */
+    private static Map<String, Set<String>> keysThatMustDiffer(
+            Map<String, List<EntryHeld.Requirement>> asked) {
+        Map<String, Set<String>> apart = new LinkedHashMap<>();
+        for (List<EntryHeld.Requirement> inOneMap : asked.values()) {
+            for (EntryHeld.Requirement one : inOneMap) {
+                for (EntryHeld.Requirement other : inOneMap) {
+                    if (one.valueIs() != null && other.valueIs() != null
+                            && one.valueIs().compareTo(other.valueIs()) != 0) {
+                        apart.computeIfAbsent(one.key().steps().getFirst(),
+                                _ -> new LinkedHashSet<>()).add(other.key().steps().getFirst());
+                    }
+                }
+            }
+        }
+        return apart;
     }
 
     /** Whether {@code field} is the key some map is asked for an entry under. */
@@ -2145,7 +2178,10 @@ public final class Partitions {
         List<Witnesses.Filed> entries = new ArrayList<>();
         for (EntryHeld.Requirement each : asked) {
             FixtureTemplate key = chosen.get(each.key().steps().getFirst());
-            FixtureTemplate value = each.valueIs() == null ? null
+            // A number the value's type admits and can be written as: a value written under a name
+            // is a value of the type only if its rules let it be.
+            FixtureTemplate value = each.valueIs() == null
+                    || !admitsNumber(map.value(), each.valueIs(), reading) ? null
                     : writtenNumberAt(map.value(), each.valueIs(), reading);
             if (key == null || (each.valueIs() != null && value == null)) {
                 return Proposals.NONE;
@@ -2169,17 +2205,16 @@ public final class Partitions {
      * A list of {@code type} whose elements at the two cases the rule names add up to one another,
      * or nothing where no such list can be written.
      *
-     * <p>As many elements as the rules require, at least two, split between the two cases; each
-     * element at one case adds as many units as the other case has elements, so the totals are
-     * the product of the two counts whichever the counts are. The unit is a whole number the
-     * element's number admits, and so is every multiple of it that is added, which is what the
-     * rules of the element say of it and not a number chosen beside them.
+     * <p>As many elements as the rules require, at least two, split between the two cases. The
+     * numbers they add are numbers the element's own rules admit ({@link #balancingAmounts}), so
+     * every element is one its type allows and the totals are equal because the numbers were found
+     * to make them so.
      *
      * <p>Never a fallback to choosing the field as any other: the rule asking the sides to balance
      * was read as kept by this ({@link SidesBalanced#writtenOn} is the one list both go by), and a
      * list chosen without it is a list the rule refuses. Nothing is what it answers for an element
-     * that is no record, a number the element cannot write or admits no multiple of, and a count
-     * past what a proposal may hold.
+     * that is no record, numbers the element admits that balance nothing, a list also kept apart,
+     * and a count past what a proposal may hold.
      */
     private static Proposals balancedSides(Type type, SidesBalanced.Requirement rule,
                                            FieldDomains.ConstructionLimits limits,
@@ -2215,23 +2250,24 @@ public final class Partitions {
         int onOne = count / 2;
         int onOther = count - onOne;
         Type numberType = product.fields().get(rule.number().getFirst());
-        // A number of the kind this writes, before its ends are read: a date has ends and no unit.
-        if (writtenNumberAt(numberType, BigDecimal.ONE, reading) == null) {
-            return Proposals.NONE;
-        }
         TypeSymbol.AtModule rulesOn = rulesOver(elementView.wrappers(), record, source);
-        BigDecimal unit = unitAdmitted(
-                FieldDomains.of(rulesOn, reading).composing(Map.of())
-                        .at(RuleKey.of(rule.number().getFirst())).values(),
-                BigDecimal.valueOf(Math.max(onOne, onOther)));
-        if (unit == null || writtenNumberAt(numberType, unit, reading) == null) {
+        // The numbers the element's own rules admit there, as the position offers them, and the
+        // sides made up of them. Nothing is chosen beside the rules: a list of numbers the type
+        // does not admit is not the list the rule asks for, whatever the totals come to.
+        FieldDomains.ConstructionLimits admitted = FieldDomains.of(rulesOn, reading)
+                .composing(Map.of()).at(RuleKey.of(rule.number().getFirst()));
+        List<FixtureTemplate> amounts = balancingAmounts(
+                admittedNumbers(numberType, admitted, reading), onOne, onOther);
+        // And a list whose elements are also held apart is a list this does not build: the
+        // elements it makes differ in their side and their amount, and nothing here keeps them
+        // apart in the rest.
+        if (amounts == null || (limits.held() != null && !limits.held().keptApart().isEmpty())) {
             return Proposals.NONE;
         }
         List<FixtureTemplate> elements = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             boolean atOne = i < onOne;
-            FixtureTemplate amount = writtenNumberAt(numberType,
-                    unit.multiply(BigDecimal.valueOf(atOne ? onOther : onOne)), reading);
+            FixtureTemplate amount = amounts.get(i);
             Proposals composed = amount == null ? Proposals.NONE
                     : composed(record, rulesOn, reading, Set.of(),
                             Map.of(rule.field(), FixtureTemplate.unitCase(atOne ? one : other),
@@ -2248,31 +2284,209 @@ public final class Partitions {
         return Proposals.ofNullable(list);
     }
 
+    /** How many of the numbers a type admits are tried to make the sides of a list balance. */
+    private static final int AMOUNTS_TRIED = 12;
+
+    /** The most elements the sides are searched over rather than made of one number each. */
+    private static final int MOST_SEARCHED = 8;
+
     /**
-     * The least whole number such that it and every whole multiple of it up to {@code times} times
-     * is inside {@code admitted}, or null where there is none.
+     * Numbers a position admits, written as values of its type: those the type offers, and whole
+     * numbers from the near end of its range, each one the range holds and the set of values it is
+     * held to has.
      *
-     * <p>One and up, so that no side is nought: a side of nothing balances anything. Where the
-     * number is bounded from below the unit is the least whole number inside the bound, and where it
-     * is bounded from above the greatest multiple has to be inside that too.
+     * <p>Asked of both, because neither is the whole of what a position admits. The type offers few
+     * numbers — the ends of its range, and a last one of its own that its rules may refuse — and the
+     * range says where numbers are and not which of them the rules leave, where the rules leave a
+     * set.
      */
-    private static BigDecimal unitAdmitted(NumericDomain.Bounds admitted, BigDecimal times) {
-        BigDecimal unit = BigDecimal.ONE;
-        if (admitted != null && admitted.min() != null) {
-            BigDecimal low = Count.number(admitted.min().at()).at();
-            BigDecimal whole = low.setScale(0, RoundingMode.CEILING);
-            if (whole.compareTo(low) == 0 && !admitted.min().inclusive()) {
-                whole = whole.add(BigDecimal.ONE);
-            }
-            unit = whole.max(unit);
-        }
-        if (admitted != null && admitted.max() != null) {
-            int against = unit.multiply(times).compareTo(Count.number(admitted.max().at()).at());
-            if (against > 0 || (against == 0 && !admitted.max().inclusive())) {
-                return null;
+    private static List<FixtureTemplate> admittedNumbers(
+            Type type, FieldDomains.ConstructionLimits limits, RuleReadingContext reading) {
+        ValueSet held = limits.valuesNamed().asASet();
+        List<FixtureTemplate> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        List<FixtureTemplate> offered = new ArrayList<>(Witnesses.distinctValuesOf(type,
+                AMOUNTS_TRIED, limits.held(), limits.admits(), reading, Set.of()).values());
+        for (BigInteger whole : wholeNumbersNear(limits.values(), AMOUNTS_TRIED)) {
+            FixtureTemplate written = writtenNumberAt(type, new BigDecimal(whole), reading);
+            if (written != null) {
+                offered.add(written);
             }
         }
-        return unit;
+        for (FixtureTemplate each : offered) {
+            if (Counts.writtenIn(each.value()) instanceof Count count
+                    && holds(limits.values(), count.exactly())
+                    && held.has(Value.number(count.at())) && seen.add(count.exactly().key())) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whole numbers from the end of {@code range} nearest to nought, as many as asked for: upward
+     * from its floor, downward from its ceiling where it has no floor, and from one upward where it
+     * has neither.
+     */
+    private static List<BigInteger> wholeNumbersNear(NumericDomain.Bounds range, int many) {
+        List<BigInteger> out = new ArrayList<>();
+        if (range != null && range.min() != null) {
+            ExactRatio low = Count.number(range.min().at()).exactly();
+            if (low.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger first)) {
+                for (int i = 0; i < many; i++) {
+                    out.add(first.add(BigInteger.valueOf(i)));
+                }
+            }
+        } else if (range != null && range.max() != null) {
+            ExactRatio high = Count.number(range.max().at()).exactly();
+            if (high.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger last)) {
+                for (int i = 0; i < many; i++) {
+                    out.add(last.subtract(BigInteger.valueOf(i)));
+                }
+            }
+        } else {
+            for (int i = 1; i <= many; i++) {
+                out.add(BigInteger.valueOf(i));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Numbers for the elements at the two sides, taken from {@code admitted}, whose totals are
+     * equal — or null where those numbers make none.
+     *
+     * <p>Only numbers the type admits ({@link #admittedNumbers}), whatever they are: a side of
+     * negative numbers balances as well as one of positive, and nought is a number like another. A total that is not nought is preferred, because a side of nothing
+     * balances anything and shows nothing; it is a preference and not a condition, so a type that
+     * admits nothing else still gets its list.
+     *
+     * <p>One number for every element of a side where that balances them, which any count of
+     * elements allows. Past that, for few enough elements, the numbers of each side are searched
+     * for ones that add up alike; with more elements than that, and no number that balances them
+     * one each, there is no list and none is offered.
+     */
+    private static List<FixtureTemplate> balancingAmounts(List<FixtureTemplate> admitted,
+                                                          int onOne, int onOther) {
+        List<FixtureTemplate> fixtures = new ArrayList<>();
+        List<ExactRatio> numbers = new ArrayList<>();
+        for (FixtureTemplate each : admitted) {
+            if (Counts.writtenIn(each.value()) instanceof Count count) {
+                fixtures.add(each);
+                numbers.add(count.exactly());
+            }
+        }
+        Map<String, int[]> oneSide = totals(numbers, onOne);
+        Map<String, int[]> otherSide = onOne == onOther ? oneSide : totals(numbers, onOther);
+        int[] one = null;
+        int[] other = null;
+        for (Map.Entry<String, int[]> each : oneSide.entrySet()) {
+            int[] match = otherSide.get(each.getKey());
+            if (match == null) {
+                continue;
+            }
+            if (!each.getKey().equals(ExactRatio.ZERO.key())) {
+                one = each.getValue();
+                other = match;
+                break;
+            }
+            // Nought only when nothing else balances.
+            if (one == null) {
+                one = each.getValue();
+                other = match;
+            }
+        }
+        if (one == null) {
+            return null;
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (int at : one) {
+            out.add(fixtures.get(at));
+        }
+        for (int at : other) {
+            out.add(fixtures.get(at));
+        }
+        return out;
+    }
+
+    /** Whether {@code number} is inside {@code range}, a range of nothing being every number. */
+    private static boolean holds(NumericDomain.Bounds range, ExactRatio number) {
+        if (range == null) {
+            return true;
+        }
+        if (range.min() != null) {
+            int against = number.compareTo(Count.number(range.min().at()).exactly());
+            if (against < 0 || (against == 0 && !range.min().inclusive())) {
+                return false;
+            }
+        }
+        if (range.max() != null) {
+            int against = number.compareTo(Count.number(range.max().at()).exactly());
+            return against < 0 || (against == 0 && range.max().inclusive());
+        }
+        return true;
+    }
+
+    /**
+     * Every total {@code count} of {@code numbers} can come to, by the total, each with numbers that
+     * come to it.
+     *
+     * <p>One number for every element where the count is past what is searched, so that a side of
+     * many elements is made of one number repeated, which is every total the count times a number
+     * comes to. The search keeps one way to each total, and stops growing at a size no list needs.
+     */
+    private static Map<String, int[]> totals(List<ExactRatio> numbers, int count) {
+        Map<String, int[]> out = new LinkedHashMap<>();
+        if (count > MOST_SEARCHED) {
+            for (int at = 0; at < numbers.size(); at++) {
+                ExactRatio total = numbers.get(at).times(ExactRatio.of(count)).orNull();
+                if (total != null) {
+                    int[] repeated = new int[count];
+                    Arrays.fill(repeated, at);
+                    out.putIfAbsent(total.key(), repeated);
+                }
+            }
+            return out;
+        }
+        Map<String, int[]> reached = new LinkedHashMap<>();
+        reached.put(ExactRatio.ZERO.key(), new int[0]);
+        Map<String, ExactRatio> sums = new LinkedHashMap<>();
+        sums.put(ExactRatio.ZERO.key(), ExactRatio.ZERO);
+        for (int step = 0; step < count; step++) {
+            Map<String, int[]> next = new LinkedHashMap<>();
+            Map<String, ExactRatio> nextSums = new LinkedHashMap<>();
+            for (Map.Entry<String, int[]> each : reached.entrySet()) {
+                for (int at = 0; at < numbers.size(); at++) {
+                    ExactRatio total = sums.get(each.getKey()).plus(numbers.get(at)).orNull();
+                    if (total != null && !next.containsKey(total.key())) {
+                        int[] picks = Arrays.copyOf(each.getValue(), step + 1);
+                        picks[step] = at;
+                        next.put(total.key(), picks);
+                        nextSums.put(total.key(), total);
+                    }
+                }
+            }
+            reached = next;
+            sums = nextSums;
+        }
+        return reached;
+    }
+
+    /**
+     * Whether the rules a position wears leave {@code number} inside the range they leave its
+     * values, or leave no range.
+     *
+     * <p>The range and not the values: a type that admits a set of numbers inside its range is
+     * asked of the decoder, which refuses what the set leaves out and says so. What this keeps out
+     * is what the range already rules out, which is a number no value of the type is.
+     */
+    private static boolean admitsNumber(Type type, BigDecimal number, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        DeclaredBounds.Range own = DeclaredBounds.of(
+                TypeView.of(type, source.inners(), source.symbols(), source.kinds(), source.sums()),
+                reading);
+        return own == null
+                || holds(new NumericDomain.Bounds(own.min(), own.max()), ExactRatio.of(number));
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

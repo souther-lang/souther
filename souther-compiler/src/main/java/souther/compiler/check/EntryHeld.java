@@ -182,37 +182,23 @@ public final class EntryHeld {
      */
     public static Map<RuleKey, List<Requirement>> writtenOn(TypeSymbol.AtModule named,
                                                             RuleReadingSource source) {
-        Map<BindingId, String> fields = new HashMap<>();
-        source.bindings().of(named).forEach((name, binding) -> fields.put(binding, name));
-        if (fields.isEmpty()
-                || source.kinds().of(named.key()) != DeclarationKind.PRODUCT
-                || source.newtypes().of(named.key())) {
+        RecordRules rules = RecordRules.of(named, source);
+        if (rules == null) {
             return Map.of();
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
-        InvariantStatements statements = InvariantStatements.ofTheCalls(source);
-        for (DeclaredClauses.OnAName written : DeclaredClauses.of(List.of(named), source)) {
-            for (DeclaredClauses.Conjunct each : written.conjuncts()) {
-                List<InvariantStatement> states = statements.of(each.part());
-                if (states == null) {
-                    continue;
-                }
-                for (InvariantStatement one : states) {
-                    Stated stated = switch (one) {
-                        case InvariantStatement.HoldsAnEntry it -> it.held();
-                        case InvariantStatement.Applies it -> read(it.call(), core -> core);
-                        case InvariantStatement.Compares _, InvariantStatement.Unread _,
-                             InvariantStatement.BalancesSides _ -> null;
-                    };
-                    RuleKey where = stated == null ? null
-                            : ElementsApart.placeOf(stated.container(), fields, true);
-                    RuleKey key = stated == null ? null
-                            : ElementsApart.placeOf(stated.key(), fields, true);
-                    if (where != null && key != null) {
-                        out.computeIfAbsent(where, _ -> new ArrayList<>())
-                                .add(new Requirement(key, stated.valueIs()));
-                    }
-                }
+        for (InvariantStatement one : rules.statements()) {
+            Stated stated = switch (one) {
+                case InvariantStatement.HoldsAnEntry it -> it.held();
+                case InvariantStatement.Applies it -> read(it.call(), core -> core);
+                case InvariantStatement.Compares _, InvariantStatement.Unread _,
+                     InvariantStatement.BalancesSides _ -> null;
+            };
+            RuleKey where = stated == null ? null : rules.fieldAt(stated.container());
+            RuleKey key = stated == null ? null : rules.fieldAt(stated.key());
+            if (where != null && key != null) {
+                out.computeIfAbsent(where, _ -> new ArrayList<>())
+                        .add(new Requirement(key, stated.valueIs()));
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();

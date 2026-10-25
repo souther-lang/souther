@@ -1053,11 +1053,12 @@ public final class InvariantChecker {
                 k.numbers().atomsSpokenOf());
         // One reader for this value's positions, used over however many clauses reach it, and
         // the one that decides the choices in what they came to.
+        Map<FactSubject, List<List<String>>> keptApart =
+                keptApartAt(named, atoms, keys, typeAt, world.source());
         StatedByClauses.Reading reader = StatedByClauses
                 .readingOf(c.terms, positions, symbols, alternatives, allowed, c.answers,
                         c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers),
-                        keptApartAt(named, atoms, keys, typeAt, world.source()),
-                        builtFor(named, atoms, keys, world.source()));
+                        keptApart, builtFor(named, atoms, keys, keptApart, world.source()));
         // What each clause said and what each part of it said, kept as they were read and
         // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
         // read and on machines nobody has made at this point, and every one of these questions
@@ -1494,7 +1495,8 @@ public final class InvariantChecker {
      */
     private static StatedByClauses.BuiltFor builtFor(
             TypeSymbol.AtModule named, Map<RuleKey, FactSubject> atoms,
-            Map<RuleKey, FactSubject> keys, RuleReadingSource source) {
+            Map<RuleKey, FactSubject> keys, Map<FactSubject, List<List<String>>> keptApart,
+            RuleReadingSource source) {
         Map<FactSubject, Set<FactSubject>> entryKeys = new LinkedHashMap<>();
         EntryHeld.writtenOn(named, source).forEach((map, requirements) -> {
             for (FactSubject container : subjectsAt(map, atoms, keys)) {
@@ -1504,9 +1506,16 @@ public final class InvariantChecker {
                 }
             }
         });
+        // A list whose elements are also kept apart is not balanced by the builders: they make the
+        // elements differ in the side and the amount, and keep nothing else apart.
         Set<FactSubject> lists = new LinkedHashSet<>();
-        SidesBalanced.writtenOn(named, source).keySet()
-                .forEach(list -> lists.addAll(subjectsAt(list, atoms, keys)));
+        SidesBalanced.writtenOn(named, source).keySet().forEach(list -> {
+            for (FactSubject each : subjectsAt(list, atoms, keys)) {
+                if (!keptApart.containsKey(each)) {
+                    lists.add(each);
+                }
+            }
+        });
         return new StatedByClauses.BuiltFor(entryKeys, lists);
     }
 
