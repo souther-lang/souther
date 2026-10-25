@@ -8,7 +8,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleRef;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
@@ -28,6 +30,7 @@ import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The value a position is inside: what it is called, and what its rules leave each position of it
@@ -108,6 +111,20 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         return new PlacedRules(root, read, Rules.of(read, reading), alsoReaching,
                 reading.policy().allowanceForAdmittedValues(answersFor(read, machines).lending()),
                 machines);
+    }
+
+    /**
+     * These rules read again without the rules {@code parts} name, and the rules of the value above
+     * likewise.
+     *
+     * <p>Everything else is the same reading: the value, where it stands, what it may admit.
+     */
+    static PlacedRules leavingOut(PlacedRules placed, Set<PartId<RuleRef.Invariant>> parts) {
+        Reaching above = placed.alsoReaching;
+        return new PlacedRules(placed.root, placed.value, placed.rules.leavingOut(parts),
+                above == null ? null
+                        : new Reaching(leavingOut(above.outer(), parts), above.crossing()),
+                placed.sets, placed.machines);
     }
 
     /**

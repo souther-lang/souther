@@ -1,6 +1,8 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.HeldClass;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -13,6 +15,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Where a row for one coverage item has to be written.
@@ -47,6 +50,25 @@ import java.util.Optional;
  * may be implied by the ones that were.
  */
 public interface SearchRegion {
+
+    /**
+     * This region without the relation the rules {@code parts} name hold between the places they
+     * read, under the parameter each is listed under, with what was taken in and fixed kept.
+     *
+     * <p>Not a reading of declarations that never had those rules. What the original reading
+     * derived of each place by itself, the run it leaves the place with the rules in force, is
+     * kept; so a place keeps the ends the rules gave it, and the places are no longer held to one
+     * another by them. A reader asking the form the rules were about gets the sum of what each
+     * place keeps, which is wider than the rules allow together and no wider otherwise.
+     *
+     * <p>The inclusion this region keeps against what the declarations leave holds of the rest of
+     * the rules, so a reader that has shown the relation holds nothing it asks of may ask the
+     * region without it. A region that reads no declarations has none to leave out, which is what
+     * the default is.
+     */
+    default SearchRegion withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+        return this;
+    }
 
     /**
      * This region asked to take {@code form rel 0} in, and whether it could.

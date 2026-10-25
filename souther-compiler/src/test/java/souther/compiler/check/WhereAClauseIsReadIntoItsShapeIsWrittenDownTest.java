@@ -52,6 +52,10 @@ class WhereAClauseIsReadIntoItsShapeIsWrittenDownTest {
             new Licence("souther.compiler.check.ClauseReading.read", 1,
                     "the fold every reading of a clause is written as, which reads the shape and"
                             + " hands each reading its parts"),
+            new Licence("souther.compiler.check.Clauses.ReadsOfAClause.exactly", 1,
+                    "the shape of a clause as the comparisons it states exactly, which is asked"
+                            + " of the whole clause and so of every connective in it, and of no"
+                            + " part the parts of a caller's reading were chosen from"),
             new Licence("souther.compiler.check.Clauses.partsOf", 1,
                     "the shape a declaration's clause is described against, made where the parts a"
                             + " caller reads are chosen — which is every reader of a declaration's"

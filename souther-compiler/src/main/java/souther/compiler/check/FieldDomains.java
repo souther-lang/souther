@@ -936,6 +936,18 @@ public final class FieldDomains {
         return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
+    /**
+     * This value read again without the rules {@code parts} name, everything else it says being
+     * read.
+     *
+     * <p>For a reader that asks what the rest of the rules leave a position once rules it has shown
+     * to hold nothing a row at its line needs are put aside. The reading is the one every
+     * counterfactual here is, made once for the same rules left out.
+     */
+    public FieldDomains leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+        return parts.isEmpty() ? this : counterfactual(new LeftOut.Conjuncts(parts));
+    }
+
     /** This value read again without the clauses of the declarations {@code removed} names. */
     private FieldDomains withoutClausesOf(Set<TypeSymbol.AtModule> removed) {
         return counterfactual(new LeftOut.ClausesOf(removed));
