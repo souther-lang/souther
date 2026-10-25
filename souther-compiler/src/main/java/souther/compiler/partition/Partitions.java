@@ -2263,7 +2263,8 @@ public final class Partitions {
             // A number the value's type admits and can be written as: a value written under a name
             // is a value of the type only if its rules let it be.
             FixtureTemplate value = each.valueIs() == null
-                    || !admitsNumber(map.value(), each.valueIs(), reading) ? null
+                    || !EntryHeld.valueTypeAdmits(map.value(), each.valueIs(), null, reading)
+                    ? null
                     : writtenNumberAt(map.value(), each.valueIs(), reading);
             if (key == null || (each.valueIs() != null && value == null)) {
                 return Proposals.NONE;
@@ -2436,7 +2437,7 @@ public final class Partitions {
                 break;
             }
             if (Counts.writtenIn(each.value()) instanceof Count count
-                    && holds(limits.values(), count.exactly())
+                    && (limits.values() == null || limits.values().admits(count.exactly()))
                     && held.has(Value.number(count.at())) && seen.add(count.exactly().key())) {
                 out.add(each);
             }
@@ -2562,23 +2563,6 @@ public final class Partitions {
         return out;
     }
 
-    /** Whether {@code number} is inside {@code range}, a range of nothing being every number. */
-    private static boolean holds(NumericDomain.Bounds range, ExactRatio number) {
-        if (range == null) {
-            return true;
-        }
-        if (range.min() != null) {
-            int against = number.compareTo(Count.number(range.min().at()).exactly());
-            if (against < 0 || (against == 0 && !range.min().inclusive())) {
-                return false;
-            }
-        }
-        if (range.max() != null) {
-            int against = number.compareTo(Count.number(range.max().at()).exactly());
-            return against < 0 || (against == 0 && range.max().inclusive());
-        }
-        return true;
-    }
 
     /**
      * Every total {@code count} of {@code numbers} can come to, by the total, each with numbers that
@@ -2623,40 +2607,6 @@ public final class Partitions {
             sums = nextSums;
         }
         return reached;
-    }
-
-    /**
-     * Whether the names a position wears leave {@code number} among its values.
-     *
-     * <p>Asked of both the range the rules leave and the values they name, as
-     * {@link #admittedNumbers} is: a type that admits a set of numbers inside its range does not
-     * admit the others. What neither expresses is left to the decoder, which refuses a number the
-     * rules refuse and says so; the values reading does not read the arithmetic of a rule, so
-     * whether it read every rule says nothing here.
-     */
-    private static boolean admitsNumber(Type type, BigDecimal number, RuleReadingContext reading) {
-        RuleReadingSource source = reading.source();
-        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
-                source.sums());
-        ExactRatio exact = ExactRatio.of(number);
-        DeclaredBounds.Range own = DeclaredBounds.of(view, reading);
-        if (own != null && !holds(new NumericDomain.Bounds(own.min(), own.max()), exact)) {
-            return false;
-        }
-        Optional<Count> count = Count.written(exact).orNull();
-        if (count == null || count.isEmpty()) {
-            return false;
-        }
-        Value value = Value.number(count.get().at());
-        for (TypeSymbol each : view.wrappers()) {
-            if (each instanceof TypeSymbol.AtModule named) {
-                if (!FieldDomains.of(named, reading).admits(RuleKey.THE_VALUE).approximation()
-                        .has(value)) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

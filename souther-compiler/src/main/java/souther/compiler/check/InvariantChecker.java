@@ -1064,7 +1064,7 @@ public final class InvariantChecker {
         StatedByClauses.Reading reader = StatedByClauses
                 .readingOf(c.terms, positions, symbols, alternatives, allowed, c.answers,
                         c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers),
-                        keptApart, builtFor(named, atoms, keys, keptApart, world.source()));
+                        keptApart, builtFor(named, atoms, keys, keptApart, world));
         // What each clause said and what each part of it said, kept as they were read and
         // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
         // read and on machines nobody has made at this point, and every one of these questions
@@ -1519,11 +1519,12 @@ public final class InvariantChecker {
     private static StatedByClauses.BuiltFor builtFor(
             TypeSymbol.AtModule named, Map<RuleKey, FactSubject> atoms,
             Map<RuleKey, FactSubject> keys, Map<FactSubject, List<List<String>>> keptApart,
-            RuleReadingSource source) {
+            RuleReadingContext world) {
+        RuleReadingSource source = world.source();
         Map<FactSubject, Set<FactSubject>> entryKeys = new LinkedHashMap<>();
         // Of the maps whose keys are free: a map the builders hold to an entry under a key they may
         // not be able to for the key chosen is one whose key the rule does say something of.
-        EntryHeld.freelyKeyedOn(named, source).forEach((map, requirements) -> {
+        EntryHeld.freelyKeyedOn(named, world).forEach((map, requirements) -> {
             for (FactSubject container : subjectsAt(map, atoms, keys)) {
                 for (EntryHeld.Requirement each : requirements) {
                     entryKeys.computeIfAbsent(container, _ -> new LinkedHashSet<>())

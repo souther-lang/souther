@@ -102,13 +102,17 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
             """;
 
     /**
-     * Two entries asked of one map, each under a key of its own and a number of its own, are read
-     * at every field, the number being handed to a helper as an argument.
+     * Two entries asked of one map, each under a key of its own and a number of its own, are keys
+     * together: they may come to one value, or be more than their type has, and a reading of each
+     * place alone does not ask that. The map is still built holding both; no key is called free.
      */
     @Test
-    void twoEntriesAskedOfOneMapAreReadAtTheKeysAndTheMap() {
-        assertEquals(Map.of("n.x", List.of(), "n.y", List.of(), "n.rates", List.of()),
-                unansweredAtTheFields(TWO_ENTRIES + BEHAVIOR));
+    void twoEntriesAskedOfOneMapAreNotCalledFreeAtTheKeys() {
+        Map<String, List<String>> left = unansweredAtTheFields(TWO_ENTRIES + BEHAVIOR);
+
+        assertFalse(left.get("n.x").isEmpty());
+        assertFalse(left.get("n.y").isEmpty());
+        assertFalse(left.get("n.rates").isEmpty());
     }
 
     /**
@@ -161,17 +165,37 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
 
     /**
      * A rule that reads the map only to count what it holds is the count the range of the map
-     * already carries, and asks nothing else of it.
+     * already carries, and the builders hold the entry beside it. How many a map holds is how many
+     * keys the key's type must have, which this reading does not ask, so the key is not called
+     * free beside it.
      */
     @Test
-    void aRuleOnlyCountingTheMapLeavesItReadAtItsKey() {
+    void aRuleCountingTheMapLeavesTheKeyUnanswered() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { key: Int, rates: Map<Int, Int> }
+                    invariant held = Map.containsKey(key, rates)
+                    invariant some = Map.size(rates) >= 1
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                """);
+
+        assertFalse(left.get("n.key").isEmpty());
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /** One entry asked of a map nothing else asks anything of is the shape a key is called free
+     *  for. */
+    @Test
+    void oneEntryAskedOfAMapNothingElseAsksOfLeavesTheKeyRead() {
         assertEquals(Map.of("n.key", List.of(), "n.rates", List.of()),
                 unansweredAtTheFields("""
                         module demo
 
                         data N = { key: Int, rates: Map<Int, Int> }
                             invariant held = Map.containsKey(key, rates)
-                            invariant some = Map.size(rates) >= 1
 
                         behavior probe : (n: N) -> Int
                         let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
@@ -209,25 +233,6 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
         }
     }
 
-    /**
-     * A count that is an interval is the count the range already carries, and the map is still
-     * built holding the entries asked of it.
-     */
-    @Test
-    void aCountThatIsAnIntervalLeavesTheMapRead() {
-        assertEquals(Map.of("n.key", List.of(), "n.rates", List.of()),
-                unansweredAtTheFields("""
-                        module demo
-
-                        data N = { key: Int, rates: Map<Int, Int> }
-                            invariant held = Map.containsKey(key, rates)
-                            invariant some = Map.size(rates) >= 1
-                            invariant few = Map.size(rates) <= 3
-
-                        behavior probe : (n: N) -> Int
-                        let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
-                        """));
-    }
 
     /**
      * That a map can be built holding the entries asked of it is not that it can be for every key
@@ -264,6 +269,59 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
                 """ + BEHAVIOR);
 
         assertFalse(left.get("n.x").isEmpty(), "the key a is the other key's");
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /**
+     * Three entries asked of a map under keys of a type with two values are keys no map holds
+     * apart. The keys together are a question the reading of each place alone does not ask, so none
+     * is called free.
+     */
+    @Test
+    void keysOfATypeWithTooFewValuesAreNotFree() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data Stage = Open | Closed
+
+                data N = { a: Stage, b: Stage, c: Stage, byStage: Map<Stage, Int> }
+                    invariant aHasOne = atKey(a, byStage, 1)
+                    invariant bHasTwo = atKey(b, byStage, 2)
+                    invariant cHasThree = atKey(c, byStage, 3)
+
+                let atKey (k: Stage, m: Map<Stage, Int>, n: Int): Bool =
+                    Map.get(k, m)
+                        |> Option.map(r -> r == n)
+                        |> Option.withDefault(false)
+                """ + BEHAVIOR.replace("n.rates", "n.byStage"));
+
+        assertFalse(left.get("n.a").isEmpty());
+        assertFalse(left.get("n.byStage").isEmpty());
+    }
+
+    /**
+     * A number asked of the value that the value's type refuses is an entry that cannot be written,
+     * and a key is not free for an entry nothing writes.
+     */
+    @Test
+    void aKeyIsNotFreeForAValueItsTypeRefuses() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data Positive = Int
+                    invariant value > 0
+
+                data N = { key: Int, rates: Map<Int, Positive> }
+                    invariant held = Map.containsKey(key, rates)
+                    invariant isNought = zeroAt(key, rates)
+
+                let zeroAt (k: Int, m: Map<Int, Positive>): Bool =
+                    Map.get(k, m)
+                        |> Option.map(r -> r.value == 0)
+                        |> Option.withDefault(false)
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.key").isEmpty(), "no map holds a value of nought");
         assertFalse(left.get("n.rates").isEmpty());
     }
 

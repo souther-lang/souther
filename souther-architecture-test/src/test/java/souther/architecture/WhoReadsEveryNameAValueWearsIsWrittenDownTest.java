@@ -118,9 +118,14 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + TYPE
                             + "Ljava/util/function/Function;" + SOURCE + ")Ljava/util/List;",
                     THE_POSITION),
-            row(CHECK + "EntryHeld", "bareField",
-                    "(Ljava/lang/String;Lsouther/compiler/types/TypeSymbol$AtModule;" + SOURCE
-                            + ")Z",
+            row(CHECK + "EntryHeld", "keysStayFree",
+                    "(L" + CHECK + "RuleKey;Ljava/util/List;L" + CHECK
+                            + "RecordRules;Ljava/util/List;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
+                    THE_POSITION),
+            row(CHECK + "EntryHeld", "valueTypeAdmits",
+                    "(" + TYPE + "Ljava/math/BigDecimal;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
                     THE_POSITION),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
@@ -225,8 +230,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "PartitionClasses", "of",
                     "(" + TYPE + CONTEXT + "Ljava/util/Set;)Ljava/util/List;", THE_POSITION),
-            row(PARTITION + "Partitions", "admitsNumber",
-                    "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")Z", THE_POSITION),
             row(PARTITION + "Partitions", "admittedStrings",
                     "(" + TYPE + CONTEXT + "I)Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "balancedSides",

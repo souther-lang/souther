@@ -36,19 +36,10 @@ import java.util.Set;
  * @param everyRuleReached whether every declaration whose rules govern the record was expanded
  * @param readings         the fields each statement reads from, other than to count what a field
  *                         holds
- * @param countBoundedAbove the fields a rule leaves no more than some number of entries
  */
 record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements,
                    int declared, int unread, boolean everyRuleReached,
-                   List<Reading> readings, Set<String> countBoundedAbove) {
-
-    /**
-     * Whether a rule of the record leaves the field no more than some number of entries, which
-     * is what makes the entries a rule asks of it more than it can hold where they are all apart.
-     */
-    boolean countIsBoundedAbove(String field) {
-        return countBoundedAbove.contains(field);
-    }
+                   List<Reading> readings) {
 
     /** A statement and the fields of the record it reads from, whether or not it was recognised. */
     record Reading(InvariantStatement statement, Set<String> fields, Set<String> counted) {}
@@ -137,7 +128,6 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
         }
         // Where every statement reads from, whatever it says and whether or not it was recognised.
         List<Reading> readings = new ArrayList<>();
-        Set<String> boundedAbove = new HashSet<>();
         for (InvariantStatement one : statements) {
             Set<String> reads = new HashSet<>();
             Set<String> counted = new HashSet<>();
@@ -149,13 +139,13 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                             Core.withoutStanding(it.said()) instanceof Core.Binary bin
                                     ? StatedComparison.of(bin, it.positive()) : null;
                     if (compares != null) {
-                        readFromComparison(compares, fields, reads, counted, boundedAbove);
+                        readFromComparison(compares, fields, reads, counted);
                     } else {
                         readFrom(it.said(), fields, reads);
                     }
                 }
                 case InvariantStatement.Compares it ->
-                        readFromComparison(it.states(), fields, reads, counted, boundedAbove);
+                        readFromComparison(it.states(), fields, reads, counted);
                 case InvariantStatement.Applies it -> readFrom(it.call(), fields, reads);
                 case InvariantStatement.HoldsAnEntry it -> {
                     readFrom(it.held().container(), fields, reads);
@@ -167,7 +157,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
             readings.add(new Reading(one, Set.copyOf(reads), Set.copyOf(counted)));
         }
         return new RecordRules(Map.copyOf(fields), List.copyOf(statements), declared, unread,
-                everyRuleReached, List.copyOf(readings), Set.copyOf(boundedAbove));
+                everyRuleReached, List.copyOf(readings));
     }
 
     /**
@@ -182,7 +172,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
      */
     private static void readFromComparison(StatedComparison states,
                                            Map<BindingId, String> fields, Set<String> out,
-                                           Set<String> counted, Set<String> boundedAbove) {
+                                           Set<String> counted) {
         Set<String> left = new HashSet<>();
         Set<String> right = new HashSet<>();
         readFrom(states.left(), fields, left);
@@ -196,11 +186,6 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
             return;
         }
         counted.addAll(countOnTheLeft ? left : right);
-        // Counted from the count's side, a bound from below is the only one that leaves room.
-        Rel fromTheCount = countOnTheLeft ? rel : rel.turned();
-        if (fromTheCount != Rel.GE && fromTheCount != Rel.GT) {
-            boundedAbove.addAll(countOnTheLeft ? left : right);
-        }
     }
 
     /** Whether {@code e} is a count taken of a field of the record itself. */

@@ -1,12 +1,16 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -15,6 +19,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -200,19 +205,21 @@ public final class EntryHeld {
      * of the builders' reach, and for one key that is so whatever else stands.
      */
     public static Map<RuleKey, List<Requirement>> freelyKeyedOn(TypeSymbol.AtModule named,
-                                                                RuleReadingSource source) {
-        Held held = heldOn(named, source);
+                                                                RuleReadingContext world) {
+        Held held = heldOn(named, world.source());
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
         held.requirements().forEach((where, requirements) -> {
-            if (held.keysFree().contains(where)) {
+            if (keysStayFree(where, requirements, held.rules(), held.builtFor().get(where), named,
+                    world)) {
                 out.put(where, requirements);
             }
         });
         return Map.copyOf(out);
     }
 
-    /** The maps built, and of them the ones whose keys are free. */
-    private record Held(Map<RuleKey, List<Requirement>> requirements, Set<RuleKey> keysFree) {}
+    /** The maps built, the statements each was built for, and the rules they were read off. */
+    private record Held(Map<RuleKey, List<Requirement>> requirements,
+                        Map<RuleKey, List<InvariantStatement>> builtFor, RecordRules rules) {}
 
     private static Held heldOn(TypeSymbol.AtModule named, RuleReadingSource source) {
         RecordRules rules = RecordRules.of(named, source);
@@ -220,7 +227,7 @@ public final class EntryHeld {
         // ask of it, and a rule nothing was made of may ask others, or ask the map something the
         // entries held would break.
         if (rules == null || !rules.readInFull()) {
-            return new Held(Map.of(), Set.of());
+            return new Held(Map.of(), Map.of(), rules);
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
         // The maps a rule was read of that the builders cannot keep: a rule they know the shape
@@ -246,7 +253,6 @@ public final class EntryHeld {
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
-        Set<RuleKey> free = new HashSet<>();
         out.forEach((where, requirements) -> {
             // And a map no statement but those built for reads from: the map is built holding
             // what those ask of it, and a statement asking anything else of it, recognised or not
@@ -254,56 +260,89 @@ public final class EntryHeld {
             if (buildable(where, requirements) && !notKept.contains(where)
                     && !rules.readBesides(builtFor.get(where), where.steps().getFirst())) {
                 held.put(where, List.copyOf(requirements));
-                if (keysStayFree(where, requirements, rules, builtFor.get(where), named, source)) {
-                    free.add(where);
-                }
             }
         });
-        return new Held(Map.copyOf(held), Set.copyOf(free));
+        return new Held(Map.copyOf(held), Map.copyOf(builtFor), rules);
     }
 
     /**
      * Whether the map at {@code map} can be built holding the entries {@code requirements} ask of
-     * it whatever the keys come to.
+     * it for every key the key's own place admits.
      *
-     * <p>One key is asked for one entry, and any key is one the map can hold. Where there are
-     * several keys they may come to one value, to two that the record does not allow beside each
-     * other, or to more entries than the map may hold, and the keys are free only where nothing
-     * makes any of those so: no rule of the record other than these reads a key, no rule bounds
-     * the count from above, and no name stands between the places and their values, since a
-     * name's own rules decide what its places admit and are not read here.
+     * <p>Proved for the one shape that can be, and left unanswered for every other: one entry asked
+     * of the map, under one key, and nothing else asking anything of the map, how many it holds
+     * included, since that is how many keys a type must have. Several keys come to one value, to
+     * two the record does not allow beside each other, or to more values than their type has, and
+     * that is a question about the keys together which a reading of each place alone cannot ask.
+     * And a number asked of the value is held only if the value's type admits it, by the answer the
+     * builders go by ({@link #valueTypeAdmits}), since a key is free only where the entry can be
+     * written.
      */
     private static boolean keysStayFree(RuleKey map, List<Requirement> requirements,
                                         RecordRules rules, List<InvariantStatement> built,
-                                        TypeSymbol.AtModule named, RuleReadingSource source) {
+                                        TypeSymbol.AtModule named, RuleReadingContext world) {
         Set<String> keys = new HashSet<>();
         for (Requirement each : requirements) {
             keys.add(each.key().steps().getFirst());
         }
-        if (keys.size() <= 1) {
-            return true;
-        }
-        String field = map.steps().getFirst();
-        if (rules.countIsBoundedAbove(field) || !bareField(field, named, source)) {
+        if (keys.size() != 1 || rules.readAtAll(built, map.steps().getFirst())) {
             return false;
         }
-        for (String key : keys) {
-            if (rules.readAtAll(built, key) || !bareField(key, named, source)) {
+        RuleReadingSource source = world.source();
+        if (!(TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(), source.kinds(),
+                source.sums()) instanceof Shape.Product(TypeSymbol _, var fields))
+                || !(fields.get(map.steps().getFirst()) instanceof Type mapType)
+                || !(TypeView.of(mapType, source.inners(), source.symbols(), source.kinds(),
+                        source.sums()).shape() instanceof Shape.Mapping(Type _, Type value))) {
+            return false;
+        }
+        for (Requirement each : requirements) {
+            if (each.valueIs() != null && !valueTypeAdmits(value, each.valueIs(), named, world)) {
                 return false;
             }
         }
         return true;
     }
 
-    /** Whether the field {@code field} of {@code named} is of a type that wraps no name, so that no
-     *  rule of a name stands between the field and the values its type has. */
-    private static boolean bareField(String field, TypeSymbol.AtModule named,
-                                     RuleReadingSource source) {
-        return TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(), source.kinds(),
-                source.sums()) instanceof Shape.Product(TypeSymbol _, var fields)
-                && fields.get(field) instanceof Type type
-                && TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
-                        source.sums()).wrappers().isEmpty();
+    /**
+     * Whether the names a position wears leave {@code number} among its values.
+     *
+     * <p>Asked of both the range the rules leave and the values they name: a type that admits a set
+     * of numbers inside its range does not admit the others. What neither expresses is left to the
+     * decoder, which refuses a number the rules refuse and says so; the values reading does not
+     * read the arithmetic of a rule, so whether it read every rule says nothing here. The one
+     * answer both the builders of a map and the reading of its keys go by, so a key is not called
+     * free for an entry the builders cannot write.
+     *
+     * <p>False for a type that wears {@code within}, the record being read, where one is given:
+     * asking its names asks the record, whose reading this is part of.
+     */
+    public static boolean valueTypeAdmits(Type type, BigDecimal number, TypeSymbol.AtModule within,
+                                          RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (within != null && view.wrappers().contains(within)) {
+            return false;
+        }
+        ExactRatio exact = ExactRatio.of(number);
+        DeclaredBounds.Range own = DeclaredBounds.of(view, reading);
+        if (own != null && !new NumericDomain.Bounds(own.min(), own.max()).admits(exact)) {
+            return false;
+        }
+        Optional<Count> count = Count.written(exact).orNull();
+        if (count == null || count.isEmpty()) {
+            return false;
+        }
+        Value value = Value.number(count.get().at());
+        for (TypeSymbol each : view.wrappers()) {
+            if (each instanceof TypeSymbol.AtModule named
+                    && !FieldDomains.of(named, reading).admits(RuleKey.THE_VALUE).approximation()
+                            .has(value)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
