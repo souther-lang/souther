@@ -2437,9 +2437,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     List<AdequacyUncertainty> whatKeepsTheVerdictOpenInOrder(
             SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
         DocumentSources sources = new DocumentSources(rendering);
-        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> observed = forksLeftOutBy();
+        // Without where a fact was met: the order reads the kind, the reason, the sensitivity and
+        // what it is about, so walking every behavior for the rest would be work nobody reads.
         return PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
-                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places, observed));
+                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places, Map.of()));
     }
 
     /** The same, for a reader holding no places of its own. */
@@ -9147,8 +9148,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<PublishedOpening> said = new ArrayList<>();
         // Once for the fold below, for the reason the page's own line gives.
         PublishedRuleHandle.WhereARuleIs places = rulePlaces();
-        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> observed = forksLeftOutBy();
-        for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
+        List<AdequacyUncertainty> open = whatKeepsTheVerdictOpen();
+        // Walked only for a verdict some fork holds open, which is the exception.
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> observed =
+                open.stream().anyMatch(it -> it instanceof AdequacyUncertainty.ByWeakening(
+                        Weakening.ArmsUnsettled _)) ? forksLeftOutBy() : Map.of();
+        for (AdequacyUncertainty each : open) {
             said.add(openingOf(each, sources, places, observed));
         }
         for (PublishedOpening each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN
