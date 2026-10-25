@@ -18,13 +18,20 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.observe.RunSensitivity;
+import souther.compiler.publish.AdequacyOpeningWord;
+import souther.compiler.publish.PublishedOpening;
+import souther.compiler.publish.PublishedSubject;
+import souther.compiler.source.SourceId;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.RowWitnesses;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -121,7 +128,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     void andNothingSaysARowWasNotRead() {
         StringBuilder out = new StringBuilder();
         new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x", WeakeningSet.none(),
-                List.of()).branch(out, reported(), null,
+                List.of()).branch(out, "m", reported(), null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE),
                 reported().coveredOnlyByRowsThatDoNotHold(), new AdequacyReport.MarksWritten());
 
@@ -135,5 +142,55 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                 () -> "and the arms it does not hold are said under it: " + out);
         assertFalse(out.toString().contains("a row was not read"),
                 () -> "every row was read: " + out);
+        assertTrue(out.toString().contains("reached from `m.b`"),
+                () -> "and the line names the behavior it was met under: " + out);
+    }
+
+    /**
+     * One fork two behaviors leave out of their counts is met under both, and a fork they count is
+     * met under neither.
+     *
+     * <p>The two behaviors are of different modules and share a name, so naming the behavior alone
+     * would say one thing twice.
+     */
+    @Test
+    void aForkLeftOutByTwoBehaviorsIsMetUnderBothQualifiedByModule() {
+        AdequacyReport report = new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x",
+                WeakeningSet.none(),
+                List.of(moduleOf("n"), moduleOf("m")));
+
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> seen =
+                report.forksLeftOutBy();
+
+        assertEquals(List.of(UNSETTLED), List.copyOf(seen.keySet()),
+                "the fork whose arms are counted is met under no behavior");
+        assertEquals(List.of(new PublishedOpening.ObservedIn("m", "b"),
+                        new PublishedOpening.ObservedIn("n", "b")),
+                seen.get(UNSETTLED).stream()
+                        .sorted(Comparator.comparing(PublishedOpening.ObservedIn::module))
+                        .toList());
+    }
+
+    private static AdequacyReport.ModuleReport moduleOf(String name) {
+        return new AdequacyReport.ModuleReport(name, new SourceId("m.sou"),
+                List.of(reported()), List.of(), AdequacyReport.DeclarationsShown.NONE);
+    }
+
+    /** And a document names them in an order that does not depend on the order they were met in. */
+    @Test
+    void theBehaviorsAFactWasMetUnderAreWrittenInModuleThenBehaviorOrder() {
+        PublishedOpening.ObservedIn first = new PublishedOpening.ObservedIn("m", "a");
+        PublishedOpening.ObservedIn second = new PublishedOpening.ObservedIn("m", "b");
+        PublishedOpening.ObservedIn third = new PublishedOpening.ObservedIn("n", "a");
+
+        assertEquals(List.of(first, second, third),
+                opening(List.of(third, second, first, second)).observedIn());
+    }
+
+    private static PublishedOpening opening(List<PublishedOpening.ObservedIn> seenIn) {
+        return new PublishedOpening(
+                new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOT_MEASURED),
+                Optional.empty(), RunSensitivity.UNAFFECTED,
+                new PublishedSubject.OfAModule("m"), seenIn);
     }
 }

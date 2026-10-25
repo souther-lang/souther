@@ -287,7 +287,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 24;
+    public static final int SCHEMA_VERSION = 25;
 
     /**
      * Where the schema this writes documents ships.
@@ -2437,8 +2437,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     List<AdequacyUncertainty> whatKeepsTheVerdictOpenInOrder(
             SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
         DocumentSources sources = new DocumentSources(rendering);
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> observed = forksLeftOutBy();
         return PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
-                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places));
+                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places, observed));
     }
 
     /** The same, for a reader holding no places of its own. */
@@ -2764,7 +2765,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 CoveredOnlyByRowsThatDoNotHold onlyBy = behavior.coveredOnlyByRowsThatDoNotHold();
                 partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace(),
                         onlyBy, marks);
-                branch(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
+                branch(out, module.module(), behavior, module.declaredIn(), rendering, onlyBy,
+                        marks);
                 decision(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
                 replacement(out, behavior, module.module(), module.declaredIn(), rendering);
                 // Under the behavior it names, because a reason printed at the module's foot is
@@ -3819,7 +3821,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * arms and says nothing about their combinations, and a report that said "paths covered" would
      * invite an author to stop looking exactly where there is more to find.
      */
-    void branch(StringBuilder out, BehaviorReport behavior,
+    void branch(StringBuilder out, String module, BehaviorReport behavior,
                                SourceId declaredIn, SourceRendering rendering,
                                CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold,
                                MarksWritten marks) {
@@ -3857,9 +3859,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ArmExclusion left : arms.exclusions()) {
             out.append(String.format(
                     "      · a fork `%s` wrote decides by a rule its caller supplies, and which"
-                            + " rule decides here could not be worked out: what its arms come to is"
-                            + " read over however many rules that is%n",
-                    left.fork().module()));
+                            + " rule decides here, reached from `%s.%s`, could not be worked out:"
+                            + " what its arms come to is read over however many rules that is%n",
+                    left.fork().module(), module, behavior.name()));
         }
         // Every arm the count holds and no row goes through, said here or under the findings below.
         // An arm a row that never finished might have gone through is a question and not a gap, so
@@ -9145,8 +9147,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<PublishedOpening> said = new ArrayList<>();
         // Once for the fold below, for the reason the page's own line gives.
         PublishedRuleHandle.WhereARuleIs places = rulePlaces();
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> observed = forksLeftOutBy();
         for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
-            said.add(openingOf(each, sources, places));
+            said.add(openingOf(each, sources, places, observed));
         }
         for (PublishedOpening each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN
                 .arrange(said).written()) {
@@ -9157,20 +9160,64 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // incompleteness is attributed to. Neither is this, and neither is shaped like it.
             about(fact.putObject("about"), each.about(), sources);
             each.reason().ifPresent(reason -> fact.put("reason", word(reason)));
+            observedIn(fact, each.observedIn());
             fact.put("runSensitivity", word(each.runSensitivity()));
+        }
+    }
+
+    /** The behaviors a fact was met under, where there are any: the field is absent otherwise. */
+    static void observedIn(ObjectNode fact, List<PublishedOpening.ObservedIn> behaviors) {
+        if (behaviors.isEmpty()) {
+            return;
+        }
+        ArrayNode seenIn = fact.putArray("observedIn");
+        for (PublishedOpening.ObservedIn behavior : behaviors) {
+            ObjectNode seen = seenIn.addObject();
+            seen.put("module", behavior.module());
+            seen.put("behavior", behavior.behavior());
         }
     }
 
     /** What the document writes for one thing keeping the verdict open. */
     private static PublishedOpening openingOf(AdequacyUncertainty each, DocumentSources sources,
-                                              PublishedRuleHandle.WhereARuleIs places) {
+                                              PublishedRuleHandle.WhereARuleIs places,
+                                              Map<SourceConstructOrigin,
+                                                      List<PublishedOpening.ObservedIn>> observed) {
         // The reason beside it, where the kind is one that has one. A measure nobody made says
         // what it was waiting for, and that word is one this document already writes wherever a
         // measure has no number — so a reader meets one vocabulary and not two.
         Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
                 ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
+        List<PublishedOpening.ObservedIn> seenIn =
+                each instanceof AdequacyUncertainty.ByWeakening(Weakening.ArmsUnsettled(var fork))
+                        ? observed.getOrDefault(fork, List.of()) : List.of();
         return new PublishedOpening(kindOf(each), why, each.runSensitivity(),
-                publishedSubject(each.subject(), sources, places));
+                publishedSubject(each.subject(), sources, places), seenIn);
+    }
+
+    /**
+     * The behaviors under which each fork was left out of the arm count, read off the arm accounts
+     * the report already holds.
+     *
+     * <p>Only the forks an account excludes: a behavior that reaches a fork and counts its arms is
+     * not one the fork's uncertainty showed up in.
+     */
+    Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> forksLeftOutBy() {
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> out = new LinkedHashMap<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.branch() == null) {
+                    continue;
+                }
+                for (ArmSummary arms : behavior.branch().measured().made().stream().toList()) {
+                    for (ArmExclusion left : arms.exclusions()) {
+                        out.computeIfAbsent(left.fork(), _ -> new ArrayList<>()).add(
+                                new PublishedOpening.ObservedIn(module.module(), behavior.name()));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
