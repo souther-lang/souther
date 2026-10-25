@@ -311,6 +311,7 @@ public final class PublicationOrders {
                     CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
+                    CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                     CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,
                     CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                     CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,

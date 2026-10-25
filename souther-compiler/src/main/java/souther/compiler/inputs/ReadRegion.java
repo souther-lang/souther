@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.ValueSet;
@@ -86,6 +87,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public HeldClass classAt(NumericTerm.ValueOf place) {
         return within.classAt(place);
+    }
+
+    @Override
+    public OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
+        return within.orderedRegionAt(place);
     }
 
     @Override

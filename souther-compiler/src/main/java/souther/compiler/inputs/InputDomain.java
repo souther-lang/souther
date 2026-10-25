@@ -962,7 +962,7 @@ public final class InputDomain {
         return new ReadPosition(read.path(), read.view(), read.bounds(),
                 read.nothingExists(), read.projection(),
                 read.declared(), read.reading(), read.obligations(), read.admitted(),
-                read.rulesWithoutALine(), read.endsLeftOpen(),
+                read.orderedRegion(), read.rulesWithoutALine(), read.endsLeftOpen(),
                 read.unansweredQuestions(),
                 left, read.structure());
     }
@@ -1723,7 +1723,7 @@ public final class InputDomain {
                 admitted, source, noLine, nothingExists, type);
         return new ReadPosition(path, view, bounds, nothingExists,
                 placed.projection(path), declared, reading,
-                ObligationDomain.of(reading, declared), admitted,
+                ObligationDomain.of(reading, declared), admitted, placed.orderedRegionAt(path),
                 withoutALine,
                 // And which of those rules the reading of ends is still owed an end of. The
                 // finding above says what became of the rule here; this says the reading did not

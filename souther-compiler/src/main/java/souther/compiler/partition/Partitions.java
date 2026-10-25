@@ -17,6 +17,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
 import souther.compiler.inputs.Distinctions;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
@@ -40,6 +41,7 @@ import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -1499,6 +1501,17 @@ public final class Partitions {
     static Proposals representativesOf(TypeView view, RuleReadingContext reading,
                                        NumericDomain.Bounds within,
                                        Set<TypeSymbol> expanding) {
+        return representativesOf(view, reading, within, expanding, RulesAround.NONE);
+    }
+
+    /**
+     * The same, of a value built inside others whose rules name places in it ({@link RulesAround}):
+     * a record of it, or a case of a sum it is, is built field by field held to those rules as
+     * well, under the names the value wears as any value of it is.
+     */
+    static Proposals representativesOf(TypeView view, RuleReadingContext reading,
+                                       NumericDomain.Bounds within,
+                                       Set<TypeSymbol> expanding, RulesAround around) {
         RuleReadingSource ruleSource = reading.source();
         // Already inside the value of one of the names this wears, so the type is written in terms of
         // itself and there is nothing to hand back. Which is the answer and not a limit: no value of
@@ -1532,14 +1545,14 @@ public final class Partitions {
         // past what a proposal holds is a value not built, and stands where it would have stood.
         candidates.addAll(Witnesses.holding(view, characters.least(), List.of(), reading, inside)
                 .map(named));
-        Proposals ofTheShape = whatTheShapeStandsFor(view, reading, within, inside);
+        Proposals ofTheShape = whatTheShapeStandsFor(view, reading, within, inside, around);
         candidates.addAll(ofTheShape.map(named));
         // Where the shape stands for no value of its own, what stands at the position is one of the
         // kinds its type divides into, and the classes are what name them. Asked only there, because
         // a class of a position says what stands at the position under it: asked of a shape that has
         // a value of its own, the answer is that value again, arrived at by building it.
         if (ofTheShape.isEmpty()) {
-            candidates.addAll(dividedInto(view, reading, inside));
+            candidates.addAll(dividedInto(view, reading, inside, around));
         }
         return candidates.done();
     }
@@ -1557,7 +1570,7 @@ public final class Partitions {
      * classes were wrong about themselves — the answer they carry is the one an author is shown.
      */
     private static Proposals dividedInto(TypeView view, RuleReadingContext reading,
-                                         Set<TypeSymbol> expanding) {
+                                         Set<TypeSymbol> expanding, RulesAround around) {
         // In front of what is offered, what the classes passed over met: a class with nothing for a
         // figure is the class that would have been offered in its place.
         Proposals.Gathering out = Proposals.Gathering.inOrder();
@@ -1565,7 +1578,7 @@ public final class Partitions {
                 Distinctions.ofType(view.shape(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()),
                 view, reading, expanding)) {
-            Proposals stands = standingFor(each.representatives(), reading, expanding);
+            Proposals stands = standingFor(each.representatives(), reading, expanding, around);
             out.addAll(stands);
             if (!stands.isEmpty()) {
                 return out.done();
@@ -1637,7 +1650,7 @@ public final class Partitions {
      */
     private static Proposals whatTheShapeStandsFor(TypeView view, RuleReadingContext reading,
                                                    NumericDomain.Bounds within,
-                                                   Set<TypeSymbol> inside) {
+                                                   Set<TypeSymbol> inside, RulesAround around) {
         RuleReadingSource ruleSource = reading.source();
         return switch (view.shape()) {
             case Shape.Scalar scalar -> Proposals.of(standsForA(scalar, within, reading));
@@ -1661,7 +1674,7 @@ public final class Partitions {
             // names it is worn under as well as its own.
             case Shape.Product product -> product.name() instanceof TypeSymbol.AtModule named
                     ? composed(named, rulesOver(view.wrappers(), named, ruleSource), reading,
-                            inside)
+                            inside, around)
                     : Proposals.NONE;
             // What a sum or a union stands for is which of its cases it is, which is what the
             // position divides into rather than a value to name here.
@@ -1717,12 +1730,20 @@ public final class Partitions {
      */
     static Proposals standingFor(RepresentativeSource source, RuleReadingContext reading,
                                  Set<TypeSymbol> expanding) {
+        return standingFor(source, reading, expanding, RulesAround.NONE);
+    }
+
+    /** The same, of a class of a value built inside others whose rules name places in it
+     *  ({@link RulesAround}). */
+    static Proposals standingFor(RepresentativeSource source, RuleReadingContext reading,
+                                 Set<TypeSymbol> expanding, RulesAround around) {
         return switch (source) {
             case RepresentativeSource.Values values -> values.offered();
             // Against the case's own rules: the names the position wears are over the sum, and a
-            // rule of theirs reads no field of one of its cases.
+            // rule of theirs reads no field of one of its cases. A rule of a value around the sum
+            // reads the names its cases share, and comes down with it.
             case RepresentativeSource.Compose compose ->
-                    composed(compose.through(), compose.through(), reading, expanding)
+                    composed(compose.through(), compose.through(), reading, expanding, around)
                             .map(compose::written);
             case RepresentativeSource.NothingProducible _ -> Proposals.NONE;
             case RepresentativeSource.NotArrivedAt notArrived ->
@@ -1753,15 +1774,37 @@ public final class Partitions {
      * record from every point and every settling it visits, and the answer is about the record and
      * the rules and nothing about where the search is.
      *
+     * <p>Except where a rule of a value around the record reads one of its places: then the record
+     * is composed here, held to that rule as well, since the answer is about where it is built.
+     * Each such composing is counted against the one count its outermost record was given
+     * ({@link RulesAround#reserve}), whatever sum or record it is under — the cases of each nested
+     * sum multiply, and a count per sum would let the product past it.
+     *
      * @param rulesOn the name whose rules the fields are chosen against ({@link #rulesOver})
      */
     private static Proposals composed(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                                       RuleReadingContext reading,
-                                      Set<TypeSymbol> expanding) {
+                                      Set<TypeSymbol> expanding, RulesAround around) {
         // Given up on before it is asked, so that a record reached from its own field is the work
         // stopping and never the work borrowing itself.
         if (expanding.contains(record)) {
             return Proposals.NONE;
+        }
+        if (around.readAnything()) {
+            // Taken before the fields are chosen: a record built inside this one asks the same
+            // count, and one asked only afterwards lets every record on the way down pass it.
+            if (!around.reserve()) {
+                return Proposals.NONE.meeting(CompositionShortfall.of(
+                        Set.of(CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER)));
+            }
+            FieldsChosen chosen = fieldsOf(record, rulesOn, reading, expanding, Map.of(), around);
+            // Given back where nothing was built: a record whose rules leave one of its fields no
+            // value was settled before that, and a count spent on it is a case further on never
+            // tried.
+            if (chosen.leftNothing()) {
+                around.refund();
+            }
+            return written(record, chosen, reading.source());
         }
         return reading.revision().settled(
                 new ARecordComposed(record, rulesOn, reading, expanding));
@@ -1847,7 +1890,7 @@ public final class Partitions {
 
         @Override
         public Proposals workedOut(RevisionKnowledge revision) {
-            return composed(record, rulesOn, reading, expanding, Map.of());
+            return composed(record, rulesOn, reading, expanding, Map.of(), RulesAround.NONE);
         }
 
         @Override
@@ -1878,17 +1921,23 @@ public final class Partitions {
      * would be choosing them against {@code a < b} with {@code a} open, which is the reading this
      * loop exists to avoid.
      *
-     * @param given what stands at some of the fields, by name. A name no field has is nothing this
-     *              can build, and is the caller asking for a value of another type
+     * @param given  what stands at some of the fields, by name. A name no field has is nothing this
+     *               can build, and is the caller asking for a value of another type
+     * @param around the rules of the values the record is built inside ({@link RulesAround})
      */
     static Proposals composed(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                               RuleReadingContext reading, Set<TypeSymbol> expanding,
-                              Map<String, FixtureTemplate> given) {
+                              Map<String, FixtureTemplate> given, RulesAround around) {
         if (expanding.contains(record)) {
             return Proposals.NONE;
         }
-        RuleReadingSource ruleSource = reading.source();
-        FieldsChosen chosen = fieldsOf(record, rulesOn, reading, expanding, given);
+        return written(record, fieldsOf(record, rulesOn, reading, expanding, given, around),
+                reading.source());
+    }
+
+    /** The record {@code chosen} builds, where {@code record} can be written, with what it met. */
+    private static Proposals written(TypeSymbol record, FieldsChosen chosen,
+                                     RuleReadingSource ruleSource) {
         return (chosen.fields() == null || !(ruleSource.symbols().scope().reach(record)
                 instanceof TypeReachName.Written written)
                         ? Proposals.NONE
@@ -1960,8 +2009,8 @@ public final class Partitions {
                         case Proposals.Offered(FixtureTemplate value) -> {
                             Map<String, FixtureTemplate> given = new LinkedHashMap<>(base);
                             given.put(field.getKey(), value);
-                            Proposals composed =
-                                    composed(record, rulesOn, reading, expanding, given);
+                            Proposals composed = composed(record, rulesOn, reading, expanding,
+                                    given, RulesAround.NONE);
                             out.stop(composed.met());
                             for (FixtureTemplate each : composed.values()) {
                                 if (found.putIfAbsent(each.text(), given) == null) {
@@ -1999,13 +2048,22 @@ public final class Partitions {
      * What stands at each field of a record, or null where one of them has nothing to stand for
      * it, and what of this compiler's choosing them met.
      *
-     * @param fields by name, in the order the record declares them; null where a field has nothing
-     * @param met    what building the fields' values met — a field with nothing because its value
-     *               is past a figure is a record this compiler did not build, not one with no value
+     * @param fields      by name, in the order the record declares them; null where a field has
+     *                    nothing
+     * @param met         what building the fields' values met — a field with nothing because its
+     *                    value is past a figure is a record this compiler did not build, not one
+     *                    with no value
+     * @param leftNothing whether a field had nothing because the rules leave it no value, which is
+     *                    settled before anything is built and is no record this tried to build
      */
-    record FieldsChosen(SequencedMap<String, FixtureTemplate> fields, CompositionShortfall met) {
+    record FieldsChosen(SequencedMap<String, FixtureTemplate> fields, CompositionShortfall met,
+                        boolean leftNothing) {
 
         static final FieldsChosen NONE = new FieldsChosen(null, CompositionShortfall.NONE);
+
+        FieldsChosen(SequencedMap<String, FixtureTemplate> fields, CompositionShortfall met) {
+            this(fields, met, false);
+        }
     }
 
     /**
@@ -2020,10 +2078,13 @@ public final class Partitions {
      * @param rulesOn the name whose rules the fields are chosen against: {@code record} itself, or
      *                a name worn over it ({@link #rulesOver}), whose reading names the record's
      *                fields as the record does
+     * @param around  the rules of the values the record is being built inside, which name its
+     *                fields as well: each field is held to what they leave it beside what the
+     *                record's own rules do
      */
     static FieldsChosen fieldsOf(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                                  RuleReadingContext reading, Set<TypeSymbol> expanding,
-                                 Map<String, FixtureTemplate> given) {
+                                 Map<String, FixtureTemplate> given, RulesAround around) {
         RuleReadingSource ruleSource = reading.source();
         // What the record is made of, read where a position's reading is made. A walk from the
         // declaration to its fields is that same reading taken a second time, and the two part
@@ -2048,12 +2109,20 @@ public final class Partitions {
         }
         Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
-        Map<RuleKey, Count> settled = new LinkedHashMap<>();
+        // What is settled is kept once for everything built under the outermost record, by where
+        // it stands, and every value's rules are asked about it as they name those places. Kept
+        // beside each record's rules, a number chosen in an inner record would be one the rules
+        // outside it were never told.
+        RulesAround within = around.sharing();
+        within.forgetUnder(within.here());
+        FieldDomains rules = FieldDomains.of(rulesOn, reading);
         // The record's rules, read once. Each field is then chosen against this with the fields
         // before it settled into it, which is what a settling states — a reading per settled field
         // would be paying for every clause again to arrive where the first one already is.
-        FieldDomains rules = FieldDomains.of(rulesOn, reading);
         FieldDomains.Composing left = rules.composing(Map.of());
+        // The places the record's own rules read, which a value built at one of its fields is held
+        // to where they are under the field.
+        PlacesTheRulesRead read = PlacesTheRulesRead.of(Type.ref(rulesOn), ruleSource);
         SequencedMap<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         if (!fields.keySet().containsAll(given.keySet())) {
             return FieldsChosen.NONE;
@@ -2076,7 +2145,18 @@ public final class Partitions {
             Map.Entry<String, Type> field = Map.entry(name, fields.get(name));
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
-                FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
+                FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()))
+                        .meet(within.at(field.getKey()));
+                // A field the rules leave no value at leaves the record none, which is settled
+                // here and said as itself: nothing was built and nothing was tried.
+                if (limits.leavesNothing()) {
+                    within.forgetUnder(within.here());
+                    return new FieldsChosen(null, met, true);
+                }
+                // What every value around this one, and this one's own rules, say of the places
+                // under the field: the value there is built held to them as well as to its own
+                // declaration's rules, by whatever builds a value of its type.
+                RulesAround inner = within.aroundTheField(read, rules, field.getKey());
                 // A map asked for an entry under a key already chosen is built holding it.
                 Proposals holding = asked.containsKey(name)
                         ? holdingTheEntriesAskedFor(field.getValue(), asked.get(name),
@@ -2100,24 +2180,26 @@ public final class Partitions {
                         : !taken.isEmpty() ? Witnesses.distinctValuesOf(field.getValue(),
                                 taken.size() + 1, limits.held(), limits.admits(), reading, inside)
                         : Witnesses.firstWhatThePlaceAdmits(
-                        field.getValue(), limits, reading, inside,
-                        () -> representativesHolding(field.getValue(), reading, limits, inside))
+                        field.getValue(), limits, reading, inside, inner,
+                        () -> representativesHolding(field.getValue(), reading, limits, inside,
+                                inner))
                         .firstOf(1);
                 met = met.and(stands.met());
                 at = stands.values().stream().filter(each -> !taken.contains(each.text()))
                         .findFirst().orElse(null);
                 if (at == null) {
+                    within.forgetUnder(within.here());
                     return new FieldsChosen(null, met);
                 }
             }
             chosenByName.put(field.getKey(), at);
             // Settled, and the rules read again with it in them. A field chosen against the rules as
             // they stand before anything is settled is chosen against `a < b` with `a` still open,
-            // which leaves `b` its whole range and takes the bottom of it.
-            if (Counts.writtenIn(at.value()) instanceof Count count) {
-                settled.put(RuleKey.of(field.getKey()), count);
-                left = rules.composing(FieldDomains.atValues(settled));
-            }
+            // which leaves `b` its whole range and takes the bottom of it. Every number the value
+            // writes, wherever in it, from the value chosen and not from what was tried on the way
+            // to it.
+            Counts.writtenUnder(within.here().then(field.getKey()), at.value(), within::settle);
+            left = rules.composing(FieldDomains.atValues(within.settledUnder(within.here())));
         }
         // Written in the order the record declares them, whichever order they were chosen in.
         for (String name : fields.keySet()) {
@@ -2598,6 +2680,150 @@ public final class Partitions {
         return WornNames.under(view.wrappers(), written, source);
     }
 
+    /**
+     * The rules of the values a value being built sits inside, and where it sits.
+     *
+     * <p>What a value built inside another is held to besides its own declaration's rules, handed to
+     * whatever builds a value of its type — which is the only builder there is, so the names the
+     * value wears, the rules of a name wrapping a record and the cases a sum is built as are that
+     * builder's, as for any value. A rule of {@code Holder} about {@code q.limit} names a field of
+     * whatever case {@code q} is, and a case built on its own reads only its own rules: so every
+     * value's rules out here come down, and a record built under them is built field by field held
+     * to what each leaves the field ({@link #at}).
+     *
+     * <p>One state for everything built under the outermost record ({@link Shared}): the count of
+     * records built afresh, and what has been settled so far by where it stands. A record built
+     * here is built afresh rather than borrowed from the revision, and under nested sums the cases
+     * tried multiply — so each is counted ({@link #reserve}) against the count the outermost record
+     * began, and the figure stops the lot. And a number chosen anywhere in the value is told to
+     * the rules of every value around it as they name its place ({@link #at}), so a rule relating
+     * two fields of an inner record is asked about the second with the first in it.
+     *
+     * @param each   every value around, outermost first
+     * @param here   where the value being built sits, relative to the places those values stand at
+     * @param shared what is shared by everything built under the outermost record, or null where
+     *               none has begun to be built
+     */
+    record RulesAround(List<Around> each, TermPath here, Shared shared) {
+
+        /** Nothing around: a value built on its own, at a place named for nothing in particular. */
+        static final RulesAround NONE = new RulesAround(List.of(), TermPath.of("value"), null);
+
+        RulesAround {
+            each = List.copyOf(each);
+        }
+
+        /**
+         * One value's rules, and where that value stands relative to what is being built.
+         *
+         * <p>Places and not names. What a rule of that value calls a place under it is the
+         * translation from a place to a name, which has one home ({@link RuleAddress#of}): the
+         * fields on the way are names its rules write, and a case on the way is not.
+         *
+         * @param read  the places that value's rules read, which say whether one reads under a
+         *              place ({@link PlacesTheRulesRead})
+         * @param rules that value's rules, which are asked what is settled when a field is chosen
+         * @param root  where that value stands
+         */
+        record Around(PlacesTheRulesRead read, FieldDomains rules, TermPath root) {}
+
+        /**
+         * What is shared by everything built under the outermost record: what is left of the one
+         * count, and the numbers settled so far by where each stands.
+         */
+        static final class Shared {
+
+            private int left = CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum();
+
+            private final Map<TermPath, Count> settled = new LinkedHashMap<>();
+        }
+
+        /** This, with the state of the outermost record begun where nothing has begun it. */
+        RulesAround sharing() {
+            return shared != null ? this : new RulesAround(each, here, new Shared());
+        }
+
+        /** What every value around leaves the field {@code field} of the record being built, met. */
+        FieldDomains.ConstructionLimits at(String field) {
+            FieldDomains.ConstructionLimits out = FieldDomains.ConstructionLimits.NONE;
+            for (Around one : each) {
+                RuleAddress named = RuleAddress.of(one.root(), here.then(field));
+                if (named != null) {
+                    out = out.meet(one.rules()
+                            .composing(FieldDomains.atValues(settledUnder(one.root())))
+                            .at(named.key()));
+                }
+            }
+            return out;
+        }
+
+        /** Whether a rule of some value around reads a place under the value being built. */
+        boolean readAnything() {
+            for (Around one : each) {
+                RuleAddress at = RuleAddress.of(one.root(), here);
+                if (at != null && one.read().readUnder(at.key())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** Whether the count has one left for another value built here. */
+        boolean hasLeft() {
+            return shared != null && shared.left > 0;
+        }
+
+        /**
+         * Takes one from the count for a value about to be built here, or says there is none.
+         * Taken before and not after, since what is built inside it asks the same count.
+         */
+        boolean reserve() {
+            if (!hasLeft()) {
+                return false;
+            }
+            shared.left--;
+            return true;
+        }
+
+        /** Gives back the one {@link #reserve} took, for a value the rules left no room for. */
+        void refund() {
+            shared.left++;
+        }
+
+        /** Takes in that the number {@code count} stands at {@code path}. */
+        void settle(TermPath path, Count count) {
+            shared.settled.put(path, count);
+        }
+
+        /** What is settled under {@code root}, by the name a rule of the value there gives it. */
+        Map<RuleKey, Count> settledUnder(TermPath root) {
+            Map<RuleKey, Count> out = new LinkedHashMap<>();
+            if (shared != null) {
+                shared.settled.forEach((path, count) -> {
+                    RuleAddress named = RuleAddress.of(root, path);
+                    if (named != null) {
+                        out.put(named.key(), count);
+                    }
+                });
+            }
+            return out;
+        }
+
+        /** Takes back what was settled under {@code root}: the value there is built afresh. */
+        void forgetUnder(TermPath root) {
+            if (shared != null) {
+                shared.settled.keySet().removeIf(path -> RuleAddress.of(root, path) != null);
+            }
+        }
+
+        /** These and a record's own rules, around the record's field {@code field}. */
+        RulesAround aroundTheField(PlacesTheRulesRead read, FieldDomains rules, String field) {
+            List<Around> out = new ArrayList<>(each);
+            out.add(new Around(read, rules, here));
+            return new RulesAround(out, here.then(field), shared);
+        }
+    }
+
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules
      * are: {@link DeclaredBounds#leastCountOf}. Of the position as it was read, since how many a
      * value holds is what the rules of every name it wears say. */
@@ -2781,20 +3007,32 @@ public final class Partitions {
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
                                             FieldDomains.ConstructionLimits limits,
                                             Set<TypeSymbol> expanding) {
+        return representativesHolding(type, reading, limits, expanding, RulesAround.NONE);
+    }
+
+    /** The same, of a value built inside others whose rules name places in it
+     *  ({@link RulesAround}). */
+    static Proposals representativesHolding(Type type, RuleReadingContext reading,
+                                            FieldDomains.ConstructionLimits limits,
+                                            Set<TypeSymbol> expanding, RulesAround around) {
         return representativesHolding(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()), reading,
-                limits, expanding);
+                limits, expanding, around);
     }
 
     /** The same, with the names this is already inside the value of, for the same reason
      *  {@link #representativesOf} carries them. */
     static Proposals representativesHolding(TypeView view, RuleReadingContext reading,
                                             FieldDomains.ConstructionLimits limits,
-                                            Set<TypeSymbol> expanding) {
-        NumericDomain.Bounds within = limits.values();
+                                            Set<TypeSymbol> expanding, RulesAround around) {
         FieldDomains.Held held = limits.held();
         RuleReadingSource ruleSource = reading.source();
         Proposals.Gathering candidates = Proposals.Gathering.distinct();
+        // A position the rules leave nothing at is offered nothing: every value written there is
+        // one they refuse.
+        if (limits.leavesNothing()) {
+            return candidates.done();
+        }
         // A member of the class the value is held to, first: the values offered below are read off
         // where the value stops, and a value between the ends is of the class only by luck — the
         // first of a month offered for a position held to the first of each, and not whatever date
@@ -2814,7 +3052,11 @@ public final class Partitions {
                     ElementsKeptApart.heldBy(held), reading, expanding)
                     .map(bare -> RepresentativeSource.under(spelled.names(), bare)));
         }
-        candidates.addAll(representativesOf(view, reading, within, expanding));
+        // Of each run the order leaves the value, lowest first: a value between the ends of the
+        // first and the last is one every alternative refuses where it falls between two runs.
+        for (NumericDomain.Bounds run : limits.runs()) {
+            candidates.addAll(representativesOf(view, reading, run, expanding, around));
+        }
         return candidates.done();
     }
 
@@ -2843,9 +3085,15 @@ public final class Partitions {
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         NumericDomain.Bounds within = limits.values();
-        Proposals ordinarily = representativesHolding(view, reading, limits, Set.of());
+        Proposals ordinarily = representativesHolding(view, reading, limits, Set.of(),
+                RulesAround.NONE);
         Proposals.Gathering base = Proposals.Gathering.distinct();
         base.addAll(ordinarily);
+        // Nothing held back and nothing displaced where nothing can stand: both are values beside
+        // the ones offered, and there are none.
+        if (limits.leavesNothing()) {
+            return base.done();
+        }
         // What a position holds back for the product search's second pass is on offer here from the
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
@@ -2857,7 +3105,10 @@ public final class Partitions {
             return base.done();
         }
         Carrier carrier = declared.carrier();
-        NumericDomain.Bounds range = TypeBounds.admissible(declared, within);
+        // Displaced inside the first run, where the first value was chosen: the ends around every
+        // run hold the gaps between them, and a value displaced into one is no second value but
+        // one every alternative refuses.
+        NumericDomain.Bounds range = TypeBounds.admissible(declared, limits.runs().getFirst());
         Place step = displaced(range, carrier, reading.today());
         if (step == null) {
             return base.done();
@@ -2894,14 +3145,18 @@ public final class Partitions {
         }
         FieldDomains.ConstructionLimits.ValuesNamed named = limits.valuesNamed();
         ValueSet admits = named.asASet();
-        NumericDomain.Bounds run = TypeBounds.admissible(declared, limits.values());
         Carrier carrier = declared.carrier();
-        ClassMembers members = held.standingIn(run, carrier, carrier.usualPlace(reading.today()),
-                named.keptOut() + 1);
-        for (BigInteger each : members.values()) {
-            Place at = new Count(new BigDecimal(each));
-            if (declared.carrier().admitted(admits, at)) {
-                return standing(view, declared.carrier(), at, reading.source());
+        // In each run the value may be in, since a member between two of them is one every
+        // alternative refuses.
+        for (NumericDomain.Bounds within : limits.runs()) {
+            NumericDomain.Bounds run = TypeBounds.admissible(declared, within);
+            ClassMembers members = held.standingIn(run, carrier,
+                    carrier.usualPlace(reading.today()), named.keptOut() + 1);
+            for (BigInteger each : members.values()) {
+                Place at = new Count(new BigDecimal(each));
+                if (declared.carrier().admitted(admits, at)) {
+                    return standing(view, declared.carrier(), at, reading.source());
+                }
             }
         }
         return null;

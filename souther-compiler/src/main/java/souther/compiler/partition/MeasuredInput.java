@@ -12,6 +12,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Today;
 import souther.compiler.types.Type;
 
@@ -138,14 +139,16 @@ public final class MeasuredInput {
      */
     private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
 
-    /** A position as what it is offered turns on: where the value stops, how much it holds, the
-     *  class it is held to and the values its rules name — and not the rest of what the rules
-     *  admit, which nothing offered here reads. */
-    private record Offered(Type type, NumericDomain.Bounds values, FieldDomains.Held held,
-                           HeldClass heldTo, FieldDomains.ConstructionLimits.ValuesNamed named) {
+    /** A position as what it is offered turns on: where the value stops and the runs it is in, how
+     *  much it holds, the class it is held to and the values its rules name — and not the rest of
+     *  what the rules admit, which nothing offered here reads. */
+    private record Offered(Type type, NumericDomain.Bounds values, OrderedRuns ordered,
+                           FieldDomains.Held held, HeldClass heldTo,
+                           FieldDomains.ConstructionLimits.ValuesNamed named) {
 
         Offered(Type type, FieldDomains.ConstructionLimits limits) {
-            this(type, limits.values(), limits.held(), limits.heldTo(), limits.valuesNamed());
+            this(type, limits.values(), limits.ordered(), limits.held(), limits.heldTo(),
+                    limits.valuesNamed());
         }
     }
 
