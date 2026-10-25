@@ -3179,10 +3179,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A way only values past the greatest {@code Int} take leaves no row to the comparison behind
-     * it, so the amounts there are not shown to reach each other: {@code a - b >= M} beside
-     * {@code b >= 1}, which the box and its differences prove, and {@code a - 2b >= M - 1} beside
-     * it, which nothing proves, are each held by an {@code a} past {@code M} alone. A way some
-     * pair of {@code Int}s holds leaves the amounts every value they take.
+     * it, so no row arrives there and the amounts are not said to reach each other: {@code a - b >= M}
+     * beside {@code b >= 1}, which the box and its differences prove, and {@code a - 2b >= M - 1}
+     * beside it, which nothing proves, are each held by an {@code a} past {@code M} alone. A way
+     * some pair of {@code Int}s holds leaves the amounts every value they take.
      */
     @Test
     void aWayOnlyValuesPastTheirTypeTakeLeavesNoRowToReachAnything() {
@@ -3191,8 +3191,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         for (String way : List.of("b >= 1 && a - b >= 9223372036854775807",
                 "b >= 1 && a - 2 * b >= 9223372036854775806")) {
             String body = "if " + way + " then x.value >= y.value else false";
-            assertEquals(NOT_SHOWN, left(inputs, yen, body,
-                    atThe(">= y.value", yen, inputs, body)).get("x"), way);
+            String said = left(inputs, yen, body, atThe(">= y.value", yen, inputs, body)).get("x");
+            assertTrue(said.contains("no row that arrives at it"), way + ": " + said);
         }
         String some = "if b >= 1 && a - 2 * b >= 9223372036854775805 then x.value >= y.value"
                 + " else false";

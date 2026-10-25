@@ -6,7 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.LinearForm;
@@ -318,7 +318,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
     private static NumericDomain<FactSubject> assuming(Map<FactSubject, Bounds> facts, Terms terms) {
         NumericDomain<FactSubject> given = NumericDomain.top(FactSubject.inOneOrder());
         for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
-            Map<FactSubject, Granularity> spacing = terms.kindsOfIfNamed(one.getKey());
+            Map<FactSubject, NumberSpace> spacing = terms.spacesOfIfNamed(one.getKey());
             if (!spacing.isEmpty()) {
                 given = given.assuming(one.getKey(), one.getValue(), spacing);
             }

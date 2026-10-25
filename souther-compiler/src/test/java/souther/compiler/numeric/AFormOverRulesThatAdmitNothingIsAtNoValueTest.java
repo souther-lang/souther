@@ -33,10 +33,10 @@ class AFormOverRulesThatAdmitNothingIsAtNoValueTest {
                 .plus(LinearForm.weighing(Y, ExactRatio.of(cy))).form();
     }
 
-    private static Map<String, Granularity> whole() {
-        Map<String, Granularity> out = new LinkedHashMap<>();
-        out.put(X, Granularity.DISCRETE);
-        out.put(Y, Granularity.DISCRETE);
+    private static Map<String, NumberSpace> whole() {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
+        out.put(X, NumberSpace.spacedOnly(Granularity.DISCRETE));
+        out.put(Y, NumberSpace.spacedOnly(Granularity.DISCRETE));
         return out;
     }
 

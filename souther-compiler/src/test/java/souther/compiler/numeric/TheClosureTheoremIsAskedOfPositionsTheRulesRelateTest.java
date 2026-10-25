@@ -37,7 +37,8 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     @Test
     void positionsNoRuleRelatesAreNotHeldToOneKind() {
         NumericDomain<String> domain = bounded(Map.of(
-                "whole", Granularity.DISCRETE, "part", Granularity.DENSE));
+                "whole", NumberSpace.spacedOnly(Granularity.DISCRETE),
+                "part", NumberSpace.spacedOnly(Granularity.DENSE)));
 
         assertEquals(CERTIFIED, domain.projectionCertification());
     }
@@ -46,7 +47,8 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     @Test
     void aRuleRelatingTwoKindsIsNotCertified() {
         NumericDomain<String> domain = relating(
-                Map.of("whole", Granularity.DISCRETE, "part", Granularity.DENSE),
+                Map.of("whole", NumberSpace.spacedOnly(Granularity.DISCRETE),
+                        "part", NumberSpace.spacedOnly(Granularity.DENSE)),
                 "whole", "part");
 
         assertEquals(SPACED_DIFFERENTLY, domain.projectionCertification());
@@ -56,7 +58,8 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     @Test
     void aRuleRelatingOneKindIsCertified() {
         NumericDomain<String> domain = relating(
-                Map.of("whole", Granularity.DISCRETE, "other", Granularity.DISCRETE),
+                Map.of("whole", NumberSpace.spacedOnly(Granularity.DISCRETE),
+                        "other", NumberSpace.spacedOnly(Granularity.DISCRETE)),
                 "whole", "other");
 
         assertEquals(CERTIFIED, domain.projectionCertification());
@@ -71,10 +74,10 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
      */
     @Test
     void twoKindsReachingEachOtherThroughAThirdPositionAreNotCertified() {
-        Map<String, Granularity> kinds = new LinkedHashMap<>();
-        kinds.put("whole", Granularity.DISCRETE);
-        kinds.put("between", Granularity.DISCRETE);
-        kinds.put("part", Granularity.DENSE);
+        Map<String, NumberSpace> kinds = new LinkedHashMap<>();
+        kinds.put("whole", NumberSpace.spacedOnly(Granularity.DISCRETE));
+        kinds.put("between", NumberSpace.spacedOnly(Granularity.DISCRETE));
+        kinds.put("part", NumberSpace.spacedOnly(Granularity.DENSE));
         NumericDomain<String> domain = relating(kinds, "whole", "between");
         domain = domain.assume(difference("between", "part"), Rel.LE, kinds);
 
@@ -84,7 +87,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     // --- the systems ------------------------------------------------------------------------------
 
     /** Every position bounded on its own, which is a system every certificate holds of. */
-    private static NumericDomain<String> bounded(Map<String, Granularity> kinds) {
+    private static NumericDomain<String> bounded(Map<String, NumberSpace> kinds) {
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (String position : kinds.keySet()) {
             domain = domain.assume(
@@ -96,7 +99,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     }
 
     /** The same, with one difference written between two of the positions. */
-    private static NumericDomain<String> relating(Map<String, Granularity> kinds,
+    private static NumericDomain<String> relating(Map<String, NumberSpace> kinds,
                                                   String above, String below) {
         return bounded(kinds).assume(difference(above, below), Rel.LE, kinds);
     }

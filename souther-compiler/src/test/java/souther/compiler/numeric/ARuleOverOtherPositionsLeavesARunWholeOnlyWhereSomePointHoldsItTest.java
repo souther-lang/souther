@@ -43,7 +43,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 rules.add(ruleOverAAndB(random));
             }
             NumericDomain<String> domain = domainOf(rules);
-            NumericDomain.Bounds run = domain.heldInsideTheirOrders(endless("a", "b", "c"))
+            NumericDomain.Bounds run = told(domain, endless("a", "b", "c"))
                     .wholeRunOf("c");
             boolean somePoint = somePointHolds(rules);
             if (!somePoint) {
@@ -77,8 +77,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         coefs.put("b", -3L);
         Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
                 "b", Granularity.DENSE, "c", Granularity.DISCRETE);
-        NumericDomain<String> domain = domainOf(List.of(new Written(coefs, 0, Rel.LT)), spacing)
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain<String> domain = told(
+                domainOf(List.of(new Written(coefs, 0, Rel.LT)), spacing), endless("a", "b", "c"));
 
         assertEquals(new ProjectionCertification.NotEveryRuleIsProven(),
                 domain.projectionCertification());
@@ -101,13 +101,13 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         coefs.put("b", 1L);
         NumericDomain<String> domain = domainOf(List.of(new Written(coefs, -HIGH, Rel.LE)));
 
-        assertNull(domain.heldInsideTheirOrders(endless("a", "c")).wholeRunOf("c"));
+        assertNull(told(domain, endless("a", "c")).wholeRunOf("c"));
         assertEquals(run(LOW, HIGH),
-                domain.heldInsideTheirOrders(endless("a", "b", "c")).wholeRunOf("c"));
-        NumericDomain<String> told = NumericDomain.<String>top(CanonicalOrder.asTheyAreSpelled())
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+                told(domain, endless("a", "b", "c")).wholeRunOf("c"));
+        NumericDomain<String> told = told(
+                NumericDomain.top(CanonicalOrder.asTheyAreSpelled()), endless("a", "b", "c"));
         assertEquals(run(LOW, HIGH), domain.meet(told).wholeRunOf("c"));
-        assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(endless("a", "b", "c"))
+        assertEquals(run(LOW, HIGH), told(domain, endless("a", "b", "c"))
                 .over(each -> each + "'", CanonicalOrder.asTheyAreSpelled()).wholeRunOf("c'"));
     }
 
@@ -122,8 +122,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         Map<String, Long> limit = new LinkedHashMap<>();
         limit.put("a", 1L);
         limit.put("b", 1L);
-        NumericDomain<String> alone = domainOf(List.of(new Written(limit, -5, Rel.LE)))
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain<String> alone = told(
+                domainOf(List.of(new Written(limit, -5, Rel.LE))), endless("a", "b", "c"));
         assertEquals(run(LOW, 5), alone.wholeRunOf("a"));
         assertEquals(run(LOW, 5), alone.wholeRunOf("b"));
         assertEquals(run(LOW, HIGH), alone.wholeRunOf("c"));
@@ -131,9 +131,9 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         Map<String, Long> mixed = new LinkedHashMap<>();
         mixed.put("a", 2L);
         mixed.put("c", -3L);
-        NumericDomain<String> beside = domainOf(
-                List.of(new Written(limit, -5, Rel.LE), new Written(mixed, 0, Rel.LT)))
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain<String> beside = told(domainOf(
+                List.of(new Written(limit, -5, Rel.LE), new Written(mixed, 0, Rel.LT))),
+                endless("a", "b", "c"));
         assertNull(beside.wholeRunOf("a"));
         assertNull(beside.wholeRunOf("b"));
     }
@@ -151,9 +151,10 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         limit.put("b", 1L);
         Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
                 "b", Granularity.DENSE, "c", Granularity.DISCRETE);
-        NumericDomain<String> domain = domainOf(List.of(new Written(Map.of("a", 1L), 0, Rel.GT),
-                new Written(Map.of("b", 1L), 0, Rel.GT), new Written(limit, -1, Rel.LT)), spacing)
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain<String> domain = told(domainOf(List.of(
+                new Written(Map.of("a", 1L), 0, Rel.GT),
+                new Written(Map.of("b", 1L), 0, Rel.GT), new Written(limit, -1, Rel.LT)), spacing),
+                endless("a", "b", "c"));
         NumericDomain.Bounds open = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(0)),
                 Endpoint.exclusive(Count.of(1)));
         assertEquals(open, domain.wholeRunOf("a"));
@@ -161,9 +162,10 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         assertEquals(run(LOW, HIGH), domain.wholeRunOf("c"));
 
         // At the limit itself, with the least ends left out, nothing is left.
-        NumericDomain<String> none = domainOf(List.of(new Written(Map.of("a", 1L), 0, Rel.GT),
-                new Written(Map.of("b", 1L), 0, Rel.GT), new Written(limit, 0, Rel.LE)), spacing)
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain<String> none = told(domainOf(List.of(
+                new Written(Map.of("a", 1L), 0, Rel.GT),
+                new Written(Map.of("b", 1L), 0, Rel.GT), new Written(limit, 0, Rel.LE)), spacing),
+                endless("a", "b", "c"));
         assertNull(none.wholeRunOf("a"));
         assertNull(none.wholeRunOf("c"));
     }
@@ -184,14 +186,14 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         for (List<Written> extra : List.of(skew, concat(skew, bounded),
                 List.of(new Written(coefsOf("a", 4, "b", -3), 0, Rel.LT),
                         new Written(coefsOf("a", -1, "b", 2), -1, Rel.LT)))) {
-            NumericDomain<String> domain = domainOf(concat(above, extra), spacing)
-                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            NumericDomain<String> domain = told(domainOf(concat(above, extra), spacing),
+                    endless("a", "b", "c"));
             assertEquals(run(LOW, HIGH), domain.wholeRunOf("c"), extra::toString);
         }
         // No point meets 2a < 3b and 3b < a beside a, b > 0.
-        NumericDomain<String> none = domainOf(concat(concat(above, skew),
-                List.of(new Written(coefsOf("a", -1, "b", 3), 0, Rel.LT))), spacing)
-                .heldInsideTheirOrders(endless("a", "b", "c"));
+        NumericDomain<String> none = told(domainOf(concat(concat(above, skew),
+                List.of(new Written(coefsOf("a", -1, "b", 3), 0, Rel.LT))), spacing),
+                endless("a", "b", "c"));
         assertNull(none.wholeRunOf("c"));
     }
 
@@ -217,8 +219,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                             random.nextBoolean() ? Rel.LT : Rel.GT));
                 }
             }
-            NumericDomain<String> domain = domainOf(rules, spacing)
-                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            NumericDomain<String> domain = told(domainOf(rules, spacing),
+                    endless("a", "b", "c"));
             if (domain.wholeRunOf("c") == null) {
                 continue;
             }
@@ -299,8 +301,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                 Endpoint.inclusive(Count.of(3)), null);
         orders.put("a", fromThree);
         orders.put("b", fromThree);
-        NumericDomain<String> domain = domainOf(List.of(new Written(limit, -5, Rel.LE)))
-                .heldInsideTheirOrders(orders);
+        NumericDomain<String> domain = told(
+                domainOf(List.of(new Written(limit, -5, Rel.LE))), orders);
         assertNull(domain.wholeRunOf("a"));
         assertNull(domain.wholeRunOf("b"));
         assertNull(domain.wholeRunOf("c"));
@@ -334,8 +336,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                     rules.add(new Written(Map.of(atom, 1L), -least, Rel.GE));
                 }
             }
-            NumericDomain<String> domain = domainOf(rules)
-                    .heldInsideTheirOrders(endless("a", "b", "c"));
+            NumericDomain<String> domain = told(domainOf(rules), endless("a", "b", "c"));
             boolean[][] carried = valuesCarried(rules);
             for (String atom : List.of("a", "b", "c")) {
                 NumericDomain.Bounds run = domain.wholeRunOf(atom);
@@ -377,6 +378,27 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         return carried;
     }
 
+    /** What the types of {@code spacing} say, which for these positions is how they are spaced
+     *  and nothing of where they stop: the ends are told apart, as a reader does that learns
+     *  them after it has the rules. */
+    private static Map<String, NumberSpace> spaced(Map<String, Granularity> spacing) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
+        spacing.forEach((atom, how) -> out.put(atom, NumberSpace.spacedOnly(how)));
+        return out;
+    }
+
+    /** {@code domain} told where the order of each of {@code ends} stops, spaced as it already is
+     *  and, for a position it has no rule about, as whole numbers. */
+    private static NumericDomain<String> told(NumericDomain<String> domain,
+                                              Map<String, NumericDomain.Bounds> ends) {
+        Map<String, NumberSpace> told = new LinkedHashMap<>();
+        ends.forEach((atom, stops) -> {
+            Granularity how = domain.spacingOf(atom);
+            told.put(atom, NumberSpace.stopping(how == null ? Granularity.DISCRETE : how, stops));
+        });
+        return domain.told(told);
+    }
+
     /** Each of {@code atoms} on an order with no end either way. */
     private static Map<String, NumericDomain.Bounds> endless(String... atoms) {
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
@@ -410,8 +432,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
 
         Map<String, NumericDomain.Bounds> parts = new LinkedHashMap<>(endless("c"));
         parts.putAll(Map.of("d", day, "e", day, "m", month, "n", month));
-        assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(parts).wholeRunOf("c"));
-        assertEquals(run(LOW, HIGH), domain.heldInsideTheirOrders(endless("c", "d", "e", "m", "n"))
+        assertEquals(run(LOW, HIGH), told(domain, parts).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH), told(domain, endless("c", "d", "e", "m", "n"))
                 .wholeRunOf("c"));
     }
 
@@ -431,10 +453,10 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         NumericDomain<String> past = beside(new Written(weighed, -(GREATEST - 1), Rel.GE), b);
         NumericDomain<String> inside = beside(new Written(weighed, -(GREATEST - 2), Rel.GE), b);
 
-        assertNull(past.heldInsideTheirOrders(onInts()).wholeRunOf("c"));
+        assertNull(told(past,onInts()).wholeRunOf("c"));
         assertEquals(run(LOW, HIGH),
-                past.heldInsideTheirOrders(endless("a", "b", "c")).wholeRunOf("c"));
-        assertEquals(run(LOW, HIGH), inside.heldInsideTheirOrders(onInts()).wholeRunOf("c"));
+                told(past,endless("a", "b", "c")).wholeRunOf("c"));
+        assertEquals(run(LOW, HIGH), told(inside,onInts()).wholeRunOf("c"));
     }
 
     /** {@code a} and {@code b} on the {@code Int}s, beside {@code c} on an order with no end. */
@@ -457,9 +479,9 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         NumericDomain<String> domain = beside(new Written(apart, -GREATEST, Rel.GE),
                 new Written(Map.of("b", 1L), -1, Rel.GE));
 
-        assertNull(domain.heldInsideTheirOrders(onInts()).wholeRunOf("c"));
+        assertNull(told(domain, onInts()).wholeRunOf("c"));
         assertEquals(run(LOW, HIGH),
-                domain.heldInsideTheirOrders(endless("a", "b", "c")).wholeRunOf("c"));
+                told(domain, endless("a", "b", "c")).wholeRunOf("c"));
     }
 
     /** {@code rules} over whole numbers nothing bounds, beside {@code c} from nought to seven. */
@@ -473,7 +495,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         system.addAll(List.of(rules));
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Written each : system) {
-            domain = domain.assume(formOf(each), each.rel(), whole);
+            domain = domain.assume(formOf(each), each.rel(), spaced(whole));
         }
         return domain;
     }
@@ -504,7 +526,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         system.add(new Written(Map.of("c", 1L), -HIGH, Rel.LE));
         system.addAll(rules);
         for (Written each : system) {
-            domain = domain.assume(formOf(each), each.rel(), whole);
+            domain = domain.assume(formOf(each), each.rel(), spaced(whole));
         }
         for (int a = 0; a <= 4; a++) {
             for (int b = 0; b <= 4; b++) {
@@ -516,7 +538,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             }
         }
 
-        assertNull(domain.heldInsideTheirOrders(endless("a", "b", "c", "d")).wholeRunOf("c"));
+        assertNull(told(domain, endless("a", "b", "c", "d")).wholeRunOf("c"));
     }
 
     /** {@code a·a + b·b + d·d + constant  rel  0}. */
@@ -586,7 +608,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
         system.addAll(rules);
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Written each : system) {
-            domain = domain.assume(formOf(each), each.rel(), spacing);
+            domain = domain.assume(formOf(each), each.rel(), spaced(spacing));
         }
         return domain;
     }

@@ -46,7 +46,7 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         ClosedStates kept = ClosedStates.kept();
         NumericDomain<String> rules = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(LinearForm.atomMinusConstant("a", ExactRatio.of(3)), Rel.LE,
-                        Map.of("a", Granularity.DISCRETE));
+                        Map.of("a", NumberSpace.spacedOnly(Granularity.DISCRETE)));
 
         NumericDomain.top(CanonicalOrder.asTheyAreSpelled(), kept).meet(rules).boundsOf("a");
         NumericDomain.top(CanonicalOrder.asTheyAreSpelled(), kept).meet(rules).boundsOf("a");
@@ -113,8 +113,9 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
     @Test
     void aDomainMadeFromAClosedOneAsksOnlyAboutThePartItsRuleReaches() {
         ClosedStates kept = ClosedStates.kept();
-        Map<String, Granularity> spacing = Map.of("a", Granularity.DISCRETE,
-                "b", Granularity.DISCRETE, "c", Granularity.DISCRETE, "d", Granularity.DISCRETE);
+        NumberSpace counted = NumberSpace.spacedOnly(Granularity.DISCRETE);
+        Map<String, NumberSpace> spacing = Map.of("a", counted, "b", counted, "c", counted,
+                "d", counted);
         NumericDomain<String> twoParts = NumericDomain.top(CanonicalOrder.asTheyAreSpelled(), kept)
                 .assume(form("a", 1, "b", -1, -2), Rel.LE, spacing)
                 .assume(form("c", 1, "d", -1, -3), Rel.LE, spacing);
@@ -283,8 +284,8 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
     }
 
     private static NumericDomain<String> holdingTwoRules(ClosedStates kept) {
-        Map<String, Granularity> spacing = Map.of("a", Granularity.DISCRETE,
-                "b", Granularity.DISCRETE);
+        NumberSpace counted = NumberSpace.spacedOnly(Granularity.DISCRETE);
+        Map<String, NumberSpace> spacing = Map.of("a", counted, "b", counted);
         return NumericDomain.top(CanonicalOrder.asTheyAreSpelled(), kept)
                 .assume(LinearForm.atomMinusConstant("a", ExactRatio.of(3)), Rel.GE, spacing)
                 .assume(form("a", 1, "b", -1, 0), Rel.LE, spacing);

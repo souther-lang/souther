@@ -19,7 +19,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -318,7 +318,7 @@ final class MeaningAssumptions {
                 switch (formAt(form)) {
                     case FormAt.Named(LinearForm<FactSubject> over) -> {
                         known = known.taking(over, holds ? p : p.denied(),
-                                Known.Held.ON_THE_PATH, terms.kindsOf(over));
+                                Known.Held.ON_THE_PATH, terms.spacesOf(over));
                         taken = true;
                     }
                     case FormAt.Unnamed(Set<WhyNotTaken.DomainLimit> edges) ->
@@ -593,13 +593,13 @@ final class MeaningAssumptions {
             ExactRatio at = Count.number(range.min().at()).exactly();
             known = known.taking(LinearForm.atomMinusConstant(atom, at),
                     range.min().inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
-                    terms.kindsOf(LinearForm.atom(atom)));
+                    terms.spacesOf(LinearForm.atom(atom)));
         }
         if (range.max() != null) {
             ExactRatio at = Count.number(range.max().at()).exactly();
             known = known.taking(LinearForm.atomMinusConstant(atom, at),
                     range.max().inclusive() ? Rel.LE : Rel.LT, Known.Held.OF_THE_VALUE,
-                    terms.kindsOf(LinearForm.atom(atom)));
+                    terms.spacesOf(LinearForm.atom(atom)));
         }
     }
 
@@ -884,15 +884,15 @@ final class MeaningAssumptions {
             return;
         }
         if (held.runs().size() == 1) {
-            Map<FactSubject, Granularity> kinds = terms.kindsOf(LinearForm.atom(number));
+            Map<FactSubject, NumberSpace> spaces = terms.spacesOf(LinearForm.atom(number));
             WholeNumberRuns.Run run = held.runs().getFirst();
             if (run.from() != null) {
                 known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.from())),
-                        Rel.GE, Known.Held.ON_THE_PATH, kinds);
+                        Rel.GE, Known.Held.ON_THE_PATH, spaces);
             }
             if (run.to() != null) {
                 known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.to())),
-                        Rel.LE, Known.Held.ON_THE_PATH, kinds);
+                        Rel.LE, Known.Held.ON_THE_PATH, spaces);
             }
             return;
         }
@@ -935,7 +935,7 @@ final class MeaningAssumptions {
         carrying(count, size);
         known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
                 holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
-                terms.kindsOf(LinearForm.atom(count)));
+                terms.spacesOf(LinearForm.atom(count)));
         taken = true;
         return true;
     }
@@ -957,7 +957,7 @@ final class MeaningAssumptions {
         ExactRatio at = Count.number(least.at()).exactly();
         known = known.taking(LinearForm.atomMinusConstant(atom, at),
                 least.inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
-                terms.kindsOf(LinearForm.atom(atom)));
+                terms.spacesOf(LinearForm.atom(atom)));
     }
 
     /**

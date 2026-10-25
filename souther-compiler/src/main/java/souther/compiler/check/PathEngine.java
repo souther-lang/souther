@@ -317,7 +317,7 @@ final class PathEngine {
         Known out = k;
         for (NumericConstraint each : certain) {
             out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
-                    terms.kindsOf(each.form()));
+                    terms.spacesOf(each.form()));
         }
         return out;
     }
@@ -618,7 +618,7 @@ final class PathEngine {
             LinearForm<FactSubject> apart = field == null || value == null ? null
                     : Terms.add(field, value, true);
             if (apart != null && !apart.coefs().isEmpty()) {
-                out = out.taking(apart, Rel.EQ, Known.Held.OF_THE_VALUE, terms.kindsOf(apart));
+                out = out.taking(apart, Rel.EQ, Known.Held.OF_THE_VALUE, terms.spacesOf(apart));
             }
         }
         return out;

@@ -121,8 +121,8 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
 
     private static NumericDomain<String> domainOf(Written rule) {
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
-        Map<String, Granularity> whole = Map.of("a", Granularity.DISCRETE,
-                "b", Granularity.DISCRETE);
+        NumberSpace counted = NumberSpace.spacedOnly(Granularity.DISCRETE);
+        Map<String, NumberSpace> whole = Map.of("a", counted, "b", counted);
         for (Written each : systemOf(rule)) {
             domain = domain.assume(formOf(each), each.rel(), whole);
         }
