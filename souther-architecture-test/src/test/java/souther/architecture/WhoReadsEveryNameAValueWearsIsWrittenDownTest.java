@@ -245,8 +245,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "holdingExactly",
-                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;" + CONTEXT + ")"
-                            + REALIZATION,
+                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;L" + PARTITION
+                            + "TermRealizations$ElementsHeldTo;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "namesOf",
                     "(" + TYPE + SOURCE + ")L" + PARTITION + "WornNames;", THE_POSITION),
