@@ -77,6 +77,15 @@ class AClauseStatesExactlyItsComparisonsOrIsUnreadTest {
                                 Map.of(RuleKey.of("a"), ExactRatio.ONE)), Rel.GE))));
         assertEquals(ClauseAffineMeaning.UNREAD, ClauseAffineMeaning.ofComparisons(
                 List.of(sum(-100, Rel.GE, 1, 1), sum(-100, Rel.LE, 1, 2))));
+        // a comparison of no place, or one that weighs a place by nought, is no sum of places
+        ClauseAffineMeaning.Comparison noPlace = new ClauseAffineMeaning.Comparison(
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), Rel.EQ);
+        assertThrows(IllegalArgumentException.class,
+                () -> new ClauseAffineMeaning.Exact(List.of(noPlace)));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ClauseAffineMeaning.Exact(List.of(sum(0, Rel.GE, 1, 0))));
+        assertEquals(ClauseAffineMeaning.UNREAD,
+                ClauseAffineMeaning.ofComparisons(List.of(noPlace)));
         assertEquals(new ClauseAffineMeaning.Exact(List.of(sum(-100, Rel.GE, 1, 1),
                         sum(-200, Rel.LE, 2, 2))),
                 ClauseAffineMeaning.ofComparisons(

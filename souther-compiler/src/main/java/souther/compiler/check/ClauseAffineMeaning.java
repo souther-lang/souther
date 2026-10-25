@@ -56,6 +56,9 @@ public sealed interface ClauseAffineMeaning {
      *  times as the others: they are the one form up to a factor. */
     private static boolean weighSameAlike(List<Comparison> conjuncts) {
         Map<RuleKey, ExactRatio> first = conjuncts.getFirst().form().coefs();
+        if (first.isEmpty() || first.values().stream().anyMatch(ExactRatio::isZero)) {
+            return false;
+        }
         for (Comparison each : conjuncts) {
             Map<RuleKey, ExactRatio> other = each.form().coefs();
             if (!first.keySet().equals(other.keySet())) {

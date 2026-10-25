@@ -333,15 +333,21 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
                 assertFalse(found.get(point).equals("owed") && walked.get(point).equals("none"),
                         "a row is owed at " + point + " where no pair has one\n" + shown);
             }
+            boolean guardNotRead = report.contains("· not read: comparison@" + line);
             switch (each.reading()) {
                 case READ -> {
                     assertTrue(each.leavesTheGuardUndecided(),
                             "a case read and compared leaves the guard open\n" + shown);
-                    assertFalse(report.contains(NOT_READ), shown);
+                    assertFalse(guardNotRead, shown);
                     assertEquals(walked, found, shown);
                 }
-                case NOT_READ -> assertTrue(report.contains(NOT_READ), shown);
-                case SETTLED -> assertFalse(each.leavesTheGuardUndecided(), shown);
+                case NOT_READ -> assertTrue(guardNotRead, shown);
+                // The rules settle the guard: it is read, and what it owes is what the walk finds.
+                case SETTLED -> {
+                    assertFalse(each.leavesTheGuardUndecided(), shown);
+                    assertFalse(guardNotRead, shown);
+                    assertEquals(walked, found, shown);
+                }
             }
         }
     }
