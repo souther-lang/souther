@@ -25,6 +25,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,12 @@ import java.util.Set;
  *
  * <p>Every container is read again as a whole before it is offered, so the cells, which promise
  * what an element answers in the container it was proposed for, are never the answer.
+ *
+ * <p>What is offered is proposed, and the rows are run to say which stand: the type of an element
+ * may tie a position the statements do not read to the number (an amount above a hundred is only
+ * active), which is not held here. Elements that answer alike are alike to the count and not to
+ * the type, so every way of listing them is kept and each is offered in turn, and where there is
+ * more than one the elements are said to be only some of those that could be chosen.
  *
  * <p>Not for a statement that is not forms of the element's number, its total and numbers outside
  * every container against nought ({@link AStatementAtARow#affineRelations}), nor for a number
@@ -323,9 +330,9 @@ final class CoupledCardinalityComposer {
      *
      * @param cell   the ways the relations of every statement stand
      * @param meets  for each statement, in the order of the counts, whether it holds of the element
-     * @param listed which of the listings of the element's other positions the answers were read at
+     * @param listed every one of the listings of the element's other positions that answers so
      */
-    private record Kind(List<Outcome> cell, boolean[] meets, int listed,
+    private record Kind(List<Outcome> cell, boolean[] meets, List<Integer> listed,
                         TotalsASharingCanComeTo.Reach reach) {}
 
     private static final class Composition {
@@ -725,7 +732,11 @@ final class CoupledCardinalityComposer {
                 if (probe == null) {
                     continue;
                 }
-                Set<List<Boolean>> seen = new LinkedHashSet<>();
+                // The elements that answer alike count alike, and are one kind; but they are not
+                // alike to the type, which may tie a position the statements do not read to the
+                // number, so every way of listing the element that answers so is kept.
+                Map<List<Boolean>, List<Integer>> listedAlike = new LinkedHashMap<>();
+                Map<List<Boolean>, boolean[]> answered = new HashMap<>();
                 for (int listed = 0; listed < observed.size(); listed++) {
                     boolean[] meets = answers(observed.get(listed), probe[0], probe[1]);
                     if (meets == null) {
@@ -736,10 +747,11 @@ final class CoupledCardinalityComposer {
                     for (boolean each : meets) {
                         key.add(each);
                     }
-                    if (seen.add(key)) {
-                        out.add(new Kind(cell, meets, listed, reach));
-                    }
+                    listedAlike.computeIfAbsent(key, _ -> new ArrayList<>()).add(listed);
+                    answered.putIfAbsent(key, meets);
                 }
+                listedAlike.forEach((key, ways) ->
+                        out.add(new Kind(cell, answered.get(key), ways, reach)));
             }
             return out;
         }
@@ -822,11 +834,31 @@ final class CoupledCardinalityComposer {
                     active.add(kind);
                 }
             }
+            // The elements of a kind may be listed in more than one way, which the type may
+            // allow at some numbers and not at others, and nothing here tells which: a container
+            // of each way in turn is offered, and the rows that are run say which stand.
+            int ways = 1;
+            for (int kind : active) {
+                ways = Math.max(ways, kinds.get(kind).listed().size());
+            }
+            if (ways > 1) {
+                unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+            }
             for (BigInteger total : totalsOf(kinds, sharing, active)) {
                 for (int[] count : counted) {
-                    List<ObservedValue> values = valuesOf(kinds, sharing, active, total, count);
-                    if (values != null && meetsEveryCount(values)) {
-                        return !offer(values);
+                    boolean offered = false;
+                    for (int variant = 0; variant < Math.min(ways, MOST_OFFERED); variant++) {
+                        List<ObservedValue> values =
+                                valuesOf(kinds, sharing, active, total, count, variant);
+                        if (values != null && meetsEveryCount(values)) {
+                            offered = true;
+                            if (offer(values)) {
+                                return false;
+                            }
+                        }
+                    }
+                    if (offered) {
+                        return true;
                     }
                 }
             }
@@ -855,7 +887,7 @@ final class CoupledCardinalityComposer {
          * @param counted for each statement, how many it is counted to
          */
         private List<ObservedValue> valuesOf(List<Kind> kinds, int[] sharing, List<Integer> active,
-                                             BigInteger total, int[] counted) {
+                                             BigInteger total, int[] counted, int variant) {
             List<Kind> chosen = new ArrayList<>();
             List<BigInteger[]> bounds = new ArrayList<>();
             BigInteger lowest = BigInteger.ZERO;
@@ -916,11 +948,12 @@ final class CoupledCardinalityComposer {
                     offered = meetingSeen++ % counted[coupled.keptCount()];
                 }
                 ListedAt listed = listed(at[each], offered);
-                if (listed == null || listed.values().size() <= kind.listed()) {
+                int way = kind.listed().get(variant % kind.listed().size());
+                if (listed == null || listed.values().size() <= way) {
                     unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
                     return null;
                 }
-                values.add(listed.values().get(kind.listed()));
+                values.add(listed.values().get(way));
             }
             return values;
         }

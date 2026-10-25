@@ -196,9 +196,6 @@ final class TotalsASharingCanComeTo {
             // A kind has an element only at the totals where its least is no more than its
             // greatest; at any other the sums of the kinds say nothing, since a kind with none
             // adds none.
-            // A kind has an element only at the totals where its least is no more than its
-            // greatest; at any other the sums of the kinds say nothing, since a kind with none
-            // adds none.
             Interval inhabited = whereAnElementCanBe(each, unheld);
             if (inhabited == null) {
                 return null;

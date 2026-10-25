@@ -385,6 +385,49 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     }
 
     /**
+     * What the elements may be is the type's, and the type may tie the number to a position the
+     * statement does not read: here an amount above a hundred is only active. The rows composed
+     * keep to the type, and one above half of the total, which is above a hundred, is composed.
+     */
+    @Test
+    void aPositionTheStatementDoesNotReadIsChosenBySoMuchAsTheTypeLeavesTheNumber() {
+        String source = source("data Forecast = { amount: Int, active: Bool }"
+                + " invariant amount <= 100 || active\n", FS,
+                "if " + listCount("f.amount > 100 && " + HALF) + " == 2 then 1 else 0");
+        Compilation compilation = measured(source);
+        String rows = GeneratedRows.of(compilation, "probe", null,
+                SourceRendering.namedByIdentity(compilation.texts())).text();
+        StringBuilder examples = new StringBuilder("\nexample f\n");
+        StringBuilder text = new StringBuilder();
+        Set<Long> counts = new HashSet<>();
+        Pattern element = Pattern.compile("amount = (-?\\d+), active = (true|false)");
+        for (String line : rows.split("\n")) {
+            if (line.startsWith("//")) {
+                continue;
+            }
+            if (line.startsWith("    |")) {
+                text = new StringBuilder();
+            }
+            text.append(line).append('\n');
+            if (!line.contains("<?>")) {
+                continue;
+            }
+            List<int[]> all = new ArrayList<>();
+            Matcher found = element.matcher(text);
+            while (found.find()) {
+                all.add(new int[] {Integer.parseInt(found.group(1)),
+                        "true".equals(found.group(2)) ? 1 : 0});
+            }
+            int total = all.stream().mapToInt(each -> each[0]).sum();
+            long held = all.stream().filter(each -> each[0] > 100 && each[0] * 2 > total).count();
+            counts.add(held);
+            examples.append(text.toString().replace("<?>", held == 2 ? "1" : "0"));
+        }
+        measured(source + examples);
+        assertTrue(counts.contains(2L), () -> counts + " in " + rows);
+    }
+
+    /**
      * A statement that asks of its own value a position outside the container is left to the
      * composition that does not read the total, and said to be: the observation the elements are
      * read in holds the container and the numbers beside it, and there is nothing in it to read
