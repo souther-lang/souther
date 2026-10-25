@@ -198,6 +198,21 @@ final class CardinalityComposer {
         Element element = Element.of(counts, container);
         boolean inside = standingAt.stream()
                 .anyMatch(each -> !each.term().subjectPath().equals(container.element()));
+        // Counts whose statements read the total of the element's number are composed with the
+        // total chosen first ({@link CoupledCardinalityComposer}): what a row holding an element
+        // alone answers is not what the element answers in the container it is in. Counts it does
+        // not take are chosen as below.
+        if (element == null && standingAt.isEmpty()
+                && ElementsKeptApart.at(view, keptApart, reading).isEmpty()) {
+            CoupledCardinalityComposer.Coupled coupled =
+                    CoupledCardinalityComposer.Coupled.of(asked, container, measuring);
+            TermRealizations.Realization composed = coupled == null ? null
+                    : CoupledCardinalityComposer.compose(coupled, container, size, sourceType,
+                            holding, measuring, within, reading);
+            if (composed != null) {
+                return composed;
+            }
+        }
         // An element that is more than one number is chosen among the values it is read at
         // whole; and so is every element whose different values are counted, since what is
         // shared out then is the elements holding one value together, however many there are of
@@ -390,7 +405,7 @@ final class CardinalityComposer {
      * Where the elements chosen for a container stand in the input: the row a container of them
      * is read as, and the rows written holding them.
      */
-    private sealed interface Standing {
+    sealed interface Standing {
 
         /** {@code holding}, a row holding a container of the elements chosen, as it is read. */
         BorderQuantity.Observation read(BorderQuantity.Observation holding);
@@ -952,7 +967,7 @@ final class CardinalityComposer {
      * turns, over a group of so many elements, where the number stands at that share of the place
      * ({@link #turningWith}): those shares are where an element is chosen too.
      */
-    private static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
+    static List<ObservedValue> numbersAt(TermPath at, OfTheType part, List<Asked> asked,
                                                  Quantity.TheValue apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
@@ -1784,7 +1799,7 @@ final class CardinalityComposer {
      * are a question each value answers and a number of the elements that answer it, so a container
      * composed for both is composed by sharing elements out among what they answer together.
      */
-    private sealed interface Asked {
+    sealed interface Asked {
 
         /** Whether {@code value}, as the element {@code row} reads, answers this. */
         AStatementAtARow.Answer at(Place value, BorderQuantity.Observation row);
@@ -2119,7 +2134,7 @@ final class CardinalityComposer {
      * the region leaves it at, and the value it is written as in {@code written}; a number the
      * region leaves at more or none, or that stands on no order, is in neither.
      */
-    private static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
+    static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
                                                           Quantities measuring,
                                                           SearchRegion within,
                                                           Map<TermPath, ObservedValue> written) {
@@ -2567,7 +2582,7 @@ final class CardinalityComposer {
 
     /** {@code row}, with {@code written} in it where there is any: a row asked once for each way
      *  the elements are shared out is not wrapped for nothing. */
-    private static BorderQuantity.Observation withNumbersBeside(
+    static BorderQuantity.Observation withNumbersBeside(
             BorderQuantity.Observation row, Map<TermPath, ObservedValue> written) {
         return written.isEmpty() ? row : new WithNumbersBeside(row, written);
     }
@@ -3352,13 +3367,13 @@ final class CardinalityComposer {
         }
     }
 
-    private static TermRealizations.Realization none(String why) {
+    static TermRealizations.Realization none(String why) {
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, why);
     }
 
     /** Elements of a kind nothing here chooses, which is the population and no proof. */
-    private static TermRealizations.Realization notChosen(String why) {
+    static TermRealizations.Realization notChosen(String why) {
         return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)), why);
     }

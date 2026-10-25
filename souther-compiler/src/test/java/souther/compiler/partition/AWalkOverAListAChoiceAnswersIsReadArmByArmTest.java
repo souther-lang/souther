@@ -21,6 +21,11 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
     private static final String MODULE = "probe";
 
     private static PartitionEvidence screened(String codes) {
+        return screened("", codes);
+    }
+
+    /** The same, with {@code before} worked out ahead of the screening. */
+    private static PartitionEvidence screened(String before, String codes) {
         String model = """
                 module probe
 
@@ -37,12 +42,13 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                 behavior screen : (lead: Lead, contacts: List<Contact>) -> NoMatch | Matched
 
                 let screen (lead, contacts) = {
+                    %s
                     let codes = %s
                     let found = List.flatMap(e -> List.filter(c -> c.code == e, contacts), codes)
                     guard List.length(found) >= 1 else NoMatch
                     Matched { ids = List.map(c -> c.id, found) }
                 }
-                """.formatted(codes);
+                """.formatted(before, codes);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -56,6 +62,53 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
     private static List<String> stopped(PartitionEvidence evidence) {
         return evidence.notRead().stream().filter(PartitionEvidence.NotRead::readingStopped)
                 .map(PartitionEvidence.NotRead::at).toList();
+    }
+
+    /**
+     * A comparison inside a closure is reached only past what the run works out before the call
+     * applies the closure: the numbers from nought to the lead's code are more than a list holds
+     * where the code is past what a list holds, so no run with such a code gets to the screening,
+     * and the code is not shown to be compared at every value. Without them it is.
+     */
+    @Test
+    void aComparisonInAClosureIsReachedOnlyPastWhatTheRunWorksOutBeforeIt() {
+        PartitionEvidence padded = screened("let pad = List.rangeInclusive(0, lead.code)",
+                "[ lead.code ]");
+        assertEquals(List.of("contacts[*].code", "lead.code"),
+                notReachedAtEveryValue(padded), () -> padded.notRead().toString());
+        PartitionEvidence one = screened("", "[ lead.code ]");
+        assertEquals(List.of(), stopped(one), () -> one.notRead().toString());
+    }
+
+    /**
+     * The witness a join is shown to fit on holds as few contacts as the way lets it: a guard
+     * asking for two at least leaves one of two, which fits. One asking for as many as a list
+     * holds leaves that many, and two codes keeping them all join past what a list holds. A guard
+     * asking anything else of how many there are leaves no list cut down to so few a row of the
+     * way.
+     */
+    @Test
+    void theWitnessAJoinFitsOnHoldsAsFewAsTheWayLetsIt() {
+        PartitionEvidence two = screened("guard List.length(contacts) >= 2 else NoMatch",
+                "[ lead.code ]");
+        assertEquals(List.of(), notReachedAtEveryValue(two), () -> two.notRead().toString());
+        PartitionEvidence full = screened(
+                "guard List.length(contacts) >= 2147483647 else NoMatch",
+                "[ lead.code, lead.code ]");
+        assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(full),
+                () -> full.notRead().toString());
+        PartitionEvidence atMost = screened("guard List.length(contacts) <= 3 else NoMatch",
+                "[ lead.code ]");
+        assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(atMost),
+                () -> atMost.notRead().toString());
+    }
+
+    /** Where a relation was read and a run may stop on the way to it. */
+    private static List<String> notReachedAtEveryValue(PartitionEvidence evidence) {
+        return evidence.notRead().stream()
+                .filter(each -> each.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)
+                .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
     }
 
     /** The filter that keeps the one code where the lead is known, which is read already. */

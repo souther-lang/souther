@@ -100,6 +100,17 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
                     "how many element-wise readings of one row a point is tried against"),
 
+            // What counts are composed against the total of their container, and past which they
+            // are composed as any are. No search runs to them and stops there: they say which
+            // statements this takes, and a statement past them is not stopped but left to the
+            // composing that does not read the total.
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer.MOST_STATEMENTS",
+                    "how many counts are composed together against a total; past it the counts"
+                            + " are composed one at a time as they are elsewhere"),
+            Map.entry("souther.compiler.partition.CoupledCardinalityComposer.MOST_RELATIONS",
+                    "how many relations of those counts have their ways of standing taken"
+                            + " together; past it the counts are composed as elsewhere"),
+
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
