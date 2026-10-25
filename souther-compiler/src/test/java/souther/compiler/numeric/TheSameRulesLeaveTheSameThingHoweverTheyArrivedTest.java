@@ -50,15 +50,15 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         return LinearForm.weighing(a, ExactRatio.of(k));
     }
 
-    private static Map<String, Granularity> whole(String... atoms) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> whole(String... atoms) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : atoms) {
-            out.put(each, Granularity.DISCRETE);
+            out.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         return out;
     }
 
-    private static NumericDomain<String> given(List<Written> rules, Map<String, Granularity> kinds) {
+    private static NumericDomain<String> given(List<Written> rules, Map<String, NumberSpace> kinds) {
         NumericDomain<String> out = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Written each : rules) {
             out = out.assume(each.form(), each.rel(), kinds);
@@ -70,7 +70,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
     @Test
     void aHoleAndABoundLeaveTheSameThingWhicheverWasWrittenFirst() {
-        Map<String, Granularity> kinds = whole("x");
+        Map<String, NumberSpace> kinds = whole("x");
         Written hole = new Written(atom("x"), Rel.NE);
         Written floor = new Written(atom("x"), Rel.GE);
 
@@ -86,7 +86,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      *  bites when a later rule is what makes it bite. */
     @Test
     void aHoleBitesOnWhatALaterRuleEstablishes() {
-        Map<String, Granularity> kinds = whole("x");
+        Map<String, NumberSpace> kinds = whole("x");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.NE, kinds)
                 .assume(LinearForm.atomMinusConstant("x", ExactRatio.of(5)), Rel.LE, kinds)
@@ -96,7 +96,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
     @Test
     void aHoleWithNothingToSideItStaysAHole() {
-        Map<String, Granularity> kinds = whole("x");
+        Map<String, NumberSpace> kinds = whole("x");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom("x"), Rel.NE, kinds);
         assertTrue(d.boundsOf("x").saysNothing(), "nothing says which side of nought x is on");
         assertFalse(d.isBottom());
@@ -104,7 +104,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
     @Test
     void aHoleAtTheOnlyValueLeftLeavesNothing() {
-        Map<String, Granularity> kinds = whole("x");
+        Map<String, NumberSpace> kinds = whole("x");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.GE, kinds)
                 .assume(atom("x"), Rel.LE, kinds)
@@ -118,7 +118,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      *  what the range knows. */
     @Test
     void aRuleOverTwoPositionsNarrowsThemAndIsProvenFromWhatItLeft() {
-        Map<String, Granularity> kinds = whole("straw", "choco");
+        Map<String, NumberSpace> kinds = whole("straw", "choco");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("straw"), Rel.GE, kinds)
                 .assume(atom("straw").minus(num(1000)), Rel.LE, kinds)
@@ -139,7 +139,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      *  describing a value nobody can build while the proof discharges everything. */
     @Test
     void aRuleThatCannotHoldWithTheBoundsLeavesNothing() {
-        Map<String, Granularity> kinds = whole("a", "b");
+        Map<String, NumberSpace> kinds = whole("a", "b");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(20)), Rel.GE, kinds)
                 .assume(atom("b").minus(num(20)), Rel.GE, kinds)
@@ -152,7 +152,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      *  come back with a range around a third whose two ends are decimals and a third is not. */
     @Test
     void aRuleAtAValueItsSumCannotReachLeavesNothing() {
-        Map<String, Granularity> dense = Map.of("a", Granularity.DENSE);
+        Map<String, NumberSpace> dense = Map.of("a", NumberSpace.spacedOnly(Granularity.DENSE));
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(scaled("a", 3).minus(num(1)), Rel.EQ, dense);
         assertTrue(d.isBottom());
@@ -171,7 +171,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      */
     @Test
     void whatAFormRunsUpToIsWhatFollowsFromIt() {
-        Map<String, Granularity> kinds = whole("x", "y");
+        Map<String, NumberSpace> kinds = whole("x", "y");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.GE, kinds)
                 .assume(LinearForm.atomMinusConstant("x", ExactRatio.of(5)), Rel.LE, kinds)
@@ -196,7 +196,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      */
     @Test
     void aQuestionScaledUpIsTheSameQuestion() {
-        Map<String, Granularity> kinds = whole("a", "b");
+        Map<String, NumberSpace> kinds = whole("a", "b");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(SmallForm.small(LinearForm.difference("a", "b")).minus(num(2)).form(), Rel.LE, kinds);
 
@@ -211,7 +211,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      *  far as {@code a - b}, so an answer about one handed back for the other is out by a factor. */
     @Test
     void aBoundOnAScaledFormIsScaledToMatch() {
-        Map<String, Granularity> kinds = whole("a", "b");
+        Map<String, NumberSpace> kinds = whole("a", "b");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(SmallForm.small(LinearForm.difference("a", "b")).plus(num(2)).form(), Rel.LE, kinds);
 
@@ -234,7 +234,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      */
     @Test
     void anEqualityIsRefutedWhereTheRulesPutItsValueOutOfReach() {
-        Map<String, Granularity> kinds = whole("x");
+        Map<String, NumberSpace> kinds = whole("x");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(num(3)), Rel.LE, kinds);
 
@@ -247,7 +247,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      *  than one it refuses to be asked. */
     @Test
     void aQuestionAboutAPositionThisNeverHeardOfIsNotProven() {
-        Map<String, Granularity> kinds = whole("x");
+        Map<String, NumberSpace> kinds = whole("x");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(num(3)), Rel.LE, kinds);
 
@@ -271,9 +271,9 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aPositionsBoundIsOneAnswerEvenWhereTheRoundsRunOut() {
         int chain = ClosedState.ROUNDS + 1;
-        Map<String, Granularity> kinds = new LinkedHashMap<>();
+        Map<String, NumberSpace> kinds = new LinkedHashMap<>();
         for (int i = 0; i <= chain; i++) {
-            kinds.put("x" + i, Granularity.DISCRETE);
+            kinds.put("x" + i, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x" + chain).minus(num(1)), Rel.LE, kinds);
@@ -298,7 +298,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
      */
     @Test
     void theOrderAndTheRepetitionAreNotPartOfAnyAnswer() {
-        Map<String, Granularity> kinds = whole("a", "b", "c");
+        Map<String, NumberSpace> kinds = whole("a", "b", "c");
         for (List<RulesAsWritten.Written> written : OVER_THREE) {
             List<Written> rules = new ArrayList<>();
             written.forEach(each -> rules.add(new Written(

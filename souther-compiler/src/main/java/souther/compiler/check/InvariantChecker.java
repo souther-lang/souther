@@ -14,7 +14,9 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
@@ -522,7 +524,7 @@ public final class InvariantChecker {
                   boolean everyClauseRead, Map<RuleKey, Set<RulesMissed>> notGathered,
                   Set<RuleKey> unreadOfEveryValue, Set<RuleKey> handedOn,
                   List<Written> readings,
-                  Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
+                  Map<FactSubject, NumberSpace> spaces,
                   Map<RuleKey, ValueSet> admitted,
                   Map<RuleKey, List<StoppedReading>> unreadAt,
                   Set<RuleKey> notSeparated,
@@ -994,7 +996,7 @@ public final class InvariantChecker {
                 needs.put(part.id(), asked);
                 for (NumericConstraint one : asked.asked()) {
                     workedOut = workedOut.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
-                            c.terms.kindsOf(one.form()));
+                            c.terms.spacesOf(one.form()));
                 }
             }
             written.set(each.reading(), written.get(each.reading()).alsoWorkedOut(needs));
@@ -1208,26 +1210,32 @@ public final class InvariantChecker {
         // on: a row of this value holds them inside those ends, and they go with the rules
         // wherever the rules are carried. Every one, since an atom is named on an order or not at
         // all — a count on the whole numbers, whatever it counts.
-        Map<FactSubject, NumericDomain.Bounds> stops = new LinkedHashMap<>();
+        Map<FactSubject, NumberSpace> told = new LinkedHashMap<>();
         for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
             Carrier order = c.terms.carrierOf(atom);
             if (order != null) {
-                stops.put(atom, order.whereItStops());
+                // Spaced as the rules have it: the ends are what this adds.
+                told.put(atom, NumberSpace.stopping(
+                        constraints.numbers().spacingOf(atom), order.whereItStops()));
             }
         }
-        constraints = constraints.heldInsideTheirOrders(stops);
-        // How each atom's values are spaced, kept so that settling one afterwards states the
-        // equality the same way this does. A count is a whole number of things whatever the
+        constraints = constraints.told(told);
+        // What each atom's type says of its values, kept so that settling one afterwards states
+        // the equality the same way this does. A count is a whole number of things whatever the
         // things are spaced by; a position's own value is spaced by its type.
-        Map<FactSubject, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
+        Map<FactSubject, NumberSpace> spaces = new LinkedHashMap<>();
         atoms.forEach((path, atom) -> {
             Type type = typeAt.get(path);
             if (type != null) {
-                spacing.put(atom, c.terms.carrierOf(type).spacing());
+                spaces.put(atom, c.terms.carrierOf(type).space());
             }
         });
-        held.forEach((path, counted) ->
-                spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
+        held.forEach((path, counted) -> {
+            Carrier order = c.terms.carrierOf(counted.atom());
+            spaces.put(counted.atom(), order == null
+                    ? NumberSpace.spacedOnly(Granularity.DISCRETE)
+                    : NumberSpace.stopping(Granularity.DISCRETE, order.whereItStops()));
+        });
         for (Map.Entry<NumberAt<RuleKey>, Count> each : settled.entrySet()) {
             NumberAt<RuleKey> where = each.getKey();
             // The number the caller settled, which is the position's own value or the count
@@ -1258,11 +1266,11 @@ public final class InvariantChecker {
                 continue;
             }
             // A count is a whole number of things, whatever the values counted are spaced by.
-            souther.compiler.numeric.Granularity spaced = spacing.get(atom);
-            if (spaced == null) {
+            NumberSpace space = spaces.get(atom);
+            if (space == null) {
                 continue;
             }
-            constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
+            constraints = ConstraintState.settling(constraints, atom, each.getValue(), space);
         }
         constraints = ComputedNumbers.settled(constraints);
         // And what stands at each name the reading wrote, which is the last of this answer and is
@@ -1321,7 +1329,7 @@ public final class InvariantChecker {
         }
         return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
-                written, Map.copyOf(spacing), admitted, unreadAt, notSeparated,
+                written, Map.copyOf(spaces), admitted, unreadAt, notSeparated,
                 c.answers.facts(),
                 Collections.unmodifiableMap(new LinkedHashMap<>(endsLeftOpen)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(boundsLeftOpen)),

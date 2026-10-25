@@ -8,6 +8,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
@@ -229,7 +230,7 @@ public final class FieldDomains {
     private final List<InvariantChecker.Written> readings;
     /** How each atom's values are spaced, so that settling one afterwards states the same equality
      *  the reading would have stated for it. */
-    private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
+    private final Map<FactSubject, NumberSpace> spaces;
     /**
      * The string machines this reading answered from and made.
      *
@@ -337,7 +338,7 @@ public final class FieldDomains {
                          Set<RuleKey> unreadOfEveryValue,
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          List<InvariantChecker.Written> readings,
-                         Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
+                         Map<FactSubject, NumberSpace> spaces,
                          StringFacts stringMachines, RevisionKnowledge revision,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
@@ -380,7 +381,7 @@ public final class FieldDomains {
         this.atomAt = atomAt;
         this.countAt = countAt;
         this.readings = readings;
-        this.spacing = spacing;
+        this.spaces = spaces;
     }
 
     /**
@@ -613,7 +614,7 @@ public final class FieldDomains {
                 seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readings(), seeded.spacing(), seeded.stringMachines(),
+                seeded.readings(), seeded.spaces(), seeded.stringMachines(),
                 // What the revision has worked out, which is what a counterfactual of this reading
                 // borrows its work from.
                 reading.readings().revision(),
@@ -1132,12 +1133,11 @@ public final class FieldDomains {
         for (Map.Entry<NumberAt<RuleKey>, Count> each : fixed.entrySet()) {
             NumberAt<RuleKey> where = each.getKey();
             FactSubject atom = subjectAt(where.position(), where.of());
-            souther.compiler.numeric.Granularity spaced =
-                    atom == null ? null : spacing.get(atom);
+            NumberSpace space = atom == null ? null : spaces.get(atom);
             // A coordinate no range is taken of here settles nothing, which is less than the caller
             // said and is the safe direction: what is left is wider than what they asked about.
-            if (spaced != null) {
-                taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
+            if (space != null) {
+                taken = ConstraintState.settling(taken, atom, each.getValue(), space);
             }
         }
         List<ComputedNumbers.Computed> computed = computedNumbers;

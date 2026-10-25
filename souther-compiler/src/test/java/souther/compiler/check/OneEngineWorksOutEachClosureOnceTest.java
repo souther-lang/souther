@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.TestDay;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -34,7 +36,8 @@ class OneEngineWorksOutEachClosureOnceTest {
                 Terms.Of.THE_DISCHARGE_TREE);
         FactSubject x = FactSubject.of(NAMES.written("x"));
         LinearForm<FactSubject> form = LinearForm.atom(x);
-        Map<FactSubject, Granularity> kinds = Map.of(x, Granularity.DISCRETE);
+        Map<FactSubject, NumberSpace> kinds =
+                Map.of(x, NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN));
 
         Known one = engine.nothingKnown().taking(form, Rel.GE, Known.Held.ON_THE_PATH, kinds);
         Known two = engine.nothingKnown().taking(form, Rel.GE, Known.Held.ON_THE_PATH, kinds);
