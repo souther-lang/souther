@@ -1401,12 +1401,43 @@ public final class NumericDomain<A> {
         }
         Boolean had = noRow;
         if (had == null) {
-            NumericDomain<A> inside = insideTheOrdersOf(
-                    kinds.keys().stream().filter(orders::contains).toList());
-            had = inside != this && inside != null && inside.isBottom();
+            had = everyRuleBoundsOneAtom() ? someBoxLiesOutsideItsOrder()
+                    : leavesNoRowByClosure();
             noRow = had;
         }
         return had;
+    }
+
+    /**
+     * Whether every rule is a bound on one position, which is all the rules say of it. Then the
+     * positions do not constrain each other, and what is left of one is its box.
+     */
+    private boolean everyRuleBoundsOneAtom() {
+        for (AffineConstraint<A> rule : rules()) {
+            if (rule instanceof AffineConstraint.Disequality<A> || rule.form().coefs().size() != 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the box of some position told its order shares no value with it. */
+    private boolean someBoxLiesOutsideItsOrder() {
+        for (A atom : kinds.keys()) {
+            Bounds stop = orders.get(atom);
+            Bounds box = stop == null ? null : boxOf(atom);
+            if (box != null && !box.meet(stop).holdsAValue()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The same answer for any rules: the ends taken in as rules and the closure asked again. */
+    boolean leavesNoRowByClosure() {
+        NumericDomain<A> inside = insideTheOrdersOf(
+                kinds.keys().stream().filter(orders::contains).toList());
+        return inside != this && inside != null && inside.isBottom();
     }
 
     /**
