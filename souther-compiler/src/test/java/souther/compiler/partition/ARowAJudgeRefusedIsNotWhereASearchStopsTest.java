@@ -66,6 +66,23 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
     }
 
     @Test
+    void aSearchStoppedBeforeTheLastWayIsNotLostToTheLastWayThatLookedAtEverything() {
+        List<Generator.BoundaryAttempt> held = new ArrayList<>();
+        Generator.BoundaryAttempt stopped = Generator.BoundaryAttempt.Unplanned.at(
+                "a rule of the decision", Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED),
+                CompositionAccount.NOTHING);
+        Generator.BoundaryAttempt last = unresolved(
+                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+
+        assertFalse(Generator.builtLeavingNothingOut(stopped, held));
+
+        Generator.BoundaryAttempt heldOne = Generator.heldBack(held, last);
+        assertTrue(heldOne.stoppedShort(), "what the stopped way left unlooked at is said");
+        assertSame(last.unrepresented(), heldOne.unrepresented(),
+                "and the account is that of the way as it stands");
+    }
+
+    @Test
     void aWordProvingNothingCanStandThereLookedAtEverything() {
         for (Generator.UnresolvedCombination.Reason each
                 : Generator.UnresolvedCombination.Reason.values()) {

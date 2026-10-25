@@ -5145,10 +5145,11 @@ public final class Generator {
          */
         default boolean stoppedShort() {
             return switch (this) {
-                case Built _ -> false;
-                case Unresolved it -> it.why().reason().leavesSomethingUntried()
+                case BoundaryAttempt.Built _ -> false;
+                case BoundaryAttempt.Unresolved it -> it.why().reason().leavesSomethingUntried()
                         || !it.why().alsoShort().isEmpty();
-                case Stopped _, Unexhausted _, Limited _, Unplanned _ -> true;
+                case BoundaryAttempt.Stopped _, BoundaryAttempt.Unexhausted _,
+                     BoundaryAttempt.Limited _, BoundaryAttempt.Unplanned _ -> true;
             };
         }
 
@@ -5599,6 +5600,11 @@ public final class Generator {
             } else if (refused == null) {
                 refused = each;
             }
+        }
+        if (stopped != null && !none.stoppedShort()) {
+            // The way as it stands is composed against what it states, and says so in its account;
+            // what another way left unlooked at is the word. Neither replaces the other.
+            return refused == null ? stopped.withAccount(none.unrepresented()) : stopped;
         }
         if (refused == null) {
             return none;
@@ -6324,7 +6330,8 @@ public final class Generator {
          * figure, a population, an offer short of a rule or a plan cut is a search that did not.
          */
         boolean lookedAtWhole() {
-            return tried instanceof Outcome.Unresolved && found.nothing();
+            return tried instanceof Outcome.Unresolved(var reason, var _)
+                    && !reason.leavesSomethingUntried() && found.nothing();
         }
     }
 
