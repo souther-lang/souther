@@ -85,8 +85,7 @@ public record StringsReached(boolean inputHoldsAValue, Set<TermPath> unrestricte
         // Any other number a string operation answers is shown only of strings nothing restricts.
         if (term instanceof NumericTerm.CodePointClassCount
                 || term instanceof NumericTerm.CodePointValueSum
-                || (term instanceof NumericTerm.TakenOf other
-                        && other.operation().alias().equals("String"))) {
+                || (term instanceof NumericTerm.TakenOf other && isOfAString(other))) {
             return unrestricted.contains(((NumericTerm.FromOnePosition) term).position());
         }
         return true;
@@ -94,8 +93,15 @@ public record StringsReached(boolean inputHoldsAValue, Set<TermPath> unrestricte
 
     private static boolean isLength(NumericTerm term) {
         return term instanceof NumericTerm.TakenOf taken
-                && taken.operation().equals(ValueName.Stdlib.operation("String", "length"));
+                && taken.operation().equals(ValueName.Stdlib.operation(STRING, "length"));
     }
+
+    /** Whether the number is what an operation of {@code String} answers. */
+    private static boolean isOfAString(NumericTerm.TakenOf taken) {
+        return taken.operation().alias().equals(STRING);
+    }
+
+    private static final String STRING = "String";
 
     /**
      * Whether every length the rules leave the number {@code bounds} is about is the length of a

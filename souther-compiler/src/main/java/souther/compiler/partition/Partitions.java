@@ -160,25 +160,6 @@ public final class Partitions {
                                WhereTheOperationsStand operationsStanding,
                                StringsReached strings) {
 
-        /** A partitioning of an input with no string position. */
-        public Partitioning(List<PositionMeasurements> measurements,
-                            List<StandingQuestion> unanswered,
-                            java.util.Set<NumericTerm> uncertain,
-                            List<RuleWithoutALine> rulesWithoutALine,
-                            List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
-                            List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
-                            List<Border> between,
-                            java.util.Map<AxisId, List<Border>> along,
-                            ReachingCuts reaching,
-                            MeasureClosure.OfThePartition partitionClosure,
-                            MeasureClosure.OfTheBorder borderClosure,
-                            souther.compiler.inputs.EmptyInput inputIsEmpty,
-                            WhereTheOperationsStand operationsStanding) {
-            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
-                    notSeparated, between, along, reaching, partitionClosure, borderClosure,
-                    inputIsEmpty, operationsStanding, StringsReached.NONE);
-        }
-
         public Partitioning {
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
