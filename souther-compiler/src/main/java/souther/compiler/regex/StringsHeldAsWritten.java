@@ -1,9 +1,13 @@
 package souther.compiler.regex;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
@@ -75,6 +79,83 @@ public final class StringsHeldAsWritten {
             at += Character.charCount(codePoint);
         }
         return machine.stopsAt(state);
+    }
+
+    /**
+     * Whether there are none of these.
+     *
+     * <p>Only a non-empty answer is evidence: one of these is a value. A language holding a
+     * string made of code points that are not stable starters may hold a value too, so an empty
+     * answer here does not say that no value exists.
+     */
+    public boolean isEmpty() {
+        BitSet reached = new BitSet();
+        Deque<Integer> pending = new ArrayDeque<>();
+        reached.set(Automaton.START);
+        pending.add(Automaton.START);
+        while (!pending.isEmpty()) {
+            int state = pending.poll();
+            if (machine.stopsAt(state)) {
+                return false;
+            }
+            for (Automaton.Step step : machine.stepsFrom(state)) {
+                if (!reached.get(step.to())) {
+                    reached.set(step.to());
+                    pending.add(step.to());
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether these have a string of every length {@code language} has one: a length of the
+     * language is a length some value has.
+     *
+     * <p>Both machines are walked a code point at a time with the states they can be in, which is
+     * a unary automaton of each, and the walk ends when the pair of state sets repeats. That is a
+     * decision when it ends, and a refusal to answer when it does not end within
+     * {@link #LAYERS}: false then says the equality was not shown.
+     */
+    boolean hasEveryLengthOf(Automaton language) {
+        BitSet inLanguage = new BitSet();
+        BitSet inThese = new BitSet();
+        inLanguage.set(Automaton.START);
+        inThese.set(Automaton.START);
+        Set<List<BitSet>> seen = new HashSet<>();
+        for (int layer = 0; layer < LAYERS; layer++) {
+            if (stopsIn(language, inLanguage) != stopsIn(machine, inThese)) {
+                return false;
+            }
+            if (!seen.add(List.of(inLanguage, inThese))) {
+                return true;
+            }
+            inLanguage = after(language, inLanguage);
+            inThese = after(machine, inThese);
+        }
+        return false;
+    }
+
+    /** The layers {@link #hasEveryLengthOf} walks before it gives up. */
+    private static final int LAYERS = 4096;
+
+    private static boolean stopsIn(Automaton automaton, BitSet states) {
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            if (automaton.stopsAt(state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static BitSet after(Automaton automaton, BitSet states) {
+        BitSet next = new BitSet();
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            for (Automaton.Step step : automaton.stepsFrom(state)) {
+                next.set(step.to());
+            }
+        }
+        return next;
     }
 
     /** The code points standing at {@code index} of these of {@code length} code points. */

@@ -8,6 +8,10 @@ import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
+import souther.compiler.evaluate.EvaluationContext;
+import souther.runtime.Strings;
+import souther.runtime.TextAdmission;
+
 import java.util.Set;
 
 /**
@@ -129,7 +133,8 @@ public final class TextExtents {
             return new TextExtent.NotBuilt(stopped(meter));
         }
         if (left.isEmpty()) {
-            return new TextExtent.One(Text.of(first), null);
+            return isAValue(first)
+                    ? new TextExtent.One(Text.of(first), null) : new TextExtent.NotEstablished();
         }
         String after = left.least();
         if (after == null) {
@@ -139,9 +144,12 @@ public final class TextExtents {
         if (beyond == null) {
             return new TextExtent.NotBuilt(stopped(meter));
         }
-        return beyond.equals(left)
+        if (!beyond.equals(left)) {
+            return new TextExtent.NoNamedRun();
+        }
+        return isAValue(first) && isAValue(after)
                 ? new TextExtent.One(Text.of(first), Text.of(after))
-                : new TextExtent.NoNamedRun();
+                : new TextExtent.NotEstablished();
     }
 
     /**
@@ -161,7 +169,54 @@ public final class TextExtents {
         if (inside == null) {
             return Emptiness.UNDECIDED;
         }
-        return inside.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
+        return holdsAValue(inside);
+    }
+
+    /**
+     * Whether {@code language} holds a string a {@code String} can be.
+     *
+     * <p>A language bounds the values; it does not say that one exists. No string is the answer
+     * where the language holds none, and a value is the answer where it holds one as written
+     * ({@link Language#heldAsWritten}). A language all of whose strings are changed by
+     * normalization holds none of those, and may still hold a value made of code points that
+     * compose with nothing, so that is {@link Emptiness#UNDECIDED}.
+     */
+    public static Emptiness holdsAValue(Language language) {
+        if (language.isEmpty()) {
+            return Emptiness.EMPTY;
+        }
+        return language.heldAsWritten().isEmpty() ? Emptiness.UNDECIDED : Emptiness.NONEMPTY;
+    }
+
+    /**
+     * Whether {@code set} holds a value of the carrier it stands at. A set of strings that names a
+     * language is {@link #holdsAValue(Language)}'s; any other set lists its values or leaves out a
+     * few, and holds one wherever it is not the empty set.
+     */
+    public static Emptiness holdsAValue(ValueSet set) {
+        if (set instanceof ValueSet.Matching it) {
+            return holdsAValue(it.language());
+        }
+        return set.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
+    }
+
+    /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds one. */
+    public static boolean shownToHoldAValue(ValueSet set) {
+        Emptiness held = holdsAValue(set);
+        return held.isDecided() && !held.isEmpty();
+    }
+
+    /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds none. */
+    public static boolean shownToHoldNone(ValueSet set) {
+        return holdsAValue(set).isEmpty();
+    }
+
+    /** Whether {@code text} is a string a {@code String} holds, which is to say it is its own
+     *  Normalization Form C. */
+    private static boolean isAValue(String text) {
+        return Strings.admission(text, EvaluationContext.checkpoint())
+                instanceof TextAdmission.Admitted held
+                && held.text().equals(text);
     }
 
     /**

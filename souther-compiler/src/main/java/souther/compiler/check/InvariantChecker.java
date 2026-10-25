@@ -3948,7 +3948,7 @@ public final class InvariantChecker {
                 }
                 return placed ? new Run.Bounding(value) : new Run.NotBounding();
             }
-            case TextExtent.NoNamedRun _ -> {
+            case TextExtent.NoNamedRun _, TextExtent.NotEstablished _ -> {
                 return new Run.NotBounding();
             }
             case TextExtent.NotBuilt it -> {

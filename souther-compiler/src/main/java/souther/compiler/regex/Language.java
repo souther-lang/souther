@@ -243,6 +243,14 @@ public final class Language {
         return StringsHeldAsWritten.of(machine);
     }
 
+    /**
+     * Whether every length one of its strings has is the length of a string a {@code String}
+     * holds as written. False also where that was not shown within what is walked.
+     */
+    public boolean everyLengthIsOfAValue() {
+        return heldAsWritten().hasEveryLengthOf(machine);
+    }
+
     /** Where the code point a string it holds has at {@code index} lies, or null where it holds
      *  no string that long. */
     public Ends codePointsAt(int index) {
