@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "question_unanswered", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
+  "weakening" : [ "rule_unread", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -10805,8 +10805,7 @@
     } ]
   }, {
     "module" : "conformance.counting",
-    "status" : "partial",
-    "weakening" : [ "question_unanswered" ],
+    "status" : "complete",
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -11098,8 +11097,7 @@
         "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "question_unanswered" ],
+      "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "not_a_sum",
@@ -11125,8 +11123,7 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "question_unanswered" ]
+          "status" : "complete"
         },
         "boundariesMeasure" : {
           "status" : "complete"
@@ -11144,41 +11141,6 @@
           "status" : "complete",
           "covered" : [ "List.length(deals)/0 < x" ],
           "unclassifiedRows" : 0
-        } ],
-        "unanswered" : [ {
-          "at" : "rates.base",
-          "rule" : "invariant RateTable (baseIsUnity)",
-          "ruleId" : {
-            "kind" : "invariant",
-            "declaredIn" : "conformance.counting",
-            "declaredOn" : "RateTable",
-            "clause" : 0
-          },
-          "question" : "admitted_values",
-          "subject" : {
-            "kind" : "position",
-            "path" : "rates.base"
-          },
-          "stopped" : [ {
-            "reason" : "unsupported_syntax"
-          } ]
-        }, {
-          "at" : "rates.rates",
-          "rule" : "invariant RateTable (baseIsUnity)",
-          "ruleId" : {
-            "kind" : "invariant",
-            "declaredIn" : "conformance.counting",
-            "declaredOn" : "RateTable",
-            "clause" : 0
-          },
-          "question" : "admitted_values",
-          "subject" : {
-            "kind" : "position",
-            "path" : "rates.rates"
-          },
-          "stopped" : [ {
-            "reason" : "unsupported_syntax"
-          } ]
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -11785,7 +11747,7 @@
           "covered" : 0,
           "unknown" : 0
         },
-        "notDerivable" : [ "deals[*].amount" ],
+        "notDerivable" : [ "deals[*].amount", "rates.rates" ],
         "notRead" : [ {
           "position" : "deals[*].currency",
           "reason" : "position_restricted_to_what_a_rule_admits",
@@ -11798,7 +11760,7 @@
           }
         }, {
           "position" : "rates.base",
-          "reason" : "exact_values_too_costly",
+          "reason" : "position_restricted_to_what_a_rule_admits",
           "rule" : "invariant CurrencyCode #1",
           "ruleId" : {
             "kind" : "invariant",
@@ -11954,6 +11916,10 @@
         "disposition" : "reported",
         "subject" : "deals[*].amount"
       }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "rates.rates"
+      }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "deals[*].currency",
@@ -11974,7 +11940,7 @@
           "declaredOn" : "CurrencyCode",
           "clause" : 0
         },
-        "reason" : "exact_values_too_costly"
+        "reason" : "position_restricted_to_what_a_rule_admits"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -11986,26 +11952,6 @@
           "clause" : 0
         },
         "reason" : "position_restricted_to_what_a_rule_admits"
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "invariant RateTable (baseIsUnity) — which values may stand at rates.base",
-        "ruleId" : {
-          "kind" : "invariant",
-          "declaredIn" : "conformance.counting",
-          "declaredOn" : "RateTable",
-          "clause" : 0
-        }
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "invariant RateTable (baseIsUnity) — which values may stand at rates.rates",
-        "ruleId" : {
-          "kind" : "invariant",
-          "declaredIn" : "conformance.counting",
-          "declaredOn" : "RateTable",
-          "clause" : 0
-        }
       } ]
     } ]
   } ],

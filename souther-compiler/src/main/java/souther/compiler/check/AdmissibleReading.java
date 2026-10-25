@@ -278,6 +278,15 @@ final class AdmissibleReading {
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
+        // A rule about a container and a place beside it: it says how the container's entries or
+        // elements stand and leaves the values of the place beside it as they were, so the
+        // container alone is short of it.
+        EntryAt entry = entryHeldAt(part, at);
+        FactSubject sides = entry == null ? sidesBalancedAt(part, at) : null;
+        if (entry != null || sides != null) {
+            return shortOf(part, Set.of(entry != null ? entry.container() : sides),
+                    UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
+        }
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
                 : relatesTwoPositions(part, at) ? UnreadReason.RELATES_TWO_POSITIONS

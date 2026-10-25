@@ -247,6 +247,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
+            new Held("souther.compiler.check.EntryHeld.valueIs",
+                    "asks whether a statement about the value a lookup found is an equality with"
+                            + " a written number"),
+            new Held("souther.compiler.check.SidesBalanced.read",
+                    "asks whether two totals are compared for equality"),
+            new Held("souther.compiler.check.SidesBalanced.side",
+                    "asks whether the step of a walk adding a number compares a field of the"
+                            + " element for equality with a case"),
             new Held("souther.compiler.check.ComputedNumber.read",
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),
