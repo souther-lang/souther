@@ -185,7 +185,7 @@ public final class TextExtents {
         if (language.isEmpty()) {
             return Emptiness.EMPTY;
         }
-        return language.heldAsWritten().isEmpty() ? Emptiness.UNDECIDED : Emptiness.NONEMPTY;
+        return language.holdsAStringAsWritten() ? Emptiness.NONEMPTY : Emptiness.UNDECIDED;
     }
 
     /**

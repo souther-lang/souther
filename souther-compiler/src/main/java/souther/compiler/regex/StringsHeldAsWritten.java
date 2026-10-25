@@ -89,17 +89,26 @@ public final class StringsHeldAsWritten {
      * answer here does not say that no value exists.
      */
     public boolean isEmpty() {
+        return holdsNoneIn(machine);
+    }
+
+    /**
+     * {@link #isEmpty} of the strings of {@code language}, without making their machine: a step
+     * is taken where it holds a stable starter, which stops at the first one, and the machine of
+     * these keeps every such code point of every step.
+     */
+    static boolean holdsNoneIn(Automaton language) {
         BitSet reached = new BitSet();
         Deque<Integer> pending = new ArrayDeque<>();
         reached.set(Automaton.START);
         pending.add(Automaton.START);
         while (!pending.isEmpty()) {
             int state = pending.poll();
-            if (machine.stopsAt(state)) {
+            if (language.stopsAt(state)) {
                 return false;
             }
-            for (Automaton.Step step : machine.stepsFrom(state)) {
-                if (!reached.get(step.to())) {
+            for (Automaton.Step step : language.stepsFrom(state)) {
+                if (!reached.get(step.to()) && StableStarters.anyWithin(step.over())) {
                     reached.set(step.to());
                     pending.add(step.to());
                 }

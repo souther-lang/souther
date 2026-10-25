@@ -244,6 +244,14 @@ public final class Language {
     }
 
     /**
+     * Whether it holds a string a {@code String} holds as written ({@link StringsHeldAsWritten}).
+     * Answered without making their machine.
+     */
+    public boolean holdsAStringAsWritten() {
+        return !StringsHeldAsWritten.holdsNoneIn(machine);
+    }
+
+    /**
      * Whether every length one of its strings has is the length of a string a {@code String}
      * holds as written. False also where that was not shown within what is walked.
      */
