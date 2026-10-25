@@ -196,6 +196,7 @@ public final class EntryHeld {
         // of and cannot name the key of is as much a rule asking something of the map as one they
         // can.
         Set<RuleKey> notKept = new HashSet<>();
+        Map<RuleKey, List<InvariantStatement>> builtFor = new HashMap<>();
         for (InvariantStatement one : rules.statements()) {
             Stated stated = switch (one) {
                 case InvariantStatement.HoldsAnEntry it -> it.held();
@@ -208,17 +209,18 @@ public final class EntryHeld {
             if (where != null && key != null) {
                 out.computeIfAbsent(where, _ -> new ArrayList<>())
                         .add(new Requirement(key, stated.valueIs()));
+                builtFor.computeIfAbsent(where, _ -> new ArrayList<>()).add(one);
             } else if (where != null) {
                 notKept.add(where);
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
         out.forEach((where, requirements) -> {
-            // And a map no other rule reads from: the map is built holding what the rules above
-            // ask of it, and a rule asking anything else of it, however it is written, is one
-            // the map is built without knowing of.
+            // And a map no statement but those built for reads from: the map is built holding
+            // what those ask of it, and a statement asking anything else of it, recognised or not
+            // and however it is written, is one the map is built without knowing of.
             if (buildable(where, requirements) && !notKept.contains(where)
-                    && !rules.readFromByOthers(where.steps().getFirst())) {
+                    && !rules.readBesides(builtFor.get(where), where.steps().getFirst())) {
                 held.put(where, List.copyOf(requirements));
             }
         });

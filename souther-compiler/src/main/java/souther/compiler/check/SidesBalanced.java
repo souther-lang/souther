@@ -179,6 +179,7 @@ public final class SidesBalanced {
             return Map.of();
         }
         Map<RuleKey, List<Requirement>> out = new LinkedHashMap<>();
+        Map<RuleKey, List<InvariantStatement>> builtFor = new HashMap<>();
         for (InvariantStatement one : rules.statements()) {
             if (!(one instanceof InvariantStatement.BalancesSides it)) {
                 continue;
@@ -188,15 +189,17 @@ public final class SidesBalanced {
                 out.computeIfAbsent(where, _ -> new ArrayList<>())
                         .add(new Requirement(it.balanced().field(), it.balanced().number(),
                                 it.balanced().one(), it.balanced().other()));
+                builtFor.computeIfAbsent(where, _ -> new ArrayList<>()).add(one);
             }
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
         out.forEach((where, requirements) -> {
-            // And a list no other rule reads from: it is built balanced, and a rule asking
-            // anything else of it, however it is written, is one it is built without knowing of.
-            // How many it holds is the range its count already has, and is not another rule.
+            // And a list no statement but those built for reads from: it is built balanced, and a
+            // statement asking anything else of it, recognised or not and however it is written,
+            // is one it is built without knowing of. How many it holds is the range its count
+            // already has, and is not another statement.
             if (buildable(where, requirements) && elementsStandAlone(named, where, source)
-                    && !rules.readFromByOthers(where.steps().getFirst())) {
+                    && !rules.readBesides(builtFor.get(where), where.steps().getFirst())) {
                 held.put(where, List.copyOf(requirements));
             }
         });

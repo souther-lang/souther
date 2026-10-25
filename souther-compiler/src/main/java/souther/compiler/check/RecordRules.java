@@ -5,6 +5,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -32,26 +33,36 @@ import java.util.Set;
  * @param unread           how many of those left no statement at all, which is a rule whose reading
  *                         stopped and whose places are not known
  * @param everyRuleReached whether every declaration whose rules govern the record was expanded
- * @param readByOthers     the fields a rule reads from that no consumer builds for, other than to
- *                         count what they hold
+ * @param readings         the fields each statement reads from, other than to count what a field
+ *                         holds
  */
 record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements,
                    int declared, int unread, boolean everyRuleReached,
-                   Set<String> readByOthers) {
+                   List<Reading> readings) {
+
+    /** A statement and the fields of the record it reads from, whether or not it was recognised. */
+    record Reading(InvariantStatement statement, Set<String> fields) {}
 
     /**
-     * Whether a rule that nothing here builds for reads from the field {@code field}, other than to
-     * count what it holds.
+     * Whether a statement other than {@code built} reads from the field {@code field}, other than
+     * to count what it holds.
      *
      * <p>The question a builder asks before it takes a field on: it builds the field holding what
-     * the rules it knows ask of it, and is right only if no other rule asks anything else of the
-     * field. A rule is told apart by where it reads from and not by what it says, so a denial, a
-     * denied choice and a rule written through a helper are all the same to it. How many a field
-     * holds is the count the range of its values already carries, so a rule reading the field only
-     * through that is no other rule.
+     * the statements it built for ask of it, and is right only if no other statement asks anything
+     * else of the field. That a statement was recognised is not that it was built for, so the
+     * builder names the ones it built for and every other is read from where it reads, whatever it
+     * says: a denial, a denied choice, a rule written through a helper and a rule of a shape the
+     * builder knows and could not place are all the same to it. How many a field holds is the count
+     * the range of its values already carries, so a statement reading the field only through that
+     * is no other statement.
      */
-    boolean readFromByOthers(String field) {
-        return readByOthers.contains(field);
+    boolean readBesides(Collection<InvariantStatement> built, String field) {
+        for (Reading each : readings) {
+            if (each.fields().contains(field) && !built.contains(each.statement())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether the record is shown to declare no rule at all: none is written and none was left
@@ -95,32 +106,43 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                 }
             }
         }
-        // Where the rules nothing is built for read from, whatever they say.
-        Set<String> readByOthers = new HashSet<>();
+        // Where every statement reads from, whatever it says and whether or not it was recognised.
+        List<Reading> readings = new ArrayList<>();
         for (InvariantStatement one : statements) {
+            Set<String> reads = new HashSet<>();
             switch (one) {
-                case InvariantStatement.Unread it -> readFrom(it.said(), fields, readByOthers);
+                case InvariantStatement.Unread it -> readFrom(it.said(), fields, reads);
                 case InvariantStatement.Compares it -> {
-                    readFrom(it.states().left(), fields, readByOthers);
-                    readFrom(it.states().right(), fields, readByOthers);
+                    readFrom(it.states().left(), fields, reads);
+                    readFrom(it.states().right(), fields, reads);
                 }
-                case InvariantStatement.Applies it -> {
-                    if (EntryHeld.read(it.call(), core -> core) == null) {
-                        readFrom(it.call(), fields, readByOthers);
-                    }
+                case InvariantStatement.Applies it -> readFrom(it.call(), fields, reads);
+                case InvariantStatement.HoldsAnEntry it -> {
+                    readFrom(it.held().container(), fields, reads);
+                    readFrom(it.held().key(), fields, reads);
                 }
-                case InvariantStatement.HoldsAnEntry _, InvariantStatement.BalancesSides _ -> { }
+                case InvariantStatement.BalancesSides it -> readFrom(it.balanced().list(), fields,
+                        reads);
             }
+            readings.add(new Reading(one, Set.copyOf(reads)));
         }
         return new RecordRules(Map.copyOf(fields), List.copyOf(statements), declared, unread,
-                everyRuleReached, Set.copyOf(readByOthers));
+                everyRuleReached, List.copyOf(readings));
     }
 
-    /** The fields of the record {@code e} reads, other than as the thing a count is taken of. */
+    /**
+     * The fields of the record {@code e} reads, other than as the thing a count is taken of.
+     *
+     * <p>A count is left out only of a field itself: the count of a map made from the field
+     * ({@code Map.size(Map.remove(0, rates))}) depends on what the field holds, and is read from
+     * it.
+     */
     private static void readFrom(Core e, Map<BindingId, String> fields, Set<String> out) {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.PreservedCall call
-                && NumericMeasures.isMeasure(call.operation())) {
+                && NumericMeasures.isMeasure(call.operation())
+                && call.args().stream().allMatch(arg -> Core.withoutStanding(arg)
+                        instanceof Core.Read read && fields.containsKey(read.binding()))) {
             return;
         }
         if (node instanceof Core.Read read && fields.containsKey(read.binding())) {

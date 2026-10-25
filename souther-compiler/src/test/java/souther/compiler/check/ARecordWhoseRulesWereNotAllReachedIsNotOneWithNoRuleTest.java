@@ -6,7 +6,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,7 +23,7 @@ class ARecordWhoseRulesWereNotAllReachedIsNotOneWithNoRuleTest {
 
     @Test
     void nothingListedAndNothingLeftOutIsNoRule() {
-        RecordRules none = new RecordRules(Map.of(), List.of(), 0, 0, true, Set.of());
+        RecordRules none = new RecordRules(Map.of(), List.of(), 0, 0, true, List.of());
 
         assertTrue(none.declaresNothing());
         assertTrue(none.readInFull());
@@ -32,7 +31,7 @@ class ARecordWhoseRulesWereNotAllReachedIsNotOneWithNoRuleTest {
 
     @Test
     void nothingListedBecauseTheRulesWereNotReachedIsNotNoRule() {
-        RecordRules unreached = new RecordRules(Map.of(), List.of(), 0, 0, false, Set.of());
+        RecordRules unreached = new RecordRules(Map.of(), List.of(), 0, 0, false, List.of());
 
         assertFalse(unreached.declaresNothing());
         assertFalse(unreached.readInFull());
@@ -40,7 +39,7 @@ class ARecordWhoseRulesWereNotAllReachedIsNotOneWithNoRuleTest {
 
     @Test
     void aRuleNothingWasMadeOfIsARuleAndIsNotRead() {
-        RecordRules unread = new RecordRules(Map.of(), List.of(), 1, 1, true, Set.of());
+        RecordRules unread = new RecordRules(Map.of(), List.of(), 1, 1, true, List.of());
 
         assertFalse(unread.declaresNothing());
         assertFalse(unread.readInFull());

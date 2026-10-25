@@ -179,6 +179,51 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     }
 
     /**
+     * A count taken of a map made from the field is not the count the field's range carries: the
+     * map without the key nought has as many entries as the field only where it holds no such
+     * entry, so the rule says the key is not nought.
+     */
+    @Test
+    void aCountOfTheMapWithAnEntryRemovedIsARuleReadingTheMap() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { key: Int, rates: Map<Int, Int> }
+                    invariant held = Map.containsKey(key, rates)
+                    invariant noZero = Map.size(Map.remove(0, rates)) == Map.size(rates)
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                """);
+
+        assertFalse(left.get("n.key").isEmpty(), "a key of nought has no map beside it");
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /**
+     * A rule of the shape the builders know, asked of a map made from the field, is recognised and
+     * not built for: the map it asks the entry of is not a field. That it was recognised does not
+     * make it a rule the field is built holding.
+     */
+    @Test
+    void aRuleRecognisedAndNotBuiltForIsStillARuleReadingTheMap() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { key: Int, rates: Map<Int, Int> }
+                    invariant held = Map.containsKey(key, rates)
+                    invariant one = Map.size(rates) == 1
+                    invariant required = Map.containsKey(1, Map.remove(0, rates))
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                """);
+
+        assertFalse(left.get("n.key").isEmpty(), "only the key one is held by such a map");
+        assertFalse(left.get("n.rates").isEmpty());
+    }
+
+    /**
      * A key that is not a field of the record is a key the builders are never told of, because a
      * record's fields are chosen one at a time and a key is chosen before the map it is a key of.
      * The rule is left standing rather than called read.
