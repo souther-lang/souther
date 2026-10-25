@@ -621,7 +621,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " runs out, and says so as the search stopped at that figure"),
             Map.entry("souther.compiler.partition.Generator$CasesUnderARule#<init>()V",
                     "begins the one count of the cases planned under for a rule above"),
-            Map.entry("souther.compiler.partition.Partitions$RulesAround$Budget#<init>()V",
+            Map.entry("souther.compiler.partition.Partitions$RulesAround$Shared#<init>()V",
                     "begins the one count of the records composed under a rule above, for a value"
                             + " built whole"),
             Map.entry("souther.compiler.partition.Partitions#composed("

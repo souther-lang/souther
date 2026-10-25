@@ -2102,11 +2102,16 @@ public final class Partitions {
         }
         Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
-        Map<RuleKey, Count> settled = new LinkedHashMap<>();
+        // What is settled is kept once for everything built under the outermost record, by where
+        // it stands, and every value's rules are asked about it as they name those places. Kept
+        // beside each record's rules, a number chosen in an inner record would be one the rules
+        // outside it were never told.
+        RulesAround within = around.sharing();
+        within.forgetUnder(within.here());
+        FieldDomains rules = FieldDomains.of(rulesOn, reading);
         // The record's rules, read once. Each field is then chosen against this with the fields
         // before it settled into it, which is what a settling states — a reading per settled field
         // would be paying for every clause again to arrive where the first one already is.
-        FieldDomains rules = FieldDomains.of(rulesOn, reading);
         FieldDomains.Composing left = rules.composing(Map.of());
         // The places the record's own rules read, which a value built at one of its fields is held
         // to where they are under the field.
@@ -2120,16 +2125,17 @@ public final class Partitions {
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
                 FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()))
-                        .meet(around.at(field.getKey()));
+                        .meet(within.at(field.getKey()));
                 // A field the rules leave no value at leaves the record none, which is settled
                 // here and said as itself: nothing was built and nothing was tried.
                 if (limits.leavesNothing()) {
+                    within.forgetUnder(within.here());
                     return new FieldsChosen(null, met, true);
                 }
                 // What every value around this one, and this one's own rules, say of the places
                 // under the field: the value there is built held to them as well as to its own
                 // declaration's rules, by whatever builds a value of its type.
-                RulesAround inner = around.aroundTheField(read, left, field.getKey());
+                RulesAround inner = within.aroundTheField(read, rules, field.getKey());
                 // The first value, with what was met in front of it: a field's later values are
                 // values nothing here takes.
                 Proposals stands = Witnesses.firstWhatThePlaceAdmits(
@@ -2139,6 +2145,7 @@ public final class Partitions {
                         .firstOf(1);
                 met = met.and(stands.met());
                 if (stands.isEmpty()) {
+                    within.forgetUnder(within.here());
                     return new FieldsChosen(null, met);
                 }
                 at = stands.values().getFirst();
@@ -2146,11 +2153,11 @@ public final class Partitions {
             chosen.put(field.getKey(), at);
             // Settled, and the rules read again with it in them. A field chosen against the rules as
             // they stand before anything is settled is chosen against `a < b` with `a` still open,
-            // which leaves `b` its whole range and takes the bottom of it.
-            if (Counts.writtenIn(at.value()) instanceof Count count) {
-                settled.put(RuleKey.of(field.getKey()), count);
-                left = rules.composing(FieldDomains.atValues(settled));
-            }
+            // which leaves `b` its whole range and takes the bottom of it. Every number the value
+            // writes, wherever in it, from the value chosen and not from what was tried on the way
+            // to it.
+            Counts.writtenUnder(within.here().then(field.getKey()), at.value(), within::settle);
+            left = rules.composing(FieldDomains.atValues(within.settledUnder(within.here())));
         }
         return new FieldsChosen(chosen, met);
     }
@@ -2166,16 +2173,20 @@ public final class Partitions {
      * value's rules out here come down, and a record built under them is built field by field held
      * to what each leaves the field ({@link #at}).
      *
-     * <p>One count for everything built under them. A record built here is built afresh rather than
-     * borrowed from the revision, and under nested sums the cases tried multiply — so each is
-     * counted ({@link #spend}) against the count the outermost record began, and the figure stops
-     * the lot.
+     * <p>One state for everything built under the outermost record ({@link Shared}): the count of
+     * records built afresh, and what has been settled so far by where it stands. A record built
+     * here is built afresh rather than borrowed from the revision, and under nested sums the cases
+     * tried multiply — so each is counted ({@link #spend}) against the count the outermost record
+     * began, and the figure stops the lot. And a number chosen anywhere in the value is told to
+     * the rules of every value around it as they name its place ({@link #at}), so a rule relating
+     * two fields of an inner record is asked about the second with the first in it.
      *
      * @param each   every value around, outermost first
      * @param here   where the value being built sits, relative to the places those values stand at
-     * @param budget what is left of the count, or null where nothing around has begun one
+     * @param shared what is shared by everything built under the outermost record, or null where
+     *               none has begun to be built
      */
-    record RulesAround(List<Around> each, TermPath here, Budget budget) {
+    record RulesAround(List<Around> each, TermPath here, Shared shared) {
 
         /** Nothing around: a value built on its own, at a place named for nothing in particular. */
         static final RulesAround NONE = new RulesAround(List.of(), TermPath.of("value"), null);
@@ -2191,17 +2202,27 @@ public final class Partitions {
          * translation from a place to a name, which has one home ({@link RuleAddress#of}): the
          * fields on the way are names its rules write, and a case on the way is not.
          *
-         * @param read the places that value's rules read, which say whether one reads under a
-         *             place ({@link PlacesTheRulesRead})
-         * @param left that value's rules with what was settled in it taken on
-         * @param root where that value stands
+         * @param read  the places that value's rules read, which say whether one reads under a
+         *              place ({@link PlacesTheRulesRead})
+         * @param rules that value's rules, which are asked what is settled when a field is chosen
+         * @param root  where that value stands
          */
-        record Around(PlacesTheRulesRead read, FieldDomains.Composing left, TermPath root) {}
+        record Around(PlacesTheRulesRead read, FieldDomains rules, TermPath root) {}
 
-        /** What is left of the one count, shared by everything built under one record. */
-        static final class Budget {
+        /**
+         * What is shared by everything built under the outermost record: what is left of the one
+         * count, and the numbers settled so far by where each stands.
+         */
+        static final class Shared {
 
             private int left = CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum();
+
+            private final Map<TermPath, Count> settled = new LinkedHashMap<>();
+        }
+
+        /** This, with the state of the outermost record begun where nothing has begun it. */
+        RulesAround sharing() {
+            return shared != null ? this : new RulesAround(each, here, new Shared());
         }
 
         /** What every value around leaves the field {@code field} of the record being built, met. */
@@ -2210,7 +2231,9 @@ public final class Partitions {
             for (Around one : each) {
                 RuleAddress named = RuleAddress.of(one.root(), here.then(field));
                 if (named != null) {
-                    out = out.meet(one.left().at(named.key()));
+                    out = out.meet(one.rules()
+                            .composing(FieldDomains.atValues(settledUnder(one.root())))
+                            .at(named.key()));
                 }
             }
             return out;
@@ -2229,22 +2252,47 @@ public final class Partitions {
 
         /** Whether the count has one left for another value built here. */
         boolean hasLeft() {
-            return budget != null && budget.left > 0;
+            return shared != null && shared.left > 0;
         }
 
         /** Takes one from the count, for a value built here that the rules left room for. */
         void spend() {
             if (hasLeft()) {
-                budget.left--;
+                shared.left--;
+            }
+        }
+
+        /** Takes in that the number {@code count} stands at {@code path}. */
+        void settle(TermPath path, Count count) {
+            shared.settled.put(path, count);
+        }
+
+        /** What is settled under {@code root}, by the name a rule of the value there gives it. */
+        Map<RuleKey, Count> settledUnder(TermPath root) {
+            Map<RuleKey, Count> out = new LinkedHashMap<>();
+            if (shared != null) {
+                shared.settled.forEach((path, count) -> {
+                    RuleAddress named = RuleAddress.of(root, path);
+                    if (named != null) {
+                        out.put(named.key(), count);
+                    }
+                });
+            }
+            return out;
+        }
+
+        /** Takes back what was settled under {@code root}: the value there is built afresh. */
+        void forgetUnder(TermPath root) {
+            if (shared != null) {
+                shared.settled.keySet().removeIf(path -> RuleAddress.of(root, path) != null);
             }
         }
 
         /** These and a record's own rules, around the record's field {@code field}. */
-        RulesAround aroundTheField(PlacesTheRulesRead read, FieldDomains.Composing left,
-                                   String field) {
+        RulesAround aroundTheField(PlacesTheRulesRead read, FieldDomains rules, String field) {
             List<Around> out = new ArrayList<>(each);
-            out.add(new Around(read, left, here));
-            return new RulesAround(out, here.then(field), budget != null ? budget : new Budget());
+            out.add(new Around(read, rules, here));
+            return new RulesAround(out, here.then(field), shared);
         }
     }
 

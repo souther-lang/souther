@@ -10,6 +10,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -297,6 +299,64 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         String block = blockOf(WRAPPED_SUM);
 
         assertTrue(block.contains("Wrapped(A { limit = 101"), block);
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /**
+     * A rule above that relates two fields of an inner record holds them together when the outer
+     * record is built whole: what the first field came to is taken into the rule before the second
+     * is chosen.
+     */
+    @Test
+    void aRuleAboveRelatingTwoFieldsOfAnInnerRecordHoldsThemTogether() {
+        String block = blockOf("""
+                module example.gap
+
+                data Inner = { a: Int, b: Int }
+                data Holder = { inner: Inner }
+                    invariant adjacent = inner.b == inner.a + 1
+                data Holders = List<Holder>
+                    invariant nonEmpty = List.length(value) >= 1
+
+                behavior f : (hs: Holders, n: Int) -> Bool
+                let f (hs, n) = if n >= 3 then true else false
+                """);
+
+        Matcher inner = Pattern.compile("Inner \\{ a = (-?\\d+), b = (-?\\d+) \\}").matcher(block);
+        assertTrue(inner.find(), block);
+        do {
+            assertEquals(Long.parseLong(inner.group(1)) + 1, Long.parseLong(inner.group(2)), block);
+        } while (inner.find());
+        assertFalse(block.contains("no row for"), block);
+    }
+
+    /**
+     * The same where the rule above relates a field of each of two inner records: what the first
+     * record came to is in the rule when the second is built.
+     */
+    @Test
+    void aRuleAboveRelatingFieldsOfTwoInnerRecordsHoldsThemTogether() {
+        String block = blockOf("""
+                module example.gap
+
+                data Left = { a: Int }
+                data Right = { b: Int }
+                data Holder = { left: Left, right: Right }
+                    invariant apart = right.b == left.a + 5
+                data Holders = List<Holder>
+                    invariant nonEmpty = List.length(value) >= 1
+
+                behavior f : (hs: Holders, n: Int) -> Bool
+                let f (hs, n) = if n >= 3 then true else false
+                """);
+
+        Matcher both = Pattern.compile(
+                "left = Left \\{ a = (-?\\d+) \\}, right = Right \\{ b = (-?\\d+) \\}")
+                .matcher(block);
+        assertTrue(both.find(), block);
+        do {
+            assertEquals(Long.parseLong(both.group(1)) + 5, Long.parseLong(both.group(2)), block);
+        } while (both.find());
         assertFalse(block.contains("no row for"), block);
     }
 
