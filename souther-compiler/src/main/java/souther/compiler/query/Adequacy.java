@@ -3777,15 +3777,18 @@ public final class Adequacy {
 
     /**
      * How near the attempts of one pair of numbers came: first by the rows built that no judge
-     * refused, then by the rows built. Two counts compared in turn, since the number of attempts
-     * differs from pair to pair and no weight of one count makes the other a tie-break for every
-     * pair.
+     * refused, then by whether some search a figure stopped is among them, then by the rows built.
+     * Compared in turn, since the number of attempts differs from pair to pair and no weight of
+     * one count makes the next a tie-break for every pair. A search a figure stopped is what a
+     * pair of rows all refused must not hide.
      */
-    record Nearness(long reached, long built) implements Comparable<Nearness> {
+    record Nearness(long reached, boolean stoppedShort, long built)
+            implements Comparable<Nearness> {
 
         static Nearness of(List<Generator.BoundaryAttempt> attempts) {
             return new Nearness(
                     attempts.stream().filter(Adequacy::builtAndNotRefused).count(),
+                    attempts.stream().anyMatch(Generator.BoundaryAttempt::stoppedShort),
                     attempts.stream().filter(Generator.BoundaryAttempt.Built.class::isInstance)
                             .count());
         }
@@ -3793,7 +3796,11 @@ public final class Adequacy {
         @Override
         public int compareTo(Nearness other) {
             int byReached = Long.compare(reached, other.reached);
-            return byReached != 0 ? byReached : Long.compare(built, other.built);
+            if (byReached != 0) {
+                return byReached;
+            }
+            int byStopped = Boolean.compare(stoppedShort, other.stoppedShort);
+            return byStopped != 0 ? byStopped : Long.compare(built, other.built);
         }
     }
 

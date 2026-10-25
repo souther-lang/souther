@@ -5107,6 +5107,14 @@ public final class Generator {
         CompositionAccount unrepresented();
 
         /**
+         * Whether this is a search that a figure or a plan stopped, which left something unlooked
+         * at: no row, and not the model refusing every row it was shown.
+         */
+        default boolean stoppedShort() {
+            return this instanceof NoRow && !(this instanceof Unresolved);
+        }
+
+        /**
          * This attempt as it came back, with {@code account} said of it in the place of the one it
          * came back with.
          *
@@ -5533,17 +5541,30 @@ public final class Generator {
     /**
      * The attempt that stands where none of these came back whole and reached: the first row built
      * that a judge did not refuse, short of the way as it may be, since the run of a row that took
-     * what was asked took it however it was composed; otherwise the first row built, which says
-     * where its run went; otherwise {@code none}.
+     * what was asked took it however it was composed; otherwise, where only rows a judge refused
+     * were built, the first search a figure or a plan stopped, since a row refused is no answer
+     * that nothing was left to find; otherwise the first row built, which says where its run
+     * went; otherwise {@code none}.
      */
-    private static BoundaryAttempt heldBack(List<BoundaryAttempt> builtShort,
+    static BoundaryAttempt heldBack(List<BoundaryAttempt> builtShort,
                                             BoundaryAttempt none) {
+        BoundaryAttempt refused = null;
+        BoundaryAttempt stopped = null;
         for (BoundaryAttempt each : builtShort) {
-            if (each instanceof BoundaryAttempt.Built built && !built.refused()) {
+            if (!(each instanceof BoundaryAttempt.Built built)) {
+                if (stopped == null) {
+                    stopped = each;
+                }
+            } else if (!built.refused()) {
                 return each;
+            } else if (refused == null) {
+                refused = each;
             }
         }
-        return builtShort.isEmpty() ? none : builtShort.getFirst();
+        if (refused == null) {
+            return none;
+        }
+        return stopped != null ? stopped : refused;
     }
 
     /**
@@ -5558,10 +5579,16 @@ public final class Generator {
      * <p>A row refused is a row built, and is held back like a row built short: the next way of
      * composing may reach a row the judge accepts, and a search that stopped at the first row
      * built would never look.
+     *
+     * <p>A search a figure or a plan stopped is held back too, beside them, since it is what a
+     * row refused must not hide ({@link #heldBack}).
      */
     static boolean builtLeavingNothingOut(BoundaryAttempt attempt,
                                           List<BoundaryAttempt> builtShort) {
         if (!(attempt instanceof BoundaryAttempt.Built built)) {
+            if (attempt.stoppedShort()) {
+                builtShort.add(attempt);
+            }
             return false;
         }
         if (!built.refused() && built.unrepresented().onTheWay().isEmpty()
@@ -5878,7 +5905,9 @@ public final class Generator {
         // untried, by its figure or under a case nobody read, reached no row to say nothing was
         // left to find, so it comes to what that walk came to and not to a row.
         boolean refusedOnly = !refusedKept.isEmpty() && preferring.takenIsRefused()
-                && aRefusedRowStands(walked, under.foundOut(walked));
+                && aRefusedRowStands(walked, whatTheWalkLeftUnlookedAt(under.foundOut(walked),
+                        cameToNothing, passedFound[0], preferring.untried()),
+                        cameToNothing.stream().anyMatch(each -> !each.lookedAtWhole()));
         if (refusedOnly) {
             refusedKept.getFirst().toArray(composed);
         }
@@ -6018,8 +6047,26 @@ public final class Generator {
      * is no answer that nothing else was there to find; it comes to what that walk found out.
      */
     static boolean aRefusedRowStands(ContentsAsked.UnderTheCases.Walked walked,
-                                     SearchShortfall left) {
-        return walked == ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED && left.nothing();
+                                     SearchShortfall left, boolean aParameterWasNotLookedAtWhole) {
+        return walked == ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED && left.nothing()
+                && !aParameterWasNotLookedAtWhole;
+    }
+
+    /**
+     * What a walk over the ways under the cases left unlooked at, from every place it can be
+     * said: the ways not handed over, what the parameters of each way found out, what the rows
+     * passed over found out, and what the choice among rows left untried. The one value
+     * {@link WhatTheAlternativesCameTo} joins, so that a row refused is held to the same account
+     * as a walk that took no row.
+     */
+    private static SearchShortfall whatTheWalkLeftUnlookedAt(
+            SearchShortfall ways, List<ParameterCameToNothing> cameToNothing,
+            SearchShortfall passedOver, SearchShortfall untried) {
+        SearchShortfall left = ways.and(passedOver).and(untried);
+        for (ParameterCameToNothing each : cameToNothing) {
+            left = left.and(each.found());
+        }
+        return left;
     }
 
     /** The parameters a row writes a value for, in the order they are declared. */
@@ -6231,7 +6278,16 @@ public final class Generator {
      * @param here      the positions of it the caller had decided
      */
     private record ParameterCameToNothing(int parameter, Outcome tried, SearchShortfall found,
-                                          Map<TermPath, List<FixtureTemplate>> here) {}
+                                          Map<TermPath, List<FixtureTemplate>> here) {
+
+        /**
+         * Whether its search ran to the end of what it looked at and came to the word alone: a
+         * figure, a population, an offer short of a rule or a plan cut is a search that did not.
+         */
+        boolean lookedAtWhole() {
+            return tried instanceof Outcome.Unresolved && found.nothing();
+        }
+    }
 
     /**
      * What composing a row at a point in order came to, for a caller that may pass rows over: the

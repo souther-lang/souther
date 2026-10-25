@@ -52,8 +52,35 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
     @Test
     void aRefusedRowStandsOnlyWhereEveryWayUnderTheCasesWasTried() {
         assertTrue(Generator.aRefusedRowStands(
-                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED, SearchShortfall.NONE));
+                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED, SearchShortfall.NONE, false));
     }
+
+    /**
+     * A way under a case whose parameter's search was cut by a figure is a way the walk over the
+     * cases did finish, and what that search found out is not the walk's: the row refused does not
+     * stand over it.
+     */
+    @Test
+    void aRefusedRowDoesNotHideAParameterWhoseSearchWasNotLookedAtWhole() {
+        assertFalse(Generator.aRefusedRowStands(
+                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED, SearchShortfall.NONE, true));
+    }
+
+    @Test
+    void aSearchAFigureStoppedIsHeldBackBesideTheRowsRefused() {
+        List<Generator.BoundaryAttempt> held = new ArrayList<>();
+        Generator.BoundaryAttempt stopped = Generator.BoundaryAttempt.Unplanned.at(
+                "a rule of the decision", Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED),
+                CompositionAccount.NOTHING);
+        // Held back beside the row, whichever of them was reached first.
+
+        assertFalse(Generator.builtLeavingNothingOut(built(true), held));
+        assertFalse(Generator.builtLeavingNothingOut(stopped, held));
+
+        assertSame(stopped, Generator.heldBack(held, null),
+                "a row refused does not stand in the place of a search that was stopped");
+    }
+
 
     @Test
     void aRefusedRowDoesNotHideTheFigureThatEndedTheWalkOverTheCases() {
@@ -61,14 +88,14 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
                 Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)));
 
         assertFalse(Generator.aRefusedRowStands(
-                ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE, figure));
+                ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE, figure, false));
     }
 
     @Test
     void aRefusedRowDoesNotHideAWayUnderACaseNobodyRead() {
         assertFalse(Generator.aRefusedRowStands(
                 ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                SearchShortfall.NONE.unreadWhere(true)));
+                SearchShortfall.NONE.unreadWhere(true), false));
     }
 
     private static Generator.BoundaryAttempt built(boolean refused) {
