@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -46,6 +47,28 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
 
         assertFalse(Generator.builtLeavingNothingOut(none, held));
         assertTrue(held.isEmpty());
+    }
+
+    @Test
+    void aRefusedRowStandsOnlyWhereEveryWayUnderTheCasesWasTried() {
+        assertTrue(Generator.aRefusedRowStands(
+                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED, SearchShortfall.NONE));
+    }
+
+    @Test
+    void aRefusedRowDoesNotHideTheFigureThatEndedTheWalkOverTheCases() {
+        SearchShortfall figure = SearchShortfall.of(CompositionShortfall.of(
+                Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)));
+
+        assertFalse(Generator.aRefusedRowStands(
+                ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE, figure));
+    }
+
+    @Test
+    void aRefusedRowDoesNotHideAWayUnderACaseNobodyRead() {
+        assertFalse(Generator.aRefusedRowStands(
+                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
+                SearchShortfall.NONE.unreadWhere(true)));
     }
 
     private static Generator.BoundaryAttempt built(boolean refused) {

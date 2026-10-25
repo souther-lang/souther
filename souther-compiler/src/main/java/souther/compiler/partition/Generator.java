@@ -5148,6 +5148,11 @@ public final class Generator {
          * is a row and is no row the search was for, and whoever walks on past this attempt —
          * another way of writing the elements, another pair of numbers — goes on past it.
          *
+         * <p>A row refused is only ever returned by a walk that looked at everything there was to
+         * look at ({@link #aRefusedRowStands}): where a figure ended the walk, or a way was left
+         * unread, what comes back is what that walk came to, so that no layer above has a row
+         * refused to hold in the place of the figure.
+         *
          * @param refused whether the judge the walk was held to refused the row's run
          */
         record Built(GeneratedRow row, CompositionAccount unrepresented, boolean refused)
@@ -5868,10 +5873,12 @@ public final class Generator {
                 }
             }
         });
-        // No way reached a row the judge accepts and the walk was not stopped: the row it refused
-        // first is what comes back, built and marked refused.
-        boolean refusedOnly = walked != ContentsAsked.UnderTheCases.Walked.COMPOSED
-                && !refusedKept.isEmpty() && preferring.takenIsRefused();
+        // No way reached a row the judge accepts and every way there is was tried: the row it
+        // refused first is what comes back, built and marked refused. A walk that left ways
+        // untried, by its figure or under a case nobody read, reached no row to say nothing was
+        // left to find, so it comes to what that walk came to and not to a row.
+        boolean refusedOnly = !refusedKept.isEmpty() && preferring.takenIsRefused()
+                && aRefusedRowStands(walked, under.foundOut(walked));
         if (refusedOnly) {
             refusedKept.getFirst().toArray(composed);
         }
@@ -6002,6 +6009,17 @@ public final class Generator {
                     new GeneratedRow(List.of(new Purpose.ForAPoint(label)), inputs, answers),
                     where.unrepresented(), refusedOnly);
         };
+    }
+
+    /**
+     * Whether a row a judge refused may come back as the row of a walk over the ways under the
+     * cases: only when every way was tried and none was left unlooked at. A walk its figure ended,
+     * or one with a way under a case nobody read, did not look at every way, so a row it refused
+     * is no answer that nothing else was there to find; it comes to what that walk found out.
+     */
+    static boolean aRefusedRowStands(ContentsAsked.UnderTheCases.Walked walked,
+                                     SearchShortfall left) {
+        return walked == ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED && left.nothing();
     }
 
     /** The parameters a row writes a value for, in the order they are declared. */

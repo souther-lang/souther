@@ -26,6 +26,35 @@ class ARowAJudgeRefusedDoesNotEndTheLookingOverPairsOfNumbersTest {
         assertFalse(Adequacy.composedAgainstEverythingAsked(built(true)));
     }
 
+    /**
+     * A pair with one row accepted and one that built none stands nearer than a pair of five rows
+     * all refused, however many attempts each pair made.
+     */
+    @Test
+    void aPairThatReachedARowIsNearerThanOneThatOnlyBuiltMoreRefusedRows() {
+        List<Generator.BoundaryAttempt> reached = List.of(built(false), none());
+        List<Generator.BoundaryAttempt> refusedOnly = List.of(built(true), built(true), built(true),
+                built(true), built(true));
+
+        assertTrue(Adequacy.Nearness.of(reached).compareTo(Adequacy.Nearness.of(refusedOnly)) > 0);
+        assertTrue(Adequacy.Nearness.of(refusedOnly).compareTo(Adequacy.Nearness.of(reached)) < 0);
+    }
+
+    @Test
+    void withTheSameRowsReachedTheMoreBuiltIsNearer() {
+        List<Generator.BoundaryAttempt> more = List.of(built(false), built(true));
+        List<Generator.BoundaryAttempt> fewer = List.of(built(false), none());
+
+        assertTrue(Adequacy.Nearness.of(more).compareTo(Adequacy.Nearness.of(fewer)) > 0);
+    }
+
+    private static Generator.BoundaryAttempt none() {
+        return new Generator.BoundaryAttempt.Unresolved(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                CompositionAccount.NOTHING);
+    }
+
     private static Generator.BoundaryAttempt built(boolean refused) {
         return new Generator.BoundaryAttempt.Built(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint("a rule of the decision"), List.of()),

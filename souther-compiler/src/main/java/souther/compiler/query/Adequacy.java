@@ -3698,7 +3698,7 @@ public final class Adequacy {
                 // dependencies in that came with it: a row built whole is a row, and another way
                 // of standing in that came to nothing beside it takes nothing from it.
                 List<Generator.BoundaryAttempt> nearest = null;
-                long nearestBuilt = -1;
+                Nearness nearestNearness = null;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
                         InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf,
                                 ofTheRow);
@@ -3715,13 +3715,10 @@ public final class Adequacy {
                     // The pair that came nearest is the one with the most rows built that no judge
                     // refused, and then the most rows built: a refused row says where its run went
                     // and is no row the search was for.
-                    long built = out.stream()
-                            .filter(Generator.BoundaryAttempt.Built.class::isInstance).count();
-                    long reached = out.stream().filter(Adequacy::builtAndNotRefused).count();
-                    long nearness = reached * (out.size() + 1) + built;
-                    if (nearness > nearestBuilt) {
+                    Nearness nearness = Nearness.of(out);
+                    if (nearest == null || nearness.compareTo(nearestNearness) > 0) {
                         nearest = out;
-                        nearestBuilt = nearness;
+                        nearestNearness = nearness;
                     }
                 }
                 // No pair composed a row whole. What the pair that came nearest built stays, since
@@ -3776,6 +3773,28 @@ public final class Adequacy {
                                 Generator.UnresolvedCombination.Reason.wordFor(figures)),
                         CompositionShortfall.of(figures), said)
                 : attempt.withAccount(said);
+    }
+
+    /**
+     * How near the attempts of one pair of numbers came: first by the rows built that no judge
+     * refused, then by the rows built. Two counts compared in turn, since the number of attempts
+     * differs from pair to pair and no weight of one count makes the other a tie-break for every
+     * pair.
+     */
+    record Nearness(long reached, long built) implements Comparable<Nearness> {
+
+        static Nearness of(List<Generator.BoundaryAttempt> attempts) {
+            return new Nearness(
+                    attempts.stream().filter(Adequacy::builtAndNotRefused).count(),
+                    attempts.stream().filter(Generator.BoundaryAttempt.Built.class::isInstance)
+                            .count());
+        }
+
+        @Override
+        public int compareTo(Nearness other) {
+            int byReached = Long.compare(reached, other.reached);
+            return byReached != 0 ? byReached : Long.compare(built, other.built);
+        }
     }
 
     /**
