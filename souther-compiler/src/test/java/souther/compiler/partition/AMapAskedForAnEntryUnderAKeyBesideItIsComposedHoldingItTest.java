@@ -215,6 +215,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
         TypeSymbol.AtModule record = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
-        return Partitions.fieldsOf(record, record, reading, Set.of(), given);
+        return Partitions.fieldsOf(record, record, reading, Set.of(), given,
+                Partitions.RulesAround.NONE);
     }
 }

@@ -112,6 +112,29 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     }
 
     /**
+     * A rule of the record that was listed and nothing was made of may ask the same map the
+     * opposite: {@code key} held in the map and the key {@code 0} not, which no map beside a key of
+     * nought satisfies. Listing a rule is not reading it, and the entry asked for is not built
+     * beside it.
+     */
+    @Test
+    void aRuleOfTheRecordNothingWasMadeOfLeavesTheMapUnanswered() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data N = { key: Int, rates: Map<Int, Int> }
+                    invariant held = Map.containsKey(key, rates)
+                    invariant notNought = Bool.not(Map.containsKey(0, rates))
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+                """);
+
+        assertFalse(left.get("n.key").isEmpty(), "a key of nought has no map beside it");
+        assertFalse(left.get("n.rates").isEmpty(), "a rule asking the map the opposite is unread");
+    }
+
+    /**
      * A key that is not a field of the record is a key the builders are never told of, because a
      * record's fields are chosen one at a time and a key is chosen before the map it is a key of.
      * The rule is left standing rather than called read.

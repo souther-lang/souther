@@ -27,7 +27,8 @@ import java.util.Map;
  * @param statements       every statement of every conjunct, the ones nothing was made of included
  * @param declared         how many conjuncts the record's rules are written as, whether or not any
  *                         of them was read
- * @param unread           how many of those no statement was made of at all
+ * @param unread           how many of those nothing was made of: a rule that left no statement,
+ *                         and a statement that is only a statement that something was written
  * @param everyRuleReached whether every declaration whose rules govern the record was expanded
  */
 record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements,
@@ -71,6 +72,14 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
                     unread++;
                 } else {
                     statements.addAll(states);
+                    // The denial of a rule of a kind something is built for: it asks the opposite
+                    // of what the rules beside it are built to, and was read as nothing. The
+                    // statements this reading has no form for besides are most comparisons, which
+                    // ask nothing of what is built and are not counted.
+                    unread += (int) states.stream()
+                            .filter(one -> one instanceof InvariantStatement.Unread it
+                                    && it.denies())
+                            .count();
                 }
             }
         }

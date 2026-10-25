@@ -2388,7 +2388,8 @@ public final class Partitions {
             Proposals composed = amount == null ? Proposals.NONE
                     : composed(record, rulesOn, reading, Set.of(),
                             Map.of(rule.field(), FixtureTemplate.unitCase(atOne ? one : other),
-                                    rule.number().getFirst(), amount));
+                                    rule.number().getFirst(), amount),
+                            RulesAround.NONE);
             FixtureTemplate each = composed.isEmpty() ? null
                     : WornNames.under(elementView.wrappers(), composed.values().getFirst(), source);
             if (each == null) {
