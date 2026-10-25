@@ -227,7 +227,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 Requirements.NONE, ConstructionPlan.ContentsComposed.NONE,
                 (at, _) -> ConstructionPlan.ItMayHold.counting(at.equals(bag)
                         ? new DeclaredBounds.CountRange(0, 0)
-                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE)));
+                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE)), _ -> false);
 
         assertInstanceOf(ConstructionPlan.ModelRefusal.NoRoom.class,
                 assertInstanceOf(ConstructionPlan.Result.Refused.class, asked,
@@ -252,7 +252,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 ScopedDeclarations.sumsOf(symbolsOf(BESIDE_A_LIST)),
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         TermPath.of("query").then("item").then("bag").element()),
-                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY);
+                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         assertEquals(TermPath.of("query").then("item").then("method"),
                 assertInstanceOf(ConstructionPlan.Result.Unnarrowed.class, asked,
@@ -277,7 +277,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 ScopedDeclarations.wrapsOf(symbolsOf(source)), symbolsOf(source),
                 ScopedDeclarations.kindsOf(symbolsOf(source)),
                 ScopedDeclarations.sumsOf(symbolsOf(source)), decided, Requirements.NONE,
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
     }
 
     private static Type typeOf(String source) {

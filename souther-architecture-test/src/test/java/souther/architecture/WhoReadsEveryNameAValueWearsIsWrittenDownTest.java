@@ -124,6 +124,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ILjava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;)V",
                     THE_NAMES),
             row(CHECK + "NewtypeInners", "terminal", "(" + TYPE + ")" + TYPE, THE_SPINE),
+            row(CHECK + "PlacesTheRulesRead", "of",
+                    "(" + TYPE + SOURCE + ")L" + CHECK + "PlacesTheRulesRead;", THE_POSITION),
             row(TYPE_OPS, "newtypeChain", "(" + TYPE + INNERS + ")Ljava/util/List;", THE_SPINE),
             row(TYPE_VIEW, "asWritten",
                     "(" + TYPE + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
@@ -179,7 +181,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + INNERS + SYMBOLS + KINDS + SUMS
                             + "ILjava/util/Set;L" + INPUTS + "Requirements;L" + PARTITION
                             + "ConstructionPlan$ContentsComposed;L" + PARTITION
-                            + "ConstructionPlan$WhatItMayHold;)L" + PARTITION
+                            + "ConstructionPlan$WhatItMayHold;L" + PARTITION
+                            + "ConstructionPlan$RulesUnder;)L" + PARTITION
                             + "ConstructionPlan$NodeResult;",
                     THE_POSITION),
             row(PARTITION + "ContainersAddingUp", "composedThrough",
@@ -235,7 +238,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "patternsOfAPiece",
                     "(" + TYPE + CONTEXT + ")Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "representativesHolding",
-                    "(" + TYPE + CONTEXT + LIMITS + "Ljava/util/Set;)" + PROPOSALS,
+                    "(" + TYPE + CONTEXT + LIMITS + "Ljava/util/Set;L" + PARTITION
+                            + "Partitions$RulesAround;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
@@ -281,8 +285,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Witnesses", "placed",
-                    "(" + TYPE + ADMITTED + CONTEXT + "Ljava/util/Set;)L" + PARTITION
-                            + "Witnesses$Placed;",
+                    "(" + TYPE + ADMITTED + CONTEXT + "Ljava/util/Set;L" + PARTITION
+                            + "Partitions$RulesAround;)L" + PARTITION + "Witnesses$Placed;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
                     "(" + TYPE + CONTEXT + ")Ljava/util/function/IntFunction;",

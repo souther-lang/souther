@@ -22,6 +22,7 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -260,6 +261,19 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
             return here;
         }
         NumericDomain.Bounds outer = alsoReaching.outer().leftAt(above, kind);
+        return here == null ? outer : outer == null ? here : here.meet(outer);
+    }
+
+    /**
+     * What the order leaves the position at {@code path}, or null where no rule of it stops the
+     * position: this value's own, met with what it leaves the value this was narrowed out of, as
+     * {@link #admits} meets what each admits. Whatever shape the meet comes to — one run, runs
+     * apart, or none — is the answer.
+     */
+    OrderedRuns orderedRegionAt(TermPath path) {
+        OrderedRuns here = rules.orderedRegionAt(under(path));
+        TermPath above = alsoAt(path);
+        OrderedRuns outer = above == null ? null : alsoReaching.outer().orderedRegionAt(above);
         return here == null ? outer : outer == null ? here : here.meet(outer);
     }
 

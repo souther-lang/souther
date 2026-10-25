@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -30,7 +31,7 @@ import java.util.Set;
 record ReadPosition(TermPath path, TypeView view, List<PositionBounds> bounds,
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
-                    ObligationDomain obligations, AdmissibleSet admitted,
+                    ObligationDomain obligations, AdmissibleSet admitted, OrderedRuns orderedRegion,
                     List<RuleWithoutALine> rulesWithoutALine,
                     List<EndLeftOpen> endsLeftOpen,
                     List<StandingQuestion> unansweredQuestions,

@@ -485,7 +485,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
-                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/List;Lsouther/compiler/values/ValueSet;"
                             + "Ljava/util/Set;Lsouther/compiler/numeric/UsualPlace;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "says in what it hands back that a run held more members than it offered, by"
@@ -606,6 +606,33 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$ValueTaking;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the same bound over one pass of the assignments"),
+            Map.entry("souther.compiler.partition.Generator#valueAtOnce("
+                            + "Lsouther/compiler/partition/MeasuredInput;I"
+                            + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;"
+                            + "Lsouther/compiler/inputs/Requirements;"
+                            + "Lsouther/compiler/partition/Generator$Handed;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/Generator$FoundOut;"
+                            + "Lsouther/compiler/partition/Generator$ValueTaking;"
+                            + "[Lsouther/compiler/partition/Generator$Composing;"
+                            + "Lsouther/compiler/partition/Generator$CasesUnderARule;)"
+                            + "Lsouther/compiler/partition/Generator$Outcome;",
+                    "stops planning under the cases a rule above names a field of where the count"
+                            + " runs out, and says so as the search stopped at that figure"),
+            Map.entry("souther.compiler.partition.Generator$CasesUnderARule#<init>()V",
+                    "begins the one count of the cases planned under for a rule above"),
+            Map.entry("souther.compiler.partition.Partitions$RulesAround$Shared#<init>()V",
+                    "begins the one count of the records composed under a rule above, for a value"
+                            + " built whole"),
+            Map.entry("souther.compiler.partition.Partitions#composed("
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + "Lsouther/compiler/check/RuleReadingContext;"
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/partition/Partitions$RulesAround;)"
+                            + "Lsouther/compiler/partition/Proposals;",
+                    "stops composing a record a rule above reads under where the count runs out,"
+                            + " and says so as the figure"),
             Map.entry("souther.compiler.partition.ConstructionPlan#node("
                             + "Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/inputs/TermPath;"
@@ -616,7 +643,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"
                             + "Lsouther/compiler/partition/ConstructionPlan$ContentsComposed;"
-                            + "Lsouther/compiler/partition/ConstructionPlan$WhatItMayHold;)"
+                            + "Lsouther/compiler/partition/ConstructionPlan$WhatItMayHold;"
+                            + "Lsouther/compiler/partition/ConstructionPlan$RulesUnder;)"
                             + "Lsouther/compiler/partition/ConstructionPlan$NodeResult;",
                     "stops descending where a value is still made of positions, and says which"
                             + " figure — on the position where it stopped, or as the whole plan"

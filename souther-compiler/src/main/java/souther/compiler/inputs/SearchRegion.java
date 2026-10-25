@@ -5,6 +5,7 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
@@ -234,6 +235,19 @@ public interface SearchRegion {
      */
     default HeldClass classAt(NumericTerm.ValueOf place) {
         return HeldClass.NONE;
+    }
+
+    /**
+     * What the order leaves the value at {@code place} by its declarations — one run, runs apart,
+     * or none — or null where no rule of the order stops it ({@link Position#orderedRegion}).
+     *
+     * <p>{@link #projectionOf} may be wider, and a search choosing the value is held to this as
+     * well: a value in a gap between two runs is one every alternative refuses, and a value where
+     * this holds nothing is one no rule admits. A region that reads no declarations says nothing of
+     * it, which is what the default is.
+     */
+    default OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
+        return null;
     }
 
     /**
