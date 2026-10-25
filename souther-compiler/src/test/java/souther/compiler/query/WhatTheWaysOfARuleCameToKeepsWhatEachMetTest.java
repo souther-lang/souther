@@ -141,6 +141,45 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
                 "a row was composed and run, which says more of the rule than nothing to try");
     }
 
+    /**
+     * A row the judge refused is a row built and no row the search was for: beside a way that
+     * left something unlooked at, that is what the rule came to.
+     */
+    @Test
+    void aRowRefusedDoesNotHideAWayThatStoppedShort() {
+        Generator.BoundaryAttempt.NoRow stopped =
+                stoppedAt(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);
+        for (List<Generator.BoundaryAttempt> ways : List.of(
+                List.of(refused(), stopped), List.of(stopped, refused()))) {
+            RuleSettlement settled = cameTo(ways);
+
+            assertInstanceOf(RuleRequirement.Unsettled.NothingWasComposedToTry.class,
+                    settled.requirement(), "the figure is what the rule came to");
+            assertEquals(List.of(RuleSearch.Came.of(stopped.came())),
+                    settled.synthesisShortfalls());
+        }
+    }
+
+    @Test
+    void aWayThatLookedAtEverythingDoesNotHideARowRefused() {
+        RuleSettlement settled = cameTo(List.of(refused(), new Generator.BoundaryAttempt.Unresolved(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
+                CompositionAccount.NOTHING)));
+
+        assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
+                settled.requirement(), "where its run went is what can be told");
+    }
+
+    @Test
+    void aRowAcceptedIsTheAnswerBesideAWayThatStoppedShortAndARowRefused() {
+        RuleSettlement settled = cameTo(List.of(refused(),
+                stoppedAt(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), built()));
+
+        assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
+                settled.requirement());
+    }
+
     /** And no way at all is the classes not linking, and says so. */
     @Test
     void noWayAtAllIsTheClassesNotLinking() {
@@ -188,6 +227,12 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
         return new OnTheWay.Declined(condition,
                 new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition),
                 new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
+    }
+
+    private static Generator.BoundaryAttempt refused() {
+        return new Generator.BoundaryAttempt.Built(new Generator.GeneratedRow(
+                new Generator.Purpose.ForAPoint("a rule of the decision"), List.of()),
+                CompositionAccount.NOTHING, true);
     }
 
     private static Generator.BoundaryAttempt built() {

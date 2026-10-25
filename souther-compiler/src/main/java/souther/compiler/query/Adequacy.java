@@ -3264,9 +3264,12 @@ public final class Adequacy {
                 Function<Generator.BoundaryAttempt.Built, RuleSettlement> run,
                 WayToTheBorder way, AnswersDemanded demands) {
             RuleSettlement established = null;
+            RuleSettlement refusedSettlement = null;
+            boolean someLeftUnlookedAt = false;
             List<CameToNothing> cameToNothing = new ArrayList<>();
             CompositionAccount without = null;
             for (Generator.BoundaryAttempt made : ways) {
+                someLeftUnlookedAt |= made.stoppedShort();
                 switch (made) {
                     // What the composing came to, said on the axis it is about. The rule is left
                     // where it was and nothing here is a word about the model: the way may be the
@@ -3279,14 +3282,26 @@ public final class Adequacy {
                     }
                     case Generator.BoundaryAttempt.Built built -> {
                         RuleSettlement here = run.apply(built);
-                        established = established == null
-                                || establishes(here) > establishes(established)
-                                ? here : established;
+                        if (built.refused()) {
+                            refusedSettlement = refusedSettlement == null
+                                    || establishes(here) > establishes(refusedSettlement)
+                                    ? here : refusedSettlement;
+                        } else {
+                            established = established == null
+                                    || establishes(here) > establishes(established)
+                                    ? here : established;
+                        }
                     }
                 }
             }
             if (established != null) {
                 return established;
+            }
+            // A row the judge refused says where its run went and is no row the search was for:
+            // it is the answer only where no way beside it left something unlooked at, and
+            // otherwise what those ways came to is.
+            if (refusedSettlement != null && !someLeftUnlookedAt) {
+                return refusedSettlement;
             }
             if (!cameToNothing.isEmpty()) {
                 return RuleSettlement.nothingToTryWith(RuleSearch.CameToNothing.of(cameToNothing),
