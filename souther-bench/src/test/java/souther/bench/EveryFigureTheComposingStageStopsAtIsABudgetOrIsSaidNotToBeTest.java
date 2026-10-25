@@ -72,6 +72,11 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
 
+            // A distance no assignment reaches, which a position with no class to move to is at.
+            Map.entry("souther.compiler.partition.NearestAssignments.UNREACHABLE",
+                    "no distance, which is what a position with no class to move to changes"
+                            + " a distance by"),
+
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",
                     "no position, which is what an index that found none is"),
@@ -86,6 +91,8 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // for #1232 and left where they are, which is why they are named rather than omitted.
             Map.entry("souther.compiler.partition.Generator.MOST_REPAIRS",
                     "the walk over which classes to settle a row at, not the row at an item"),
+            Map.entry("souther.compiler.partition.Generator.MOST_LOOKS",
+                    "how many assignments one search for a row looks at, passed over or built"),
             Map.entry("souther.compiler.partition.Generator.MOST_INTERPRETATIONS",
                     "how many readings of a row's values one run tries"),
             Map.entry("souther.compiler.partition.Generator.MOST_RUNS_PER_INTERPRETATION",

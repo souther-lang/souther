@@ -3600,6 +3600,11 @@ public final class Generator {
         }
 
         @Override
+        public void reached(Figure figure) {
+            boundsReached.add(figure);
+        }
+
+        @Override
         public Taken take(Candidate candidate) {
             Map<String, Written> given = candidate.from().writtenAgainst(axes,
                     candidate.delta(), candidate.where(), references);
@@ -3818,6 +3823,9 @@ public final class Generator {
     private interface TakingCandidates extends Taking<Candidate> {
 
         ParameterProjections known();
+
+        /** Takes in that the walk stopped at {@code figure}, in front of work nobody did. */
+        void reached(Figure figure);
     }
 
     /**
@@ -4005,7 +4013,7 @@ public final class Generator {
      * requirements and not every position's: a position is asked again only where what is asked
      * of it changed.
      */
-    private static final class StandingTogether {
+    private static final class StandingTogether implements NearestAssignments.Together {
 
         private final WhatEachClassRequires requires;
 
@@ -4025,12 +4033,14 @@ public final class Generator {
         }
 
         /** Moves {@code axis} from the class {@code from} to the class {@code to}. */
-        void move(int axis, int from, int to) {
+        @Override
+        public void move(int axis, int from, int to) {
             remove(axis, from);
             add(axis, to);
         }
 
-        boolean holds() {
+        @Override
+        public boolean holds() {
             return disagreeing.isEmpty();
         }
 
@@ -4156,6 +4166,9 @@ public final class Generator {
         List<Axis> axes = requires.axes;
         int[] about = about(axes, reading);
         Set<String> asked = reading.heads(axes);
+        // One count of looks for every group of origins: a walk that was divided between them
+        // would be allowed what each is, and not what all of them are.
+        NearestAssignments.Looks looks = new NearestAssignments.Looks(MOST_LOOKS);
         // The origins that state most of what the demand is about, whole and at every distance,
         // before any that state less of it.
         for (int grounds = asked.size(); grounds >= 0; grounds--) {
@@ -4168,7 +4181,7 @@ public final class Generator {
             if (here.isEmpty()) {
                 continue;
             }
-            Traversal walked = gather(requires, reading, about, here, admits, taking);
+            Traversal walked = gather(requires, reading, about, here, admits, looks, taking);
             if (walked != Traversal.EXHAUSTED) {
                 return walked;
             }
@@ -4194,11 +4207,13 @@ public final class Generator {
                                        List<ResolvedOrigin> origins, Admits admits,
                                        TakingCandidates taking) {
         int[] about = about(requires.axes, reading);
+        NearestAssignments.Looks looks = new NearestAssignments.Looks(MOST_LOOKS);
         for (ResolvedOrigin origin : origins) {
             if (!origin.composes()) {
                 continue;
             }
-            Traversal walked = gather(requires, reading, about, List.of(origin), admits, taking);
+            Traversal walked = gather(requires, reading, about, List.of(origin), admits, looks,
+                    taking);
             if (walked != Traversal.EXHAUSTED) {
                 return walked;
             }
@@ -4210,17 +4225,20 @@ public final class Generator {
      * Every assignment these origins offer for one reading, nearest first, handed to
      * {@code taking}.
      *
-     * <p>Walked by how many positions it moves and handed over by the distance the assignment came
-     * to, which are two numbers and not one. Moving {@code k} positions moves {@code k} of them; the
-     * reading may move more, where a class it asks for cannot stand beside where the origin's own
-     * value does. So an assignment is never nearer than the number of positions that produced it,
-     * and everything at one distance has been produced by the time the walk finishes moving that
-     * many — which is what lets this hand them over in distance order without holding the whole
-     * space to sort it.
+     * <p>Walked by the distance the assignment comes to, and not by how many positions it moves,
+     * which are two numbers: the base a walk starts from differs from the origin where the reading
+     * settled a position, and a position moved back to where the origin stands brings the
+     * assignment nearer. Each distance is asked of every origin in turn
+     * ({@link NearestAssignments}), and an assignment is handed over as it stands, so nothing is
+     * held while a distance waits to be reached.
+     *
+     * <p>Held to {@code looks}, the work of finding assignments, which the consumer's own bound
+     * never sees where it passes over what it is handed for nothing. Out of them, the walk stops
+     * and says so: the assignments past that point are work nobody did.
      */
     private static Traversal gather(WhatEachClassRequires requires, Interpretation reading,
                                     int[] about, List<ResolvedOrigin> origins, Admits admits,
-                                    TakingCandidates taking) {
+                                    NearestAssignments.Looks looks, TakingCandidates taking) {
         List<Axis> axes = requires.axes;
         // What the demand asks for settled first, and each origin's own classes kept at every
         // position that can keep them beside it. Worked out once per origin: it is where that
@@ -4233,37 +4251,104 @@ public final class Generator {
                 bases.add(new Started(origin, base));   // null is this reading not being one value
             }
         }
-        // Produced further away than the number of positions that produced them, kept until the
-        // walk reaches that distance rather than handed over early.
-        Map<Integer, List<Candidate>> waiting = new LinkedHashMap<>();
-        // What moves is a position the row is not about, so the most that can be moved is every
-        // position but those. Walked further, nothing is produced and the only thing left to do is
-        // hand over what the readings moved beyond them, which is what happens below either way.
-        for (int moved = 0; moved <= axes.size() - about.length; moved++) {
-            for (Started origin : bases) {
-                for (int[] where : assignmentsMoving(axes, requires, origin, about, moved,
-                        taking.known())) {
-                    Candidate candidate = new Candidate(origin.from(), where,
-                            Delta.between(origin.from().stands(), where));
-                    waiting.computeIfAbsent(candidate.delta().size(), _ -> new ArrayList<>())
-                            .add(candidate);
+        bases.sort(Comparator.comparingInt(started -> started.from().index()));
+        int[] classes = new int[axes.size()];
+        for (int i = 0; i < classes.length; i++) {
+            classes[i] = axes.get(i).classes().size();
+        }
+        List<Walking> walks = new ArrayList<>();
+        int nearest = Integer.MAX_VALUE;
+        int farthest = 0;
+        for (Started origin : bases) {
+            int[] steps = movable(axes, about, origin.base());
+            NearestAssignments walk = new NearestAssignments(origin.from().stands(), origin.base(),
+                    steps, classes);
+            walks.add(new Walking(origin, steps, walk));
+            nearest = Math.min(nearest, walk.nearest());
+            farthest = Math.max(farthest, walk.farthest());
+        }
+        // One distance at a time, and within it one origin's assignments before the next origin's.
+        // The assignments are handed to the consumer as they stand, so a consumer that is satisfied
+        // or stops leaves everything after unwalked, and nothing waits for its distance to come.
+        for (int distance = nearest; distance <= farthest; distance++) {
+            for (Walking walking : walks) {
+                Traversal walked = visiting(requires, walking, distance, looks, taking);
+                if (walked != Traversal.EXHAUSTED) {
+                    return walked;
                 }
             }
-            // Everything this far and nearer. Asked of every distance up to this one rather than of
-            // this one alone: what is due is a fact about the distances, and a walk that read it off
-            // how many positions it had just moved would leave a nearer assignment sitting in the
-            // map for as long as the number that produced it was larger than it.
-            Traversal walked = handOut(waiting, moved, taking);
-            if (walked != Traversal.EXHAUSTED) {
-                return walked;
-            }
         }
-        // What the readings moved beyond the most positions walked. Nothing generates at these
-        // distances any more, so they are handed over rather than dropped — and handed over the same
-        // way, because which of two candidates one distance apart comes first is one rule and not
-        // one per place a candidate leaves this walk.
-        return handOut(waiting, Integer.MAX_VALUE, taking);
+        return Traversal.EXHAUSTED;
     }
+
+    /** One origin's walk, and the positions it moves. */
+    private record Walking(Started origin, int[] steps, NearestAssignments walk) {}
+
+    /**
+     * Every assignment {@code distance} from one origin, handed to {@code taking} in the order
+     * {@link NearestAssignments} walks them.
+     *
+     * <p>Less what the consumer has come to pass over by the time the assignment stands, which it
+     * is asked at that moment: what it learns of one parameter's value from one assignment is
+     * what leaves out the next that shares it.
+     */
+    private static Traversal visiting(WhatEachClassRequires requires, Walking walking,
+                                      int distance, NearestAssignments.Looks looks,
+                                      TakingCandidates taking) {
+        Started origin = walking.origin();
+        ParameterProjections known = taking.known();
+        ParameterProjections.Settling settling = known.settling(origin.from(), walking.steps());
+        Traversal[] result = {Traversal.EXHAUSTED};
+        NearestAssignments.Ended ended = walking.walk().visitAt(distance,
+                new StandingTogether(requires, origin.base().clone()),
+                (where, from, to) -> {
+                    for (int filled = from; filled <= to; filled++) {
+                        if (known.leavesOut(settling, where, filled)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                looks,
+                where -> {
+                    if (known.leavesOut(origin.from(), where)) {
+                        return true;
+                    }
+                    Candidate candidate = new Candidate(origin.from(), where.clone(),
+                            Delta.between(origin.from().stands(), where));
+                    switch (taking.take(candidate)) {
+                        case NOT_TAKEN -> {
+                            result[0] = Traversal.STOPPED;
+                            return false;
+                        }
+                        case AND_DONE -> {
+                            result[0] = Traversal.SATISFIED;
+                            return false;
+                        }
+                        case AND_MORE -> { }
+                    }
+                    return true;
+                });
+        return switch (ended) {
+            case EXHAUSTED -> Traversal.EXHAUSTED;
+            case DECLINED -> result[0];
+            case OUT_OF_LOOKS -> {
+                taking.reached(WorkFigure.ASSIGNMENTS_A_REPAIR_LOOKS_AT.at(MOST_LOOKS));
+                yield Traversal.STOPPED;
+            }
+        };
+    }
+
+    /**
+     * How many assignments a walk repairing a row looks at, across every distance and every origin
+     * of one search.
+     *
+     * <p>Beside {@link #MOST_REPAIRS} and not in place of it. That bounds what is built, and a
+     * candidate the consumer passes over before it builds anything costs it none of it; with the
+     * positions of one parameter numbering in the tens and their classes in the hundreds, the
+     * assignments there are to pass over are more than any search can look at.
+     */
+    private static final int MOST_LOOKS = 100_000;
 
     /**
      * Where one origin's walk for one reading starts: what the reading asks for, and the origin's
@@ -4274,48 +4359,6 @@ public final class Generator {
      * every key is the one instance that was put there, and reads as though it worked either way.
      */
     private record Started(ResolvedOrigin from, int[] base) {}
-
-    /**
-     * Every candidate of {@code waiting} no further than {@code upTo}, nearest first, handed to
-     * {@code taking}.
-     *
-     * <p>Within one distance the origins keep the order they were gathered in. Sorted rather than
-     * generated that way, because an assignment reaches one distance from more than one number of
-     * positions moved.
-     *
-     * <p>Less what the consumer has since come to pass over. These were produced before it had
-     * taken anything they share a parameter with, so they are asked again here rather than where
-     * they were produced.
-     */
-    private static Traversal handOut(Map<Integer, List<Candidate>> waiting, int upTo,
-                                     TakingCandidates taking) {
-        for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
-            if (distance > upTo) {
-                return Traversal.EXHAUSTED;
-            }
-            for (Candidate candidate : sortedByOrigin(waiting.remove(distance))) {
-                if (taking.known().leavesOut(candidate.from(), candidate.where())) {
-                    continue;
-                }
-                switch (taking.take(candidate)) {
-                    case NOT_TAKEN -> {
-                        return Traversal.STOPPED;
-                    }
-                    case AND_DONE -> {
-                        return Traversal.SATISFIED;
-                    }
-                    case AND_MORE -> { }
-                }
-            }
-        }
-        return Traversal.EXHAUSTED;
-    }
-
-    private static List<Candidate> sortedByOrigin(List<Candidate> due) {
-        due.sort(java.util.Comparator.comparingInt(candidate -> candidate.from().index()));
-        return due;
-    }
-
 
     /**
      * Which positions beside the ones a row is about it may move, in the axes' own order.
@@ -4336,69 +4379,6 @@ public final class Generator {
         }
         return Arrays.copyOf(out, n);
     }
-
-    /**
-     * Every assignment over {@code origin}'s base that moves {@code moved} of the positions the row
-     * is not about, each of the rest standing where the base puts it.
-     *
-     * <p>A moved position takes each of its classes in turn, and never the one it already stood
-     * at — so the assignment that moves fewer is the one a smaller number already produced.
-     *
-     * <p>Decided one position at a time in the axes' own order, staying or moving. A class is asked
-     * whether it can stand beside the rest when it is moved to: beside the positions moved before
-     * it, and the base everywhere after.
-     *
-     * <p>Deciding them in turn is what lets the walk stop under a step that settles a parameter
-     * where the consumer has already passed over this origin's candidates — at classes it saw
-     * come to nothing, or, for an origin that writes a value, at classes it could write none of its
-     * parameters at. Everything below such a step would be passed over the same way, whichever of
-     * the positions after it move, and there are as many ways of moving them as there are ways to
-     * choose that many positions.
-     *
-     * <p>Handed back in the order the choosing gave: the moved positions as combinations of the
-     * axes' order, earliest first, and the classes of one choice with the first position slowest.
-     * Which assignment comes first decides which row is offered, so two runs of one model offer
-     * the same rows.
-     */
-    private static List<int[]> assignmentsMoving(List<Axis> axes, WhatEachClassRequires requires,
-                                                 Started origin, int[] about, int moved,
-                                                 ParameterProjections known) {
-        int[] steps = movable(axes, about, origin.base());
-        if (moved > steps.length) {
-            return List.of();
-        }
-        List<Moved> out = new ArrayList<>();
-        // Cloned, because the walk settles the positions in place and puts back what it found. A
-        // row about a class under one case of a sum would otherwise carry the classes of the
-        // positions under another, which is a row that has to be two things at once.
-        int[] where = origin.base().clone();
-        new Moving(axes, steps, known, known.settling(origin.from(), steps),
-                new StandingTogether(requires, where), new int[moved], out).walk(where, 0, 0);
-        out.sort((one, other) -> {
-            int compared = Arrays.compare(one.positions(), other.positions());
-            if (compared != 0) {
-                return compared;
-            }
-            for (int axis : one.positions()) {
-                compared = Integer.compare(one.where()[axis], other.where()[axis]);
-                if (compared != 0) {
-                    return compared;
-                }
-            }
-            return 0;
-        });
-        List<int[]> assignments = new ArrayList<>(out.size());
-        for (Moved each : out) {
-            assignments.add(each.where());
-        }
-        return assignments;
-    }
-
-    /**
-     * One assignment a walk of {@link #assignmentsMoving} produced, and the positions it moved, in
-     * the axes' order — which is what it is ordered by, read once when it was produced.
-     */
-    private record Moved(int[] where, int[] positions) {}
 
     /**
      * Which class each position's value falls in for the value the model already states there, or
@@ -4492,57 +4472,6 @@ public final class Generator {
     /** Where every position stands when a row is composed from the classes alone. */
     private static int[] composes(List<Axis> axes) {
         return standing(new WhatEachClassRequires(axes), null, new int[0]);
-    }
-
-    /**
-     * One walk of {@link #assignmentsMoving}: the positions it decides, in order, and what it
-     * carries from one step to the next.
-     *
-     * @param taken the positions moved so far, as many as the walk moves in all
-     */
-    private record Moving(List<Axis> axes, int[] steps, ParameterProjections known,
-                          ParameterProjections.Settling settling, StandingTogether together,
-                          int[] taken, List<Moved> out) {
-
-        /** Decides the positions from {@code filled} on, {@code count} of them moved already. */
-        void walk(int[] where, int filled, int count) {
-            if (known.leavesOut(settling, where, filled)) {
-                return;
-            }
-            if (filled == steps.length) {
-                out.add(new Moved(where.clone(), taken.clone()));
-                return;
-            }
-            int left = taken.length - count;
-            // Staying, where enough positions are left after this one to move the rest.
-            if (left < steps.length - filled) {
-                walk(where, filled + 1, count);
-            }
-            if (left == 0) {
-                return;
-            }
-            int axis = steps[filled];
-            taken[count] = axis;
-            int stood = where[axis];
-            int at = stood;
-            for (int c = 0; c < axes.get(axis).classes().size(); c++) {
-                // Where it already stands is not a move, and the assignment that makes it is the
-                // one a smaller number of moves already produced.
-                if (c == stood) {
-                    continue;
-                }
-                together.move(axis, at, c);
-                at = c;
-                where[axis] = c;
-                // And a class the rest of the assignment cannot be beside is not a move either: it
-                // is a row that would have to be two things at once, which no value is.
-                if (together.holds()) {
-                    walk(where, filled + 1, count + 1);
-                }
-            }
-            together.move(axis, at, stood);
-            where[axis] = stood;
-        }
     }
 
     /**
@@ -10200,6 +10129,11 @@ public final class Generator {
 
             private Running(int most) {
                 this.most = most;
+            }
+
+            @Override
+            public void reached(Figure figure) {
+                boundsReached.add(figure);
             }
 
             @Override
