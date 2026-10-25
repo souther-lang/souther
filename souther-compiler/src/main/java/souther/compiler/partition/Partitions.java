@@ -31,7 +31,6 @@ import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
-import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
@@ -65,7 +64,6 @@ import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
-import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -160,9 +158,9 @@ public final class Partitions {
                                MeasureClosure.OfTheBorder borderClosure,
                                souther.compiler.inputs.EmptyInput inputIsEmpty,
                                WhereTheOperationsStand operationsStanding,
-                               boolean everyStringIsShownAValue) {
+                               StringsReached strings) {
 
-        /** A partitioning of an input none of whose strings is left in doubt. */
+        /** A partitioning of an input with no string position. */
         public Partitioning(List<PositionMeasurements> measurements,
                             List<StandingQuestion> unanswered,
                             java.util.Set<NumericTerm> uncertain,
@@ -178,7 +176,7 @@ public final class Partitions {
                             WhereTheOperationsStand operationsStanding) {
             this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
-                    inputIsEmpty, operationsStanding, true);
+                    inputIsEmpty, operationsStanding, StringsReached.NONE);
         }
 
         public Partitioning {
@@ -328,11 +326,15 @@ public final class Partitions {
          * settled already gets. Read as a proof, a floor no value reaches became a row an author was
          * told to write.
          *
-         * <p>A string's length is the one that stays proven, because a string of any length is
-         * written by repeating a character. Declining the proof there too would take away every
-         * `String.length` edge in the corpus over collections that have no values. */
+         * <p>A string's length stays proven where the position's strings have a value of every
+         * length ({@link StringsReached}), because a string of any length is written by repeating
+         * a character. Declining the proof there too would take away every `String.length` edge
+         * in the corpus over collections that have no values. And false at a number of a string
+         * the position's strings do not reach, and wherever a string position may hold no value:
+         * a row is a whole value of the input. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return everyStringIsShownAValue && !uncertain.contains(term) && switch (term) {
+            return strings.inputHoldsAValue() && strings.reaches(term)
+                    && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.
                 case NumericTerm.ValueOf _ -> true;
@@ -579,11 +581,9 @@ public final class Partitions {
                 quantities.emptiness().orElse(null),
                 // No body is read here.
                 WhereTheOperationsStand.NONE,
-                // A row at an edge is a whole value of the input, and a string position whose
-                // language is not shown to hold one may leave the input none.
-                inputs.positions().stream().allMatch(
-                        position -> TextExtents.shownToHoldAValue(
-                                position.admitted().approximation())));
+                // Every position, whether or not an axis is drawn at it: a body measures a
+                // number of a string the declarations never did.
+                StringsReached.of(inputs.positions()));
     }
 
     /**
@@ -1183,7 +1183,7 @@ public final class Partitions {
                 // Carried across. Whether the rules leave the input a value is the declarations'
                 // answer, and a body drawing lines on what they left does not change it.
                 base.inputIsEmpty(),
-                operationsStanding, base.everyStringIsShownAValue());
+                operationsStanding, base.strings());
     }
 
     /**
@@ -1378,32 +1378,6 @@ public final class Partitions {
     }
 
     /**
-     * Whether every number {@code term} can take of the strings {@code position} holds is the
-     * number of some value of it. False for a number that is not of a string, since nothing is
-     * said of it here.
-     *
-     * <p>A string no rule is written about has a value of every length, every sum of code points
-     * and every count of a class. A rule naming a format keeps the strings to it, so what holds of
-     * every string does not hold of the format's: a format of {@code AA} or {@code CC} has no
-     * string whose code points come to 132. A length is asked of the format itself, since the
-     * lengths of the format's strings are those of its values wherever the walk shows it.
-     */
-    private static boolean numberOfAStringIsReached(NumericTerm term, Position position) {
-        boolean length = term instanceof NumericTerm.TakenOf taken
-                && taken.operation().equals(ValueName.Stdlib.operation("String", "length"));
-        if (!length && !(term instanceof NumericTerm.CodePointClassCount
-                || term instanceof NumericTerm.CodePointValueSum)) {
-            return true;
-        }
-        return switch (position.admitted().approximation()) {
-            case ValueSet.Matching it -> it.language().isEverything()
-                    || (length && it.language().everyLengthIsOfAValue());
-            case ValueSet.Cofinite _ -> true;
-            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
-        };
-    }
-
-    /**
      * One position, turned into an axis or given up in favour of what is under it.
      *
      * <p>The local answer first, whole: the classes the position's declarations state and the lines
@@ -1443,9 +1417,6 @@ public final class Partitions {
                 List<Axis> axes = new ArrayList<>();
                 for (DeclaredMeasure each : divided.measures()) {
                     if (each.cuts() instanceof CutEvidence.Present cut && cut.uncertain()) {
-                        uncertain.add(each.term());
-                    }
-                    if (!numberOfAStringIsReached(each.term(), position)) {
                         uncertain.add(each.term());
                     }
                     axes.add(Axis.of(behavior, each.term(), each.classes(), List.of(),

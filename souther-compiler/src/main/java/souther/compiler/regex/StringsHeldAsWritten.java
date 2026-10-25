@@ -4,10 +4,10 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Deque;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
@@ -118,34 +118,42 @@ public final class StringsHeldAsWritten {
     }
 
     /**
-     * Whether these have a string of every length {@code language} has one: a length of the
-     * language is a length some value has.
+     * Whether these have a string of every length {@code wanted} names.
      *
-     * <p>Both machines are walked a code point at a time with the states they can be in, which is
-     * a unary automaton of each, and the walk ends when the pair of state sets repeats. That is a
-     * decision when it ends, and a refusal to answer when it does not end within
-     * {@link #LAYERS}: false then says the equality was not shown.
+     * <p>The machine is walked a code point at a time with the states it can be in, which is a
+     * unary automaton of it. {@code wanted} names the lengths of one stretch. Where {@code
+     * endless}, the stretch has no end, so the walk ends at the first set of states it meets again
+     * and every layer of the cycle must stop; otherwise it ends at the first layer past the
+     * stretch. A walk that does not end within {@link #LAYERS} is a refusal to answer: false then
+     * says only that it was not shown.
      */
-    boolean hasEveryLengthOf(Automaton language) {
-        BitSet inLanguage = new BitSet();
-        BitSet inThese = new BitSet();
-        inLanguage.set(Automaton.START);
-        inThese.set(Automaton.START);
-        Set<List<BitSet>> seen = new HashSet<>();
+    boolean reachesEveryLength(IntPredicate wanted, boolean endless) {
+        BitSet states = new BitSet();
+        states.set(Automaton.START);
+        Map<BitSet, Integer> metAt = new HashMap<>();
+        List<Boolean> stops = new ArrayList<>();
+        boolean inStretch = false;
         for (int layer = 0; layer < LAYERS; layer++) {
-            if (stopsIn(language, inLanguage) != stopsIn(machine, inThese)) {
+            boolean stopsHere = stopsIn(machine, states);
+            boolean named = wanted.test(layer);
+            if (named && !stopsHere) {
                 return false;
             }
-            if (!seen.add(List.of(inLanguage, inThese))) {
+            if (!endless && inStretch && !named) {
                 return true;
             }
-            inLanguage = after(language, inLanguage);
-            inThese = after(machine, inThese);
+            inStretch |= named;
+            stops.add(stopsHere);
+            Integer before = endless ? metAt.putIfAbsent(states, layer) : null;
+            if (before != null) {
+                return stops.subList(before, layer).stream().allMatch(stop -> stop);
+            }
+            states = after(machine, states);
         }
         return false;
     }
 
-    /** The layers {@link #hasEveryLengthOf} walks before it gives up. */
+    /** The layers {@link #reachesEveryLength} walks before it gives up. */
     private static final int LAYERS = 4096;
 
     private static boolean stopsIn(Automaton automaton, BitSet states) {

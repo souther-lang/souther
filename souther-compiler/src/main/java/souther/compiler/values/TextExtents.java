@@ -13,6 +13,7 @@ import souther.runtime.Strings;
 import souther.runtime.TextAdmission;
 
 import java.util.Set;
+import java.util.function.IntPredicate;
 
 /**
  * Where a language stops on the order the strings it holds are measured on.
@@ -209,6 +210,39 @@ public final class TextExtents {
     /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds none. */
     public static boolean shownToHoldNone(ValueSet set) {
         return holdsAValue(set).isEmpty();
+    }
+
+    /**
+     * Whether every length {@code wanted} names is the length of a value of {@code set}.
+     *
+     * <p>A format reaches the lengths of its strings held as written and no others, and a set of
+     * every string but a few lacks the one string of length nought where it leaves that out; there
+     * are strings of every other length however many are left out. A set that lists its values
+     * is not shown to reach any length.
+     *
+     * @param wanted  the lengths asked about, which are those of one stretch
+     * @param endless whether the stretch has no end
+     */
+    public static boolean reachesEveryLength(ValueSet set, IntPredicate wanted, boolean endless) {
+        return switch (set) {
+            case ValueSet.Matching it -> it.language().reachesEveryLength(wanted, endless);
+            case ValueSet.Cofinite it ->
+                    !wanted.test(0) || !Sets.textsIn(it.excluded()).contains("");
+            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
+        };
+    }
+
+    /**
+     * Whether every count of the code points of a class, and every sum of code points, is that of
+     * a value of {@code set}. Shown only of the strings no rule restricts: a format or a few left
+     * out can take the one string a count or a sum needs.
+     */
+    public static boolean reachesEveryCount(ValueSet set) {
+        return switch (set) {
+            case ValueSet.Matching it -> it.language().isEverything();
+            case ValueSet.Cofinite it -> it.excluded().isEmpty();
+            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
+        };
     }
 
     /** Whether {@code text} is a string a {@code String} holds, which is to say it is its own

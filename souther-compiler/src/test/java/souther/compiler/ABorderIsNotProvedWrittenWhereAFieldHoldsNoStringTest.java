@@ -51,7 +51,9 @@ class ABorderIsNotProvedWrittenWhereAFieldHoldsNoStringTest {
 
     @Test
     void noBorderOfAFieldBesideAStringNoValueIsIsProved() {
-        List<BorderAssessment.Point> points = pointsAt(NEVER, "example.never", "f");        assertFalse(provedAny(points), "Holder has no value, so nothing in f is proved writable");
+        List<BorderAssessment.Point> points = pointsAt(NEVER, "example.never", "f");        assertFalse(points.stream().noneMatch(p -> p.owed() != null),
+                "the body still draws its line on h.n, so there are borders to be unproved");
+        assertFalse(provedAny(points), "Holder has no value, so nothing in f is proved writable");
     }
 
     @Test
