@@ -82,23 +82,50 @@ final class ComputedNumbers {
      * who settled it would have named.
      */
     static ConstraintState<FactSubject> settled(ConstraintState<FactSubject> state) {
+        return settled(state, in(state));
+    }
+
+    /**
+     * {@code state} with each of {@code numbers} equal to what it comes to, for a caller that
+     * settles one state's places many times and has asked which numbers there are once.
+     */
+    static ConstraintState<FactSubject> settled(ConstraintState<FactSubject> state,
+                                                List<Computed> numbers) {
         ConstraintState<FactSubject> out = state;
-        NumericDomain<FactSubject> numbers = state.numbers();
+        NumericDomain<FactSubject> domain = state.numbers();
         // Each number is made of places and never of another number, so settling one does not
         // change what any other is made of and the order they are taken in says nothing.
-        for (FactSubject atom : numbers.atomsSpokenOf()) {
-            ComputedNumber number = ComputedNumber.of(atom.identity(), ComputedNumbers::aPlace);
-            Granularity spacing = numbers.spacingOf(atom);
-            if (number == null || spacing == null) {
-                continue;
-            }
-            ExactRatio comesTo = number.comesTo(place -> standingAt(numbers, FactSubject.of(place)));
+        for (Computed each : numbers) {
+            ExactRatio comesTo =
+                    each.number().comesTo(place -> standingAt(domain, FactSubject.of(place)));
             Optional<Count> at = comesTo == null ? null : Count.written(comesTo).orNull();
             if (at != null && at.isPresent()) {
-                out = ConstraintState.settling(out, atom, at.get(), spacing);
+                out = ConstraintState.settling(out, each.atom(), at.get(), each.spacing());
             }
         }
         return out;
+    }
+
+    /** A number the rules write as arithmetic over places, and how its values are spaced. */
+    record Computed(FactSubject atom, ComputedNumber number, Granularity spacing) {}
+
+    /**
+     * The numbers {@code state} holds that are arithmetic over places.
+     *
+     * <p>Settling a place states an equality on an atom the state already has, so the atoms are
+     * the same whatever is settled and one reading of them serves every settling.
+     */
+    static List<Computed> in(ConstraintState<FactSubject> state) {
+        NumericDomain<FactSubject> domain = state.numbers();
+        List<Computed> out = new ArrayList<>();
+        for (FactSubject atom : domain.atomsSpokenOf()) {
+            ComputedNumber number = ComputedNumber.of(atom.identity(), ComputedNumbers::aPlace);
+            Granularity spacing = domain.spacingOf(atom);
+            if (number != null && spacing != null) {
+                out.add(new Computed(atom, number, spacing));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** The one number {@code place} stands at, or null where the rules leave it more than one. */

@@ -306,6 +306,11 @@ public final class FieldDomains {
      *  it is asked. */
     private volatile Map<RuleKey, List<EntryHeld.Requirement>> entriesHeld;
 
+    /** The numbers these rules write as arithmetic over places, read the first time a place is
+     *  settled: settling states an equality on an atom the rules already have, so they are the
+     *  same for every settling. */
+    private volatile List<ComputedNumbers.Computed> computedNumbers;
+
     /** What the rules of this value ask of each list about its sides
      *  ({@link #sidesBalancedAt}), read the first time it is asked. */
     private volatile Map<RuleKey, List<SidesBalanced.Requirement>> sidesBalanced;
@@ -1135,7 +1140,12 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
             }
         }
-        return ComputedNumbers.settled(taken);
+        List<ComputedNumbers.Computed> computed = computedNumbers;
+        if (computed == null) {
+            computed = ComputedNumbers.in(constraints);
+            computedNumbers = computed;
+        }
+        return ComputedNumbers.settled(taken, computed);
     }
 
     /**
