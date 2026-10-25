@@ -395,6 +395,9 @@ final class MeaningAssumptions {
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT);
             case Proposition.SameValue _, Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
+            // Which language a string is in is no fact a path holds of a place.
+            case Proposition.InTheStrings _ ->
+                    outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
         }
     }
 

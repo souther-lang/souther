@@ -702,14 +702,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // a sum over values written out — asks here before reading any of them, and past
             // either figure carries what it would have read out as a part nothing read, naming
             // the one it reached.
-            Map.entry("souther.compiler.partition.Pullback#splitInto("
-                            + "Lsouther/compiler/inputs/InputReads;J)"
+            Map.entry("souther.compiler.partition.Pullback#splitInto(JJ)"
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "counts the readings a split makes along one way down, and says which figure"
                             + " where they are past it"),
             Map.entry("souther.compiler.partition.Pullback#splitInto("
-                            + "Lsouther/compiler/inputs/InputReads;"
-                            + "Ljava/util/function/LongUnaryOperator;)"
+                            + "JLjava/util/function/LongUnaryOperator;)"
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "tells a count of the readings of a split how far the figures can tell, and"
                             + " asks the split of what it counted"),
@@ -883,6 +881,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;)V",
                     "looks for no more assignments than there is room for among the ways looked"
                             + " along, and says that figure when it leaves some"),
+            Map.entry("souther.compiler.partition.Cutting#linesOnOneQuantityPastTheFigure("
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/inputs/InputReading;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/coverage/Arrivals;)"
+                            + "Lsouther/compiler/partition/Cutting$Read;",
+                    "counts the lines one quantity is cut by against the readings figure, and"
+                            + " says that figure where a statement's lines are not worked out"),
             Map.entry("souther.compiler.partition.Cutting#asLines("
                             + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"

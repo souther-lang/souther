@@ -160,8 +160,9 @@ public final class CountsWrittenOut {
                                 reached.noneBelow().map(_ -> noneBelow), reached.holds());
             }
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Carried _, Proposition.Unread _ -> stated;
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.Unread _ -> stated;
         };
     }
 
