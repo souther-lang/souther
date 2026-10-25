@@ -161,6 +161,34 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
         assertNull(composedGiven(POSITIVE_RATES, Map.of()).fields());
     }
 
+    private static String rateSet(String asked) {
+        return """
+                module demo
+
+                data Rate = Decimal
+                    invariant value == 1.0m || value == 3.0m
+
+                data N = { base: String, rates: Map<String, Rate> }
+                    invariant atRate = atRate(base, rates)
+
+                let atRate (k: String, rates: Map<String, Rate>): Bool =
+                    Map.get(k, rates)
+                        |> Option.map(r -> Decimal.compare(r.value, %s) == 0)
+                        |> Option.withDefault(false)
+                """.formatted(asked);
+    }
+
+    /**
+     * A number inside the range the value type leaves and outside the set it admits is not
+     * written under the name: the range of one or three holds two, and the type does not.
+     */
+    @Test
+    void aNumberBetweenTheOnesTheValueTypeAdmitsIsNotWrittenUnderItsName() {
+        assertNull(composedGiven(rateSet("2.0m"), Map.of()).fields());
+        assertTrue(composedGiven(rateSet("3.0m"), Map.of()).fields().get("rates").text()
+                .contains("Rate(3m)"));
+    }
+
     /**
      * Two numbers asked of one key are no map at all, and the record is not composed: choosing the
      * map as any other would be offering one the rules refuse.

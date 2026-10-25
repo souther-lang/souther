@@ -92,7 +92,37 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
     @Test
     void aProductBesideAPlaceThatItDefinesIsTakenInAtTheFactors() {
         assertEquals(Map.of("n.a", List.of(), "n.b", List.of(), "n.c", List.of()),
-                unansweredBelowTheInput(record("c == a * b") + BEHAVIOR));
+                unansweredBelowTheInput("""
+                        module demo
+
+                        data N = { a: Decimal, b: Decimal, c: Decimal }
+                            invariant c == a * b
+                        """ + BEHAVIOR));
+    }
+
+    /** Whole numbers stop at a width, and a product of two of them may not: no factor is free. */
+    @Test
+    void aProductOfWholeNumbersBesideAPlaceThatItDefinesLeavesTheFactorsUnanswered() {
+        Map<String, List<String>> left =
+                unansweredBelowTheInput(record("c == a * b") + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty());
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
+    /** Where the places lie well inside the width the arithmetic never leaves it. */
+    @Test
+    void aProductOfWholeNumbersThatStaysInsideTheirWidthLeavesTheFactorsFree() {
+        assertEquals(Map.of("n.a", List.of(), "n.b", List.of(), "n.c", List.of()),
+                unansweredBelowTheInput("""
+                        module demo
+
+                        data Small = Int
+                            invariant value >= 0 && value <= 1000
+
+                        data N = { a: Small, b: Small, c: Int }
+                            invariant c == a.value * b.value
+                        """ + BEHAVIOR));
     }
 
     /**
@@ -169,14 +199,56 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
         assertFalse(left.get("n.b").isEmpty());
     }
 
+    /**
+     * A range is the hull of what a place admits, and a place that admits two numbers inside it
+     * admits less than the range: {@code c} of one or three has no {@code a} of two beside a
+     * {@code b} of one.
+     */
+    @Test
+    void aDefinitionOfAPlaceThatAdmitsASetInsideItsRangeLeavesItsFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data Restricted = Int
+                    invariant value == 1 || value == 3
+
+                data N = { a: Int, b: Int, c: Restricted }
+                    invariant lower = a >= 1 && a <= 3
+                    invariant one = b == 1
+                    invariant product = c.value == a * b
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a of two has no c beside it");
+    }
+
+    /**
+     * Whole numbers stop at a width, and a product past it is no value of any place: the arithmetic
+     * aborts. A factor of the greatest whole number has no second factor of two or more.
+     */
+    @Test
+    void aProductOfWholeNumbersThatCanLeaveTheirWidthLeavesItsFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data Positive = Int
+                    invariant value >= 2
+
+                data N = { a: Positive, b: Positive, c: Int }
+                    invariant c == a.value * b.value
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a of the greatest whole number has no b");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
     @Test
     void aDefinitionOfAPlaceThatAdmitsEverythingTheNumberCanComeToLeavesItsFactorsFree() {
         assertEquals(Map.of("n.a", List.of(), "n.b", List.of(), "n.c", List.of()),
                 unansweredBelowTheInput("""
                         module demo
 
-                        data Count = Int
-                            invariant value >= 0
+                        data Count = Decimal
+                            invariant value >= 0.0m
 
                         data N = { a: Count, b: Count, c: Count }
                             invariant c.value == a.value * b.value

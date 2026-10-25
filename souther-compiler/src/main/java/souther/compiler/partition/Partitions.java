@@ -2205,7 +2205,8 @@ public final class Partitions {
      * A list of {@code type} whose elements at the two cases the rule names add up to one another,
      * or nothing where no such list can be written.
      *
-     * <p>As many elements as the rules require, at least two, split between the two cases. The
+     * <p>At least as many elements as the rules require, and at least two, split between the two
+     * cases: the fewest that the numbers balance, walked up from the least the rules ask for. The
      * numbers they add are numbers the element's own rules admit ({@link #balancingAmounts}), so
      * every element is one its type allows and the totals are equal because the numbers were found
      * to make them so.
@@ -2213,8 +2214,10 @@ public final class Partitions {
      * <p>Never a fallback to choosing the field as any other: the rule asking the sides to balance
      * was read as kept by this ({@link SidesBalanced#writtenOn} is the one list both go by), and a
      * list chosen without it is a list the rule refuses. Nothing is what it answers for an element
-     * that is no record, numbers the element admits that balance nothing, a list also kept apart,
-     * and a count past what a proposal may hold.
+     * that is no record, numbers the element admits that balance no count it walks, a list also
+     * kept apart, and a count past what a proposal may hold. It is an answer about what this
+     * builds and not about the type: a list kept apart as well, or a count past the sizes walked,
+     * may exist, and the figures that ended the walk travel with the nothing.
      */
     private static Proposals balancedSides(Type type, SidesBalanced.Requirement rule,
                                            FieldDomains.ConstructionLimits limits,
@@ -2238,17 +2241,18 @@ public final class Partitions {
                         instanceof TypeReachName.Written other)) {
             return Proposals.NONE;
         }
-        DeclaredBounds.CountRange room = heldRange(type, reading, limits.held());
-        int count = Math.max(2, room.least());
-        if (count > room.most()) {
+        // A list whose elements are also held apart is a list this does not build: the elements it
+        // makes differ in their side and their amount and nothing else, and nothing here keeps
+        // them apart in the rest. A list that is both exists wherever its amounts allow, so this is
+        // a combination left unbuilt and not a statement that there is none.
+        if (limits.held() != null && !limits.held().keptApart().isEmpty()) {
             return Proposals.NONE;
         }
-        CompositionBudget past = Witnesses.pastTheElements(count);
-        if (past != null) {
-            return Proposals.NONE.meeting(CompositionShortfall.of(List.of(past)));
+        DeclaredBounds.CountRange room = heldRange(type, reading, limits.held());
+        int first = Math.max(2, room.least());
+        if (first > room.most()) {
+            return Proposals.NONE;
         }
-        int onOne = count / 2;
-        int onOther = count - onOne;
         Type numberType = product.fields().get(rule.number().getFirst());
         TypeSymbol.AtModule rulesOn = rulesOver(elementView.wrappers(), record, source);
         // The numbers the element's own rules admit there, as the position offers them, and the
@@ -2256,14 +2260,28 @@ public final class Partitions {
         // does not admit is not the list the rule asks for, whatever the totals come to.
         FieldDomains.ConstructionLimits admitted = FieldDomains.of(rulesOn, reading)
                 .composing(Map.of()).at(RuleKey.of(rule.number().getFirst()));
-        List<FixtureTemplate> amounts = balancingAmounts(
-                admittedNumbers(numberType, admitted, reading), onOne, onOther);
-        // And a list whose elements are also held apart is a list this does not build: the
-        // elements it makes differ in their side and their amount, and nothing here keeps them
-        // apart in the rest.
-        if (amounts == null || (limits.held() != null && !limits.held().keptApart().isEmpty())) {
-            return Proposals.NONE;
+        List<FixtureTemplate> numbers = admittedNumbers(numberType, admitted, reading);
+        // The count the rules ask for at least is where the walk starts and not the only count:
+        // numbers that balance four elements two against two do not balance three, and the list
+        // of four is as much a list the rules allow.
+        CompositionBudget past = Witnesses.pastTheElements(first);
+        if (past != null) {
+            return Proposals.NONE.meeting(CompositionShortfall.of(List.of(past)));
         }
+        int walked = CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
+        int held = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
+        int last = (int) Math.min(Math.min(room.most(), held), (long) first + walked - 1);
+        Split split = balancedSplit(numbers, first, last);
+        if (split == null) {
+            // Nothing among the sizes walked, which says the walk ended and not that no size is
+            // left: past the last one there may be a list the figure did not reach.
+            return last < room.most() ? Proposals.NONE.meeting(CompositionShortfall.of(List.of(
+                    last < held ? CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH
+                            : CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))) : Proposals.NONE;
+        }
+        int count = split.count();
+        int onOne = split.onOne();
+        List<FixtureTemplate> amounts = split.amounts();
         List<FixtureTemplate> elements = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             boolean atOne = i < onOne;
@@ -2350,6 +2368,26 @@ public final class Partitions {
             }
         }
         return out;
+    }
+
+    /** A count of elements, how many of them are at the first case, and the amounts they add. */
+    private record Split(int count, int onOne, List<FixtureTemplate> amounts) {}
+
+    /**
+     * The first count from {@code first} to {@code last} that {@code numbers} balance, and the
+     * split of it between the two cases that does — the sides nearest to equal in size first — or
+     * null where none of them does.
+     */
+    private static Split balancedSplit(List<FixtureTemplate> numbers, int first, int last) {
+        for (int count = first; count <= last; count++) {
+            for (int onOne = count / 2; onOne >= 1; onOne--) {
+                List<FixtureTemplate> amounts = balancingAmounts(numbers, onOne, count - onOne);
+                if (amounts != null) {
+                    return new Split(count, onOne, amounts);
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -2473,20 +2511,37 @@ public final class Partitions {
     }
 
     /**
-     * Whether the rules a position wears leave {@code number} inside the range they leave its
-     * values, or leave no range.
+     * Whether the names a position wears leave {@code number} among its values.
      *
-     * <p>The range and not the values: a type that admits a set of numbers inside its range is
-     * asked of the decoder, which refuses what the set leaves out and says so. What this keeps out
-     * is what the range already rules out, which is a number no value of the type is.
+     * <p>Asked of both the range the rules leave and the values they name, as
+     * {@link #admittedNumbers} is: a type that admits a set of numbers inside its range does not
+     * admit the others. What neither expresses is left to the decoder, which refuses a number the
+     * rules refuse and says so; the values reading does not read the arithmetic of a rule, so
+     * whether it read every rule says nothing here.
      */
     private static boolean admitsNumber(Type type, BigDecimal number, RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
-        DeclaredBounds.Range own = DeclaredBounds.of(
-                TypeView.of(type, source.inners(), source.symbols(), source.kinds(), source.sums()),
-                reading);
-        return own == null
-                || holds(new NumericDomain.Bounds(own.min(), own.max()), ExactRatio.of(number));
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        ExactRatio exact = ExactRatio.of(number);
+        DeclaredBounds.Range own = DeclaredBounds.of(view, reading);
+        if (own != null && !holds(new NumericDomain.Bounds(own.min(), own.max()), exact)) {
+            return false;
+        }
+        Optional<Count> count = Count.written(exact).orNull();
+        if (count == null || count.isEmpty()) {
+            return false;
+        }
+        Value value = Value.number(count.get().at());
+        for (TypeSymbol each : view.wrappers()) {
+            if (each instanceof TypeSymbol.AtModule named) {
+                if (!FieldDomains.of(named, reading).admits(RuleKey.THE_VALUE).approximation()
+                        .has(value)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

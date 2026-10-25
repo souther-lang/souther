@@ -152,12 +152,28 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
         assertEquals(0, sides.total("Credit").signum(), list);
     }
 
-    /** A type whose numbers balance nothing is no list, and no list is offered. */
+    /**
+     * Three elements of the one number there is cannot balance, and four can: the least the rules
+     * ask for is where the walk starts, and the list of four is a list the rules allow.
+     */
     @Test
-    void anAmountTypeThatAdmitsLessThanTheSidesNeedIsNotBuilt() {
-        // One debit and two credits: no number of 1 balances 2 of them, and 1 is all there is.
-        assertNull(composedOrNot(journal(3, "value == 1.0m", "")).fields());
+    void aCountThatTheNumbersCannotBalanceIsPassedForOneThatTheyCan() {
+        Sides sides = sidesOf(composed(journal(3, "value == 1.0m", "")).fields()
+                .get("postings").text());
+
+        assertEquals(4, sides.elements());
+        assertEquals(0, sides.total("Debit").compareTo(sides.total("Credit")));
+        assertEquals(2, sides.amounts().get("Debit").size());
     }
+
+    /** Where the rules leave no count the numbers balance, no list is offered. */
+    @Test
+    void aTypeWhoseNumbersBalanceNoCountTheRulesLeaveIsNotBuilt() {
+        // Three elements and no more: one debit and two credits, and a 1 balances neither.
+        assertNull(composedOrNot(journal(3, "value == 1.0m",
+                "invariant atMost = length(postings) <= 3")).fields());
+    }
+
 
     /** A count past what a proposal may hold is not built, and is not built a little at a time. */
     @Test
@@ -167,7 +183,9 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
 
     /**
      * Elements that are also to be kept apart are not made by this: they differ in their side and
-     * their amount and nothing else, and what keeps them apart in the rest is not asked.
+     * their amount and nothing else, and what keeps them apart in the rest is not asked. A list
+     * of a debit of four against credits of one and three is kept apart and balanced both, so this
+     * is a combination left unbuilt and not a type with no such list.
      */
     @Test
     void aListThatIsAlsoKeptApartIsNotBuilt() {

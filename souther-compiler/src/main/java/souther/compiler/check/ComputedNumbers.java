@@ -116,14 +116,17 @@ final class ComputedNumbers {
      * Where either is not shown the places stay unanswered, which is the rule left unread and not a
      * claim about them.
      *
-     * <p>Where the places' rules put it, and not where their types end. A whole number past the
-     * width of its type ends the run that makes it and is no value of any place, but the ends of an
-     * order are kept beside the ranges of the interval algebra and not in them, so they are not
-     * reasoned about here: a product of two unbounded whole numbers is taken to lie inside an
-     * unbounded place, and the builders find the pairs whose product the type holds when they
-     * settle the places.
+     * <p>And the two are asked of what the places can be, which is not what their ranges say. A range
+     * is the hull of what a place admits: a place that admits one number or three admits less than
+     * its range, and a rule read as alternatives, or not read, leaves the interval algebra holding
+     * the hull and nothing of the gap. So the defined place has to restrict nothing besides its
+     * range, and every place has to be shown exact ({@link Account}). The numbers also stop where
+     * their order does: the arithmetic of whole numbers aborts at the step that leaves them, so a
+     * product of two whole numbers each as great as the order allows is no value of any place, and
+     * every step of the number is held inside the order it is worked out in.
      */
-    static boolean leavesFree(Definition definition, NumericDomain<FactSubject> numbers) {
+    static boolean leavesFree(Definition definition, NumericDomain<FactSubject> numbers,
+                              Account account) {
         // Nothing but the definition ties the defined place or the number to another position, and
         // nothing ties a place the number is made of to any. A range is a box and says nothing of
         // how two positions go together, so a place related to another by some other rule is not
@@ -133,17 +136,59 @@ final class ComputedNumbers {
                 || definition.operands().stream().anyMatch(each -> numbers.relationsOf(each) != 0)) {
             return false;
         }
-        ComputedNumber.Range image = definition.number()
-                .lies(place -> rangeOf(numbers.boundsOf(FactSubject.of(place))));
+        if (!account.restrictsNothingBesideItsRange(definition.defined())
+                || !definition.operands().stream().allMatch(account::shownExact)) {
+            return false;
+        }
+        ComputedNumber.Range image = definition.number().lies(
+                place -> within(numbers.boundsOf(FactSubject.of(place)),
+                        account.orderOf(FactSubject.of(place))),
+                rangeOf(account.orderOf(definition.atom())));
+        if (image == null) {
+            return false;
+        }
         NumericDomain.Bounds allowed = numbers.boundsOf(definition.defined());
+        NumericDomain.Bounds order = account.orderOf(definition.defined());
         return reachesNoFurtherThan(image.low(), allowed.min(), true)
-                && reachesNoFurtherThan(image.high(), allowed.max(), false);
+                && reachesNoFurtherThan(image.high(), allowed.max(), false)
+                && (order == null
+                        || (reachesNoFurtherThan(image.low(), order.min(), true)
+                                && reachesNoFurtherThan(image.high(), order.max(), false)));
+    }
+
+    /** What the reading of a value's rules can say of a place beyond the ranges of the interval
+     *  algebra. */
+    interface Account {
+
+        /** Where the order the place's numbers are worked out in stops, or null where it does
+         *  not. */
+        NumericDomain.Bounds orderOf(FactSubject place);
+
+        /** Whether what is held of the place is what the rules leave it, and not something wider
+         *  that a choice reaching across places left. */
+        boolean shownExact(FactSubject place);
+
+        /** Whether the place is shown exact and its rules leave it every number its range
+         *  holds. */
+        boolean restrictsNothingBesideItsRange(FactSubject place);
     }
 
     private static ComputedNumber.Range rangeOf(NumericDomain.Bounds bounds) {
-        return new ComputedNumber.Range(
+        return bounds == null ? ComputedNumber.Range.ANY : new ComputedNumber.Range(
                 bounds.min() == null ? null : Count.number(bounds.min().at()).exactly(),
                 bounds.max() == null ? null : Count.number(bounds.max().at()).exactly());
+    }
+
+    /** The range of {@code bounds} inside where {@code order} stops. */
+    private static ComputedNumber.Range within(NumericDomain.Bounds bounds,
+                                               NumericDomain.Bounds order) {
+        ComputedNumber.Range own = rangeOf(bounds);
+        ComputedNumber.Range stops = rangeOf(order);
+        ExactRatio low = own.low() == null ? stops.low() : stops.low() == null ? own.low()
+                : own.low().compareTo(stops.low()) >= 0 ? own.low() : stops.low();
+        ExactRatio high = own.high() == null ? stops.high() : stops.high() == null ? own.high()
+                : own.high().compareTo(stops.high()) <= 0 ? own.high() : stops.high();
+        return new ComputedNumber.Range(low, high);
     }
 
     /** Whether an end of the number's range is inside the end of the range the place allows. */

@@ -84,6 +84,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/Witnesses$Built;",
                     "stops at the pairings a map is built from at once, and says which"),
+            // The counts a list balanced between two cases of a field is walked over, and the
+            // elements a proposal holds that cap them; the figure that ended the walk is handed
+            // on with the nothing it ended in.
+            Map.entry("souther.compiler.partition.Partitions#balancedSides("
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/check/SidesBalanced$Requirement;"
+                            + "Lsouther/compiler/check/FieldDomains$ConstructionLimits;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/Proposals;",
+                    "walks the counts a list is balanced at, and hands the figure the walk ended"
+                            + " at on as the shortfall of the nothing it offers"),
             // A total's two, one consumer each. The figure is asked for twice per consumer and for
             // two questions: whether there is room for the piece in front of it, and — where the
             // walk finds there was not — which figure to say so under. Held apart, a consumer could

@@ -171,11 +171,16 @@ final class ComputedNumber {
     }
 
     /**
-     * Where this lies with each place in the range {@code at} gives it. A range of every number
-     * wherever the arithmetic cannot say better.
+     * Where this lies with each place in the range {@code at} gives it, or null where some step of
+     * it can come to a number outside {@code within}. A range of every number wherever the
+     * arithmetic cannot say better.
+     *
+     * <p>Every step and not only the last: the arithmetic of a type that stops somewhere aborts at
+     * the step that leaves it, whatever the steps after it would have brought the number back to.
+     * A {@code within} of every number is the arithmetic of a type that does not stop.
      */
-    Range lies(Function<Term, Range> at) {
-        return bounded(root, at);
+    Range lies(Function<Term, Range> at, Range within) {
+        return bounded(root, at, within);
     }
 
     private static Expr read(Term term, Predicate<Term> aPlace, Set<Term> found) {
@@ -300,38 +305,56 @@ final class ComputedNumber {
         };
     }
 
-    private static Range bounded(Expr e, Function<Term, Range> at) {
+    /** The range of {@code e}, or null where a step of it can leave {@code within}. */
+    private static Range bounded(Expr e, Function<Term, Range> at, Range within) {
         return switch (e) {
             case Expr.Place it -> at.apply(it.term());
             case Expr.Written it -> Range.at(it.number());
-            case Expr.Negated it -> bounded(it.operand(), at).negated();
+            case Expr.Negated it -> {
+                Range operand = bounded(it.operand(), at, within);
+                yield operand == null ? null : stays(operand.negated(), within);
+            }
             case Expr.Operated it -> {
-                Range left = bounded(it.left(), at);
-                Range right = bounded(it.right(), at);
-                yield switch (it.operator()) {
+                Range left = bounded(it.left(), at, within);
+                Range right = bounded(it.right(), at, within);
+                yield left == null || right == null ? null : stays(switch (it.operator()) {
                     case ADD -> left.plus(right);
                     case SUB -> left.plus(right.negated());
                     case MUL -> left.times(right);
                     default -> throw new IllegalStateException("not arithmetic: " + it.operator());
-                };
+                }, within);
             }
             case Expr.Weighed it -> {
                 Range sum = Range.at(it.constant());
                 for (Weight each : it.weights()) {
-                    sum = sum.plus(bounded(each.argument(), at)
-                            .times(Range.at(each.coefficient())));
+                    Range argument = bounded(each.argument(), at, within);
+                    Range term = argument == null ? null
+                            : stays(argument.times(Range.at(each.coefficient())), within);
+                    sum = term == null ? null : stays(sum.plus(term), within);
+                    if (sum == null) {
+                        break;
+                    }
                 }
                 yield sum;
             }
             // Rounding to a step never turns a greater number into a lesser one, so the ends of
             // what is rounded are the ends of what it rounds to.
             case Expr.Rounded it -> {
-                Range inner = bounded(it.inner(), at);
-                yield new Range(inner.low() == null ? null : rounded(inner.low(), it.scale(),
-                        it.way()), inner.high() == null ? null
-                        : rounded(inner.high(), it.scale(), it.way()));
+                Range inner = bounded(it.inner(), at, within);
+                yield inner == null ? null : stays(new Range(inner.low() == null ? null
+                        : rounded(inner.low(), it.scale(), it.way()), inner.high() == null ? null
+                        : rounded(inner.high(), it.scale(), it.way())), within);
             }
         };
+    }
+
+    /** {@code range}, or null where it reaches past {@code within}. */
+    private static Range stays(Range range, Range within) {
+        boolean low = within.low() == null
+                || (range.low() != null && range.low().compareTo(within.low()) >= 0);
+        boolean high = within.high() == null
+                || (range.high() != null && range.high().compareTo(within.high()) <= 0);
+        return low && high ? range : null;
     }
 
     /** {@code value} rounded to a whole multiple of ten to the minus {@code scale}, the way the

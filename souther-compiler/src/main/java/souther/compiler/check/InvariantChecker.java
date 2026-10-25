@@ -1187,8 +1187,15 @@ public final class InvariantChecker {
         // The places the rules define from others, with everything the rules hold in hand: the
         // places a definition is made of are free where the number cannot come to what the
         // defined place refuses, and then the definition says nothing of any of them.
+        // What the rules leave each place is asked of the values as they were read, which is the
+        // constraints the reading below ends in; the ranges of the algebra alone are the hulls.
+        ConstraintState<FactSubject> constraints = k.constraints()
+                .takingRead(answered.whole().confinement(), allowed, c.answers);
+        ComputedNumbers.Account account = new ReadAccount(constraints.values(), c.terms);
         for (ComputedNumbers.Defining each : definitions) {
-            if (ComputedNumbers.leavesFree(each.definition(), k.numbers())) {
+            // Only where every clause of the value was read: a rule this did not read may hold
+            // any place the number is made of, or the place it defines, to fewer numbers.
+            if (read && ComputedNumbers.leavesFree(each.definition(), k.numbers(), account)) {
                 took.freedByDefinition(each.rule(), each.definition().operands());
             }
         }
@@ -1197,8 +1204,6 @@ public final class InvariantChecker {
         Reading reading = c.directsIn(accounted, at, numbers, took,
                 new RulesRead(narrowedBy), settled.isEmpty() && reach.everything()
                         ? new WithoutAPart(named, world, c.answers) : null);
-        ConstraintState<FactSubject> constraints = k.constraints()
-                .takingRead(answered.whole().confinement(), allowed, c.answers);
         // Where the order of every number the rules speak of stops, off the order each was named
         // on: a row of this value holds them inside those ends, and they go with the rules
         // wherever the rules are carried. Every one, since an atom is named on an order or not at
