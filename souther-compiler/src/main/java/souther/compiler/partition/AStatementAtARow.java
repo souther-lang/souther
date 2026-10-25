@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
@@ -27,8 +26,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.Recognizer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -161,9 +158,6 @@ final class AStatementAtARow {
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
             };
-            case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtASubject(DecisionSubject.AnInput _),
-                    var _, var _, var _) -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
                  Proposition.InTheStrings _, Proposition.SameValue _, Proposition.Unread _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
@@ -338,9 +332,6 @@ final class AStatementAtARow {
                     positions.add(at);
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
                                      boolean _, String _) -> positions.add(at);
-            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtASubject(
-                    DecisionSubject.AnInput(TermPath at)), var _, var _, var _) ->
-                    positions.add(at);
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
                                        String _) -> {
@@ -503,9 +494,6 @@ final class AStatementAtARow {
             // Which of the elements holding a value is the last depends on the others.
             case Proposition.LastToHold _ -> false;
             case Proposition.Some _, Proposition.SoManyHold _ -> false;
-            case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtASubject(DecisionSubject.AnInput _),
-                    var _, var _, var _) -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
                  Proposition.InTheStrings _, Proposition.SameValue _, Proposition.Unread _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
@@ -1079,11 +1067,6 @@ final class AStatementAtARow {
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
                                      boolean holds, String _) when askable(part) ->
                     heldAs(holds, amongCases(at, cases, row));
-            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtASubject(
-                    DecisionSubject.AnInput(TermPath at)), PatternMeaning accepts, boolean holds,
-                                          String _) -> heldAs(holds, ofItsValue(at, row,
-                    value -> value instanceof ObservedValue.Text text
-                            ? inTheStrings(accepts, text.value()) : null));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
@@ -1212,11 +1195,6 @@ final class AStatementAtARow {
                 yield true;
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
-            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtASubject(
-                    DecisionSubject.AnInput(TermPath at)), var _, var _, var _) -> {
-                read.add(at);
-                yield true;
-            }
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
                  Proposition.InTheStrings _, Proposition.SameValue _, Proposition.Unread _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
@@ -1495,14 +1473,6 @@ final class AStatementAtARow {
             case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
             case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
         };
-    }
-
-    /** Whether {@code text} is one of the strings {@code accepts} means, or null where saying so
-     *  would take more than the allowance of a fold. */
-    private static Boolean inTheStrings(PatternMeaning accepts, String text) {
-        Recognizer recognizer = Recognizer.of(accepts, PatternPlan.Budget.OF_A_FOLD.meter());
-        return recognizer == null ? null
-                : recognizer.accepts(text, PatternPlan.Budget.OF_A_FOLD.meter()).orElse(null);
     }
 
     /**
