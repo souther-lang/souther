@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.NumberSpace;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.LinearForm;
@@ -393,35 +392,16 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                 confinement.renamed(naming::apply), shown);
     }
 
-    /** This, with where the order each of {@code stops} is counted on stops recorded
-     *  ({@link NumericDomain#heldInsideTheirOrders}). Nothing it leaves moves. */
-    public ConstraintState<A> heldInsideTheirOrders(Map<A, NumericDomain.Bounds> stops) {
-        NumericDomain<A> held = numbers.heldInsideTheirOrders(stops);
+    /** This, told what the types of {@code told} say ({@link NumericDomain#told}). Nothing it
+     *  leaves moves. */
+    public ConstraintState<A> told(Map<A, NumberSpace> told) {
+        NumericDomain<A> held = numbers.told(told);
         return held == numbers ? this : new ConstraintState<>(held, facts, confinement, shown);
-    }
-
-    /**
-     * This, with {@code f rel 0} taken as holding over atoms whose spacing is all that is known.
-     *
-     * <p>For a reader whose atom may have no type to ask where its order stops, which then has
-     * none recorded and is not shown to leave a row. Where the type is there, {@code taking} with
-     * the space is the door.
-     */
-    public ConstraintState<A> takingSpaced(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
-    }
-
-    /** The same for an atom taken to lie between {@code bounds}. */
-    public ConstraintState<A> takingSpaced(A atom, NumericDomain.Bounds bounds,
-                                           Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assuming(atom, bounds, kinds), facts, confinement,
-                shown);
     }
 
     /** This, with {@code f rel 0} taken as holding. */
     public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
-        return new ConstraintState<>(numbers.assumeWithin(f, rel, spaces), facts, confinement,
-                shown);
+        return new ConstraintState<>(numbers.assume(f, rel, spaces), facts, confinement, shown);
     }
 
     /**
@@ -435,7 +415,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      */
     public ConstraintState<A> taking(A atom, NumericDomain.Bounds bounds,
                                      Map<A, NumberSpace> spaces) {
-        return new ConstraintState<>(numbers.assumingWithin(atom, bounds, spaces), facts,
+        return new ConstraintState<>(numbers.assuming(atom, bounds, spaces), facts,
                 confinement, shown);
     }
 
@@ -490,14 +470,12 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *
      * <p>The one place a settling is stated, so that a reading made with one and a reading settled
      * after it was made say the same thing. Written twice, the second would be free to state it
-     * under a different spacing and answer a position differently while both stayed sound.
+     * under a different space and answer a position differently while both stayed sound.
      */
     static <A> ConstraintState<A> settling(ConstraintState<A> state, A atom,
                                            souther.compiler.numeric.Count at,
-                                           Granularity spacing) {
-        return new ConstraintState<>(
-                state.numbers.assume(LinearForm.<A>atomMinusConstant(atom, at.exactly()), Rel.EQ,
-                        java.util.Map.of(atom, spacing)),
-                state.facts, state.confinement, state.shown);
+                                           NumberSpace space) {
+        return state.taking(LinearForm.<A>atomMinusConstant(atom, at.exactly()), Rel.EQ,
+                Map.of(atom, space));
     }
 }

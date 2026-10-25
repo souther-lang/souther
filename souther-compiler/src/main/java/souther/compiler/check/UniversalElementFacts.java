@@ -320,7 +320,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
         for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
             Map<FactSubject, NumberSpace> spacing = terms.spacesOfIfNamed(one.getKey());
             if (!spacing.isEmpty()) {
-                given = given.assumingWithin(one.getKey(), one.getValue(), spacing);
+                given = given.assuming(one.getKey(), one.getValue(), spacing);
             }
         }
         return given;

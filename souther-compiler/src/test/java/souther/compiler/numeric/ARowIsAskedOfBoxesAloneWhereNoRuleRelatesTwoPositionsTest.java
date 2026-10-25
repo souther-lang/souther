@@ -27,11 +27,11 @@ class ARowIsAskedOfBoxesAloneWhereNoRuleRelatesTwoPositionsTest {
     private static final long[] COEFS = {1, 2, 3, -1, -2};
 
     private static NumericDomain<String> random(Random random, Granularity spacing) {
-        NumberSpace seven = new NumberSpace(spacing, new NumericDomain.Bounds(
+        NumberSpace seven = NumberSpace.stopping(spacing, new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(7))));
         Map<String, NumberSpace> spaces = new LinkedHashMap<>();
         ATOMS.forEach(each -> spaces.put(each, seven));
-        NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.<String>asTheyAreSpelled());
+        NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         int rules = 1 + random.nextInt(4);
         for (int i = 0; i < rules; i++) {
             String atom = ATOMS.get(random.nextInt(ATOMS.size()));
@@ -44,7 +44,7 @@ class ARowIsAskedOfBoxesAloneWhereNoRuleRelatesTwoPositionsTest {
                 form = LinearForm.<String>constant(ExactRatio.ZERO).minus(form).orNull();
             }
             form = form.minus(LinearForm.constant(ExactRatio.of(random.nextInt(31) - 12))).orNull();
-            domain = domain.assumeWithin(form, RELS[random.nextInt(RELS.length)], spaces);
+            domain = domain.assume(form, RELS[random.nextInt(RELS.length)], spaces);
         }
         return domain;
     }

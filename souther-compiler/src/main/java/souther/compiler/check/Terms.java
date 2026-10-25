@@ -2297,7 +2297,7 @@ final class Terms {
      *  closure was handed and never read is one no form names. */
     Map<FactSubject, NumberSpace> spacesOfIfNamed(FactSubject atom) {
         Carrier carrier = atomCarriers.get(atom);
-        return carrier == null ? Map.of() : Map.of(atom, spaceOf(carrier));
+        return carrier == null ? Map.of() : Map.of(atom, carrier.space());
     }
 
     private Map<FactSubject, NumberSpace> spacesOfAtoms(Set<FactSubject> atoms) {
@@ -2307,13 +2307,9 @@ final class Terms {
             if (carrier == null) {
                 throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
-            out.put(atom, spaceOf(carrier));
+            out.put(atom, carrier.space());
         }
         return out;
-    }
-
-    private static NumberSpace spaceOf(Carrier carrier) {
-        return new NumberSpace(carrier.spacing(), carrier.whereItStops());
     }
 
     /** An expression's canonical key: a location names itself, and everything else is read

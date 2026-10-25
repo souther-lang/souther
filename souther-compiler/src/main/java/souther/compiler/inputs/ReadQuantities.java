@@ -19,6 +19,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -870,7 +871,7 @@ final class ReadQuantities implements Quantities {
         // Walked by the terms, because which term is named in the refusal is the answer here and a
         // form holds its terms without holding an order they were written in.
         for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
-            if (spacingOf(constraints(under).numbers(), term, called(term, under)) == null) {
+            if (spaceOf(constraints(under).numbers(), term, called(term, under)) == null) {
                 return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(term));
             }
         }
@@ -1091,19 +1092,19 @@ final class ReadQuantities implements Quantities {
                 || !stands(each.form().coefs().keySet(), under)) {
             return made;
         }
-        Map<InputAtom, Granularity> spacing = new LinkedHashMap<>();
+        Map<InputAtom, NumberSpace> spaces = new LinkedHashMap<>();
         for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
-            Granularity spaced = spacingOf(made.numbers(), term, called(term, under));
-            if (spaced == null) {
+            NumberSpace space = spaceOf(made.numbers(), term, called(term, under));
+            if (space == null) {
                 return made;
             }
-            spacing.put(called(term, under), spaced);
+            spaces.put(called(term, under), space);
         }
         // Where the caller's own form cannot be carried into this input's terms, this rule is one
         // the state is not narrowed by — an unheld sum is a step short, and the sound answer with
         // less is not to take a step at all.
         LinearForm<InputAtom> over = over(each.form(), under);
-        return over == null ? made : insideItsOrder(made.takingSpaced(over, each.rel(), spacing),
+        return over == null ? made : insideItsOrder(made.taking(over, each.rel(), spaces),
                 each.form().coefs().keySet(), under);
     }
 
@@ -1239,11 +1240,10 @@ final class ReadQuantities implements Quantities {
                     return rules;
                 }
                 InputAtom atom = called(counted, under);
-                souther.compiler.numeric.Granularity spaced =
-                        spacingOf(rules.numbers(), counted, atom);
-                return spaced == null ? rules : rules.takingSpaced(
+                NumberSpace space = spaceOf(rules.numbers(), counted, atom);
+                return space == null ? rules : rules.taking(
                         LinearForm.<InputAtom>atomMinusConstant(atom, ExactRatio.ONE),
-                        Rel.GE, Map.of(atom, spaced));
+                        Rel.GE, Map.of(atom, space));
             }
         }
     }
@@ -1497,11 +1497,11 @@ final class ReadQuantities implements Quantities {
             return rules;
         }
         InputAtom atom = called(term, under);
-        souther.compiler.numeric.Granularity spaced = spacingOf(rules.numbers(), term, atom);
-        if (spaced == null) {
+        NumberSpace space = spaceOf(rules.numbers(), term, atom);
+        if (space == null) {
             return rules;
         }
-        return insideItsOrder(rules.takingSpaced(atom, numbersOf(runs), Map.of(atom, spaced)),
+        return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, space)),
                 Set.of(term), under);
     }
 
@@ -1513,7 +1513,7 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * How the values of one term are spaced.
+     * What is said of the values of one term: how they are spaced, and where their order stops.
      *
      * <p>What the rules already record about it where they record anything, and what its type says
      * where they do not. Asked of the rules first because that is where the two could disagree, and
@@ -1529,9 +1529,9 @@ final class ReadQuantities implements Quantities {
      * a strict bound is either wrongly sharpened on it or silently left blunt — so what is not
      * known is left out, and what the rules leave is then wider rather than wrong.
      */
-    private Granularity spacingOf(NumericDomain<InputAtom> rules, NumericTerm term,
-                                  InputAtom atom) {
-        Granularity had = rules.spacingOf(atom);
+    private NumberSpace spaceOf(NumericDomain<InputAtom> rules, NumericTerm term,
+                                InputAtom atom) {
+        NumberSpace had = rules.spaceOf(atom);
         if (had != null) {
             return had;
         }
@@ -1544,7 +1544,7 @@ final class ReadQuantities implements Quantities {
         // the order was there to be had, and a count under more steps than the enumeration goes
         // down would lose the floor every count has.
         Carrier carrier = ordersOf(term).answered();
-        return carrier == null ? null : carrier.spacing();
+        return carrier == null ? null : carrier.space();
     }
 
     @Override
@@ -1669,15 +1669,20 @@ final class ReadQuantities implements Quantities {
     private ConstraintState<InputAtom> insideItsOrder(ConstraintState<InputAtom> rules,
                                                       Set<NumericTerm> terms,
                                                       StructuralContext under) {
-        Map<InputAtom, NumericDomain.Bounds> stops = new LinkedHashMap<>();
+        Map<InputAtom, NumberSpace> told = new LinkedHashMap<>();
         for (NumericTerm each : NumericTerms.inOrder(terms)) {
             TermOrders orders = ordersOf(each);
             Carrier order = orders == null ? null : orders.answered();
             if (order != null) {
-                stops.put(called(each, under), order.whereItStops());
+                InputAtom atom = called(each, under);
+                // Spaced as the rules already have it, where they have it: the ends are what this
+                // adds, and a position is spaced one way.
+                Granularity spacing = rules.numbers().spacingOf(atom);
+                told.put(atom, NumberSpace.stopping(
+                        spacing == null ? order.spacing() : spacing, order.whereItStops()));
             }
         }
-        return rules.heldInsideTheirOrders(stops);
+        return rules.told(told);
     }
 
     /**

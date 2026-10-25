@@ -61,7 +61,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         NumericDomain<FactSubject> d = NumericDomain.top(FactSubject.inOneOrder());
         for (FactSubject atom : atoms) {
             LinearForm<FactSubject> form = LinearForm.atom(atom);
-            d = d.assumeWithin(form, Rel.GE, terms.spacesOf(form));
+            d = d.assume(form, Rel.GE, terms.spacesOf(form));
         }
         return d;
     }

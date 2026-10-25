@@ -61,19 +61,20 @@ public final class NumericDomain<A> {
     private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 34;
 
     private final StatedRules<A> stated;
-    /** How the values at each position are spaced, told one rule at a time ({@link AppendOnly}). */
-    private final AppendOnly<A, Granularity> kinds;
     /**
-     * Where the order each atom's values are counted on stops, told where the atom is known
-     * ({@link #heldInsideTheirOrders}). A fact about the position, as its spacing is, so it goes
-     * with the names and with every domain met with this one: what a row holds is asked inside
-     * these, and an answer that needed each asker to say them again was one an asker without them
-     * gave of values no row holds.
+     * What a type says of each atom the domain was told of — how its values are spaced and where
+     * the order they are counted on stops — told one atom at a time ({@link AppendOnly}).
      *
-     * <p>Not a rule. Said as one, an order's end would be a bound the rules place, and every reader
-     * of what the rules leave would read the type's end as a line the model draws.
+     * <p>One table for the two, because they are facts about one position: they go with the names
+     * and with every domain met with this one, and what a row holds is asked inside the ends, so an
+     * answer that needed each asker to say them again was one an asker without them gave of values
+     * no row holds. Held as one, an atom cannot be known by its spacing and have its ends left
+     * behind by whichever route told it.
+     *
+     * <p>The ends are not a rule. Said as one, an order's end would be a bound the rules place, and
+     * every reader of what the rules leave would read the type's end as a line the model draws.
      */
-    private final AppendOnly<A, Bounds> orders;
+    private final AppendOnly<A, NumberSpace> spaces;
     private final boolean readARuleNothingSatisfies;
 
     /**
@@ -121,14 +122,12 @@ public final class NumericDomain<A> {
     private Systems<A> systems;
     private Boolean noRow;
 
-    private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
-                          AppendOnly<A, Bounds> orders,
+    private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
                           boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
                           ClosedStates closedStates, ClosedStates.Parted<A> closedBefore,
                           RulesRead<A> readBefore) {
         this.stated = stated;
-        this.kinds = kinds;
-        this.orders = orders;
+        this.spaces = spaces;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
         this.order = order;
         this.closedStates = closedStates;
@@ -173,7 +172,7 @@ public final class NumericDomain<A> {
      * from this one is lent the closure of any other made from it that held the same rules.
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
-        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), AppendOnly.empty(),
+        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(),
                 false, order, closedStates, null, null);
     }
 
@@ -328,68 +327,35 @@ public final class NumericDomain<A> {
      * sound answer with less, and the one {@link AffineConstraint.Read.NotWorkedOut} gives for a
      * rule whose lowest terms are not held.
      *
-     * @param atomKinds see {@link #assume(LinearForm, Rel, Map)}
+     * @param spaces see {@link #assume(LinearForm, Rel, Map)}
      */
     public NumericDomain<A> assume(ExactAnswer<LinearForm<A>> f, Rel rel,
-                                   Map<A, Granularity> atomKinds) {
+                                   Map<A, NumberSpace> spaces) {
         return f instanceof ExactAnswer.Held<LinearForm<A>> held
-                ? assume(held.value(), rel, atomKinds) : this;
-    }
-
-    /**
-     * The domain with {@code f rel 0} taken in, and with the space of each atom of {@code f}
-     * recorded: its spacing and where its order stops, together, so that no route tells the domain
-     * one without the other.
-     *
-     * @param spaces what the type of each atom of {@code f} says of its values
-     */
-    public NumericDomain<A> assumeWithin(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
-        return knowingSpaces(f.coefs().keySet(), spaces).assume(f, rel, spacingsOf(spaces));
-    }
-
-    /** The domain with {@code atom} taken to lie between {@code bounds}, its space recorded as
-     *  {@link #assumeWithin} does. */
-    public NumericDomain<A> assumingWithin(A atom, Bounds bounds, Map<A, NumberSpace> spaces) {
-        return knowingSpaces(Set.of(atom), spaces).assuming(atom, bounds, spacingsOf(spaces));
-    }
-
-    private NumericDomain<A> knowingSpaces(Set<A> atoms, Map<A, NumberSpace> spaces) {
-        Map<A, Bounds> stops = new LinkedHashMap<>();
-        for (A atom : atoms) {
-            NumberSpace space = spaces.get(atom);
-            if (space == null) {
-                throw new IllegalStateException("no space given for atom `" + atom + "`");
-            }
-            stops.put(atom, space.extent());
-        }
-        return heldInsideTheirOrders(stops);
-    }
-
-    private static <A> Map<A, Granularity> spacingsOf(Map<A, NumberSpace> spaces) {
-        Map<A, Granularity> out = new LinkedHashMap<>();
-        spaces.forEach((atom, space) -> out.put(atom, space.spacing()));
-        return out;
+                ? assume(held.value(), rel, spaces) : this;
     }
 
     /**
      * The domain with {@code f rel 0} taken in.
      *
-     * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than
-     *                  defaulted: an atom whose spacing is guessed is one a strict bound is either
-     *                  wrongly sharpened on or silently left blunt, and neither shows up as a
-     *                  failure anywhere near where the guess was made.
+     * @param spaces what the type of each atom of {@code f} says of its values: how they are
+     *               spaced and where their order stops. Required rather than defaulted: an atom
+     *               whose spacing is guessed is one a strict bound is either wrongly sharpened on
+     *               or silently left blunt, and neither shows up as a failure anywhere near where
+     *               the guess was made. An atom no type could be found for is told as such
+     *               ({@link NumberSpace#spacedOnly}), which is a thing said and not a default.
      */
-    public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, Granularity> atomKinds) {
-        NumericDomain<A> knowing = knowing(f.coefs().keySet(), atomKinds);
+    public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
+        NumericDomain<A> knowing = knowing(f.coefs().keySet(), spaces);
         if (knowing.readARuleNothingSatisfies) {
             return knowing;
         }
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                f.coefs(), f.constant(), rel, knowing.kinds::get);
+                f.coefs(), f.constant(), rel, knowing::spacingOf);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
-                    new NumericDomain<>(StatedRules.none(), knowing.kinds, knowing.orders, true,
+                    new NumericDomain<>(StatedRules.none(), knowing.spaces, true,
                             knowing.order, closedStates, null, null);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
@@ -409,7 +375,7 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
-        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, orders, false, order,
+        return new NumericDomain<>(stated.and(StatedRules.of(rule)), spaces, false, order,
                 closedStates, lent(), readLent());
     }
 
@@ -421,74 +387,83 @@ public final class NumericDomain<A> {
      * caller spelling that out is a second reader of an {@link Endpoint} that can spell it
      * differently. Two of them had.
      */
-    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
+    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, NumberSpace> spaces) {
         NumericDomain<A> out = this;
         if (bounds.min() != null) {
             out = out.assume(
                     LinearForm.atomMinusConstant(atom, Count.number(bounds.min().at()).exactly()),
-                    bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
+                    bounds.min().inclusive() ? Rel.GE : Rel.GT, spaces);
         }
         if (bounds.max() != null) {
             out = out.assume(
                     LinearForm.atomMinusConstant(atom, Count.number(bounds.max().at()).exactly()),
-                    bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
+                    bounds.max().inclusive() ? Rel.LE : Rel.LT, spaces);
         }
         return out;
     }
 
     /**
-     * The domain with the spacing of each of {@code atoms} recorded.
+     * The domain told what the types of {@code told} say, for atoms no rule has named yet as well
+     * as for the ones it has: the way a reader whose atoms come with their types hands them over
+     * before it says any rule about them, or after.
      *
-     * <p>One atom is one kind of number for as long as the domain lives. The same key arriving as
-     * both is not a widening to absorb — the key is what says two readings are of one value, so two
-     * spacings under one key means the naming and the typing disagree, and the answer to that is to
-     * stop rather than to pick the safer of the two.
+     * <p>What the rules leave does not move: the rules are the same rules, and this says only
+     * which of their points a row can be.
      */
-    private NumericDomain<A> knowing(Set<A> atoms, Map<A, Granularity> atomKinds) {
-        AppendOnly<A, Granularity> next = kinds;
-        for (A atom : atoms) {
-            Granularity given = atomKinds.get(atom);
-            if (given == null) {
-                throw new IllegalStateException("no granularity given for atom `" + atom + "`");
-            }
-            Granularity had = next.get(atom);
-            if (had == given) {
-                continue;
-            }
-            if (had != null) {
-                throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + given);
-            }
-            next = next.with(atom, given);
-        }
-        return next == kinds ? this
-                : new NumericDomain<>(stated, next, orders, readARuleNothingSatisfies, order,
-                        closedStates, lent(), readLent());
+    public NumericDomain<A> told(Map<A, NumberSpace> told) {
+        return knowing(told.keySet(), told);
     }
 
     /**
-     * The domain with where the order of each of {@code stops} is counted on stops recorded, by
-     * atom.
+     * The domain with {@code atoms}' spaces recorded, from what {@code told} gives each.
      *
-     * <p>Recorded and checked as a spacing is ({@link #knowing}): one atom is one kind of number
-     * for as long as the domain lives, so two ends under one key is the naming and the typing
-     * disagreeing, and the answer to that is to stop. What the rules leave does not move: the
-     * rules are the same rules, and this says only which of their points a row can be.
+     * <p>One atom is one kind of number for as long as the domain lives. The same atom arriving
+     * spaced two ways, or stopping at two ends, is not a widening to absorb — the key is what says
+     * two readings are of one value, so the naming and the typing disagree, and the answer to that
+     * is to stop rather than to pick the safer of the two. An atom told twice is told the same
+     * space, or told where its order stops the second time having been left untold the first
+     * ({@link NumberSpace#joinedWith}); the table keeps what it was told whole, so the second
+     * telling builds it again.
      */
-    public NumericDomain<A> heldInsideTheirOrders(Map<A, Bounds> stops) {
-        AppendOnly<A, Bounds> next = orders;
-        for (Map.Entry<A, Bounds> each : stops.entrySet()) {
-            Bounds had = next.get(each.getKey());
-            if (each.getValue().equals(had)) {
+    private NumericDomain<A> knowing(Set<A> atoms, Map<A, NumberSpace> told) {
+        AppendOnly<A, NumberSpace> next = spaces;
+        Map<A, NumberSpace> upgraded = null;
+        for (A atom : atoms) {
+            NumberSpace given = told.get(atom);
+            if (given == null) {
+                throw new IllegalStateException("no space given for atom `" + atom + "`");
+            }
+            NumberSpace had = next.get(atom);
+            if (had == null) {
+                next = next.with(atom, given);
                 continue;
             }
-            if (had != null) {
-                throw new IllegalStateException("atom `" + each.getKey() + "` stops at " + had
-                        + " and " + each.getValue());
+            NumberSpace joined;
+            try {
+                joined = had.joinedWith(given);
+            } catch (IllegalStateException disagreed) {
+                throw new IllegalStateException("atom `" + atom + "` " + disagreed.getMessage(),
+                        disagreed);
             }
-            next = next.with(each.getKey(), each.getValue());
+            if (!joined.equals(had)) {
+                if (upgraded == null) {
+                    upgraded = new LinkedHashMap<>(next.asMap());
+                }
+                upgraded.put(atom, joined);
+            }
         }
-        return next == orders ? this
-                : new NumericDomain<>(stated, kinds, next, readARuleNothingSatisfies, order,
+        if (upgraded != null) {
+            // An atom whose ends were untold and now are: the table cannot rewrite what it holds,
+            // so it is built again with what it now says.
+            next = AppendOnly.of(upgraded);
+            for (A atom : atoms) {
+                if (!next.contains(atom)) {
+                    next = next.with(atom, told.get(atom));
+                }
+            }
+        }
+        return next == spaces ? this
+                : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order,
                         closedStates, lent(), readLent());
     }
 
@@ -509,9 +484,9 @@ public final class NumericDomain<A> {
      * So the caller is the one that decides what such a position is called, and it may call it
      * something opaque; what it may not do is leave it unnamed and be given a wider answer.
      *
-     * <p>The spacing goes with the names, since it is a fact about the position rather than about
-     * the word for it. Every position a rule weighs is one this records a spacing for, so naming
-     * them all is naming everything the rules are about — a rule reaching one this has no spacing
+     * <p>The space goes with the names, since it is a fact about the position rather than about
+     * the word for it. Every position a rule weighs is one this records a space for, so naming
+     * them all is naming everything the rules are about — a rule reaching one this has no space
      * for is refused rather than carried across unnamed.
      */
     public <B> NumericDomain<B> over(java.util.function.Function<A, B> naming,
@@ -520,18 +495,9 @@ public final class NumericDomain<A> {
         // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
         // positions, so two independent rules would be carried across as two rules about one number
         // and a box holding something would come back holding nothing.
-        Renaming<A, B> called = Renaming.of(kinds.keys(), naming);
-        Map<B, Granularity> spacing = new LinkedHashMap<>();
-        kinds.asMap().forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
-        // And where each order stops, which is the same kind of fact. Of the positions the rules
-        // speak of, which are the ones a row is asked about; an end told of a position no rule
-        // names bounds nothing anybody asks.
-        Map<B, Bounds> stops = new LinkedHashMap<>();
-        orders.asMap().forEach((atom, stop) -> {
-            if (kinds.contains(atom)) {
-                stops.put(called.of(atom), stop);
-            }
-        });
+        Renaming<A, B> called = Renaming.of(spaces.keys(), naming);
+        Map<B, NumberSpace> renamed = new LinkedHashMap<>();
+        spaces.asMap().forEach((atom, space) -> renamed.put(called.of(atom), space));
         StatedRules<B> out = StatedRules.none();
         for (AffineConstraint<A> rule : rules()) {
             out = out.and(StatedRules.of(rule.over(called)));
@@ -541,7 +507,7 @@ public final class NumericDomain<A> {
         // caller is the one that knows it — the same reason the order is asked for at the top.
         // Nothing is lent across either: rules under other names are another reader's rules, and
         // they join the closures of the reading they are met into.
-        return new NumericDomain<>(out, AppendOnly.of(spacing), AppendOnly.of(stops),
+        return new NumericDomain<>(out, AppendOnly.of(renamed),
                 readARuleNothingSatisfies, order, ClosedStates.NONE, null, null);
     }
 
@@ -566,22 +532,12 @@ public final class NumericDomain<A> {
      * nothing about what the rules mean.
      */
     public NumericDomain<A> meet(NumericDomain<A> other) {
-        if (other == null || (other.stated.isNothing() && other.kinds.isEmpty()
-                && other.orders.isEmpty() && !other.readARuleNothingSatisfies)) {
+        if (other == null || (other.stated.isNothing() && other.spaces.isEmpty()
+                && !other.readARuleNothingSatisfies)) {
             return this;
         }
-        NumericDomain<A> held = heldInsideTheirOrders(other.orders.asMap());
-        AppendOnly<A, Granularity> both = kinds;
-        for (Map.Entry<A, Granularity> each : other.kinds.asMap().entrySet()) {
-            Granularity had = both.get(each.getKey());
-            if (had == null) {
-                both = both.with(each.getKey(), each.getValue());
-            } else if (had != each.getValue()) {
-                throw new IllegalStateException("atom `" + each.getKey() + "` is " + had + " and "
-                        + each.getValue());
-            }
-        }
-        return new NumericDomain<>(stated.and(other.stated), both, held.orders,
+        NumericDomain<A> both = knowing(other.spaces.keys(), other.spaces.asMap());
+        return new NumericDomain<>(stated.and(other.stated), both.spaces,
                 readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates,
                 // The rules said first are this one's, unless it has none and they are the other's.
                 stated.isNothing() ? other.lent() : lent(),
@@ -600,7 +556,7 @@ public final class NumericDomain<A> {
     private ClosedState<A> closed() {
         ClosedStates.Parted<A> had = closed;
         if (had == null) {
-            had = closedStates.of(rules(), kinds::get, order, closedBefore);
+            had = closedStates.of(rules(), this::spacingOf, order, closedBefore);
             closed = had;
         }
         return had.state();
@@ -711,7 +667,7 @@ public final class NumericDomain<A> {
     private boolean spacedAlike(Map<A, A> reaches, List<A> atoms) {
         Map<A, Granularity> ofGroup = new LinkedHashMap<>();
         for (A atom : atoms) {
-            Granularity how = kinds.get(atom);
+            Granularity how = spacingOf(atom);
             if (how == null) {
                 // Every atom of every rule is spaced, since a rule arrives through `assume` and that
                 // refuses one whose spacing it was not given. Said rather than read as an absence:
@@ -765,12 +721,12 @@ public final class NumericDomain<A> {
             return true;   // an infeasible path discharges anything
         }
         Map<A, ExactRatio> coefs = weighed(f);
-        if (!coefs.keySet().stream().allMatch(kinds::contains)) {
+        if (!coefs.keySet().stream().allMatch(spaces::contains)) {
             // A position this has never been told about is one nothing here bounds, so nothing here
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
         }
-        return switch (AffineConstraint.of(coefs, f.constant(), rel, kinds::get)) {
+        return switch (AffineConstraint.of(coefs, f.constant(), rel, this::spacingOf)) {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
@@ -979,7 +935,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Projection.NothingIsLeft();
         }
-        return kinds.contains(atom)
+        return spaces.contains(atom)
                 ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
     }
 
@@ -1104,7 +1060,7 @@ public final class NumericDomain<A> {
      * because it is one a rule was written about.
      */
     public Set<A> atomsSpokenOf() {
-        return kinds.keys();
+        return spaces.keys();
     }
 
     /**
@@ -1116,7 +1072,22 @@ public final class NumericDomain<A> {
      * whole are what a dense value between two of them has as well.
      */
     public Granularity spacingOf(A atom) {
-        return kinds.get(atom);
+        NumberSpace space = spaces.get(atom);
+        return space == null ? null : space.spacing();
+    }
+
+    /**
+     * What the type of {@code atom} said of its values when this was told of it, or null where
+     * nothing was told of the atom.
+     */
+    public NumberSpace spaceOf(A atom) {
+        return spaces.get(atom);
+    }
+
+    /** Where the order {@code atom}'s values are counted on stops, or null where nothing said. */
+    private Bounds stopsOf(A atom) {
+        NumberSpace space = spaces.get(atom);
+        return space == null ? null : space.stops();
     }
 
     /**
@@ -1208,7 +1179,7 @@ public final class NumericDomain<A> {
         return systems.shown().computeIfAbsent(group, key -> {
             List<A> atoms = systems.atomsOf().getOrDefault(key, List.of());
             List<AffineConstraint<A>> rules = systems.rulesOf().get(key);
-            if (!atoms.stream().allMatch(orders::contains)) {
+            if (!atoms.stream().allMatch(each -> stopsOf(each) != null)) {
                 return Shown.NOTHING;
             }
             if (systems.spacedAlike().contains(key)
@@ -1235,7 +1206,7 @@ public final class NumericDomain<A> {
         Map<A, Bounds> runs = new LinkedHashMap<>();
         for (A atom : atoms) {
             Bounds box = boxOf(atom);
-            Bounds run = box == null ? null : box.meet(orders.get(atom));
+            Bounds run = box == null ? null : box.meet(stopsOf(atom));
             if (run == null || !run.holdsAValue() || spacingOf(atom) == null) {
                 return null;
             }
@@ -1276,7 +1247,7 @@ public final class NumericDomain<A> {
             }
         }
         for (A atom : atoms) {
-            Bounds order = orders.get(atom);
+            Bounds order = stopsOf(atom);
             if (spacingOf(atom) != Granularity.DENSE || order == null) {
                 return false;
             }
@@ -1423,8 +1394,8 @@ public final class NumericDomain<A> {
 
     /** Whether the box of some position told its order shares no value with it. */
     private boolean someBoxLiesOutsideItsOrder() {
-        for (A atom : kinds.keys()) {
-            Bounds stop = orders.get(atom);
+        for (A atom : spaces.keys()) {
+            Bounds stop = stopsOf(atom);
             Bounds box = stop == null ? null : boxOf(atom);
             if (box != null && !box.meet(stop).holdsAValue()) {
                 return true;
@@ -1436,7 +1407,7 @@ public final class NumericDomain<A> {
     /** The same answer for any rules: the ends taken in as rules and the closure asked again. */
     boolean leavesNoRowByClosure() {
         NumericDomain<A> inside = insideTheOrdersOf(
-                kinds.keys().stream().filter(orders::contains).toList());
+                spaces.keys().stream().filter(each -> stopsOf(each) != null).toList());
         return inside != this && inside != null && inside.isBottom();
     }
 
@@ -1449,7 +1420,7 @@ public final class NumericDomain<A> {
     private NumericDomain<A> insideTheOrdersOf(List<A> atoms) {
         NumericDomain<A> inside = this;
         for (A atom : atoms) {
-            Bounds stop = orders.get(atom);
+            Bounds stop = stopsOf(atom);
             Bounds box = boxOf(atom);
             if (box != null && box.liesWithin(stop)) {
                 continue;
@@ -1457,7 +1428,7 @@ public final class NumericDomain<A> {
             if (spacingOf(atom) == null) {
                 return null;
             }
-            Map<A, Granularity> spaced = Map.of(atom, spacingOf(atom));
+            Map<A, NumberSpace> spaced = Map.of(atom, spaceOf(atom));
             if (stop.min() != null && stop.min().at() instanceof Count least) {
                 inside = inside.assume(LinearForm.atomMinusConstant(atom, least.exactly()),
                         stop.min().inclusive() ? Rel.GE : Rel.GT, spaced);

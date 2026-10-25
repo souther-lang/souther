@@ -37,7 +37,7 @@ class OneEngineWorksOutEachClosureOnceTest {
         FactSubject x = FactSubject.of(NAMES.written("x"));
         LinearForm<FactSubject> form = LinearForm.atom(x);
         Map<FactSubject, NumberSpace> kinds =
-                Map.of(x, new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN));
+                Map.of(x, NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN));
 
         Known one = engine.nothingKnown().taking(form, Rel.GE, Known.Held.ON_THE_PATH, kinds);
         Known two = engine.nothingKnown().taking(form, Rel.GE, Known.Held.ON_THE_PATH, kinds);

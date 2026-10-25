@@ -273,7 +273,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
      *  {@code held} reaches. */
     private static Known range(Known known, long low, long high, Known.Held held) {
         Map<FactSubject, NumberSpace> whole = Map.of(A_POSITION,
-                new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN));
+                NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN));
         return known
                 .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(low)), Rel.GE,
                         held, whole)

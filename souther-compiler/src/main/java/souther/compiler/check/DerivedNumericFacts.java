@@ -316,11 +316,11 @@ final class DerivedNumericFacts {
         }
 
         ReadingDomain assume(LinearForm<FactSubject> form, Rel rel, Map<FactSubject, NumberSpace> spaces) {
-            return new ReadingDomain(domain.assumeWithin(form, rel, spaces));
+            return new ReadingDomain(domain.assume(form, rel, spaces));
         }
 
         ReadingDomain assuming(FactSubject atom, Bounds bounds, Map<FactSubject, NumberSpace> spaces) {
-            return new ReadingDomain(domain.assumingWithin(atom, bounds, spaces));
+            return new ReadingDomain(domain.assuming(atom, bounds, spaces));
         }
 
         /** This, with what a walk's step is handed taken as holding. */
@@ -336,9 +336,9 @@ final class DerivedNumericFacts {
             for (Fact fact : facts) {
                 out = switch (fact) {
                     case Fact.Between(FactSubject atom, Bounds bounds) ->
-                            out.assumingWithin(atom, bounds, terms.spacesOf(LinearForm.atom(atom)));
+                            out.assuming(atom, bounds, terms.spacesOf(LinearForm.atom(atom)));
                     case NumericConstraint(LinearForm<FactSubject> form, Rel rel) ->
-                            out.assumeWithin(form, rel, terms.spacesOf(form));
+                            out.assume(form, rel, terms.spacesOf(form));
                 };
             }
             return new ReadingDomain(out);
@@ -364,7 +364,7 @@ final class DerivedNumericFacts {
         NumericDomain<FactSubject> out = base;
         for (FactSubject atom : terms.reachedFrom(from)) {
             for (NumericConstraint fact : terms.knowledgeOf(atom).intrinsic()) {
-                out = out.assumeWithin(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
+                out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
             }
         }
         return new ReadingDomain(out);

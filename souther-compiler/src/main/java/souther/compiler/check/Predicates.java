@@ -268,7 +268,7 @@ final class Predicates {
         private NumericDomain<FactSubject> in(NumericDomain<FactSubject> d) {
             NumericDomain<FactSubject> out = d;
             for (NumericConstraint one : given) {
-                out = out.assumeWithin(one.form(), one.rel(), spaces);
+                out = out.assume(one.form(), one.rel(), spaces);
             }
             return out;
         }

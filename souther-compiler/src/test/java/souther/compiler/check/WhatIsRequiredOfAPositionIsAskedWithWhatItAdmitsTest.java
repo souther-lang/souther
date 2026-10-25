@@ -255,14 +255,14 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 "no rule names it, so nothing about it follows from these rules");
         NumericDomain<String> related = nothing.assume(
                 LinearForm.<String>atom("x").minus(LinearForm.atom("y")), Rel.EQ,
-                Map.of("x", souther.compiler.numeric.Granularity.DISCRETE,
-                        "y", souther.compiler.numeric.Granularity.DISCRETE));
+                Map.of("x", NumberSpace.spacedOnly(Granularity.DISCRETE),
+                        "y", NumberSpace.spacedOnly(Granularity.DISCRETE)));
         assertEquals(new NumericDomain.Projection.Within(new NumericDomain.Bounds(null, null)),
                 related.projectionOf("x"),
                 "a rule names it and places no end, which is not the same as no rule naming it");
         NumericDomain<String> nowhere = related.assume(
                 LinearForm.<String>constant(ExactRatio.ONE), Rel.LT,
-                Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
+                Map.of("x", NumberSpace.spacedOnly(Granularity.DISCRETE)));
         assertInstanceOf(NumericDomain.Projection.NothingIsLeft.class, nowhere.projectionOf("x"),
                 "an atom of rules nothing satisfies is at no value, not at every value");
     }
@@ -280,10 +280,10 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     void aComponentHoldingNothingLeavesNoEnvelopeEvenWithNoPositionToAskAbout() {
         ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.asTheyAreSpelled())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
-                        Map.of("x", new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)))
+                        Map.of("x", NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)))
                 .taking(SmallForm.small(LinearForm.<String>constant(ExactRatio.of(-1)))
                                 .minus(LinearForm.atom("x")).form(), Rel.GE,
-                        Map.of("x", new NumberSpace(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)));
+                        Map.of("x", NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
         assertEquals(Map.of(), nowhere.confinement().carriers(), "and no position is read at all");
         assertInstanceOf(PositionEnvelope.NothingIsLeft.class, nowhere.positionEnvelope());
@@ -349,7 +349,8 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                         CanonicalOrder.asTheyAreSpelled())
                 .constraints();
         return ConstraintState.settling(handedOver, "at:" + NumberAt.valueOf(RuleKey.of("y")),
-                new Count(BigDecimal.valueOf(at)), Granularity.DISCRETE).isBottom();
+                new Count(BigDecimal.valueOf(at)),
+                NumberSpace.spacedOnly(Granularity.DISCRETE)).isBottom();
     }
 
     /** What the one declaration of {@code source} was shown to have no value by, or null. */

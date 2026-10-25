@@ -150,7 +150,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, NumberSpace>
     NumericDomain<FactSubject> taking(NumericDomain<FactSubject> domain) {
         NumericDomain<FactSubject> out = domain;
         for (Map.Entry<FactSubject, Bounds> one : at.entrySet()) {
-            out = out.assumingWithin(one.getKey(), one.getValue(), spaces);
+            out = out.assuming(one.getKey(), one.getValue(), spaces);
         }
         return out;
     }
