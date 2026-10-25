@@ -13,6 +13,7 @@ import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Instants;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
@@ -453,6 +454,14 @@ public sealed interface Carrier extends ValueOrder {
     /** Every value this order has, as the run {@link #extent} is: open on a side it has no end. */
     default NumericDomain.Bounds whereItStops() {
         return new NumericDomain.Bounds(extent().low(), extent().high());
+    }
+
+    /**
+     * What this order says of the values of an atom counted on it — how they are spaced and where
+     * the order stops — as the one thing a numeric domain is told of an atom.
+     */
+    default NumberSpace space() {
+        return NumberSpace.stopping(spacing(), whereItStops());
     }
 
     /**

@@ -31,10 +31,10 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
         return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
-    private static Map<String, Granularity> whole(String... atoms) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> whole(String... atoms) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : atoms) {
-            out.put(each, Granularity.DISCRETE);
+            out.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         return out;
     }
@@ -165,7 +165,7 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
         NumericDomain<String> stepping = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a"), Rel.GE, whole("a"));
         NumericDomain<String> filling = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(atom("a"), Rel.GE, Map.of("a", Granularity.DENSE));
+                .assume(atom("a"), Rel.GE, Map.of("a", NumberSpace.spacedOnly(Granularity.DENSE)));
 
         assertThrows(IllegalStateException.class, () -> stepping.meet(filling));
     }

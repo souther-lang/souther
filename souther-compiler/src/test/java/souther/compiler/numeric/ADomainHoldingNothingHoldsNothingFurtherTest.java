@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ADomainHoldingNothingHoldsNothingFurtherTest {
 
-    private static final Map<String, Granularity> COUNTS = Map.of("n", Granularity.DISCRETE);
+    private static final Map<String, NumberSpace> COUNTS =
+            Map.of("n", NumberSpace.spacedOnly(Granularity.DISCRETE));
 
     private static LinearForm<String> nMinus(long count) {
         return LinearForm.atomMinusConstant("n", ExactRatio.of(count));

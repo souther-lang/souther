@@ -298,7 +298,7 @@ final class PathCompletion {
         Known out = k;
         for (NumericConstraint one : asked) {
             out = out.taking(one.form(), one.rel(), Known.Held.ON_THE_PATH,
-                    terms.kindsOf(one.form()));
+                    terms.spacesOf(one.form()));
         }
         return out;
     }
@@ -453,11 +453,11 @@ final class PathCompletion {
             }
             if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
                     instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)) {
-                out = out.taking(above, Rel.LE, Known.Held.ON_THE_PATH, terms.kindsOf(above));
+                out = out.taking(above, Rel.LE, Known.Held.ON_THE_PATH, terms.spacesOf(above));
             }
             if (form.minus(LinearForm.constant(ExactRatio.of(least)))
                     instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)) {
-                out = out.taking(below, Rel.GE, Known.Held.ON_THE_PATH, terms.kindsOf(below));
+                out = out.taking(below, Rel.GE, Known.Held.ON_THE_PATH, terms.spacesOf(below));
             }
         }
         return out;

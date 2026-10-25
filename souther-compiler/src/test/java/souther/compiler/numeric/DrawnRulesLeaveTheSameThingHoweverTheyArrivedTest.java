@@ -43,15 +43,15 @@ class DrawnRulesLeaveTheSameThingHoweverTheyArrivedTest {
         return LinearForm.weighing(a, ExactRatio.of(k));
     }
 
-    private static Map<String, Granularity> whole(String... atoms) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> whole(String... atoms) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : atoms) {
-            out.put(each, Granularity.DISCRETE);
+            out.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         return out;
     }
 
-    private static NumericDomain<String> given(List<Written> rules, Map<String, Granularity> kinds) {
+    private static NumericDomain<String> given(List<Written> rules, Map<String, NumberSpace> kinds) {
         NumericDomain<String> out = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Written each : rules) {
             out = out.assume(each.form(), each.rel(), kinds);
@@ -61,7 +61,7 @@ class DrawnRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
     @Test
     void theOrderAndTheRepetitionAreNotPartOfAnyAnswer() {
-        Map<String, Granularity> kinds = whole("a", "b", "c");
+        Map<String, NumberSpace> kinds = whole("a", "b", "c");
         Random dice = new Random(891);
         for (int round = 0; round < 300; round++) {
             List<Written> rules = someRules(dice);

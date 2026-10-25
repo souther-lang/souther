@@ -28,12 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
 
-    private static final Map<String, Granularity> WHOLE = whole("x", "y", "z");
+    private static final Map<String, NumberSpace> WHOLE = whole("x", "y", "z");
 
-    private static Map<String, Granularity> whole(String... positions) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> whole(String... positions) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : positions) {
-            out.put(each, Granularity.DISCRETE);
+            out.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         return out;
     }
