@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 
@@ -111,11 +112,20 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
         for (InvariantStatement one : statements) {
             Set<String> reads = new HashSet<>();
             switch (one) {
-                case InvariantStatement.Unread it -> readFrom(it.said(), fields, reads);
-                case InvariantStatement.Compares it -> {
-                    readFrom(it.states().left(), fields, reads);
-                    readFrom(it.states().right(), fields, reads);
+                case InvariantStatement.Unread it -> {
+                    // A comparison the calls-only reading made nothing of is still a comparison,
+                    // asked under the polarity it stood at.
+                    StatedComparison compares =
+                            Core.withoutStanding(it.said()) instanceof Core.Binary bin
+                                    ? StatedComparison.of(bin, it.positive()) : null;
+                    if (compares != null) {
+                        readFromComparison(compares, fields, reads);
+                    } else {
+                        readFrom(it.said(), fields, reads);
+                    }
                 }
+                case InvariantStatement.Compares it ->
+                        readFromComparison(it.states(), fields, reads);
                 case InvariantStatement.Applies it -> readFrom(it.call(), fields, reads);
                 case InvariantStatement.HoldsAnEntry it -> {
                     readFrom(it.held().container(), fields, reads);
@@ -131,20 +141,42 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
     }
 
     /**
-     * The fields of the record {@code e} reads, other than as the thing a count is taken of.
+     * The fields of the record a comparison reads, other than as a bound on how many a field holds.
      *
-     * <p>A count is left out only of a field itself: the count of a map made from the field
-     * ({@code Map.size(Map.remove(0, rates))}) depends on what the field holds, and is read from
-     * it.
+     * <p>Only a comparison of the count of a field itself with a number the record does not
+     * decide, by an order, is the interval the range of the field's count already carries. Every
+     * other statement about a count is read from the field: one that is not an interval
+     * ({@code Map.size(rates) != 1}, {@code Int.floorMod(Map.size(rates), 2) == 1}), one that
+     * relates the count to another field, and a count of a container made from the field
+     * ({@code Map.size(Map.remove(0, rates))}), which depends on what the field holds.
      */
+    private static void readFromComparison(StatedComparison states,
+                                           Map<BindingId, String> fields, Set<String> out) {
+        Set<String> left = new HashSet<>();
+        Set<String> right = new HashSet<>();
+        readFrom(states.left(), fields, left);
+        readFrom(states.right(), fields, right);
+        boolean interval = states.relationUnder(true) != Rel.NE
+                && ((isTheCountOfAField(states.left(), fields) && right.isEmpty())
+                || (isTheCountOfAField(states.right(), fields) && left.isEmpty()));
+        if (!interval) {
+            out.addAll(left);
+            out.addAll(right);
+        }
+    }
+
+    /** Whether {@code e} is a count taken of a field of the record itself. */
+    private static boolean isTheCountOfAField(Core e, Map<BindingId, String> fields) {
+        return Core.withoutStanding(e) instanceof Core.PreservedCall call
+                && NumericMeasures.isMeasure(call.operation())
+                && !call.args().isEmpty()
+                && call.args().stream().allMatch(arg -> Core.withoutStanding(arg)
+                        instanceof Core.Read read && fields.containsKey(read.binding()));
+    }
+
+    /** The fields of the record {@code e} reads. */
     private static void readFrom(Core e, Map<BindingId, String> fields, Set<String> out) {
         Core node = Core.withoutStanding(e);
-        if (node instanceof Core.PreservedCall call
-                && NumericMeasures.isMeasure(call.operation())
-                && call.args().stream().allMatch(arg -> Core.withoutStanding(arg)
-                        instanceof Core.Read read && fields.containsKey(read.binding()))) {
-            return;
-        }
         if (node instanceof Core.Read read && fields.containsKey(read.binding())) {
             out.add(fields.get(read.binding()));
         }

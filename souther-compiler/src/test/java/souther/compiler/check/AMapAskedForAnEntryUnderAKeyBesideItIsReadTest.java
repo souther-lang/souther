@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule asking a map for an entry under the key standing in another field is a rule of the two
@@ -178,8 +179,51 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
                         """));
     }
 
+    private static final String FIXED_ENTRY = """
+            module demo
+
+            data N = { key: Int, required: Int, rates: Map<Int, Int> }
+                invariant fixed = required == 0
+                invariant held = Map.containsKey(key, rates)
+                invariant requiredEntry = Map.containsKey(required, rates)
+                invariant small = Map.size(rates) <= 2
+                %s
+
+            behavior probe : (n: N) -> Int
+            let probe (n) = if Map.size(n.rates) >= 0 then 1 else 2
+            """;
+
     /**
-     * A count taken of a map made from the field is not the count the field's range carries: the
+     * A rule about how many the map holds is the interval its range carries only when it is one:
+     * a count that must be odd, or must not be one, leaves holes in the interval, and the map
+     * holding exactly the entry required is the one map the rules allow, so the key is that entry's.
+     */
+    @Test
+    void aCountThatIsNotAnIntervalIsARuleReadingTheMap() {
+        for (String rule : List.of(
+                "invariant odd = Int.floorMod(Map.size(rates), 2) == 1",
+                "invariant notTwo = Bool.not(Map.size(rates) == 2)")) {
+            Map<String, List<String>> left = unansweredAtTheFields(FIXED_ENTRY.formatted(rule));
+
+            assertFalse(left.get("n.key").isEmpty(), rule);
+            assertFalse(left.get("n.rates").isEmpty(), rule);
+        }
+    }
+
+    /**
+     * A count that is an interval is the count the range already carries, and the map is still
+     * built holding the entries asked of it.
+     */
+    @Test
+    void aCountThatIsAnIntervalLeavesTheMapRead() {
+        Map<String, List<String>> left = unansweredAtTheFields(
+                FIXED_ENTRY.formatted("invariant some = Map.size(rates) >= 1"));
+
+        assertTrue(left.get("n.rates").isEmpty());
+    }
+
+    /**
+     * A count of a map made from the field is not the count the field's range carries: the
      * map without the key nought has as many entries as the field only where it holds no such
      * entry, so the rule says the key is not nought.
      */

@@ -96,7 +96,8 @@ public sealed interface InvariantStatement {
      * done, and from "it states nothing" follows something about the author's model that is not
      * true.
      */
-    record Unread(InvariantStatementId id, Core said) implements InvariantStatement {
+    record Unread(InvariantStatementId id, Core said, boolean positive)
+            implements InvariantStatement {
 
         public Unread {
             Objects.requireNonNull(id, "a statement nothing was made of is still some statement");

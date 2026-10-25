@@ -160,6 +160,6 @@ public final class InvariantStatements {
             return new InvariantStatement.HoldsAnEntry(reached.statement(), entry);
         }
         return new InvariantStatement.Unread(reached.statement(),
-                Clauses.substituted(reached.said().of(), given));
+                Clauses.substituted(reached.said().of(), given), reached.said().positive());
     }
 }
