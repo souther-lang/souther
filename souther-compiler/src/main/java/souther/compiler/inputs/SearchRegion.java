@@ -52,15 +52,15 @@ import java.util.Set;
 public interface SearchRegion {
 
     /**
-     * This region over what the declarations say without the rules {@code parts} name, with what
-     * was taken in and fixed kept.
+     * This region over what the declarations say without the rules {@code parts} name under the
+     * parameter each is listed under, with what was taken in and fixed kept.
      *
      * <p>Wider than this region by those rules and no wider otherwise: the inclusion this region
      * keeps against what the declarations leave holds of the rest of them, so a reader that has
      * shown the rules hold nothing it asks of may ask the region without them. A region that reads
      * no declarations has none to leave out, which is what the default is.
      */
-    default SearchRegion leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+    default SearchRegion leavingOut(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
         return this;
     }
 

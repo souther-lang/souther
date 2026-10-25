@@ -2149,6 +2149,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * together still finds the rule tying them. Worked out for this relation and kept out of what
      * is remembered of the declarations, since which rules a row at this line needs is a question
      * of this line.
+     *
+     * <p>What the exclusion rests on is that a row at the line has the form within a step of the
+     * line, where each of the rule's comparisons holds whatever else the row says, so the rule
+     * takes away no row the line asks for and the fields it relates are bounded by what bounds each
+     * of them alone. That is shown only for a rule that satisfies all of: the clause is exactly
+     * such comparisons; each of them holds on both sides of the line over the greatest weight; the
+     * rule is applied at the one place of its parameter; and what keeps the bounds of a place from
+     * being the whole of what the rules leave it is this rule's relation and nothing else
+     * ({@link #certifiedBut}). A rule that fails one stays in the reading and ties as it did.
      */
     private Roomy rulesLeavingRoomAroundTheLine(InputReading read) {
         TakenConstraint.Affine asked = askedAsAStatement();
@@ -2157,7 +2166,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Set<Object> nodes = new LinkedHashSet<>();
         Set<RuleRef> refs = new LinkedHashSet<>();
-        Set<PartId<RuleRef.Invariant>> parts = new LinkedHashSet<>();
+        Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
         for (Side side : sides) {
             for (FilingCoordinate place : placesAsked(side)) {
                 for (Object node : reachedByTheDeclarations(place.path(), read).nodes().ties()) {
@@ -2167,7 +2176,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         if (stated != null) {
                             nodes.add(rule);
                             refs.add(new RuleRef.Invariant(stated.ref()));
-                            parts.addAll(stated.parts().ids());
+                            parts.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
+                                    .addAll(stated.parts().ids());
                         }
                     }
                 }
@@ -2179,16 +2189,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The rules a row at the line of this relation needs nothing of.
      *
+     * <p>Each is put aside where it was shown to leave room and nowhere else: a rule of a
+     * declaration is a rule of every value of it, so the proof for one place of a parameter is not
+     * one for another place of it ({@link #leavingRoomAroundTheLine}) nor for another parameter,
+     * and the region is read again without the rule only for the parameters it was shown for.
+     *
      * @param rules the tying of the declarations they are, as {@link #tiedByTheDeclarations}
      *              names them
      * @param refs  the same rules as the reading of the bounds names them
-     * @param parts every rule each of them was written as, which is what a region is read again
-     *              without
+     * @param parts every rule each of them was written as, under the parameter it was shown for,
+     *              which is what a region is read again without
      */
     private record Roomy(Set<Object> rules, Set<RuleRef> refs,
-                         Set<PartId<RuleRef.Invariant>> parts) {
+                         Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
 
-        static final Roomy NONE = new Roomy(Set.of(), Set.of(), Set.of());
+        static final Roomy NONE = new Roomy(Set.of(), Set.of(), Map.of());
     }
 
     /** The clause {@code rule} is of where it states exactly comparisons of the form
@@ -2206,6 +2221,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!rules.everyRuleReached() || rule.clause() >= reached.size()
                 || !(reached.get(rule.clause()) instanceof ClauseMeaning.Stated stated)
                 || !(stated.affine() instanceof ClauseAffineMeaning.Exact exact)) {
+            return null;
+        }
+        // The one place the rule is applied in its parameter: the region is read again without it
+        // by declaration, and a second place it holds at is a place the proof below was not made
+        // for.
+        if (appliedAt(rule, read).size() != 1) {
             return null;
         }
         List<TakenConstraint.Affine> statements = new ArrayList<>();
@@ -3980,7 +4001,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param takes       what the declarations leave it
      * @param onlyItsEnds whether, where that is not every value, it is the values between the ends
      *                    and nothing else
-     *                    ({@link #onlyItsEnds(Position, NumericTerm.ValueOf, boolean)})
+     *                    ({@link #onlyItsEnds(Position, NumericTerm.ValueOf, boolean, Set)})
      * @param named       whether a rule of a value it sits in names it
      */
     private record Source(Takes takes, boolean onlyItsEnds, boolean named, boolean relaxed) {
@@ -4220,13 +4241,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName,
                              Map<TermPath, Reached> byPlace,
                              Map<Declared, TiedOnTheWay> declared,
-                             Map<Written, List<TermPath>> placed) {
+                             Map<Written, List<TermPath>> placed,
+                             Map<String, Map<Applied, Set<TermPath>>> appliedAt) {
 
         static RulesRead of(InputReading read) {
             return read.derived(RulesRead.class, _ -> new RulesRead(
                     new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
-                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>()));
+                    new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                    new ConcurrentHashMap<>()));
         }
+    }
+
+    /** One clause of a declaration, whichever place of a parameter it holds at. */
+    private record Applied(TypeSymbol worn, int clause) {}
+
+    /**
+     * Every place of the parameter {@code rule} is in that the clause it is one of holds at: more
+     * than one where the declaration sits at several places of the parameter, a record with two
+     * fields of it say.
+     */
+    private static Set<TermPath> appliedAt(TiedOnTheWay.Rule rule, InputReading read) {
+        Map<Applied, Set<TermPath>> clauses = RulesRead.of(read).appliedAt()
+                .computeIfAbsent(rule.at().head(), head -> {
+                    Map<Applied, Set<TermPath>> out = new HashMap<>();
+                    for (Position each : read.domain().positions()) {
+                        if (!each.path().head().equals(head)) {
+                            continue;
+                        }
+                        for (Object node : reachedByTheDeclarations(each.path(), read)
+                                .nodes().ties()) {
+                            if (node instanceof TiedOnTheWay.Rule held && held.clause() >= 0) {
+                                out.computeIfAbsent(new Applied(held.worn(), held.clause()),
+                                        _ -> new LinkedHashSet<>()).add(held.at());
+                            }
+                        }
+                    }
+                    return out;
+                });
+        return clauses.getOrDefault(new Applied(rule.worn(), rule.clause()), Set.of());
     }
 
     /**
@@ -4328,17 +4380,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The classes the rules around {@code path} are in ({@link Nodes#ties}), where two rules are in
-     * one class if some place of the parameter is read by both ({@link Nodes#reads}).
-     */
-    private static Set<Object> tiedByTheDeclarations(TermPath path, InputReading read) {
-        return tiedByTheDeclarations(path, read, Set.of());
-    }
-
-    /**
-     * The same, without the rules in {@code ignoring}: they tie nothing, and join no rule to
-     * another by a place both read. Remembered under the rules left out as well as the parameter,
-     * so what a question put aside is a key of what is kept and never mixed into the classes of the
-     * rules as they stand.
+     * one class if some place of the parameter is read by both ({@link Nodes#reads}), without the
+     * rules in {@code ignoring}: they tie nothing, and join no rule to another by a place both
+     * read. Remembered under the rules left out as well as the parameter, so what a question put
+     * aside is a key of what is kept and never mixed into the classes of the rules as they stand.
      */
     private static Set<Object> tiedByTheDeclarations(TermPath path, InputReading read,
                                                      Set<Object> ignoring) {

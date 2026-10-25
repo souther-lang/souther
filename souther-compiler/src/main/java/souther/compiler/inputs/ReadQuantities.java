@@ -438,16 +438,22 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * This reading with the rules {@code parts} name left out of what the declarations say, and
-     * what a caller fixed or took in kept.
+     * This reading with the rules {@code parts} name left out of what the declarations say of the
+     * parameter they are listed under, and what a caller fixed or took in kept.
+     *
+     * <p>Per parameter, since a rule of a declaration is a rule of every value of it: left out of
+     * one parameter it stays in another that holds a value of the same declaration.
      *
      * <p>A reading of its own, with nothing shared with this one that was worked out from the rules:
      * the contexts and what was answered under them are made again from the rules that are left.
      */
-    ReadQuantities leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+    ReadQuantities leavingOut(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
         Map<TermPath, OpenedRules> rest = new LinkedHashMap<>();
-        byRoot.forEach((root, opened) -> rest.put(root,
-                new OpenedRules(PlacedRules.leavingOut(opened.rules(), parts), opened.opening())));
+        byRoot.forEach((root, opened) -> {
+            Set<PartId<RuleRef.Invariant>> here = parts.get(root.head());
+            rest.put(root, here == null ? opened : new OpenedRules(
+                    PlacedRules.leavingOut(opened.rules(), here), opened.opening()));
+        });
         return new ReadQuantities(rest, roots, byPath, cases, typeAt, fixed, ruleReading, assumed,
                 heldAgainst, new Contexts(), null, null, new ConcurrentHashMap<>());
     }

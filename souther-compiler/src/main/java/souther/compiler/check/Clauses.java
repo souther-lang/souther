@@ -5,8 +5,8 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenAs;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -409,7 +409,7 @@ final class Clauses {
         bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
         return new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
                 new HashMap<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>())
-                .exactly(clause);
+                .exactly(clause, symbols, source.declarations());
     }
 
     /** Both answers about what {@code clause} reads, from one walk of it. */
@@ -561,13 +561,19 @@ final class Clauses {
          * ClauseAffineMeaning#UNREAD} where any part of it is something else.
          *
          * <p>Every part is accounted for: a conjunction of comparisons whose sides are whole numbers
-         * added, taken away and scaled by written numbers, over places of the value. A part that is
-         * a choice, a denial, a call, a binding or a product of two places is no comparison of that
-         * kind, and the clause holds back more than the others say.
+         * read as arithmetic over places of the value. What a connective, a denial and a binding
+         * make of the clause is {@link ClauseExpr}'s, what a comparison states is
+         * {@link StatedComparison}'s and what a side comes to is {@link AffineForms}', so a shape
+         * those learn to read is read here as well. A part that is a choice, a call nothing says
+         * is arithmetic or a product of two places is no comparison of that kind, and the clause
+         * holds back more than the others say.
          */
-        ClauseAffineMeaning exactly(Core clause) {
+        ClauseAffineMeaning exactly(Core clause, Symbols symbols, DeclarationAccess declarations) {
+            AffineForms.Reading<RuleKey, Map<BindingId, Core>> places =
+                    placesOfTheValue(symbols, declarations);
             List<ClauseAffineMeaning.Comparison> conjuncts = new ArrayList<>();
-            if (!conjunctsOf(clause, conjuncts) || conjuncts.isEmpty()) {
+            if (!conjunctsOf(ClauseExpr.of(clause, true), Map.of(), places, conjuncts)
+                    || conjuncts.isEmpty()) {
                 return ClauseAffineMeaning.UNREAD;
             }
             Map<RuleKey, ExactRatio> first = conjuncts.getFirst().form().coefs();
@@ -579,38 +585,102 @@ final class Clauses {
             return new ClauseAffineMeaning.Exact(conjuncts);
         }
 
-        private boolean conjunctsOf(Core e, List<ClauseAffineMeaning.Comparison> out) {
-            if (!(Core.withoutStanding(e) instanceof Core.Binary b)) {
-                return false;
-            }
-            if (b.op() == BinOp.AND) {
-                return conjunctsOf(b.left(), out) && conjunctsOf(b.right(), out);
-            }
-            Rel rel = switch (b.op()) {
-                case EQ -> Rel.EQ;
-                case NE -> Rel.NE;
-                case LT -> Rel.LT;
-                case LE -> Rel.LE;
-                case GT -> Rel.GT;
-                case GE -> Rel.GE;
-                default -> null;
+        /** Whether every part of {@code shape} that holds with it is a comparison, added to
+         *  {@code out}; the parts of a choice hold with it only one at a time, so it is none. */
+        private boolean conjunctsOf(ClauseExpr shape, Map<BindingId, Core> held,
+                                    AffineForms.Reading<RuleKey, Map<BindingId, Core>> places,
+                                    List<ClauseAffineMeaning.Comparison> out) {
+            return switch (shape) {
+                case ClauseExpr.Joined joined -> joined.how() == ConditionJoin.BOTH
+                        && conjunctsOf(joined.left(), held, places, out)
+                        && conjunctsOf(joined.right(), held, places, out);
+                case ClauseExpr.Scoped scoped -> conjunctsOf(scoped.body(),
+                        places.inside(scoped.binding(), held), places, out);
+                case ClauseExpr.Leaf leaf -> comparison(leaf, held, places, out);
             };
-            if (rel == null) {
+        }
+
+        private boolean comparison(ClauseExpr.Leaf leaf, Map<BindingId, Core> held,
+                                   AffineForms.Reading<RuleKey, Map<BindingId, Core>> places,
+                                   List<ClauseAffineMeaning.Comparison> out) {
+            StatedComparison stated = StatedComparison.of(leaf);
+            if (stated == null || Core.withoutStanding(stated.left()).type() != Type.INT
+                    || Core.withoutStanding(stated.right()).type() != Type.INT) {
                 return false;
             }
-            LinearForm<RuleKey> left = affineOf(b.left());
-            LinearForm<RuleKey> right = affineOf(b.right());
+            LinearForm<RuleKey> left = AffineForms.of(stated.left(), held, places);
+            LinearForm<RuleKey> right = AffineForms.of(stated.right(), held, places);
             LinearForm<RuleKey> between = left == null || right == null ? null
                     : left.minus(right).orNull();
-            if (between == null || between.coefs().isEmpty()) {
+            if (between == null || between.coefs().isEmpty() || !between.constant().isWhole()
+                    || !between.coefs().values().stream().allMatch(ExactRatio::isWhole)) {
                 return false;
             }
-            ClauseAffineMeaning.Comparison said = canonical(between, rel);
+            ClauseAffineMeaning.Comparison said = canonical(between, stated.relationUnder(true));
             if (said == null) {
                 return false;
             }
             out.add(said);
             return true;
+        }
+
+        /**
+         * A whole number of the value is a place of it, and a name is the value it was given.
+         *
+         * <p>The answers {@link AffineForms} asks of its caller and nothing it can work out itself:
+         * a place of the value is an atom, and a name that is no field of it stands for what a
+         * binding of the clause gave it.
+         */
+        private AffineForms.Reading<RuleKey, Map<BindingId, Core>> placesOfTheValue(
+                Symbols symbols, DeclarationAccess declarations) {
+            return new AffineForms.Reading<>() {
+
+                @Override
+                public Symbols symbols() {
+                    return symbols;
+                }
+
+                @Override
+                public DeclarationAccess declarations() {
+                    return declarations;
+                }
+
+                @Override
+                public LinearForm<RuleKey> leafOf(Core e, Map<BindingId, Core> at) {
+                    Core bare = Core.withoutStanding(e);
+                    Location place = bare.type() == Type.INT ? locationOf(bare) : null;
+                    return place == null ? null : LinearForm.atom(keyOf(place));
+                }
+
+                @Override
+                public Map<BindingId, Core> inside(Core.LetIn li, Map<BindingId, Core> at) {
+                    if (li.binder().binding() == null) {
+                        return at;
+                    }
+                    Map<BindingId, Core> inner = new HashMap<>(at);
+                    inner.put(li.binder().binding(), li.value());
+                    return inner;
+                }
+
+                @Override
+                public ValueStanding.ReadThrough<Map<BindingId, Core>> readThrough(
+                        Core.Read read, Map<BindingId, Core> at) {
+                    Core value = at.get(read.binding());
+                    return value == null ? null : new ValueStanding.ReadThrough<>(value, at);
+                }
+
+                @Override
+                public List<ValueStanding.ReadThrough<Map<BindingId, Core>>> alternativesOf(
+                        Core.Read read, Map<BindingId, Core> at) {
+                    return null;
+                }
+
+                @Override
+                public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
+                    return locationOf(fa.target()) == null
+                            && !Location.isStep(fa.target().type(), fa.field(), newtypes);
+                }
+            };
         }
 
         /**
@@ -639,41 +709,6 @@ final class Clauses {
                 case LE -> Rel.GE;
                 case LT -> Rel.GT;
                 case EQ, NE -> rel;
-            };
-        }
-
-        /** {@code e} as whole numbers added and scaled over places, or null where it is not. */
-        private LinearForm<RuleKey> affineOf(Core e) {
-            Core bare = Core.withoutStanding(e);
-            if (bare.type() != Type.INT) {
-                return null;
-            }
-            return switch (bare) {
-                case Core.Int number -> LinearForm.constant(ExactRatio.of(number.value()));
-                case Core.Neg negated -> {
-                    LinearForm<RuleKey> operand = affineOf(negated.operand());
-                    yield operand == null ? null : operand.negate();
-                }
-                case Core.Binary arithmetic -> arithmetic(arithmetic);
-                default -> {
-                    Location at = locationOf(bare);
-                    yield at == null ? null : LinearForm.atom(keyOf(at));
-                }
-            };
-        }
-
-        private LinearForm<RuleKey> arithmetic(Core.Binary b) {
-            LinearForm<RuleKey> left = affineOf(b.left());
-            LinearForm<RuleKey> right = affineOf(b.right());
-            if (left == null || right == null) {
-                return null;
-            }
-            return switch (b.op()) {
-                case ADD -> left.plus(right).orNull();
-                case SUB -> left.minus(right).orNull();
-                case MUL -> left.coefs().isEmpty() ? right.times(left.constant()).orNull()
-                        : right.coefs().isEmpty() ? left.times(right.constant()).orNull() : null;
-                default -> null;
             };
         }
 

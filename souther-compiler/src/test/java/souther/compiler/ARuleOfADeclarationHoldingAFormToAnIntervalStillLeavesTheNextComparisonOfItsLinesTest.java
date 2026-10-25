@@ -7,9 +7,11 @@ import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.IntBinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -184,6 +186,214 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
     void aRuleHoldingAnotherFormStillTiesTheFields() {
         String report = report("a + b >= 100", "    guard p.a - p.b < 200 else High");
         assertTrue(report.contains(NOT_READ), report);
+    }
+
+    /**
+     * One rule holding {@code form} to {@code from..to}, each field from a bound to a bound, and a
+     * guard asking whether the form is below {@code below}.
+     *
+     * @param oneClause whether the interval is one rule joining its two ends, or two rules
+     */
+    private record Case(String form, String inTheGuard, IntBinaryOperator valueOf, int[] a,
+                        int[] b, int from, int to, int below, boolean oneClause) {
+
+        String source() {
+            String interval = oneClause
+                    ? form + " >= " + from + " && " + form + " <= " + to
+                    : form + " >= " + from + "\n    invariant " + form + " <= " + to;
+            return model(interval + "\n    invariant a >= " + a[0] + "\n    invariant a <= " + a[1]
+                    + "\n    invariant b >= " + b[0] + "\n    invariant b <= " + b[1],
+                    "    guard " + inTheGuard + " < " + below + " else High");
+        }
+
+        /** The points some pair the rules leave has a value of the form at. */
+        Map<String, String> walk() {
+            boolean on = false;
+            boolean off = false;
+            boolean in = false;
+            boolean out = false;
+            for (int x = a[0]; x <= a[1]; x++) {
+                for (int y = b[0]; y <= b[1]; y++) {
+                    int value = valueOf.applyAsInt(x, y);
+                    if (value < from || value > to) {
+                        continue;
+                    }
+                    on |= value == below - 1;
+                    off |= value == below;
+                    in |= value <= below - 2;
+                    out |= value >= below + 1;
+                }
+            }
+            Map<String, String> points = new TreeMap<>();
+            points.put("ON", on ? "owed" : "none");
+            points.put("OFF", off ? "owed" : "none");
+            points.put("IN", in ? "owed" : "none");
+            points.put("OUT", out ? "owed" : "none");
+            return points;
+        }
+
+        boolean leavesTheGuardUndecided() {
+            Map<String, String> points = walk();
+            return (points.get("ON").equals("owed") || points.get("IN").equals("owed"))
+                    && (points.get("OFF").equals("owed") || points.get("OUT").equals("owed"));
+        }
+    }
+
+    /**
+     * What the rules leave of the fields is not always what the rule alone does: the bounds of the
+     * fields can leave the form a narrower run than the rule, the rule can leave no pair at all,
+     * and a rule over a weighted sum skips values of the form. A point is owed only where some
+     * pair has a value there, and where the guard is left undecided and read, at every such point.
+     */
+    @Test
+    void whatTheRulesAndTheBoundsLeaveTogetherIsWhatAWalkOfEveryPairFinds() {
+        int[] zeroToTen = {0, 10};
+        List<Case> cases = List.of(
+                // the bounds leave the first field only the upper part of what it would otherwise take
+                new Case("a + b", "p.a + p.b", (x, y) -> x + y, new int[] {0, 4}, new int[] {5, 7},
+                        9, 11, 10, false),
+                new Case("a + b", "p.a + p.b", (x, y) -> x + y, new int[] {0, 4}, new int[] {5, 7},
+                        9, 11, 10, true),
+                // an interval of one value, and one value of it either side
+                new Case("a + b", "p.a + p.b", (x, y) -> x + y, zeroToTen, zeroToTen, 10, 10, 10,
+                        false),
+                new Case("a - b", "p.a - p.b", (x, y) -> x - y, zeroToTen, new int[] {0, 3},
+                        4, 6, 5, true),
+                // a weighted sum, whose values the second field steps over
+                new Case("a + 2 * b", "p.a + 2 * p.b", (x, y) -> x + 2 * y, new int[] {0, 3},
+                        new int[] {2, 6}, 9, 11, 10, false),
+                new Case("a + 2 * b", "p.a + 2 * p.b", (x, y) -> x + 2 * y, zeroToTen, zeroToTen,
+                        5, 6, 6, true),
+                // the form takes only even values, and the interval's ends are odd
+                new Case("2 * a + 2 * b", "2 * p.a + 2 * p.b", (x, y) -> 2 * x + 2 * y, zeroToTen,
+                        zeroToTen, 9, 11, 10, false));
+        int compared = 0;
+        List<String> left = new ArrayList<>();
+        for (Case each : cases) {
+            String report = reportOf(each.source());
+            int line = lineWith(each.source(), "guard");
+            Map<String, String> found = pointsOf(report, line);
+            Map<String, String> walked = each.walk();
+            for (String point : walked.keySet()) {
+                assertFalse(found.get(point).equals("owed") && walked.get(point).equals("none"),
+                        "a row is owed at " + point + " where no pair has one\n" + each.source()
+                                + "\n" + report);
+            }
+            if (each.leavesTheGuardUndecided() && !report.contains(NOT_READ)) {
+                assertEquals(walked, found, each.source() + "\n" + report);
+                compared++;
+            }
+            left.add(each.form() + " " + each.from() + ".." + each.to() + " below " + each.below()
+                    + (each.leavesTheGuardUndecided() ? " undecided" : " decided")
+                    + (report.contains(NOT_READ) ? " not read" : " read") + " " + found);
+        }
+        assertTrue(compared >= 3, "only " + compared + " of the cases were read and compared: "
+                + left);
+    }
+
+    /** Rules that leave no pair are refused where they are written, so no guard is ever read over
+     *  the region they would put aside. */
+    @Test
+    void rulesThatLeaveNoPairAreRefusedWhateverComesAfterThem() {
+        Case empty = new Case("a + b", "p.a + p.b", (x, y) -> x + y, new int[] {0, 4},
+                new int[] {0, 4}, 9, 11, 10, false);
+        Compilation compilation = Compilation.ofSource(empty.source(), "Main");
+        compilation.answerEverything();
+        assertTrue(compilation.errors().stream()
+                .anyMatch(each -> each.diagnostic().code().toString().equals("E1013")),
+                empty.source());
+    }
+
+    private static String reportOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList(), source);
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static int lineWith(String source, String text) {
+        List<String> lines = source.lines().toList();
+        return 1 + lines.indexOf(lines.stream().filter(each -> each.contains(text))
+                .findFirst().orElseThrow());
+    }
+
+    /** The guards one after another on the one sum, as a body states them: each is read, and a row
+     *  is owed at every point either of them draws. */
+    @Test
+    void guardsOneAfterAnotherOnTheSameSumAreEachReadAndOweARowAtEachPoint() {
+        String source = """
+                module example.band
+
+                data Low
+                data Mid
+                data High
+
+                data Pair = { a: Int, b: Int }
+
+                behavior band : (p: Pair) -> Low | Mid | High
+
+                let band (p) = {
+                    let s = p.a + p.b
+                    guard s >= 100 else Low
+                    guard s < 200 else High
+                    Mid
+                }
+                """;
+        String report = reportOf(source);
+        assertFalse(report.contains(NOT_READ), report);
+        Map<String, String> owed = Map.of("ON", "owed", "OFF", "owed", "IN", "owed", "OUT", "owed");
+        assertEquals(owed, pointsOf(report, lineWith(source, "guard s >= 100")), report);
+        assertEquals(owed, pointsOf(report, lineWith(source, "guard s < 200")), report);
+    }
+
+    private static final String TWO_VALUES_OF_THE_DECLARATION = """
+            module example.band
+
+            data Low
+            data Mid
+            data High
+
+            data Pair = { a: Int, b: Int }
+                invariant a - b >= 100
+
+            data Two = { p: Pair, q: Pair }
+
+            behavior band : (x: Pair, y: Pair) -> Low | Mid | High
+
+            let band (x, y) = {
+                guard x.a - x.b < 200 else High
+                Mid
+            }
+
+            behavior nested : (t: Two) -> Low | Mid | High
+
+            let nested (t) = {
+                guard t.p.a - t.p.b < 200 else High
+                Mid
+            }
+            """;
+
+    /** A rule of the declaration is a rule of every value of it, and the line of a guard is drawn
+     *  on one of them: another parameter holding a value of the declaration changes nothing. */
+    @Test
+    void theSameDeclarationOnAnotherParameterDoesNotKeepTheGuardFromBeingRead() {
+        String report = reportOf(TWO_VALUES_OF_THE_DECLARATION);
+        int line = lineWith(TWO_VALUES_OF_THE_DECLARATION, "guard x.a - x.b < 200");
+        assertFalse(report.contains("· not read: comparison@" + line), report);
+        assertEquals(Map.of("ON", "owed", "OFF", "owed", "IN", "owed", "OUT", "owed"),
+                pointsOf(report, line), report);
+    }
+
+    /** The declaration at two places of one parameter: what holds of one of them is not shown of
+     *  the other, so the rule keeps tying the fields. */
+    @Test
+    void theSameDeclarationAtTwoPlacesOfOneParameterStillTiesTheFields() {
+        String report = reportOf(TWO_VALUES_OF_THE_DECLARATION);
+        int line = lineWith(TWO_VALUES_OF_THE_DECLARATION, "guard t.p.a - t.p.b < 200");
+        assertTrue(report.contains("· not read: comparison@" + line), report);
     }
 
     /** A rule ending at the line leaves no row beside it that the rule does not meet. */

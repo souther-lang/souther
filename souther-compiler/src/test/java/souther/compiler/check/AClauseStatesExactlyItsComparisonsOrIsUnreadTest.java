@@ -125,6 +125,21 @@ class AClauseStatesExactlyItsComparisonsOrIsUnreadTest {
         assertInstanceOf(ClauseAffineMeaning.Exact.class, of("a >= 0"));
     }
 
+    /** The arithmetic is the one every reading of a side shares, so a sum a helper states is the
+     *  sum written out. */
+    @Test
+    void aSumAHelperStatesIsTheSumWrittenOut() {
+        String viaAHelper = source("total(a, b) >= 100").replace("let opaque",
+                "let total (a: Int, b: Int) : Int = a + b\n\nlet opaque");
+        assertEquals(of("a + b >= 100"), ofSource(viaAHelper));
+    }
+
+    /** A quotient is not a whole number of the places, so the comparison is not read as one. */
+    @Test
+    void aSideThatIsNotWholeNumbersOfThePlacesIsUnread() {
+        assertEquals(ClauseAffineMeaning.UNREAD, of("a / 2 + b >= 100"));
+    }
+
     @Test
     void movingTheDeclarationDownTheFileDoesNotMoveTheFact() {
         String moved = source("a + b >= 100").replace("data Pair",
