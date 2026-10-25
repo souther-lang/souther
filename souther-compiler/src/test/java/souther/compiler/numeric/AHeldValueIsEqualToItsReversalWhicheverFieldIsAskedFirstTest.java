@@ -44,6 +44,16 @@ class AHeldValueIsEqualToItsReversalWhicheverFieldIsAskedFirstTest {
                 || (one.equals(other.negated()) && at.equals(there.negated()));
     }
 
+    /** Equal as the definition says whichever of the two is asked, and hashed alike where equal. */
+    private static void askedBothWaysRound(boolean expected, AffineConstraint<String> first,
+                                            AffineConstraint<String> second) {
+        assertEquals(expected, first.equals(second));
+        assertEquals(expected, second.equals(first));
+        if (expected) {
+            assertEquals(first.hashCode(), second.hashCode());
+        }
+    }
+
     @Test
     void anEqualityAndADisequalityAreEqualExactlyWhereTheDefinitionSays() {
         Random random = new Random(2705);
@@ -57,12 +67,10 @@ class AHeldValueIsEqualToItsReversalWhicheverFieldIsAskedFirstTest {
             ExactRatio at = ExactRatio.of(VALUES[random.nextInt(VALUES.length)]);
             ExactRatio there = random.nextBoolean() ? at : at.negated();
             boolean expected = oneRule(one, at, other, there);
-            assertEquals(expected,
-                    new AffineConstraint.Equality<>(one, at)
-                            .equals(new AffineConstraint.Equality<>(other, there)));
-            assertEquals(expected,
-                    new AffineConstraint.Disequality<>(one, at)
-                            .equals(new AffineConstraint.Disequality<>(other, there)));
+            askedBothWaysRound(expected, new AffineConstraint.Equality<>(one, at),
+                    new AffineConstraint.Equality<>(other, there));
+            askedBothWaysRound(expected, new AffineConstraint.Disequality<>(one, at),
+                    new AffineConstraint.Disequality<>(other, there));
             if (!expected) {
                 apart++;
             } else if (one.equals(other) && at.equals(there)) {
