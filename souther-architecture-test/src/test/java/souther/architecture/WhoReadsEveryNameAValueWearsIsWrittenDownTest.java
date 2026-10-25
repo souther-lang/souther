@@ -215,8 +215,15 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + CONTEXT + "Ljava/util/Set;)Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "admittedStrings",
                     "(" + TYPE + CONTEXT + "I)Ljava/util/List;", THE_POSITION),
+            row(PARTITION + "Partitions", "balancedSides",
+                    "(" + TYPE + "Ljava/util/List;" + LIMITS + CONTEXT + ")" + PROPOSALS,
+                    THE_POSITION),
             row(PARTITION + "Partitions", "displacedRepresentativesOf",
                     "(" + TYPE + CONTEXT + LIMITS + ")" + PROPOSALS, THE_POSITION),
+            row(PARTITION + "Partitions", "holdingTheEntriesAskedFor",
+                    "(" + TYPE + "Ljava/util/List;Ljava/util/Map;" + LIMITS + CONTEXT + ")"
+                            + PROPOSALS,
+                    THE_POSITION),
             row(PARTITION + "Partitions", "inReserve",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/List;)Ljava/util/List;",
                     THE_POSITION),
@@ -236,6 +243,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
+                    THE_POSITION),
+            row(PARTITION + "Partitions", "writtenNumberAt",
+                    "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "atThoseParts",
                     "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"

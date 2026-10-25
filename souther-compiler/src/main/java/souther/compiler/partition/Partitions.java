@@ -43,6 +43,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -2241,9 +2242,11 @@ public final class Partitions {
         }
         FixtureTemplate written = switch (prim) {
             case DECIMAL -> FixtureTemplate.decimal(number);
-            case INT -> number.remainder(BigDecimal.ONE).signum() == 0
-                    && number.toBigInteger().bitLength() < Long.SIZE
-                    ? FixtureTemplate.integer(number.toBigInteger().longValue()) : null;
+            case INT -> ExactRatio.of(number).isWhole()
+                    && ExactRatio.of(number).truncated()
+                            instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                    && whole.bitLength() < Long.SIZE
+                    ? FixtureTemplate.integer(whole.longValue()) : null;
             default -> null;
         };
         return WornNames.under(view.wrappers(), written, source);
