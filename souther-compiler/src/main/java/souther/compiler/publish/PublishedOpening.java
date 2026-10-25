@@ -2,6 +2,8 @@ package souther.compiler.publish;
 
 import souther.compiler.observe.RunSensitivity;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,7 +27,8 @@ import java.util.Optional;
  * ({@link CanonicalArrangement}).
  */
 public record PublishedOpening(Kind kind, Optional<NotMeasuredWord> reason,
-                               RunSensitivity runSensitivity, PublishedSubject about) {
+                               RunSensitivity runSensitivity, PublishedSubject about,
+                               List<ObservedIn> observedIn) {
 
     public PublishedOpening {
         if (kind == null || runSensitivity == null) {
@@ -35,6 +38,26 @@ public record PublishedOpening(Kind kind, Optional<NotMeasuredWord> reason,
             throw new IllegalArgumentException("a verdict is held open on something");
         }
         reason = reason == null ? Optional.empty() : reason;
+        observedIn = observedIn == null ? List.of() : observedIn.stream()
+                .sorted(Comparator.comparing(ObservedIn::module).thenComparing(ObservedIn::behavior))
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * A behavior whose measurement the fact showed up in.
+     *
+     * <p>Beside the fact and not part of what it is about: one fork that several behaviors reach
+     * is one thing keeping the verdict open, seen from as many behaviors. Qualified by its module,
+     * since two modules may each declare a behavior of one name.
+     */
+    public record ObservedIn(String module, String behavior) {
+
+        public ObservedIn {
+            if (module == null || behavior == null) {
+                throw new IllegalArgumentException("a behavior is named by its module and itself");
+            }
+        }
     }
 
     /**
