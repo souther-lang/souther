@@ -30,7 +30,7 @@ record WholeNumbersLeft(BigInteger least, BigInteger most, Set<BigInteger> holes
     static final WholeNumbersLeft EVERY = new WholeNumbersLeft(null, null, Set.of());
 
     /** No whole number. */
-    private static final WholeNumbersLeft NONE =
+    static final WholeNumbersLeft NONE =
             new WholeNumbersLeft(BigInteger.ONE, BigInteger.ZERO, Set.of());
 
     WholeNumbersLeft {
