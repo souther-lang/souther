@@ -71,8 +71,13 @@ class AnArmIsEnteredOnlyPastWhatItsForkWorksOutTest {
         List<Diagnostic> dead = deadBranches(body("""
                     guard a == %s else No
                     if a + 1 > b then Ok else No""".formatted(GREATEST)));
-        assertEquals(1, dead.size(), said(dead));
-        assertTrue(pointsAtAnAnswer(dead.getFirst()), said(dead));
+        // Two reports and not one, for two reasons: the sum has no answer where a is the greatest,
+        // which shuts the arm the condition leaves open; and the other arm needs a b of at least
+        // the greatest plus one, which the condition itself rules out.
+        assertEquals(2, dead.size(), said(dead));
+        assertEquals(1, dead.stream()
+                .filter(AnArmIsEnteredOnlyPastWhatItsForkWorksOutTest::pointsAtAnAnswer)
+                .count(), said(dead));
         assertEquals(List.of(), deadBranches(body("""
                     guard a == %s else No
                     if a + 1 > b then Ok else No""".formatted(BELOW_THE_GREATEST))));

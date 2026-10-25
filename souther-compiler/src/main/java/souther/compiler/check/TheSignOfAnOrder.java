@@ -6,6 +6,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConstantArguments;
@@ -242,7 +243,7 @@ public final class TheSignOfAnOrder {
         // what is asked is what the operation and the comparison prove between them, and a rule
         // about anything else would be a rule about a value that is not the sign.
         Object sign = new Object();
-        Map<Object, Granularity> spacings = Map.of(sign, spacing);
+        Map<Object, NumberSpace> spacings = Map.of(sign, NumberSpace.spacedOnly(spacing));
         LinearForm<Object> answered = LinearForm.atom(sign);
         // One position, so the order is total on the domain by there being nothing to put in an
         // order. Two of them reaching it would be a second position in a domain written to have

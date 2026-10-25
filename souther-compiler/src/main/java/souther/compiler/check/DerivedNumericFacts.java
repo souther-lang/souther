@@ -5,6 +5,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
@@ -314,12 +315,12 @@ final class DerivedNumericFacts {
             return domain.boundsOf(form);
         }
 
-        ReadingDomain assume(LinearForm<FactSubject> form, Rel rel, Map<FactSubject, Granularity> kinds) {
-            return new ReadingDomain(domain.assume(form, rel, kinds));
+        ReadingDomain assume(LinearForm<FactSubject> form, Rel rel, Map<FactSubject, NumberSpace> spaces) {
+            return new ReadingDomain(domain.assume(form, rel, spaces));
         }
 
-        ReadingDomain assuming(FactSubject atom, Bounds bounds, Map<FactSubject, Granularity> kinds) {
-            return new ReadingDomain(domain.assuming(atom, bounds, kinds));
+        ReadingDomain assuming(FactSubject atom, Bounds bounds, Map<FactSubject, NumberSpace> spaces) {
+            return new ReadingDomain(domain.assuming(atom, bounds, spaces));
         }
 
         /** This, with what a walk's step is handed taken as holding. */
@@ -335,9 +336,9 @@ final class DerivedNumericFacts {
             for (Fact fact : facts) {
                 out = switch (fact) {
                     case Fact.Between(FactSubject atom, Bounds bounds) ->
-                            out.assuming(atom, bounds, terms.kindsOf(LinearForm.atom(atom)));
+                            out.assuming(atom, bounds, terms.spacesOf(LinearForm.atom(atom)));
                     case NumericConstraint(LinearForm<FactSubject> form, Rel rel) ->
-                            out.assume(form, rel, terms.kindsOf(form));
+                            out.assume(form, rel, terms.spacesOf(form));
                 };
             }
             return new ReadingDomain(out);
@@ -363,7 +364,7 @@ final class DerivedNumericFacts {
         NumericDomain<FactSubject> out = base;
         for (FactSubject atom : terms.reachedFrom(from)) {
             for (NumericConstraint fact : terms.knowledgeOf(atom).intrinsic()) {
-                out = out.assume(fact.form(), fact.rel(), terms.kindsOf(fact.form()));
+                out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
             }
         }
         return new ReadingDomain(out);
@@ -814,7 +815,7 @@ final class DerivedNumericFacts {
     private static ReadingDomain stating(Derivation.Chosen.Arm arm, ReadingDomain base, Terms terms) {
         ReadingDomain under = base;
         for (NumericConstraint settled : arm.settles()) {
-            under = under.assume(settled.form(), settled.rel(), terms.kindsOf(settled.form()));
+            under = under.assume(settled.form(), settled.rel(), terms.spacesOf(settled.form()));
         }
         return under;
     }

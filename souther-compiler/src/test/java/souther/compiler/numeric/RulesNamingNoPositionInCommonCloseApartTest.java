@@ -477,7 +477,7 @@ class RulesNamingNoPositionInCommonCloseApartTest {
 
     static NumericDomain<String> said(List<Written> rules, CanonicalOrder<String> order,
                                               ClosedStates closing) {
-        Map<String, Granularity> kinds = kinds(rules);
+        Map<String, NumberSpace> kinds = kinds(rules);
         NumericDomain<String> out = NumericDomain.top(order, closing);
         for (Written each : rules) {
             out = out.assume(new LinearForm<>(each.constant(), each.coefs()), each.rel(), kinds);
@@ -485,12 +485,13 @@ class RulesNamingNoPositionInCommonCloseApartTest {
         return out;
     }
 
-    private static Map<String, Granularity> kinds(List<Written> rules) {
-        Map<String, Granularity> kinds = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> kinds(List<Written> rules) {
+        Map<String, NumberSpace> kinds = new LinkedHashMap<>();
         List<String> everywhere = new ArrayList<>(ONE_HALF);
         everywhere.addAll(OTHER_HALF);
         everywhere.addAll(positionsOf(rules));
-        everywhere.forEach(position -> kinds.put(position, spacing(position)));
+        everywhere.forEach(position ->
+                kinds.put(position, NumberSpace.spacedOnly(spacing(position))));
         return kinds;
     }
 
@@ -501,7 +502,7 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      */
     static NumericDomain<String> saidAskingOnTheWay(List<Written> rules,
                                                             CanonicalOrder<String> order) {
-        Map<String, Granularity> kinds = kinds(rules);
+        Map<String, NumberSpace> kinds = kinds(rules);
         NumericDomain<String> out = NumericDomain.top(order, ClosedStates.kept());
         NumericDomain<String> alone = NumericDomain.top(order, ClosedStates.IN_ONE_RUN);
         for (Written each : rules) {

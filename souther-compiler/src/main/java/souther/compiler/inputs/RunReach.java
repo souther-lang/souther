@@ -9,6 +9,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.LinearForm;
@@ -125,8 +126,8 @@ final class RunReach {
             // them is how many there are, which no step of a walk adds up.
             case RunSource.ReachableNodes _ -> null;
         };
-        Granularity answeredOn = spacingOf(orders.answered());
-        Granularity observedOn = spacingOf(orders.observed());
+        NumberSpace answeredOn = spaceOf(orders.answered());
+        NumberSpace observedOn = spaceOf(orders.observed());
         if (walk == null || element == null || answeredOn == null || observedOn == null) {
             return null;
         }
@@ -135,11 +136,11 @@ final class RunReach {
         if (seed == null || step == null) {
             return null;
         }
-        Map<Atom, Granularity> kinds =
+        Map<Atom, NumberSpace> spaces =
                 Map.of(Atom.ACCUMULATOR, answeredOn, Atom.ELEMENT, observedOn);
         return Induction.proves(element, guaranteed -> new Walked(
-                NumericDomain.top(IN_ONE_ORDER).assuming(Atom.ELEMENT, guaranteed, kinds),
-                guaranteed, seed, step, kinds));
+                NumericDomain.top(IN_ONE_ORDER).assuming(Atom.ELEMENT, guaranteed, spaces),
+                guaranteed, seed, step, spaces));
     }
 
     /**
@@ -194,17 +195,17 @@ final class RunReach {
         switch (computation) {
             case ElementValue.Affine affine -> {
                 NumericDomain<ElementProjection> domain = NumericDomain.top(BY_NAME);
-                Map<ElementProjection, Granularity> kinds = new LinkedHashMap<>();
+                Map<ElementProjection, NumberSpace> spaces = new LinkedHashMap<>();
                 for (ElementProjection field : affine.form().coefs().keySet()) {
                     Type at = typeAt.apply(field.from(elements));
                     NumericDomain.Bounds guaranteed = at == null ? null
                             : ValueGuarantees.of(at, reading).get(RuleKey.THE_VALUE);
-                    Granularity spacing = spacingOf(orders.fieldCarrier(field));
-                    if (guaranteed == null || spacing == null) {
+                    NumberSpace space = spaceOf(orders.fieldCarrier(field));
+                    if (guaranteed == null || space == null) {
                         return null;
                     }
-                    kinds.put(field, spacing);
-                    domain = domain.assuming(field, guaranteed, kinds);
+                    spaces.put(field, space);
+                    domain = domain.assuming(field, guaranteed, spaces);
                 }
                 return domain.boundsOf(affine.form());
             }
@@ -250,7 +251,7 @@ final class RunReach {
                     fields.put(field, guaranteed);
                 }
                 NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
-                Map<Integer, Granularity> kinds = new LinkedHashMap<>();
+                Map<Integer, NumberSpace> spaces = new LinkedHashMap<>();
                 Map<Integer, ExactRatio> weights = new LinkedHashMap<>();
                 for (Map.Entry<ElementValue.Monomial, ExactRatio> each
                         : products.form().coefs().entrySet()) {
@@ -267,8 +268,9 @@ final class RunReach {
                     }
                     int part = weights.size();
                     weights.put(part, each.getValue());
-                    kinds.put(part, spacing);
-                    domain = domain.assuming(part, reached, kinds);
+                    // A product of fields is no value of any type, so nothing is said of its ends.
+                    spaces.put(part, NumberSpace.spacedOnly(spacing));
+                    domain = domain.assuming(part, reached, spaces);
                 }
                 return domain.boundsOf(new LinearForm<>(products.form().constant(), weights));
             }
@@ -305,15 +307,16 @@ final class RunReach {
                     parts.add(choice);
                 });
                 NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
-                Map<Integer, Granularity> kinds = new LinkedHashMap<>();
+                Map<Integer, NumberSpace> spaces = new LinkedHashMap<>();
                 for (int i = 0; i < parts.size(); i++) {
                     NumericDomain.Bounds one =
                             ofWhatWasComputed(parts.get(i), elements, orders, typeAt, reading);
                     if (one == null) {
                         return null;
                     }
-                    kinds.put(i, spacing);
-                    domain = domain.assuming(i, one, kinds);
+                    // A choice's answer is no value of any type, so nothing is said of its ends.
+                    spaces.put(i, NumberSpace.spacedOnly(spacing));
+                    domain = domain.assuming(i, one, spaces);
                 }
                 return domain.boundsOf(new LinearForm<>(ExactRatio.ZERO, weights));
             }
@@ -334,7 +337,7 @@ final class RunReach {
             return null;
         }
         NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION)
-                .assuming(0, rounded, Map.of(0, spacing));
+                .assuming(0, rounded, Map.of(0, NumberSpace.spacedOnly(spacing)));
         NumericDomain.Bounds below = domain.boundsOf(
                 new LinearForm<>(step.negated(), Map.of(0, ExactRatio.ONE)));
         NumericDomain.Bounds above = domain.boundsOf(
@@ -357,6 +360,11 @@ final class RunReach {
     /** How the values on one order are spaced, or null where nothing orders them. */
     private static Granularity spacingOf(souther.compiler.check.Carrier on) {
         return on == null ? null : on.spacing();
+    }
+
+    /** What one order says of the values counted on it, or null where nothing orders them. */
+    private static NumberSpace spaceOf(souther.compiler.check.Carrier on) {
+        return on == null ? null : on.space();
     }
 
     private static NumericDomain.Bounds at(BigDecimal value) {
@@ -382,7 +390,7 @@ final class RunReach {
      * is checked against are the same assumptions.
      */
     private record Walked(NumericDomain<Atom> reading, NumericDomain.Bounds element,
-                          NumericDomain.Bounds seed, Step repeats, Map<Atom, Granularity> kinds)
+                          NumericDomain.Bounds seed, Step repeats, Map<Atom, NumberSpace> spaces)
             implements Induction.Prepared {
 
         @Override
@@ -407,8 +415,8 @@ final class RunReach {
 
         @Override
         public Induction.Prepared assuming(NumericDomain.Bounds candidate) {
-            return new Walked(reading.assuming(Atom.ACCUMULATOR, candidate, kinds),
-                    element, seed, repeats, kinds);
+            return new Walked(reading.assuming(Atom.ACCUMULATOR, candidate, spaces),
+                    element, seed, repeats, spaces);
         }
     }
 }
