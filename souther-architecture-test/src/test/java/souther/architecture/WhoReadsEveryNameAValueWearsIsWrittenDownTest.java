@@ -124,6 +124,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ILjava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;)V",
                     THE_NAMES),
             row(CHECK + "NewtypeInners", "terminal", "(" + TYPE + ")" + TYPE, THE_SPINE),
+            row(CHECK + "SidesBalanced", "elementsStandAlone",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + SOURCE
+                            + ")Z",
+                    THE_POSITION),
             row(TYPE_OPS, "newtypeChain", "(" + TYPE + INNERS + ")Ljava/util/List;", THE_SPINE),
             row(TYPE_VIEW, "asWritten",
                     "(" + TYPE + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",

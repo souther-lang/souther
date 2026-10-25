@@ -117,6 +117,38 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
                 """).isEmpty());
     }
 
+    /**
+     * An element with a rule of its own is one whose amounts depend on its other fields, and
+     * amounts chosen among those the amount type admits are not chosen against that rule: a debit
+     * of one beside a credit of one is a list the rule refuses, and a debit of ten beside a credit
+     * of ten is one it allows. The rule is not read as kept, and stays unanswered.
+     */
+    @Test
+    void anElementWithARuleOfItsOwnLeavesTheBalanceUnanswered() {
+        assertFalse(unansweredAtTheList("""
+                module demo
+
+                import List ( fold, length )
+
+                data Amount = Decimal
+                    invariant value >= 1.0m
+                data Side = Debit | Credit
+                data Posting = { side: Side, amount: Amount }
+                    invariant side == Credit || amount.value >= 10.0m
+
+                let sideTotal (wanted: Side, postings: List<Posting>): Decimal =
+                    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.amount.value) else acc,
+                         0.0m, postings)
+
+                data N = { postings: List<Posting> }
+                    invariant balanced =
+                        Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = 1
+                """).isEmpty());
+    }
+
     /** What stands unanswered at the list of the input of {@code probe}. */
     private static List<String> unansweredAtTheList(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

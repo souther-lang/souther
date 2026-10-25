@@ -110,6 +110,24 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
         assertFalse(left.get("n.b").isEmpty());
     }
 
+    /**
+     * A step is worked out on the order its operands are on, not the order of what it becomes:
+     * {@code a * b} is a product of whole numbers before {@code Decimal.fromInt} makes it a
+     * decimal, and it aborts there whatever the decimal beside it could hold.
+     */
+    @Test
+    void aProductOfWholeNumbersMadeADecimalAfterwardsLeavesTheFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data N = { a: Int, b: Int, c: Decimal }
+                    invariant Decimal.compare(c, Decimal.fromInt(a * b)) == 0
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a of the greatest whole number has no b");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
     /** Where the places lie well inside the width the arithmetic never leaves it. */
     @Test
     void aProductOfWholeNumbersThatStaysInsideTheirWidthLeavesTheFactorsFree() {

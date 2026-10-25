@@ -175,6 +175,22 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
     }
 
 
+    /**
+     * A balance that needs two different numbers on a side of many elements is not found, and the
+     * search says it was reduced to repeating a number there: of the numbers one and two, thirty
+     * one elements balance as a debit of fourteen ones and a two against sixteen credits of one,
+     * and a side of that many is made of one number.
+     */
+    @Test
+    void aSideTooLongToSearchSaysItWasMadeOfOneNumberRepeated() {
+        Partitions.FieldsChosen chosen = composedOrNot(journal(31, "value == 1.0m || value == 2.0m",
+                "invariant exactly = length(postings) <= 31"));
+
+        assertNull(chosen.fields());
+        assertTrue(chosen.met().figures().contains(
+                CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER), chosen.met().toString());
+    }
+
     /** A count past what a proposal may hold is not built, and is not built a little at a time. */
     @Test
     void aCountPastWhatAProposalMayHoldIsNotBuilt() {

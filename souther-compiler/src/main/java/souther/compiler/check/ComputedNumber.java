@@ -172,16 +172,30 @@ final class ComputedNumber {
 
     /**
      * Where this lies with each place in the range {@code at} gives it, or null where some step of
-     * it can come to a number outside {@code within}. A range of every number wherever the
-     * arithmetic cannot say better.
+     * it can come to a number outside the order that step is worked out in, or where no order is
+     * known for a place.
      *
      * <p>Every step and not only the last: the arithmetic of a type that stops somewhere aborts at
      * the step that leaves it, whatever the steps after it would have brought the number back to.
-     * A {@code within} of every number is the arithmetic of a type that does not stop.
+     * The order of a step is the one its operands are on, so it is told from the places and the
+     * written numbers it is made of and never from the type of the whole: {@code Decimal.fromInt(a
+     * * b)} multiplies two whole numbers before it is a decimal. A step between a whole number and
+     * a decimal is a decimal's, which does not stop; a step made only of written numbers is worked
+     * out once and stops nothing.
+     *
+     * @param at      where each place lies, inside the order its numbers are on, or null where that
+     *                order is not known
+     * @param orderOf the order each place's numbers are on, as the range it runs over, or null
+     *                where it is not known
      */
-    Range lies(Function<Term, Range> at, Range within) {
-        return bounded(root, at, within);
+    Range lies(Function<Term, Range> at, Function<Term, Range> orderOf) {
+        Lying whole = bounded(root, at, orderOf);
+        return whole == null ? null : whole.range();
     }
+
+    /** Where a step lies, and the order it is worked out in: null where it is only written
+     *  numbers, which are on no order of their own. */
+    private record Lying(Range range, Range order) {}
 
     private static Expr read(Term term, Predicate<Term> aPlace, Set<Term> found) {
         return switch (term.shape()) {
@@ -305,56 +319,94 @@ final class ComputedNumber {
         };
     }
 
-    /** The range of {@code e}, or null where a step of it can leave {@code within}. */
-    private static Range bounded(Expr e, Function<Term, Range> at, Range within) {
+    /** Where {@code e} lies, or null where a step of it can leave the order it is worked out in. */
+    private static Lying bounded(Expr e, Function<Term, Range> at, Function<Term, Range> orderOf) {
         return switch (e) {
-            case Expr.Place it -> at.apply(it.term());
-            case Expr.Written it -> Range.at(it.number());
+            case Expr.Place it -> {
+                Range lies = at.apply(it.term());
+                Range order = orderOf.apply(it.term());
+                yield lies == null || order == null ? null : new Lying(lies, order);
+            }
+            case Expr.Written it -> new Lying(Range.at(it.number()), null);
             case Expr.Negated it -> {
-                Range operand = bounded(it.operand(), at, within);
-                yield operand == null ? null : stays(operand.negated(), within);
+                Lying operand = bounded(it.operand(), at, orderOf);
+                yield operand == null ? null : stays(operand.range().negated(), operand.order());
             }
             case Expr.Operated it -> {
-                Range left = bounded(it.left(), at, within);
-                Range right = bounded(it.right(), at, within);
-                yield left == null || right == null ? null : stays(switch (it.operator()) {
-                    case ADD -> left.plus(right);
-                    case SUB -> left.plus(right.negated());
-                    case MUL -> left.times(right);
+                Lying left = bounded(it.left(), at, orderOf);
+                Lying right = bounded(it.right(), at, orderOf);
+                if (left == null || right == null) {
+                    yield null;
+                }
+                Range order = joined(left.order(), right.order());
+                yield stays(switch (it.operator()) {
+                    case ADD -> left.range().plus(right.range());
+                    case SUB -> left.range().plus(right.range().negated());
+                    case MUL -> left.range().times(right.range());
                     default -> throw new IllegalStateException("not arithmetic: " + it.operator());
-                }, within);
+                }, order);
             }
             case Expr.Weighed it -> {
-                Range sum = Range.at(it.constant());
+                // The order of the arguments, whatever the weighed sum is then written as: the
+                // arguments are worked out on it, and the sum is checked against it as well, which
+                // can only leave a sum of whole numbers written as a decimal short of a proof.
+                Range order = null;
+                List<Lying> arguments = new ArrayList<>();
                 for (Weight each : it.weights()) {
-                    Range argument = bounded(each.argument(), at, within);
-                    Range term = argument == null ? null
-                            : stays(argument.times(Range.at(each.coefficient())), within);
-                    sum = term == null ? null : stays(sum.plus(term), within);
-                    if (sum == null) {
-                        break;
+                    Lying argument = bounded(each.argument(), at, orderOf);
+                    if (argument == null) {
+                        yield null;
                     }
+                    arguments.add(argument);
+                    order = joined(order, argument.order());
+                }
+                Lying sum = new Lying(Range.at(it.constant()), order);
+                for (int i = 0; i < arguments.size() && sum != null; i++) {
+                    Lying term = stays(arguments.get(i).range()
+                            .times(Range.at(it.weights().get(i).coefficient())), order);
+                    sum = term == null ? null
+                            : stays(sum.range().plus(term.range()), order);
                 }
                 yield sum;
             }
             // Rounding to a step never turns a greater number into a lesser one, so the ends of
             // what is rounded are the ends of what it rounds to.
             case Expr.Rounded it -> {
-                Range inner = bounded(it.inner(), at, within);
-                yield inner == null ? null : stays(new Range(inner.low() == null ? null
-                        : rounded(inner.low(), it.scale(), it.way()), inner.high() == null ? null
-                        : rounded(inner.high(), it.scale(), it.way())), within);
+                Lying inner = bounded(it.inner(), at, orderOf);
+                yield inner == null ? null : stays(new Range(inner.range().low() == null ? null
+                        : rounded(inner.range().low(), it.scale(), it.way()),
+                        inner.range().high() == null ? null
+                                : rounded(inner.range().high(), it.scale(), it.way())),
+                        inner.order());
             }
         };
     }
 
-    /** {@code range}, or null where it reaches past {@code within}. */
-    private static Range stays(Range range, Range within) {
-        boolean low = within.low() == null
-                || (range.low() != null && range.low().compareTo(within.low()) >= 0);
-        boolean high = within.high() == null
-                || (range.high() != null && range.high().compareTo(within.high()) <= 0);
-        return low && high ? range : null;
+    /** The order two operands are worked out on together: a decimal's, which stops nowhere, if
+     *  either is, and otherwise the one they share. */
+    private static Range joined(Range one, Range other) {
+        if (one == null) {
+            return other;
+        }
+        if (other == null) {
+            return one;
+        }
+        boolean oneStops = one.low() != null || one.high() != null;
+        return oneStops && (other.low() != null || other.high() != null) ? one : Range.ANY;
+    }
+
+    /** {@code range} on {@code order}, or null where it reaches past it. */
+    private static Lying stays(Range range, Range order) {
+        if (order != null) {
+            boolean low = order.low() == null
+                    || (range.low() != null && range.low().compareTo(order.low()) >= 0);
+            boolean high = order.high() == null
+                    || (range.high() != null && range.high().compareTo(order.high()) <= 0);
+            if (!low || !high) {
+                return null;
+            }
+        }
+        return new Lying(range, order);
     }
 
     /** {@code value} rounded to a whole multiple of ten to the minus {@code scale}, the way the

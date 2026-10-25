@@ -657,7 +657,30 @@ public enum CompositionBudget {
      * row of nine strings reaches this one and not that. The strings past it are never taken from,
      * so what a search came to is about the strings it tried.
      */
-    STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM(8);
+    STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM(8),
+
+    /**
+     * How many elements one side of a list that balances against another has for the amounts of
+     * its elements to be searched among every number the amount's type admits.
+     *
+     * <p>Past it a side is made of one number repeated, which gives every total that number times
+     * the count comes to and no other: a balance that needs two different numbers on a side of
+     * more than this many is not found. Where it is the only number the type admits there is
+     * nothing a search would add, and the figure is not met. Met, a search that found no list says
+     * it was reduced to repeating a number, and not that the type admits none.
+     */
+    ELEMENTS_A_SIDE_IS_SEARCHED_OVER(8),
+
+    /**
+     * How many of the numbers the amount of a list's elements admits are offered to balance the
+     * sides from, the ones nearest the ends of the numbers it admits first.
+     *
+     * <p>Its own figure and not {@link #ELEMENTS_A_SIDE_IS_SEARCHED_OVER}: that one counts the
+     * elements a side is searched over and this one the numbers it is searched with, and a balance
+     * can be out of reach of either alone. A type that names every number it admits, and no more
+     * than this, is balanced from all of them and the figure is not met.
+     */
+    NUMBERS_A_SIDE_IS_BALANCED_FROM(12);
 
     private final int maximum;
 
@@ -783,6 +806,10 @@ public enum CompositionBudget {
                     "how many pieces a string parted by a body is put together of";
             case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
                     "how many of the strings a row holds a piece of a parted string is taken from";
+            case ELEMENTS_A_SIDE_IS_SEARCHED_OVER ->
+                    "how many elements a side of a balanced list has for its amounts to be searched";
+            case NUMBERS_A_SIDE_IS_BALANCED_FROM ->
+                    "how many of the numbers an amount admits the sides of a list are balanced from";
         };
     }
 
@@ -848,7 +875,9 @@ public enum CompositionBudget {
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                  RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                  PIECES_A_STRING_IS_PUT_TOGETHER_OF,
-                 STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM -> null;
+                 STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
+                 ELEMENTS_A_SIDE_IS_SEARCHED_OVER,
+                 NUMBERS_A_SIDE_IS_BALANCED_FROM -> null;
         };
     }
 }

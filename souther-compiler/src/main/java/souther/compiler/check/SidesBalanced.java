@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -188,11 +189,46 @@ public final class SidesBalanced {
         }
         Map<RuleKey, List<Requirement>> held = new LinkedHashMap<>();
         out.forEach((where, requirements) -> {
-            if (buildable(where, requirements)) {
+            if (buildable(where, requirements) && elementsStandAlone(named, where, source)) {
                 held.put(where, List.copyOf(requirements));
             }
         });
         return Map.copyOf(held);
+    }
+
+    /**
+     * Whether the elements of the list at {@code list} are records with no rule of their own.
+     *
+     * <p>The numbers are chosen among those the number's type admits, and the case is chosen
+     * beside them. A rule of the element that reads its case and its number together
+     * ({@code side == Credit || amount >= 10}) makes the numbers a case admits depend on the case,
+     * and one that reads either with a third field makes them depend on that, so an element with
+     * any rule of its own is one whose numbers cannot be chosen apart from its fields. Which fields
+     * a rule reads is not asked: a rule stated through a helper is read through the helper only as
+     * far as the statements go, and the answer worth having is that nothing relates them.
+     */
+    private static boolean elementsStandAlone(TypeSymbol.AtModule named, RuleKey list,
+                                              RuleReadingSource source) {
+        if (!(TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(), source.kinds(),
+                source.sums()) instanceof Shape.Product(TypeSymbol _, var fields))
+                || !(fields.get(list.steps().getFirst()) instanceof Type listType)) {
+            return false;
+        }
+        TypeView view = TypeView.of(listType, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
+                || kind != Shape.Sequence.Kind.LIST) {
+            return false;
+        }
+        TypeView elementView = TypeView.of(element, source.inners(), source.symbols(),
+                source.kinds(), source.sums());
+        if (!(elementView.shape() instanceof Shape.Product product)
+                || !(product.name() instanceof TypeSymbol.AtModule record)
+                || elementView.wrappers().stream().anyMatch(each -> !each.equals(record))) {
+            return false;
+        }
+        RecordRules rules = RecordRules.of(record, source);
+        return rules != null && rules.statements().isEmpty();
     }
 
     /**

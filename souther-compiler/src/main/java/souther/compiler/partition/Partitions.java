@@ -2271,13 +2271,30 @@ public final class Partitions {
         int walked = CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
         int held = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
         int last = (int) Math.min(Math.min(room.most(), held), (long) first + walked - 1);
-        Split split = balancedSplit(numbers, first, last);
+        Walk walk = balancedSplit(numbers, first, last);
+        Split split = walk.split();
         if (split == null) {
             // Nothing among the sizes walked, which says the walk ended and not that no size is
-            // left: past the last one there may be a list the figure did not reach.
-            return last < room.most() ? Proposals.NONE.meeting(CompositionShortfall.of(List.of(
-                    last < held ? CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH
-                            : CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))) : Proposals.NONE;
+            // left: past the last one there may be a list the figure did not reach. And a side
+            // made of a number repeated has not been searched.
+            List<CompositionBudget> met = new ArrayList<>();
+            if (walk.reduced()) {
+                met.add(CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER);
+            }
+            // Only the numbers of the type nearest its ends were balanced from, unless the type
+            // names all it admits and they are no more than that.
+            FieldDomains.ConstructionLimits.ValuesNamed named = admitted.valuesNamed();
+            if (!named.areTheValues()
+                    || named.values().size() > CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM
+                            .maximum()) {
+                met.add(CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM);
+            }
+            if (last < room.most()) {
+                met.add(last < held ? CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH
+                        : CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);
+            }
+            return met.isEmpty() ? Proposals.NONE
+                    : Proposals.NONE.meeting(CompositionShortfall.of(met));
         }
         int count = split.count();
         int onOne = split.onOne();
@@ -2302,12 +2319,6 @@ public final class Partitions {
         return Proposals.ofNullable(list);
     }
 
-    /** How many of the numbers a type admits are tried to make the sides of a list balance. */
-    private static final int AMOUNTS_TRIED = 12;
-
-    /** The most elements the sides are searched over rather than made of one number each. */
-    private static final int MOST_SEARCHED = 8;
-
     /**
      * Numbers a position admits, written as values of its type: those the type offers, and whole
      * numbers from the near end of its range, each one the range holds and the set of values it is
@@ -2324,8 +2335,10 @@ public final class Partitions {
         List<FixtureTemplate> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         List<FixtureTemplate> offered = new ArrayList<>(Witnesses.distinctValuesOf(type,
-                AMOUNTS_TRIED, limits.held(), limits.admits(), reading, Set.of()).values());
-        for (BigInteger whole : wholeNumbersNear(limits.values(), AMOUNTS_TRIED)) {
+                CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM.maximum(), limits.held(),
+                limits.admits(), reading, Set.of()).values());
+        for (BigInteger whole : wholeNumbersNear(limits.values(),
+                CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM.maximum())) {
             FixtureTemplate written = writtenNumberAt(type, new BigDecimal(whole), reading);
             if (written != null) {
                 offered.add(written);
@@ -2374,20 +2387,32 @@ public final class Partitions {
     private record Split(int count, int onOne, List<FixtureTemplate> amounts) {}
 
     /**
-     * The first count from {@code first} to {@code last} that {@code numbers} balance, and the
-     * split of it between the two cases that does — the sides nearest to equal in size first — or
-     * null where none of them does.
+     * What walking the counts found: the split, or null, and whether a side was past the elements
+     * a side is searched over, which leaves what was not found as not found by that search.
      */
-    private static Split balancedSplit(List<FixtureTemplate> numbers, int first, int last) {
+    private record Walk(Split split, boolean reduced) {}
+
+    /**
+     * The first count from {@code first} to {@code last} that {@code numbers} balance, and the
+     * split of it between the two cases that does — the sides nearest to equal in size first.
+     *
+     * <p>A side of more elements than the figure is searched over is made of one number repeated,
+     * which finds the balances that need one number to a side and no others; the walk says it was
+     * reduced to that whenever it came to such a side with more than one number to choose among.
+     */
+    private static Walk balancedSplit(List<FixtureTemplate> numbers, int first, int last) {
+        int searched = CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER.maximum();
+        boolean reduced = false;
         for (int count = first; count <= last; count++) {
             for (int onOne = count / 2; onOne >= 1; onOne--) {
+                reduced |= numbers.size() > 1 && count - onOne > searched;
                 List<FixtureTemplate> amounts = balancingAmounts(numbers, onOne, count - onOne);
                 if (amounts != null) {
-                    return new Split(count, onOne, amounts);
+                    return new Walk(new Split(count, onOne, amounts), reduced);
                 }
             }
         }
-        return null;
+        return new Walk(null, reduced);
     }
 
     /**
@@ -2475,7 +2500,7 @@ public final class Partitions {
      */
     private static Map<String, int[]> totals(List<ExactRatio> numbers, int count) {
         Map<String, int[]> out = new LinkedHashMap<>();
-        if (count > MOST_SEARCHED) {
+        if (count > CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER.maximum()) {
             for (int at = 0; at < numbers.size(); at++) {
                 ExactRatio total = numbers.get(at).times(ExactRatio.of(count)).orNull();
                 if (total != null) {

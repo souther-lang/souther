@@ -140,28 +140,36 @@ final class ComputedNumbers {
                 || !definition.operands().stream().allMatch(account::shownExact)) {
             return false;
         }
+        NumericDomain.Bounds order = account.orderOf(definition.defined());
+        if (order == null) {
+            return false;
+        }
         ComputedNumber.Range image = definition.number().lies(
-                place -> within(numbers.boundsOf(FactSubject.of(place)),
-                        account.orderOf(FactSubject.of(place))),
-                rangeOf(account.orderOf(definition.atom())));
+                place -> {
+                    NumericDomain.Bounds stops = account.orderOf(FactSubject.of(place));
+                    return stops == null ? null
+                            : within(numbers.boundsOf(FactSubject.of(place)), stops);
+                },
+                place -> {
+                    NumericDomain.Bounds stops = account.orderOf(FactSubject.of(place));
+                    return stops == null ? null : rangeOf(stops);
+                });
         if (image == null) {
             return false;
         }
         NumericDomain.Bounds allowed = numbers.boundsOf(definition.defined());
-        NumericDomain.Bounds order = account.orderOf(definition.defined());
         return reachesNoFurtherThan(image.low(), allowed.min(), true)
                 && reachesNoFurtherThan(image.high(), allowed.max(), false)
-                && (order == null
-                        || (reachesNoFurtherThan(image.low(), order.min(), true)
-                                && reachesNoFurtherThan(image.high(), order.max(), false)));
+                && reachesNoFurtherThan(image.low(), order.min(), true)
+                && reachesNoFurtherThan(image.high(), order.max(), false);
     }
 
     /** What the reading of a value's rules can say of a place beyond the ranges of the interval
      *  algebra. */
     interface Account {
 
-        /** Where the order the place's numbers are worked out in stops, or null where it does
-         *  not. */
+        /** Where the order the place's numbers are worked out in stops: open ends where it does
+         *  not stop, and null where the order is not known, which proves nothing. */
         NumericDomain.Bounds orderOf(FactSubject place);
 
         /** Whether what is held of the place is what the rules leave it, and not something wider
