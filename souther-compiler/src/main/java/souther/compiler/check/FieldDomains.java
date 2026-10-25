@@ -96,7 +96,7 @@ public final class FieldDomains {
                     NOTHING_NAMED,
                     ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
-                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE,
+                    Map.of(), Map.of(), List.of(), Map.of(), List.of(), StringFacts.NONE,
                     RevisionKnowledge.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
                     SettledOrderEnvelope.nothing());
@@ -307,10 +307,11 @@ public final class FieldDomains {
      *  it is asked. */
     private volatile Map<RuleKey, List<EntryHeld.Requirement>> entriesHeld;
 
-    /** The numbers these rules write as arithmetic over places, read the first time a place is
-     *  settled: settling states an equality on an atom the rules already have, so they are the
-     *  same for every settling. */
-    private volatile List<ComputedNumbers.Computed> computedNumbers;
+    /** The numbers these rules write as arithmetic over places, each with the order its steps
+     *  answer on: settling a place states an equality on an atom the rules already have, so they
+     *  are the same for every settling. Read with the rules, where the terms that know those
+     *  orders are. */
+    private final List<ComputedNumbers.Computed> computedNumbers;
 
     /** What the rules of this value ask of each list about its sides
      *  ({@link #sidesBalancedAt}), read the first time it is asked. */
@@ -339,6 +340,7 @@ public final class FieldDomains {
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          List<InvariantChecker.Written> readings,
                          Map<FactSubject, NumberSpace> spaces,
+                         List<ComputedNumbers.Computed> computedNumbers,
                          StringFacts stringMachines, RevisionKnowledge revision,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
@@ -382,6 +384,7 @@ public final class FieldDomains {
         this.countAt = countAt;
         this.readings = readings;
         this.spaces = spaces;
+        this.computedNumbers = computedNumbers;
     }
 
     /**
@@ -614,7 +617,7 @@ public final class FieldDomains {
                 seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readings(), seeded.spaces(), seeded.stringMachines(),
+                seeded.readings(), seeded.spaces(), seeded.computed(), seeded.stringMachines(),
                 // What the revision has worked out, which is what a counterfactual of this reading
                 // borrows its work from.
                 reading.readings().revision(),
@@ -1140,12 +1143,7 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), space);
             }
         }
-        List<ComputedNumbers.Computed> computed = computedNumbers;
-        if (computed == null) {
-            computed = ComputedNumbers.in(constraints);
-            computedNumbers = computed;
-        }
-        return ComputedNumbers.settled(taken, computed);
+        return ComputedNumbers.settled(taken, computedNumbers);
     }
 
     /**

@@ -525,6 +525,7 @@ public final class InvariantChecker {
                   Set<RuleKey> unreadOfEveryValue, Set<RuleKey> handedOn,
                   List<Written> readings,
                   Map<FactSubject, NumberSpace> spaces,
+                  List<ComputedNumbers.Computed> computed,
                   Map<RuleKey, ValueSet> admitted,
                   Map<RuleKey, List<StoppedReading>> unreadAt,
                   Set<RuleKey> notSeparated,
@@ -903,6 +904,7 @@ public final class InvariantChecker {
         // the value has been taken in: whether the rule leaves what it is made of free turns on
         // what the other rules hold of both.
         List<ComputedNumbers.Defining> definitions = new ArrayList<>();
+        Function<Term, ComputedNumber.Range> orders = ComputedNumbers.ordersOf(c.terms);
         for (ClauseMeaning declared :
                 opened ? c.clauses.declared(named) : List.<ClauseMeaning>of()) {
             // Where this clause becomes a rule of the model something can be attributed to.
@@ -957,7 +959,7 @@ public final class InvariantChecker {
             // position itself; `value * value >= 4` comes back about an atom standing for the
             // product, which is not the position and is not a reading of it.
             Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
-            definitions.addAll(ComputedNumbers.definingIn(origin, owed));
+            definitions.addAll(ComputedNumbers.definingIn(origin, owed, orders));
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
         }
@@ -1272,7 +1274,8 @@ public final class InvariantChecker {
             }
             constraints = ConstraintState.settling(constraints, atom, each.getValue(), space);
         }
-        constraints = ComputedNumbers.settled(constraints);
+        List<ComputedNumbers.Computed> computed = ComputedNumbers.in(constraints, orders);
+        constraints = ComputedNumbers.settled(constraints, computed);
         // And what stands at each name the reading wrote, which is the last of this answer and is
         // built here because here is where the purse is. A name is filed under a subject the
         // interval algebra knows it by and a subject everything else knows it by, and what it
@@ -1329,7 +1332,7 @@ public final class InvariantChecker {
         }
         return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
-                written, Map.copyOf(spaces), admitted, unreadAt, notSeparated,
+                written, Map.copyOf(spaces), computed, admitted, unreadAt, notSeparated,
                 c.answers.facts(),
                 Collections.unmodifiableMap(new LinkedHashMap<>(endsLeftOpen)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(boundsLeftOpen)),

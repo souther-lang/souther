@@ -319,6 +319,33 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
         assertEquals(0, new BigDecimal(48).compareTo(pointOf(composing.at(RuleKey.of("d")).values())));
     }
 
+    /**
+     * A number is settled at what it comes to only where every step of it comes to a number its
+     * own order holds: {@code (a + 1) * (b - 1)} at the greatest whole number and one is nought as
+     * mathematics and an overflow as a run, and the answer of no run is a fact about nothing.
+     */
+    @Test
+    void aNumberWhoseStepLeavesItsWidthIsSettledAtNothing() {
+        FieldDomains read = fieldsOf("""
+                module demo
+
+                data N = { a: Int, b: Int, c: Int }
+                    invariant c == (a + 1) * (b - 1)
+                """);
+
+        Map<RuleKey, Count> beyond = new LinkedHashMap<>();
+        beyond.put(RuleKey.of("a"), new Count(new BigDecimal(Long.MAX_VALUE)));
+        beyond.put(RuleKey.of("b"), new Count(BigDecimal.ONE));
+        assertNull(pointOf(read.composing(FieldDomains.atValues(beyond)).at(RuleKey.of("c"))
+                .values()), "the first step leaves the width, so c is not settled at nought");
+
+        Map<RuleKey, Count> within = new LinkedHashMap<>();
+        within.put(RuleKey.of("a"), new Count(new BigDecimal(2)));
+        within.put(RuleKey.of("b"), new Count(new BigDecimal(5)));
+        assertEquals(0, new BigDecimal(12).compareTo(pointOf(
+                read.composing(FieldDomains.atValues(within)).at(RuleKey.of("c")).values())));
+    }
+
     @Test
     void aProductThatDefinesNoPlaceStaysUnanswered() {
         Map<String, List<String>> left = unansweredBelowTheInput(record("a * b >= 3") + BEHAVIOR);

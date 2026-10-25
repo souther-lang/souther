@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The numbers a value's clauses write as arithmetic over its places ({@link ComputedNumber}), and
@@ -56,12 +57,13 @@ final class ComputedNumbers {
     record Defining(RuleRef.Invariant rule, Definition definition) {}
 
     /** The definitions {@code owed} states for {@code rule}. */
-    static List<Defining> definingIn(RuleRef.Invariant rule, Predicates.Owed owed) {
+    static List<Defining> definingIn(RuleRef.Invariant rule, Predicates.Owed owed,
+                                     Function<Term, ComputedNumber.Range> orders) {
         List<Defining> out = new ArrayList<>();
         for (Predicates.Part each : owed.parts()) {
             if (each instanceof Predicates.Part.Carried carried
                     && carried.clause().numeric() != null) {
-                Definition definition = definitionIn(carried.clause().numeric());
+                Definition definition = definitionIn(carried.clause().numeric(), orders);
                 if (definition != null) {
                     out.add(new Defining(rule, definition));
                 }
@@ -77,7 +79,8 @@ final class ComputedNumbers {
      * <p>A comparison of a computed number with a written one, or two computed numbers in one rule,
      * relates the places among themselves, and is not read through this.
      */
-    static Definition definitionIn(NumericConstraint constraint) {
+    static Definition definitionIn(NumericConstraint constraint,
+                                   Function<Term, ComputedNumber.Range> orders) {
         Map<FactSubject, ExactRatio> weights = constraint.form().coefs();
         if (constraint.rel() != Rel.EQ || !constraint.form().constant().isZero()
                 || weights.size() != 2) {
@@ -89,15 +92,17 @@ final class ComputedNumbers {
         if (first.negated().compareTo(second) != 0) {
             return null;
         }
-        Definition definition = definition(atoms.get(0), atoms.get(1));
-        return definition != null ? definition : definition(atoms.get(1), atoms.get(0));
+        Definition definition = definition(atoms.get(0), atoms.get(1), orders);
+        return definition != null ? definition : definition(atoms.get(1), atoms.get(0), orders);
     }
 
-    private static Definition definition(FactSubject defined, FactSubject computed) {
+    private static Definition definition(FactSubject defined, FactSubject computed,
+                                         Function<Term, ComputedNumber.Range> orders) {
         if (!aPlace(defined.identity())) {
             return null;
         }
-        ComputedNumber number = ComputedNumber.of(computed.identity(), ComputedNumbers::aPlace);
+        ComputedNumber number =
+                ComputedNumber.of(computed.identity(), ComputedNumbers::aPlace, orders);
         return number == null || number.places().contains(defined.identity()) ? null
                 : new Definition(defined, computed, number);
     }
@@ -144,16 +149,11 @@ final class ComputedNumbers {
         if (order == null) {
             return false;
         }
-        ComputedNumber.Range image = definition.number().lies(
-                place -> {
-                    NumericDomain.Bounds stops = account.orderOf(FactSubject.of(place));
-                    return stops == null ? null
-                            : within(numbers.boundsOf(FactSubject.of(place)), stops);
-                },
-                place -> {
-                    NumericDomain.Bounds stops = account.orderOf(FactSubject.of(place));
-                    return stops == null ? null : rangeOf(stops);
-                });
+        ComputedNumber.Range image = definition.number().lies(place -> {
+            NumericDomain.Bounds stops = account.orderOf(FactSubject.of(place));
+            return stops == null ? null
+                    : within(numbers.boundsOf(FactSubject.of(place)), stops);
+        });
         if (image == null) {
             return false;
         }
@@ -180,6 +180,20 @@ final class ComputedNumbers {
         /** Whether the place is shown exact and its rules leave it every number its range
          *  holds. */
         boolean restrictsNothingBesideItsRange(FactSubject place);
+    }
+
+    /**
+     * The order the value of each term runs on, as the range it runs over, or null for a term no
+     * order is known for.
+     *
+     * <p>Asked of the terms as they were named: the type of the expression a term was named from is
+     * the type of the value, and a step of a number answers on it.
+     */
+    static Function<Term, ComputedNumber.Range> ordersOf(Terms terms) {
+        return term -> {
+            Carrier order = terms.carrierOfTerm(term);
+            return order == null ? null : rangeOf(order.whereItStops());
+        };
     }
 
     private static ComputedNumber.Range rangeOf(NumericDomain.Bounds bounds) {
@@ -221,15 +235,11 @@ final class ComputedNumbers {
      * <p>Nothing is added for a number with a place that is still free, and nothing is taken away
      * from one that is already known. The equality is stated the way settling a position states
      * one ({@link ConstraintState#settling}), so a number settled here is the number a caller
-     * who settled it would have named.
-     */
-    static ConstraintState<FactSubject> settled(ConstraintState<FactSubject> state) {
-        return settled(state, in(state));
-    }
-
-    /**
-     * The same, for a caller that settles one state's places many times and has asked which
-     * numbers there are once.
+     * who settled it would have named. A number whose arithmetic aborts at the places it is given
+     * ({@link ComputedNumber#comesTo}) is the answer of no run, and nothing is settled at it.
+     *
+     * <p>For a caller that settles one state's places many times and has asked which numbers there
+     * are once.
      *
      * <p>Taken to where nothing more settles. A place a number is made of may itself stand at what
      * another number comes to, which is only known once that one is settled, so the numbers are
@@ -270,11 +280,13 @@ final class ComputedNumbers {
      * <p>Settling a place states an equality on an atom the state already has, so the atoms are
      * the same whatever is settled and one reading of them serves every settling.
      */
-    static List<Computed> in(ConstraintState<FactSubject> state) {
+    static List<Computed> in(ConstraintState<FactSubject> state,
+                             Function<Term, ComputedNumber.Range> orders) {
         NumericDomain<FactSubject> domain = state.numbers();
         List<Computed> out = new ArrayList<>();
         for (FactSubject atom : domain.atomsSpokenOf()) {
-            ComputedNumber number = ComputedNumber.of(atom.identity(), ComputedNumbers::aPlace);
+            ComputedNumber number =
+                    ComputedNumber.of(atom.identity(), ComputedNumbers::aPlace, orders);
             NumberSpace space = domain.spaceOf(atom);
             if (number != null && space != null) {
                 out.add(new Computed(atom, number, space));

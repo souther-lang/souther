@@ -9,6 +9,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -139,26 +140,39 @@ final class ComputedNumber {
 
     private final Expr root;
     private final Set<Term> places;
+    private final Map<Term, Range> orders;
 
-    private ComputedNumber(Expr root, Set<Term> places) {
+    private ComputedNumber(Expr root, Set<Term> places, Map<Term, Range> orders) {
         this.root = root;
         this.places = places;
+        this.orders = orders;
     }
 
     /**
      * {@code term} read as arithmetic over places, or null where it is not wholly that or is
      * nothing but a place or a written number.
      *
-     * @param aPlace which terms are places of the value being read
+     * <p>The order each step answers on is read when the number is, and kept with it: the type of
+     * the value that step is, asked of the term it was read from. It is told neither from what the
+     * step is made of nor from the type of the whole, because an operation can answer a type its
+     * arguments are not — {@code Decimal.fromInt(a * b)} multiplies two whole numbers before it is
+     * a decimal, {@code Decimal.fromInt(a) * Decimal.fromInt(b)} multiplies two decimals, and
+     * {@code Decimal.toInt(d)} answers a whole number out of a decimal.
+     *
+     * @param aPlace  which terms are places of the value being read
+     * @param orderOf the order the value of a term is counted on, as the range it runs over, or
+     *                null where it is not known, which proves nothing
      */
-    static ComputedNumber of(Term term, Predicate<Term> aPlace) {
+    static ComputedNumber of(Term term, Predicate<Term> aPlace, Function<Term, Range> orderOf) {
         Set<Term> found = new LinkedHashSet<>();
         Expr read = read(term, aPlace, found);
         if (read == null || read instanceof Expr.Place || read instanceof Expr.Written
                 || found.isEmpty()) {
             return null;
         }
-        return new ComputedNumber(read, found);
+        Map<Term, Range> orders = new HashMap<>();
+        ordersOf(read, orderOf, orders);
+        return new ComputedNumber(read, found, orders);
     }
 
     /** The places this number is made of, in the order they are first met. */
@@ -168,39 +182,61 @@ final class ComputedNumber {
 
     /**
      * What this comes to with each place at the number {@code at} gives it, or null where some
-     * place has none or the arithmetic has no exact answer the host holds.
+     * place has none, the arithmetic has no exact answer the host holds, or some step comes to a
+     * number outside the order it answers on.
+     *
+     * <p>The one evaluation {@link #lies} is, with every place at a single number: a number the
+     * arithmetic of its type aborts on is the answer of no run, so nothing is settled at it.
      */
     ExactRatio comesTo(Function<Term, ExactRatio> at) {
-        return evaluate(root, at);
+        Range whole = bounded(root, place -> {
+            ExactRatio number = at.apply(place);
+            return number == null ? null : Range.at(number);
+        });
+        return whole != null && whole.low() != null && whole.high() != null
+                && whole.low().compareTo(whole.high()) == 0 ? whole.low() : null;
     }
 
     /**
      * Where this lies with each place in the range {@code at} gives it, or null where some step of
-     * it can come to a number outside the order that step is worked out in, or where no order is
-     * known for a place.
+     * it can come to a number outside the order that step answers on, or where no order is known
+     * for a step.
      *
      * <p>Every step and not only the last: the arithmetic of a type that stops somewhere aborts at
      * the step that leaves it, whatever the steps after it would have brought the number back to.
-     * The order a step answers on is its own: the type of the value that step is, asked of the term
-     * it was read from. It is told neither from what the step is made of nor from the type of the
-     * whole, because an operation can answer a type its arguments are not — {@code Decimal.fromInt(a
-     * * b)} multiplies two whole numbers before it is a decimal, {@code Decimal.fromInt(a) *
-     * Decimal.fromInt(b)} multiplies two decimals, and {@code Decimal.toInt(d)} answers a whole
-     * number out of a decimal.
      *
-     * @param at      where each place lies, inside the order its numbers are on, or null where that
-     *                order is not known
-     * @param orderOf the order the value of each term is counted on, as the range it runs over, or
-     *                null where it is not known, which proves nothing
+     * @param at where each place lies, inside the order its numbers are on, or null where that
+     *           order is not known
      */
-    Range lies(Function<Term, Range> at, Function<Term, Range> orderOf) {
-        Lying whole = bounded(root, at, orderOf);
-        return whole == null ? null : whole.range();
+    Range lies(Function<Term, Range> at) {
+        return bounded(root, at);
     }
 
-    /** Where a step lies, and the order it is worked out in: null where it is only written
-     *  numbers, which are on no order of their own. */
-    private record Lying(Range range, Range order) {}
+    /** The order of each step of {@code e}, as {@code orderOf} gives it for the term the step was
+     *  read from. */
+    private static void ordersOf(Expr e, Function<Term, Range> orderOf, Map<Term, Range> out) {
+        switch (e) {
+            case Expr.Place it -> out.put(it.term(), orderOf.apply(it.term()));
+            case Expr.Written _ -> { }
+            case Expr.Negated it -> {
+                out.put(it.term(), orderOf.apply(it.term()));
+                ordersOf(it.operand(), orderOf, out);
+            }
+            case Expr.Operated it -> {
+                out.put(it.term(), orderOf.apply(it.term()));
+                ordersOf(it.left(), orderOf, out);
+                ordersOf(it.right(), orderOf, out);
+            }
+            case Expr.Weighed it -> {
+                out.put(it.term(), orderOf.apply(it.term()));
+                it.weights().forEach(each -> ordersOf(each.argument(), orderOf, out));
+            }
+            case Expr.Rounded it -> {
+                out.put(it.term(), orderOf.apply(it.term()));
+                ordersOf(it.inner(), orderOf, out);
+            }
+        }
+    }
 
     private static Expr read(Term term, Predicate<Term> aPlace, Set<Term> found) {
         return switch (term.shape()) {
@@ -284,128 +320,72 @@ final class ComputedNumber {
                 ? read(call.parts().get(position), aPlace, found) : null;
     }
 
-    private static ExactRatio evaluate(Expr e, Function<Term, ExactRatio> at) {
+    /**
+     * Where {@code e} lies with each place in the range {@code at} gives it, or null where a step
+     * of it can leave the order it answers on.
+     *
+     * <p>The one evaluation, for a range and for a single number alike: a step that is checked
+     * against its order here is checked for every use of the number.
+     */
+    private Range bounded(Expr e, Function<Term, Range> at) {
         return switch (e) {
-            case Expr.Place it -> at.apply(it.term());
-            case Expr.Written it -> it.number();
+            case Expr.Place it -> stays(at.apply(it.term()), orders.get(it.term()));
+            case Expr.Written it -> Range.at(it.number());
             case Expr.Negated it -> {
-                ExactRatio operand = evaluate(it.operand(), at);
-                yield operand == null ? null : operand.negated();
+                Range operand = bounded(it.operand(), at);
+                yield operand == null ? null : stays(operand.negated(), orders.get(it.term()));
             }
             case Expr.Operated it -> {
-                ExactRatio left = evaluate(it.left(), at);
-                ExactRatio right = left == null ? null : evaluate(it.right(), at);
-                if (right == null) {
+                Range left = bounded(it.left(), at);
+                Range right = bounded(it.right(), at);
+                if (left == null || right == null) {
                     yield null;
                 }
-                yield (switch (it.operator()) {
+                yield stays(switch (it.operator()) {
                     case ADD -> left.plus(right);
-                    case SUB -> left.minus(right);
+                    case SUB -> left.plus(right.negated());
                     case MUL -> left.times(right);
                     default -> throw new IllegalStateException("not arithmetic: " + it.operator());
-                }).orNull();
+                }, orders.get(it.term()));
             }
             case Expr.Weighed it -> {
-                ExactRatio sum = it.constant();
+                // Each argument on the order it is, and the weighed sum on the order it answers:
+                // an operation that makes a decimal of a whole number takes the one and answers
+                // the other.
+                Range order = orders.get(it.term());
+                Range sum = Range.at(it.constant());
                 for (Weight each : it.weights()) {
-                    ExactRatio argument = evaluate(each.argument(), at);
-                    ExactRatio weighed = argument == null ? null
-                            : argument.times(each.coefficient()).orNull();
-                    sum = weighed == null ? null : sum.plus(weighed).orNull();
+                    Range argument = bounded(each.argument(), at);
+                    Range weighed = argument == null ? null : stays(
+                            argument.times(Range.at(each.coefficient())), order);
+                    sum = weighed == null ? null : stays(sum.plus(weighed), order);
                     if (sum == null) {
                         break;
                     }
                 }
                 yield sum;
             }
-            case Expr.Rounded it -> {
-                ExactRatio value = evaluate(it.inner(), at);
-                yield value == null ? null : rounded(value, it.scale(), it.way());
-            }
-        };
-    }
-
-    /** Where {@code e} lies, or null where a step of it can leave the order it is worked out in. */
-    private static Lying bounded(Expr e, Function<Term, Range> at, Function<Term, Range> orderOf) {
-        return switch (e) {
-            case Expr.Place it -> {
-                Range lies = at.apply(it.term());
-                Range order = orderOf.apply(it.term());
-                yield lies == null || order == null ? null : new Lying(lies, order);
-            }
-            case Expr.Written it -> new Lying(Range.at(it.number()), null);
-            case Expr.Negated it -> {
-                Lying operand = bounded(it.operand(), at, orderOf);
-                Range order = orderOf.apply(it.term());
-                yield operand == null || order == null ? null
-                        : stays(operand.range().negated(), order);
-            }
-            case Expr.Operated it -> {
-                Lying left = bounded(it.left(), at, orderOf);
-                Lying right = bounded(it.right(), at, orderOf);
-                Range order = orderOf.apply(it.term());
-                if (left == null || right == null || order == null) {
-                    yield null;
-                }
-                yield stays(switch (it.operator()) {
-                    case ADD -> left.range().plus(right.range());
-                    case SUB -> left.range().plus(right.range().negated());
-                    case MUL -> left.range().times(right.range());
-                    default -> throw new IllegalStateException("not arithmetic: " + it.operator());
-                }, order);
-            }
-            case Expr.Weighed it -> {
-                // Each argument on the order it is, and the weighed sum on the order it answers:
-                // an operation that makes a decimal of a whole number takes the one and answers
-                // the other.
-                Range order = orderOf.apply(it.term());
-                if (order == null) {
-                    yield null;
-                }
-                List<Lying> arguments = new ArrayList<>();
-                for (Weight each : it.weights()) {
-                    Lying argument = bounded(each.argument(), at, orderOf);
-                    if (argument == null) {
-                        yield null;
-                    }
-                    arguments.add(argument);
-                }
-                Lying sum = new Lying(Range.at(it.constant()), order);
-                for (int i = 0; i < arguments.size() && sum != null; i++) {
-                    Lying term = stays(arguments.get(i).range()
-                            .times(Range.at(it.weights().get(i).coefficient())), order);
-                    sum = term == null ? null
-                            : stays(sum.range().plus(term.range()), order);
-                }
-                yield sum;
-            }
             // Rounding to a step never turns a greater number into a lesser one, so the ends of
             // what is rounded are the ends of what it rounds to.
             case Expr.Rounded it -> {
-                Lying inner = bounded(it.inner(), at, orderOf);
-                Range order = orderOf.apply(it.term());
-                yield inner == null || order == null ? null
-                        : stays(new Range(inner.range().low() == null ? null
-                                : rounded(inner.range().low(), it.scale(), it.way()),
-                                inner.range().high() == null ? null
-                                        : rounded(inner.range().high(), it.scale(), it.way())),
-                                order);
+                Range inner = bounded(it.inner(), at);
+                yield inner == null ? null : stays(new Range(inner.low() == null ? null
+                        : rounded(inner.low(), it.scale(), it.way()), inner.high() == null ? null
+                        : rounded(inner.high(), it.scale(), it.way())), orders.get(it.term()));
             }
         };
     }
 
-    /** {@code range} on {@code order}, or null where it reaches past it. */
-    private static Lying stays(Range range, Range order) {
-        if (order != null) {
-            boolean low = order.low() == null
-                    || (range.low() != null && range.low().compareTo(order.low()) >= 0);
-            boolean high = order.high() == null
-                    || (range.high() != null && range.high().compareTo(order.high()) <= 0);
-            if (!low || !high) {
-                return null;
-            }
+    /** {@code range} on {@code order}, or null where it reaches past it or either is not known. */
+    private static Range stays(Range range, Range order) {
+        if (range == null || order == null) {
+            return null;
         }
-        return new Lying(range, order);
+        boolean low = order.low() == null
+                || (range.low() != null && range.low().compareTo(order.low()) >= 0);
+        boolean high = order.high() == null
+                || (range.high() != null && range.high().compareTo(order.high()) <= 0);
+        return low && high ? range : null;
     }
 
     /** {@code value} rounded to a whole multiple of ten to the minus {@code scale}, the way the

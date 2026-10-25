@@ -2344,7 +2344,14 @@ public final class Partitions {
                 offered.add(written);
             }
         }
+        // The figure bounds the numbers balanced from, which is what the two walks above add up to
+        // once the ones the position refuses and the repeats are gone, and not either walk alone:
+        // the type's own first, then the whole numbers from the end nearest nought.
+        int most = CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM.maximum();
         for (FixtureTemplate each : offered) {
+            if (out.size() >= most) {
+                break;
+            }
             if (Counts.writtenIn(each.value()) instanceof Count count
                     && holds(limits.values(), count.exactly())
                     && held.has(Value.number(count.at())) && seen.add(count.exactly().key())) {
