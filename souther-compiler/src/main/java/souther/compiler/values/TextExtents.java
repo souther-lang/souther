@@ -12,6 +12,8 @@ import souther.compiler.evaluate.EvaluationContext;
 import souther.runtime.Strings;
 import souther.runtime.TextAdmission;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.IntPredicate;
 
@@ -226,11 +228,46 @@ public final class TextExtents {
     public static boolean reachesEveryLength(ValueSet set, IntPredicate wanted, boolean endless) {
         return switch (set) {
             case ValueSet.Matching it -> it.language().reachesEveryLength(wanted, endless);
-            case ValueSet.Cofinite it ->
-                    !wanted.test(0) || !Sets.textsIn(it.excluded()).contains("");
+            case ValueSet.Cofinite it -> leavesAStringOfEveryLength(it, wanted);
             case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
         };
     }
+
+    /**
+     * Whether a set of every string but those it excludes has one of every length {@code wanted}
+     * names. The excluded are finite, and so are the strings of one length they can take: of a
+     * length that many are excluded as there are strings of it, none is left. Strings of ASCII
+     * alone are always their own Normalization Form C, so the number of them of a length is a
+     * count of values that length has, and fewer than that excluded leaves one.
+     */
+    private static boolean leavesAStringOfEveryLength(ValueSet.Cofinite set, IntPredicate wanted) {
+        Map<Integer, Integer> excludedOfLength = new HashMap<>();
+        for (String each : Sets.textsIn(set.excluded())) {
+            excludedOfLength.merge(each.codePointCount(0, each.length()), 1, Integer::sum);
+        }
+        for (Map.Entry<Integer, Integer> each : excludedOfLength.entrySet()) {
+            if (wanted.test(each.getKey()) && each.getValue() >= asciiStringsOfLength(each.getKey())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** How many strings of ASCII alone have {@code length} code points, saturating. */
+    private static long asciiStringsOfLength(int length) {
+        long count = 1;
+        for (int at = 0; at < length; at++) {
+            count *= ASCII_CODE_POINTS;
+            if (count > Integer.MAX_VALUE) {
+                return Long.MAX_VALUE;
+            }
+        }
+        return count;
+    }
+
+    /** The code points of ASCII, whose strings are in Normalization Form C however they are put
+     *  together. */
+    private static final int ASCII_CODE_POINTS = 128;
 
     /**
      * Whether every count of the code points of a class, and every sum of code points, is that of

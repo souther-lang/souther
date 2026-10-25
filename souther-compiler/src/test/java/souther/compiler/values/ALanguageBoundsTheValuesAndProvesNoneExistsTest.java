@@ -8,11 +8,14 @@ import souther.compiler.numeric.Text;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A language holds the strings a rule leaves, and a {@code String} holds only the ones in
@@ -56,6 +59,24 @@ class ALanguageBoundsTheValuesAndProvesNoneExistsTest {
                 TextExtents.of(languageOf("a\\x{301}[\\s\\S]*")));
         assertEquals(new TextExtent.One(Text.of("JP"), Text.of("JQ")),
                 TextExtents.of(languageOf("JP[\\s\\S]*")));
+    }
+
+    /** Finitely many strings left out can be every string of one length, and not only the empty
+     *  one: no string of ASCII alone is changed by the form, so a length is left without a value
+     *  only when as many of them are out as there are. */
+    @Test
+    void everyStringOfALengthLeftOutLeavesNoValueOfThatLength() {
+        Set<Value> allButOne = new HashSet<>();
+        for (char each = 0; each < 127; each++) {
+            allButOne.add(Value.text(String.valueOf(each)));
+        }
+        Set<Value> all = new HashSet<>(allButOne);
+        all.add(Value.text(String.valueOf((char) 127)));
+
+        assertTrue(TextExtents.reachesEveryLength(new ValueSet.Cofinite(allButOne), n -> n == 1, false));
+        assertFalse(TextExtents.reachesEveryLength(new ValueSet.Cofinite(all), n -> n == 1, false));
+        assertTrue(TextExtents.reachesEveryLength(new ValueSet.Cofinite(all), n -> n == 2, false),
+                "a length none of them has is left whole");
     }
 
     private static Language languageOf(String pattern) {

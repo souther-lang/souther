@@ -46,37 +46,67 @@ import java.util.function.IntPredicate;
  *                         a position such a value must have and that may hold none leaves every edge
  *                         of the input unproved. It says nothing of the positions between which a
  *                         rule relates, and an input they leave empty is another question's
+ * @param parametersWithoutAShownValue the parameters with a position every value of them has
+ *                         that is not shown to hold a value by strings whose rules were read
+ *                         whole. A row at an edge in such a parameter needs a value of the whole
+ *                         parameter, which nothing shown says there is
  * @param countsReached    the positions whose strings have a value of every sum of code points
  *                         and every count of a class, which no rule on the position bounds at all
  * @param lengthsReached   the lengths of a position the rules leave it, where every one is the
  *                         length of some value and no rule on another number of the position
  *                         bounds it
  */
-public record StringsReached(boolean mandatoryPositionsHoldAValue, Set<TermPath> countsReached,
-                             Set<NumericTerm> lengthsReached) {
+public record StringsReached(boolean mandatoryPositionsHoldAValue,
+                             Set<String> parametersWithoutAShownValue,
+                             Set<TermPath> countsReached, Set<NumericTerm> lengthsReached) {
 
     /** An input none of whose positions is a string. */
-    public static final StringsReached NONE = new StringsReached(true, Set.of(), Set.of());
+    public static final StringsReached NONE =
+            new StringsReached(true, Set.of(), Set.of(), Set.of());
 
     private static final String STRING = "String";
 
     public StringsReached {
+        parametersWithoutAShownValue = Set.copyOf(parametersWithoutAShownValue);
         countsReached = Set.copyOf(countsReached);
         lengthsReached = Set.copyOf(lengthsReached);
+    }
+
+    /**
+     * Whether an edge at {@code term} is one a row could be written at, as far as the strings of
+     * the input say: every position every value has holds a value, the value {@code term} is read
+     * from is shown to exist, and the number is one its strings reach.
+     */
+    public boolean allowsAnEdgeAt(NumericTerm term) {
+        if (!mandatoryPositionsHoldAValue) {
+            return false;
+        }
+        if (term instanceof NumericTerm.FromOnePosition one
+                && parametersWithoutAShownValue.contains(one.position().head())) {
+            return false;
+        }
+        return reaches(term);
     }
 
     /** What the strings at {@code positions} reach. */
     static StringsReached of(List<Position> positions) {
         boolean holds = true;
+        Set<String> unshown = new LinkedHashSet<>();
         Set<TermPath> counts = new LinkedHashSet<>();
         Set<NumericTerm> lengths = new LinkedHashSet<>();
         for (Position each : positions) {
             ValueSet admitted = each.admitted().approximation();
-            // A position none of whose strings is shown to be a value leaves the input none. A rule
-            // not read is another account's: it makes the position's own edges unproved and leaves
-            // a search for the rest of the row to say what it could not write.
+            // A position none of whose strings is shown to be a value leaves the input none.
             if (isMandatory(each.path())) {
-                holds &= TextExtents.shownToHoldAValue(admitted) && !each.nothingExists();
+                boolean shown = TextExtents.shownToHoldAValue(admitted) && !each.nothingExists();
+                holds &= shown;
+                // And one whose strings are a bound on values that a rule not read may refuse
+                // leaves the value it is in none as far as anything shown goes. Another parameter's
+                // rules are what a search for the rest of the row says it could not write; this
+                // value's are what a row at an edge in it is a whole value of.
+                if (!shown || !isReadWhole(each)) {
+                    unshown.add(each.path().head());
+                }
             }
             // Only a string has a length, and the other numbers of a position that has one are
             // numbers of its strings. What the strings reach is read off a set that is a bound, so
@@ -95,7 +125,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue, Set<TermPath>
                 }
             }
         }
-        return new StringsReached(holds, counts, lengths);
+        return new StringsReached(holds, unshown, counts, lengths);
     }
 
     /**

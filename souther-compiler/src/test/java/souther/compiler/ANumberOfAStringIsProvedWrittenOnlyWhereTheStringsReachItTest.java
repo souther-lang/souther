@@ -98,6 +98,22 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 if String.length(s.value) >= 3 then 1 else 0
             """;
 
+    /** A field whose rule is not read may refuse every string, and a number beside it is a number
+     *  of a value only if the field has one. */
+    private static final String UNREAD_FIELD = """
+            module example.unreadfield
+
+            data Never = String
+                invariant String.reverse(value) /= String.reverse(value)
+
+            data Holder = { label: Never, n: Int }
+
+            behavior f : (h: Holder) -> Int
+
+            let f (h) =
+                if h.n >= 10 then 1 else 0
+            """;
+
     /** No value of the element exists, and the empty list is a value of the input all the same. */
     private static final String NO_ELEMENT_EXISTS = """
             module example.noelement
@@ -126,6 +142,15 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
     void nothingIsProvedOfAPositionWhoseRulesWereNotReadInFull() {
         List<BorderAssessment.Point> points = owedPoints(UNREAD_REFUSES_ALL, "example.unread");
         assertFalse(provedAny(points), "a rule not read may refuse every string the format leaves");
+    }
+
+    @Test
+    void aNumberBesideAFieldWhoseRulesWereNotReadIsNotProvedWritten() {
+        List<BorderAssessment.Point> points = owedPoints(UNREAD_FIELD, "example.unreadfield");
+        assertTrue(onNumberNamed(points, "10").findAny().isPresent(),
+                "the body draws a line on n: " + labels(points));
+        assertFalse(provedAny(onNumberNamed(points, "10").toList()),
+                "label may hold no value, and no row is written without one");
     }
 
     @Test
