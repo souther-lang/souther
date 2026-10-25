@@ -302,6 +302,10 @@ public final class FieldDomains {
     private final Map<TypeSymbol.AtModule, Map<RuleKey, List<List<String>>>> writtenApart =
             new ConcurrentHashMap<>();
 
+    /** What the rules of this value ask each map of ({@link #entriesHeldAt}), read the first time
+     *  it is asked. */
+    private volatile Map<RuleKey, List<EntryHeld.Requirement>> entriesHeld;
+
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
                          Map<RuleKey, ValueSet> admittedByName,
@@ -1950,6 +1954,25 @@ public final class FieldDomains {
         List<List<String>> apart = keptApartAt(path);
         return bounds == null && apart.isEmpty() ? null
                 : new Held(bounds == null ? NumericDomain.Bounds.OPEN : bounds, apart);
+    }
+
+    /**
+     * What the rules of this value ask of the map at {@code path} beside the fields they name, or
+     * nothing where they ask none of it.
+     *
+     * <p>A builder of the value is told it as it is told what the elements of a container are kept
+     * apart at: the rules do not change with where the search is, so they are read once.
+     */
+    public List<EntryHeld.Requirement> entriesHeldAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        Map<RuleKey, List<EntryHeld.Requirement>> held = entriesHeld;
+        if (held == null) {
+            held = EntryHeld.writtenOn(named, source);
+            entriesHeld = held;
+        }
+        return held.getOrDefault(path, List.of());
     }
 
     /** What the rules keep the elements of the value at {@code path} apart at, worked out once for

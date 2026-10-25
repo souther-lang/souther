@@ -60,6 +60,22 @@ public sealed interface InvariantStatement {
     }
 
     /**
+     * A rule asking a map for an entry under a key, and where it does the value under it
+     * ({@link EntryHeld}).
+     *
+     * <p>Stated and never denied, for the reason an operation is: a map without the entry is not
+     * the rule's denial but the rule's absence.
+     */
+    record HoldsAnEntry(InvariantStatementId id, EntryHeld.Stated held)
+            implements InvariantStatement {
+
+        public HoldsAnEntry {
+            Objects.requireNonNull(id, "a rule asking a map for an entry is some statement");
+            Objects.requireNonNull(held, "and it asks for one");
+        }
+    }
+
+    /**
      * A statement this reading recognised and made nothing of.
      *
      * <p>Not a rule that states nothing, and the difference is what a consumer acts on: from "this

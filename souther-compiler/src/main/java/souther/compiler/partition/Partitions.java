@@ -10,6 +10,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.EntryHeld;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
@@ -63,6 +64,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -2047,13 +2049,32 @@ public final class Partitions {
             return FieldsChosen.NONE;
         }
         CompositionShortfall met = CompositionShortfall.NONE;
-        for (Map.Entry<String, Type> field : fields.entrySet()) {
+        // What the rules ask of each map beside the other fields, and so which fields have to be
+        // chosen before the map that is asked for an entry under them.
+        Map<String, List<EntryHeld.Requirement>> asked = new LinkedHashMap<>();
+        for (String name : fields.keySet()) {
+            List<EntryHeld.Requirement> requirements = rules.entriesHeldAt(RuleKey.of(name));
+            if (!requirements.isEmpty()) {
+                asked.put(name, requirements);
+            }
+        }
+        List<String> order = new ArrayList<>(fields.keySet());
+        order.sort(Comparator.comparingInt(name -> standsAsAKeyOf(name, asked) ? 0 : 1));
+        Map<String, FixtureTemplate> chosenByName = new LinkedHashMap<>();
+        for (String name : order) {
+            Map.Entry<String, Type> field = Map.entry(name, fields.get(name));
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
                 FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
+                // A map asked for an entry under a key already chosen is built holding it.
+                Proposals holding = asked.containsKey(name)
+                        ? holdingTheEntriesAskedFor(field.getValue(), asked.get(name),
+                                chosenByName, limits, reading)
+                        : null;
                 // The first value, with what was met in front of it: a field's later values are
                 // values nothing here takes.
-                Proposals stands = Witnesses.firstWhatThePlaceAdmits(
+                Proposals stands = holding != null ? holding.firstOf(1)
+                        : Witnesses.firstWhatThePlaceAdmits(
                         field.getValue(), limits, reading, inside,
                         () -> representativesHolding(field.getValue(), reading, limits, inside))
                         .firstOf(1);
@@ -2063,7 +2084,7 @@ public final class Partitions {
                 }
                 at = stands.values().getFirst();
             }
-            chosen.put(field.getKey(), at);
+            chosenByName.put(field.getKey(), at);
             // Settled, and the rules read again with it in them. A field chosen against the rules as
             // they stand before anything is settled is chosen against `a < b` with `a` still open,
             // which leaves `b` its whole range and takes the bottom of it.
@@ -2072,7 +2093,89 @@ public final class Partitions {
                 left = rules.composing(FieldDomains.atValues(settled));
             }
         }
+        // Written in the order the record declares them, whichever order they were chosen in.
+        for (String name : fields.keySet()) {
+            chosen.put(name, chosenByName.get(name));
+        }
         return new FieldsChosen(chosen, met);
+    }
+
+    /** Whether {@code field} is the key some map is asked for an entry under. */
+    private static boolean standsAsAKeyOf(String field,
+                                          Map<String, List<EntryHeld.Requirement>> asked) {
+        return asked.values().stream().flatMap(List::stream)
+                .anyMatch(each -> each.key().steps().equals(List.of(field)));
+    }
+
+    /**
+     * A map of {@code type} holding the entries the rules ask of it, under the keys already chosen,
+     * or null where this does not build for what they ask.
+     *
+     * <p>Null leaves the field to be chosen as any other. That is for a key not yet chosen, a map
+     * the position does not declare, two entries each asked for a value of its own, and a value the
+     * position cannot be written as the number asked for.
+     */
+    private static Proposals holdingTheEntriesAskedFor(Type type,
+                                                       List<EntryHeld.Requirement> asked,
+                                                       Map<String, FixtureTemplate> chosen,
+                                                       FieldDomains.ConstructionLimits limits,
+                                                       RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Mapping map)) {
+            return null;
+        }
+        Witnesses.Filed filed = null;
+        List<FixtureTemplate> keysOnly = new ArrayList<>();
+        for (EntryHeld.Requirement each : asked) {
+            FixtureTemplate key = each.key().steps().size() == 1
+                    ? chosen.get(each.key().steps().getFirst()) : null;
+            if (key == null) {
+                return null;
+            }
+            if (each.valueIs() == null) {
+                keysOnly.add(key);
+                continue;
+            }
+            FixtureTemplate value = writtenNumberAt(map.value(), each.valueIs(), reading);
+            if (filed != null || value == null) {
+                return null;
+            }
+            filed = new Witnesses.Filed(key, value);
+        }
+        Proposals made = Witnesses.holding(map,
+                filed == null ? List.of() : List.of(filed.value()), List.of(), filed, keysOnly,
+                List.of(), heldRange(type, reading, limits.held()), reading);
+        List<FixtureTemplate> worn = new ArrayList<>();
+        for (FixtureTemplate each : made.values()) {
+            FixtureTemplate under = WornNames.under(view.wrappers(), each, source);
+            if (under == null) {
+                return null;
+            }
+            worn.add(under);
+        }
+        return Proposals.of(worn).meeting(made.met());
+    }
+
+    /** {@code number} written as a value of {@code type}, or null where the position holds no
+     *  number of that kind or cannot name the names it wears. */
+    private static FixtureTemplate writtenNumberAt(Type type, BigDecimal number,
+                                                   RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Scalar(Type.Prim prim))) {
+            return null;
+        }
+        FixtureTemplate written = switch (prim) {
+            case DECIMAL -> FixtureTemplate.decimal(number);
+            case INT -> number.remainder(BigDecimal.ONE).signum() == 0
+                    && number.toBigInteger().bitLength() < Long.SIZE
+                    ? FixtureTemplate.integer(number.toBigInteger().longValue()) : null;
+            default -> null;
+        };
+        return WornNames.under(view.wrappers(), written, source);
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules

@@ -239,7 +239,8 @@ public final class BoundaryConstraints {
      */
     private Optional<BoundaryConstraint> of(InvariantStatement statement, Type base) {
         return switch (statement) {
-            case InvariantStatement.Unread _ -> Optional.empty();
+            case InvariantStatement.Unread _, InvariantStatement.HoldsAnEntry _ ->
+                    Optional.empty();
             case InvariantStatement.Applies it -> ofCall(it.call(), base);
             case InvariantStatement.Compares it -> ofComparison(it.states(), base);
         };

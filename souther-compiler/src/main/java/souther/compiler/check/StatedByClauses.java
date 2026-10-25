@@ -848,7 +848,14 @@ sealed interface StatedByClauses {
                                                                            Denotations at) {
             AdmissibleReading.KeptApart stated = values.keptApartAt(part, at);
             if (stated == null) {
-                return Adoption.nothing();
+                // Or a map asked for an entry under a key beside it: taken in at both, since the
+                // rule is about the two together and the builders of the map are told it.
+                AdmissibleReading.EntryAt entry = values.entryHeldAt(part, at);
+                if (entry == null) {
+                    return Adoption.nothing();
+                }
+                Set<FactSubject> both = Set.of(entry.container(), entry.key());
+                return Adoption.at(both, both, false);
             }
             Set<FactSubject> container = Set.of(stated.container());
             boolean kept = ElementsApart.covers(

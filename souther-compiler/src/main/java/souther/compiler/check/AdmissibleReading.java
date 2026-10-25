@@ -323,6 +323,36 @@ final class AdmissibleReading {
     record KeptApart(FactSubject container, List<String> run) {}
 
     /**
+     * The map and the key {@code part} asks the map for an entry under, or null where it asks no
+     * map for one ({@link EntryHeld}) or names a map or a key that is no position of this value.
+     *
+     * <p>The same recognition the builders of the map are told the rule by, so that a leaf this
+     * calls read is a rule they keep.
+     */
+    EntryAt entryHeldAt(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()) {
+            return null;
+        }
+        EntryHeld.Stated stated = EntryHeld.read(part.of(), core -> followed(core, at));
+        FactSubject container = stated == null ? null : positionIn(stated.container(), at);
+        FactSubject key = stated == null ? null : positionIn(stated.key(), at);
+        return container == null || key == null ? null : new EntryAt(container, key);
+    }
+
+    /** A leaf asking {@code container} for an entry under the key at {@code key}. */
+    record EntryAt(FactSubject container, FactSubject key) {}
+
+    /** What a name stands for where it was given a value, and the expression itself otherwise. */
+    private static Core followed(Core e, Denotations at) {
+        Core here = e;
+        while (Core.withoutStanding(here) instanceof Core.Read read
+                && at.givenTo(read.binding()) instanceof ValueStanding.ReadThrough<Denotations> given) {
+            here = given.value();
+        }
+        return here;
+    }
+
+    /**
      * What {@code e} leaves the positions it names, said twice: to the places, and about the clause.
      *
      * <p>Both from the one decision and neither from the other. What a place is left holding is the
