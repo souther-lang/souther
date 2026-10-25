@@ -1005,6 +1005,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "what a budget reached counts, in a reader's words"),
             Map.entry("souther.compiler.observe.Figure$Budget#most()Ljava/lang/String;",
                     "the number a budget reached stands at"),
+            Map.entry("souther.compiler.partition.NearbyValues#shapesOf("
+                            + "Ljava/lang/String;Lsouther/compiler/meaning/PieceDemand;"
+                            + "Ljava/util/List;Ljava/util/function/Consumer;)Ljava/util/List;",
+                    "hands the figure over to whoever asked for the strings, where a string is seen"
+                            + " in more pieces than it puts one together of"),
+            Map.entry("souther.compiler.partition.NearbyValues#heldBy("
+                            + "Lsouther/compiler/meaning/PieceDemand;"
+                            + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/List;"
+                            + "Ljava/util/function/Consumer;)Ljava/util/List;",
+                    "hands the figure over to whoever asked for the strings, where the row holds more"
+                            + " strings to take a piece from than it tries"),
             Map.entry("souther.compiler.partition.Generator$ReplacementWitness#asFigures("
                             + "Ljava/util/Collection;)Ljava/util/List;",
                     "hands the budgets a search for a rewrite's row met on as the figures it"

@@ -634,7 +634,30 @@ public enum CompositionBudget {
      * parameter multiplies. It stops the walk before a row that answers was found, so the point is
      * one this compiler stopped looking for a row at, and never one no row answers at.
      */
-    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64);
+    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
+
+    /**
+     * How many pieces a string is put together of when a body parts it and builds a newtype of the
+     * pieces: how many it is seen in that a piece of it is changed at, and how many it is made of
+     * for the pieces to be ones the newtype admits.
+     *
+     * <p>The strings past it were never offered, so what a search came to is about the strings it
+     * tried — a string seen in more pieces than this is changed at none of them. The runs those
+     * strings are put to are counted where every candidate's are, and this stops only the making of
+     * them: a string of many pieces is as long as it has pieces, and so are the strings made of it.
+     */
+    PIECES_A_STRING_IS_PUT_TOGETHER_OF(8),
+
+    /**
+     * How many of the strings a row holds in its other inputs, each a string the newtype a body
+     * builds of the pieces of a string admits, a piece of that string is taken from.
+     *
+     * <p>Its own figure and not {@link #PIECES_A_STRING_IS_PUT_TOGETHER_OF}: that one counts the
+     * places of a string and this one the values a place is given, and a string of two pieces in a
+     * row of nine strings reaches this one and not that. The strings past it are never taken from,
+     * so what a search came to is about the strings it tried.
+     */
+    STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM(8);
 
     private final int maximum;
 
@@ -756,6 +779,10 @@ public enum CompositionBudget {
             case RUNS_REPAIRING_A_ROW -> "how many runs looking for a row that goes further may make";
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
                     "how many rows a walk composing a row for a point hands the choice of a row";
+            case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
+                    "how many pieces a string parted by a body is put together of";
+            case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
+                    "how many of the strings a row holds a piece of a parted string is taken from";
         };
     }
 
@@ -819,7 +846,9 @@ public enum CompositionBudget {
                  COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
-                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW -> null;
+                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                 PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                 STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM -> null;
         };
     }
 }
