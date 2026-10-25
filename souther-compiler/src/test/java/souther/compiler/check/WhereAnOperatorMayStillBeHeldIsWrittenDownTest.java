@@ -255,7 +255,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.SidesBalanced.side",
                     "asks whether the step of a walk adding a number compares a field of the"
                             + " element for equality with a case"),
-            new Held("souther.compiler.check.ComputedNumber.read",
+            new Held("souther.compiler.check.ComputedNumber.operated",
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),
             new Held("souther.compiler.check.ComputedNumber.evaluate",

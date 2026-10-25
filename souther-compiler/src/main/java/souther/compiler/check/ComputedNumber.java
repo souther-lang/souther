@@ -83,40 +83,38 @@ final class ComputedNumber {
     }
 
     private static Expr read(Term term, Predicate<Term> aPlace, Set<Term> found) {
-        switch (term.shape()) {
-            case INT -> {
-                return new Expr.Written(ExactRatio.of((Long) term.carried()));
-            }
-            case DECIMAL -> {
-                return new Expr.Written(ExactRatio.of((BigDecimal) term.carried()));
-            }
-            case NEG -> {
-                Expr operand = read(term.parts().getFirst(), aPlace, found);
-                return operand == null ? null : new Expr.Negated(operand);
-            }
-            case OP -> {
-                BinOp operator = (BinOp) term.carried();
-                if (operator != BinOp.ADD && operator != BinOp.SUB && operator != BinOp.MUL) {
-                    return null;
-                }
-                Expr left = read(term.parts().get(0), aPlace, found);
-                Expr right = left == null ? null : read(term.parts().get(1), aPlace, found);
-                return right == null ? null : new Expr.Operated(operator, left, right);
-            }
-            case CALLED -> {
-                return called(term, aPlace, found);
-            }
-            case AT, ON -> {
-                if (!aPlace.test(term)) {
-                    return null;
-                }
-                found.add(term);
-                return new Expr.Place(term);
-            }
-            default -> {
-                return null;
-            }
+        return switch (term.shape()) {
+            case INT -> new Expr.Written(ExactRatio.of((Long) term.carried()));
+            case DECIMAL -> new Expr.Written(ExactRatio.of((BigDecimal) term.carried()));
+            case NEG -> negated(term, aPlace, found);
+            case OP -> operated(term, aPlace, found);
+            case CALLED -> called(term, aPlace, found);
+            case AT, ON -> place(term, aPlace, found);
+            default -> null;
+        };
+    }
+
+    private static Expr negated(Term term, Predicate<Term> aPlace, Set<Term> found) {
+        Expr operand = read(term.parts().getFirst(), aPlace, found);
+        return operand == null ? null : new Expr.Negated(operand);
+    }
+
+    private static Expr operated(Term term, Predicate<Term> aPlace, Set<Term> found) {
+        BinOp operator = (BinOp) term.carried();
+        if (operator != BinOp.ADD && operator != BinOp.SUB && operator != BinOp.MUL) {
+            return null;
         }
+        Expr left = read(term.parts().get(0), aPlace, found);
+        Expr right = left == null ? null : read(term.parts().get(1), aPlace, found);
+        return right == null ? null : new Expr.Operated(operator, left, right);
+    }
+
+    private static Expr place(Term term, Predicate<Term> aPlace, Set<Term> found) {
+        if (!aPlace.test(term)) {
+            return null;
+        }
+        found.add(term);
+        return new Expr.Place(term);
     }
 
     private static Expr called(Term term, Predicate<Term> aPlace, Set<Term> found) {
