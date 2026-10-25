@@ -2751,8 +2751,8 @@ final class Terms {
      * Two types for one term are not one order, so the term is filed as having none.
      */
     private void orderOfTheValue(Term term, Type type) {
-        Carrier carrier = type == null ? null : Carrier.ofValue(type, declarations());
-        if (carrier == null || !carrier.counts()) {
+        Carrier carrier = type == null ? null : countedOrderOf(type);
+        if (carrier == null) {
             return;
         }
         Carrier had = termCarriers.putIfAbsent(term, carrier);
@@ -2769,6 +2769,21 @@ final class Terms {
         }
         Carrier carrier = termCarriers.get(term);
         return carrier != null ? carrier : atomCarriers.get(FactSubject.of(term));
+    }
+
+    /** The order each type is counted on, asked of the declarations once: every term named asks
+     *  it of the type of the expression it came from, and the types met are few. */
+    private final Map<Type, Optional<Carrier>> countedOrders = new HashMap<>();
+
+    /** The order {@code type} is counted on, or null where its values are not counted. */
+    private Carrier countedOrderOf(Type type) {
+        Optional<Carrier> known = countedOrders.get(type);
+        if (known == null) {
+            known = Optional.ofNullable(Carrier.ofValue(type, declarations()))
+                    .filter(Carrier::counts);
+            countedOrders.put(type, known);
+        }
+        return known.orElse(null);
     }
 
     private final Map<Term, Carrier> termCarriers = new HashMap<>();
