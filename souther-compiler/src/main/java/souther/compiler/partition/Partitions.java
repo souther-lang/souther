@@ -2567,6 +2567,12 @@ public final class Partitions {
     record PatternForAWitness(StringPredicates.StatedPattern pattern)
             implements RevisionWork<PatternForAWitness.Made> {
 
+        /** The refusal of a pattern's machine by {@code stopped}, as it is made under the allowance
+         *  one pattern has: what a search that was kept from a value by it reports. */
+        static PatternPlan.Refused refusedAt(Meter.Stopped stopped) {
+            return new PatternPlan.Refused(PatternPlan.Budget.OF_A_PATTERN_FOR_A_WITNESS, stopped);
+        }
+
         /** What building the pattern came to. */
         sealed interface Made {
 
@@ -2933,29 +2939,32 @@ public final class Partitions {
                           StringPredicates.StatedPattern accepts) {}
 
     /**
-     * Whether {@code text}, once {@code through} has made it into what is parted, is a string every
-     * pattern the rules on {@code piece} state admits — and false where there is no such pattern,
-     * which says nothing of whether the type admits it.
+     * Whether {@code text} is a string every pattern the rules on {@code piece} state admits — and
+     * false where there is no such pattern, which says nothing of whether the type admits it.
+     *
+     * <p>The string of the type itself, which is the string a case conversion has made and not the
+     * string the conversion was given: the strings of the input that are made into it are
+     * {@link PieceShape.MadeInto}'s to work out.
      *
      * <p>A pattern whose machine could not be made is told to {@code stoppedAt} as the figure it
-     * stopped at, and the answer is false: not that the string is refused, but that nothing here
+     * was refused at, and the answer is false: not that the string is refused, but that nothing here
      * can say it is admitted.
      */
-    static boolean pieceAdmits(Type piece, RuleReadingContext reading, CaseMapping through,
-                               String text, Consumer<Figure> stoppedAt) {
+    static boolean pieceAdmits(Type piece, RuleReadingContext reading, String text,
+                               Consumer<Figure> stoppedAt) {
         List<StringPredicates.StatedPattern> patterns = patternsOfAPiece(piece, reading);
         if (patterns.isEmpty()) {
             return false;
         }
         for (StringPredicates.StatedPattern each : patterns) {
-            switch (reading.revision().settled(new PatternBeforeAConversion(each, through))) {
-                case PatternBeforeAConversion.ItsMachine(Language language) -> {
+            switch (reading.revision().settled(new PatternForAWitness(each))) {
+                case PatternForAWitness.Made.Built(Language language, var _) -> {
                     if (!language.has(text)) {
                         return false;
                     }
                 }
-                case PatternBeforeAConversion.NoMachine(Meter.Stopped stopped) -> {
-                    stoppedAt.accept(figureOf(stopped));
+                case PatternForAWitness.Made.NotBuilt(Meter.Stopped stopped) -> {
+                    stoppedAt.accept(figureOf(PatternForAWitness.refusedAt(stopped)));
                     return false;
                 }
             }
@@ -2964,16 +2973,21 @@ public final class Partitions {
     }
 
     /** The figure a machine for the strings that part into pieces was refused at. */
-    static Figure figureOf(Meter.Stopped stopped) {
-        return new PatternPlan.Refused(PatternPlan.Budget.OF_A_WITNESS, stopped).as(
-                WorkFigure.STRINGS_PARTED_ONE_MACHINE, WorkFigure.STRINGS_PARTED_IN_ALL);
+    static Figure figureOf(PatternPlan.Refused refused) {
+        return refused.as(WorkFigure.STRINGS_PARTED_ONE_MACHINE,
+                WorkFigure.STRINGS_PARTED_IN_ALL);
     }
 
-    /** Which limit refused {@code meter}; the machine limit where it was a machine built under
-     *  another allowance that did. */
-    private static Meter.Stopped stoppedBy(Meter meter) {
+    /** What refused {@code meter}, or nothing where it refused nothing: a construction that
+     *  came back empty for another reason is not one a limit stopped. */
+    private static Optional<PatternPlan.Refused> refusedBy(Meter meter) {
         Meter.Stopped stopped = meter.stoppedBy();
-        return stopped == null ? Meter.Stopped.ONE_MACHINE : stopped;
+        return stopped == null ? Optional.empty() : Optional.of(refusedAsAWitness(stopped));
+    }
+
+    /** The refusal by {@code stopped} of what is built under the allowance of a witness. */
+    static PatternPlan.Refused refusedAsAWitness(Meter.Stopped stopped) {
+        return new PatternPlan.Refused(PatternPlan.Budget.OF_A_WITNESS, stopped);
     }
 
     /** Every pattern the rules on {@code piece} state, in the order they are written. */
@@ -2982,38 +2996,6 @@ public final class Partitions {
         RuleReadingSource ruleSource = reading.source();
         return patternsStatedOn(TypeView.of(piece, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums()), ruleSource).patterns();
-    }
-
-    /**
-     * The machine of the strings that, once {@code through} has made them into something else, a
-     * pattern a rule states admits — as far as that can be said of every string, which is the
-     * strings of the ASCII range ({@link #beforeConversion}).
-     *
-     * <p>Made here with the allowance of one witness, as the other machines a question composes
-     * are: it is a machine nobody wrote a rule for.
-     */
-    record PatternBeforeAConversion(StringPredicates.StatedPattern pattern, CaseMapping through)
-            implements RevisionWork<PatternBeforeAConversion.Preimage> {
-
-        /** What building the machine came to. */
-        sealed interface Preimage {
-        }
-
-        /** The machine. */
-        record ItsMachine(Language language) implements Preimage {
-        }
-
-        /** No machine, and which limit refused it. */
-        record NoMachine(Meter.Stopped stopped) implements Preimage {
-        }
-
-        @Override
-        public Preimage workedOut(RevisionKnowledge revision) {
-            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
-            Language made = PatternPlan.of(beforeConversion(pattern.meaning(), through))
-                    .compile(meter);
-            return made == null ? new NoMachine(stoppedBy(meter)) : new ItsMachine(made);
-        }
     }
 
     /**
@@ -3082,11 +3064,26 @@ public final class Partitions {
     }
 
     /**
+     * Whether {@code through} leaves {@code text} as it is, so far as that is known of every string:
+     * the code points of the ASCII range each of which is made into itself.
+     *
+     * <p>For a caller that prefers a string of the input to be the string it is made into, where
+     * it can be: the least string that is made into a text is a string of capitals for a text of
+     * small letters, which is a string of the input and not one anybody would write.
+     */
+    static boolean isUnchangedBy(String text, CaseMapping through) {
+        return text.codePoints().allMatch(each -> before(CodePoints.of(each), through).has(each));
+    }
+
+    /**
      * A string the rules on {@code position} admit that, once {@code through} has made it into
-     * what is parted, parts at {@code separator} into pieces of which each one that is empty in
-     * {@code pieces} is a string every pattern the rules on {@code piece} state admits and each
-     * other is the string it holds — or nothing where those rules state no pattern, or leave no
-     * such string.
+     * what is parted, parts at {@code separator} into the places of {@code pieces}, each as its
+     * shape says ({@link PieceShape}) — or nothing where the rules on {@code piece} state no
+     * pattern, or leave no such string.
+     *
+     * <p>Each place is taken to the language of the input by one reading of the shape it is in
+     * ({@link StringsPartedInto}), so that a string of the input and a string it is made into are
+     * never the same string to a caller.
      *
      * <p>The rules met and not one chosen from the other's strings: a piece that is a string the
      * type admits may be refused as part of the position's string, and the one the position admits
@@ -3101,7 +3098,7 @@ public final class Partitions {
     static StringsPartedInto.Parted stringsPartedInto(TypeView position,
                                                       RuleReadingContext reading, Type piece,
                                                       int separator, CaseMapping through,
-                                                      List<Optional<String>> pieces) {
+                                                      List<PieceShape> pieces) {
         if (pieces.isEmpty() || !(position.shape() instanceof Shape.Scalar scalar)
                 || scalar.prim() != Type.Prim.STRING) {
             return StringsPartedInto.NONE;
@@ -3127,7 +3124,7 @@ public final class Partitions {
      * @param rules the rules on the position, or null where they say nothing about its strings
      */
     record StringsPartedInto(RulesRead rules, List<StringPredicates.StatedPattern> patterns,
-                             int separator, CaseMapping through, List<Optional<String>> pieces)
+                             int separator, CaseMapping through, List<PieceShape> pieces)
             implements RevisionWork<StringsPartedInto.Parted> {
 
         /** What making the strings came to. */
@@ -3138,8 +3135,8 @@ public final class Partitions {
         record StringsMade(List<String> strings) implements Parted {
         }
 
-        /** No strings could be made, and which limit refused the machine. */
-        record StringsNotMade(Meter.Stopped stopped) implements Parted {
+        /** No strings could be made, and what refused the machine where a limit did. */
+        record StringsNotMade(Optional<PatternPlan.Refused> refused) implements Parted {
         }
 
         /** Nothing to make: the position or the type says nothing this reads. */
@@ -3165,8 +3162,7 @@ public final class Partitions {
                     if (place > 0) {
                         parted.add(at);
                     }
-                    parted.add(pieces.get(place).map(StringsPartedInto::written)
-                            .orElseGet(() -> beforeConversion(each.meaning(), through)));
+                    parted.add(inTheInput(pieces.get(place), each.meaning(), through));
                 }
                 PatternPlan one = PatternPlan.of(new PatternMeaning.InTurn(parted));
                 whole = whole == null ? one : whole.and(one);
@@ -3186,17 +3182,36 @@ public final class Partitions {
                         revision);
                 if (position.language() == null) {
                     // Nothing left of the position's strings: no string meets the rules where
-                    // nothing refused the machine, and none can be said to where something did.
+                    // nothing refused the machine, and none can be said to where something did —
+                    // which allowance it was is the position's rules' to say, and not this one's.
                     return rules.characters().empty() || position.shortfall().isEmpty() ? NONE
-                            : new StringsNotMade(stoppedBy(meter));
+                            : new StringsNotMade(position.shortfall().refusedBy());
                 }
                 made = made.and(position.language(), meter);
             }
             if (made == null) {
-                return new StringsNotMade(stoppedBy(meter));
+                return new StringsNotMade(refusedBy(meter));
             }
             String some = made.someWritten();
             return some == null ? NONE : new StringsMade(List.of(some));
+        }
+
+        /**
+         * What a place stands for in the strings of the input: the piece as it was seen is the
+         * string itself, and a place made into a string or into any the type admits is the strings
+         * that are made into it.
+         *
+         * <p>Exhaustive over the shapes, so a shape added without a reading here does not compile —
+         * which is how a string of one of the two strings stops being taken for the other's.
+         */
+        private static PatternMeaning inTheInput(PieceShape shape, PatternMeaning admitted,
+                                                  CaseMapping through) {
+            return switch (shape) {
+                case PieceShape.AsSeen seen -> written(seen.written());
+                case PieceShape.MadeInto made -> beforeConversion(written(made.converted()),
+                        through);
+                case PieceShape.AnyTheTypeAdmits _ -> beforeConversion(admitted, through);
+            };
         }
 
         /** The one string {@code text} is, as the pattern that accepts it alone. */

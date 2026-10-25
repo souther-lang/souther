@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.PieceDemand;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -19,7 +20,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -107,16 +107,19 @@ final class NearbyValues {
         return switch (parted) {
             case Partitions.StringsPartedInto.StringsMade made -> made.strings().iterator();
             case Partitions.StringsPartedInto.StringsNotMade refused -> {
-                stoppedAt.accept(Partitions.figureOf(refused.stopped()));
+                refused.refused().ifPresent(by -> stoppedAt.accept(Partitions.figureOf(by)));
                 yield none();
             }
         };
     }
 
     /**
-     * The strings of {@code row} a piece for {@code demand} may be taken from: the ones that stand
-     * as a piece, which hold nowhere the string is parted, and that the newtype admits once the
-     * string they are a piece of has been made into what is parted.
+     * The strings of {@code row} a piece for {@code demand} may be made into: the ones that hold
+     * nowhere the string is parted and that the newtype admits.
+     *
+     * <p>Strings of the other inputs, which are looked up against the pieces of the string once it
+     * has been made into what is parted, so strings that string's pieces are made into and not
+     * pieces of the input ({@link PieceShape.MadeInto}).
      *
      * <p>Read only as far as it takes to know the figure is reached: one string past it says so, and
      * the rest of the row is not asked.
@@ -125,12 +128,11 @@ final class NearbyValues {
                                        List<ObservedValue> row, Consumer<Figure> stoppedAt) {
         CompositionBudget taken = CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM;
         int most = taken.maximum();
-        IntPredicate parts = Partitions.partsAt(demand.separator(), demand.through());
         Set<String> held = new LinkedHashSet<>();
         for (ObservedValue each : row) {
             boolean more = eachText(each, text -> {
-                if (text.codePoints().noneMatch(parts) && Partitions.pieceAdmits(
-                        demand.attempted(), reading, demand.through(), text, stoppedAt)) {
+                if (text.codePoints().noneMatch(part -> part == demand.separator())
+                        && Partitions.pieceAdmits(demand.attempted(), reading, text, stoppedAt)) {
                     held.add(text);
                 }
                 return held.size() <= most;
@@ -158,24 +160,29 @@ final class NearbyValues {
      * bound is changed at none of them, since the strings made of it are as long as it is and are
      * as many.
      */
-    private static List<List<Optional<String>>> shapesOf(String seen, PieceDemand demand,
-                                                         List<String> held,
-                                                         Consumer<Figure> stoppedAt) {
+    private static List<List<PieceShape>> shapesOf(String seen, PieceDemand demand,
+                                                   List<String> held, Consumer<Figure> stoppedAt) {
         CompositionBudget budget = CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF;
         // The pieces of the string as it is parted, which is where it is made into the separator
         // and not where it is written as one.
         List<String> pieces = partsOf(seen, Partitions.partsAt(demand.separator(),
                 demand.through()));
-        List<List<Optional<String>>> out = new ArrayList<>();
+        List<List<PieceShape>> out = new ArrayList<>();
         if (pieces.size() <= budget.maximum()) {
             for (int changed = 0; changed < pieces.size(); changed++) {
-                out.add(changing(pieces, changed, Optional.empty()));
+                out.add(changing(pieces, changed, new PieceShape.AnyTheTypeAdmits()));
             }
             for (String text : held) {
                 for (int changed = 0; changed < pieces.size(); changed++) {
-                    if (!pieces.get(changed).equals(text)) {
-                        out.add(changing(pieces, changed, Optional.of(text)));
+                    // The string itself first where the conversions leave it as it is: it is the
+                    // string of the input that is made into it which anybody would write, and the
+                    // strings made into it besides are what the meet is left to find if it is not
+                    // one the input admits.
+                    if (demand.through() != CaseMapping.NONE
+                            && Partitions.isUnchangedBy(text, demand.through())) {
+                        out.add(changing(pieces, changed, new PieceShape.AsSeen(text)));
                     }
+                    out.add(changing(pieces, changed, new PieceShape.MadeInto(text)));
                 }
             }
         } else {
@@ -185,17 +192,17 @@ final class NearbyValues {
             stoppedAt.accept(budget.figure());
         }
         for (int count = 1; count <= Math.min(pieces.size() + 1, budget.maximum()); count++) {
-            out.add(Collections.nCopies(count, Optional.<String>empty()));
+            out.add(Collections.nCopies(count, new PieceShape.AnyTheTypeAdmits()));
         }
         return out;
     }
 
-    /** {@code pieces} as they were, but for the one at {@code changed}, which is {@code to}. */
-    private static List<Optional<String>> changing(List<String> pieces, int changed,
-                                                   Optional<String> to) {
-        List<Optional<String>> shape = new ArrayList<>();
+    /** {@code pieces} as they were seen, but for the one at {@code changed}, which is
+     *  {@code to}. */
+    private static List<PieceShape> changing(List<String> pieces, int changed, PieceShape to) {
+        List<PieceShape> shape = new ArrayList<>();
         for (int at = 0; at < pieces.size(); at++) {
-            shape.add(at == changed ? to : Optional.of(pieces.get(at)));
+            shape.add(at == changed ? to : new PieceShape.AsSeen(pieces.get(at)));
         }
         return shape;
     }

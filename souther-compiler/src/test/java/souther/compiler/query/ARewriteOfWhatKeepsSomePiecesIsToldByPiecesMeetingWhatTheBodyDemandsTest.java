@@ -2,11 +2,15 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.partition.ReplacementDisposition;
+import souther.compiler.semantics.CaseMapping;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -190,6 +194,9 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
                         + came);
         assertEquals(true, came.inputs().getFirst().matches("Source\\(\"[A-Z]{2}@CD\"\\)"),
                 () -> "the piece before the separator is two capitals: " + came.inputs());
+        List<String> parted = partedAs(CaseMapping.LOWERCASE, writtenOf(came), "@");
+        assertEquals(true, parted.size() == 2 && parted.getFirst().matches("[a-z]{2}"),
+                () -> "what the body parts is a part before the separator: " + parted);
     }
 
     @Test
@@ -203,6 +210,51 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
                 () -> "two small letters are two capitals once made capitals: " + came);
         assertEquals(true, came.inputs().getFirst().matches("Source\\(\"[a-z]{2}@cd\"\\)"),
                 () -> "the piece before the separator is two small letters: " + came.inputs());
+        List<String> parted = partedAs(CaseMapping.UPPERCASE, writtenOf(came), "@");
+        assertEquals(true, parted.size() == 2 && parted.getFirst().matches("[A-Z]{2}"),
+                () -> "what the body parts is a part before the separator: " + parted);
+    }
+
+    /**
+     * The row holds a string that the pieces are looked up against once the body has made the input
+     * capitals, and the input admits small letters only. The string looked up is what the piece is
+     * made into, and so the piece is small letters whose capitals are that string.
+     */
+    @Test
+    void aStringTheRowHoldsIsWhatAPieceIsMadeIntoAndNotThePieceItself() {
+        Collection<Replacements.Searched> all = searchedAll("""
+                module example.catalog
+
+                data Source = String
+                    invariant String.matches("[a-z]{1,2}@cd", value)
+                data Part = String
+                    invariant String.matches("[A-Z]{2}", value)
+
+                behavior known : (source: Source, books: List<Part>) -> List<Part>
+                    constructs Part
+
+                let partsOf (source: Source): List<Part> =
+                    List.flatMap(p -> if Part(p) as part then [ part ] else [],
+                                 List.drop(1, String.split("@", String.uppercase(source.value))))
+
+                let known (source, books) =
+                    List.filter(p -> List.any(b -> b == p, books), partsOf(source))
+
+                example known
+                    | "the row" : (Source("x@cd"), [Part("ZZ")]) -> []
+                """, "example.catalog", "known");
+
+        List<Replacements.Searched> told = all.stream()
+                .filter(each -> each.disposition() instanceof ReplacementDisposition.Witnessed)
+                .toList();
+        assertEquals(false, told.isEmpty(),
+                () -> "`zz@cd` is `ZZ@CD` once made capitals, and `ZZ` is a part the books hold: "
+                        + all);
+        for (Replacements.Searched each : told) {
+            List<String> parted = partedAs(CaseMapping.UPPERCASE, writtenOf(each), "@");
+            assertEquals(true, parted.contains("ZZ"),
+                    () -> "what the body parts holds the string the books hold: " + parted);
+        }
     }
 
     /**
@@ -284,6 +336,9 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
         assertInstanceOf(ReplacementDisposition.Witnessed.class, came.disposition(),
                 () -> "`ZZABBACC` is three pieces once small, and the first is a part: " + came);
         assertEquals(List.of("Source(\"ZZABBACC\")"), came.inputs());
+        assertEquals(List.of("zz", "bb", "cc"),
+                partedAs(CaseMapping.LOWERCASE, writtenOf(came), "a"),
+                "what the body parts is three pieces, the first of them a part");
     }
 
     /**
@@ -477,5 +532,23 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
 
         assertInstanceOf(ReplacementDisposition.NoneFound.class, came.disposition(),
                 () -> "no input keeps a first piece the construction accepts: " + came);
+    }
+
+    /** The one string the first input of a witness is written round: `Source("zz@cd")` is
+     *  `zz@cd`. */
+    private static String writtenOf(Replacements.Searched came) {
+        Matcher quoted = Pattern.compile("\"([^\"]*)\"").matcher(came.inputs().getFirst());
+        assertEquals(true, quoted.find(), () -> "a string is written in " + came.inputs());
+        return quoted.group(1);
+    }
+
+    /**
+     * What a body that makes the string into something and parts it at {@code separator} parts of
+     * {@code written}: the run time's own conversion, so that what a test asks of a witness is not
+     * worked out the way the search worked it out.
+     */
+    private static List<String> partedAs(CaseMapping through, String written, String separator) {
+        return List.of(BoundUnderEvaluation.mapped(through, written)
+                .split(Pattern.quote(separator), -1));
     }
 }

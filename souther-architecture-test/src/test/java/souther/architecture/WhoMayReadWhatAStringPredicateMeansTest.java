@@ -89,11 +89,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
 
     private static final String WITNESS = "souther/compiler/partition/Partitions -> " + OWNER;
 
-    /** The machine of the strings that a conversion makes into a stated pattern's, which takes the
-     *  pattern as the rule's reading handed it out. */
-    private static final String A_CONVERTED_PATTERNS_PRODUCER =
-            "souther/compiler/partition/Partitions$PatternBeforeAConversion -> " + OWNER;
-
     /** The producer of a stated pattern's machine, inside the reading that offers a value. */
     private static final String A_PATTERNS_PRODUCER =
             "souther/compiler/partition/Partitions$PatternForAWitness -> " + OWNER;
@@ -241,13 +236,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WITNESS + "$StatedOn#whyNotTyped(Lsouther/compiler/check/PartId;)"
                     + "Lsouther/compiler/inputs/BlockReason$RuleOfferShortfallReason;",
             WITNESS + "$StatedPattern",
-            // The machine of the strings a conversion makes into those a pattern accepts, which
-            // takes the pattern as the rule's reading handed it out and asks it what it means.
-            A_CONVERTED_PATTERNS_PRODUCER,
-            A_CONVERTED_PATTERNS_PRODUCER + IN_A_DESCRIPTOR,
-            A_CONVERTED_PATTERNS_PRODUCER + "$StatedPattern",
-            A_CONVERTED_PATTERNS_PRODUCER
-                    + "$StatedPattern#meaning()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             // The producer of a stated pattern's machine, which takes the pattern as the rule's
             // reading handed it out and asks it the strings it accepts.
             A_PATTERNS_PRODUCER,
