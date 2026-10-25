@@ -1127,7 +1127,7 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
             }
         }
-        return taken;
+        return ComputedNumbers.settled(taken);
     }
 
     /**

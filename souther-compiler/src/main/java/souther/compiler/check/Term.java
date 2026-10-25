@@ -1203,6 +1203,11 @@ final class Term {
         return parts;
     }
 
+    /** What this term carries beside its parts: an operator, a written number, a case's data. */
+    Object carried() {
+        return of;
+    }
+
     /**
      * How many distinct terms this one is made of, itself among them — what the representation of it
      * costs.

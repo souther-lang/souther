@@ -1244,6 +1244,7 @@ public final class InvariantChecker {
             }
             constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
         }
+        constraints = ComputedNumbers.settled(constraints);
         // And what stands at each name the reading wrote, which is the last of this answer and is
         // built here because here is where the purse is. A name is filed under a subject the
         // interval algebra knows it by and a subject everything else knows it by, and what it

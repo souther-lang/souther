@@ -1566,6 +1566,10 @@ final class Predicates {
             }
             if (c.numeric() != null) {
                 named.addAll(c.numeric().form().coefs().keySet());
+                // A place defined as a number made of others is read through that number, which
+                // leaves the places it is made of as free as they were. They are spoken of all
+                // the same: what the clause says of the defined place is said of them.
+                named.addAll(ComputedNumbers.definedFrom(c.numeric()));
             }
             if (c.fact() != null) {
                 named.addAll(c.fact().keys());

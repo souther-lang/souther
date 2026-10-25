@@ -238,11 +238,11 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
      */
     @Test
     void aProductInAnInvariantUnderAnOperationWithNoStatedFormIsTheSameProduct() {
-        List<String> bare = accountedFor("net.value == price.value * disc.value");
+        List<String> bare = accountedFor("net.value >= price.value * disc.value");
         assertTrue(bare.getFirst().contains("a product of two values that are not constants"),
                 bare.toString());
-        for (String clause : List.of("Decimal.compare(net.value, price.value * disc.value) == 0",
-                "Decimal.round(2, HALF_UP, price.value * disc.value) == net.value")) {
+        for (String clause : List.of("Decimal.compare(net.value, price.value * disc.value) >= 0",
+                "Decimal.round(2, HALF_UP, price.value * disc.value) <= net.value")) {
             assertEquals(bare, accountedFor(clause), clause);
         }
     }
