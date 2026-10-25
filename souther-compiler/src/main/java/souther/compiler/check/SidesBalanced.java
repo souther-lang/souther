@@ -228,7 +228,7 @@ public final class SidesBalanced {
             return false;
         }
         RecordRules rules = RecordRules.of(record, source);
-        return rules != null && rules.statements().isEmpty();
+        return rules != null && rules.declaresNothing();
     }
 
     /**

@@ -149,6 +149,40 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
                 """).isEmpty());
     }
 
+    /**
+     * A rule of the element that could not be read is still a rule it has: nothing read of it is
+     * not the same as nothing written, and an element is taken for one with no rule only where
+     * none is declared. A rule that stops the reading leaves no statement at all, so the list of
+     * statements is empty beside it.
+     */
+    @Test
+    void anElementWhoseRuleCouldNotBeReadIsNotTakenForOneWithNone() {
+        assertFalse(unansweredAtTheList("""
+                module demo
+
+                import List ( fold, length )
+
+                data Amount = Decimal
+                    invariant value >= 1.0m
+                data Side = Debit | Credit
+                data Posting = { side: Side, amount: Amount }
+                    invariant unreadable = loop(amount.value)
+
+                let loop (d: Decimal): Bool = loop(d)
+
+                let sideTotal (wanted: Side, postings: List<Posting>): Decimal =
+                    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.amount.value) else acc,
+                         0.0m, postings)
+
+                data N = { postings: List<Posting> }
+                    invariant balanced =
+                        Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
+
+                behavior probe : (n: N) -> Int
+                let probe (n) = 1
+                """).isEmpty());
+    }
+
     /** What stands unanswered at the list of the input of {@code probe}. */
     private static List<String> unansweredAtTheList(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

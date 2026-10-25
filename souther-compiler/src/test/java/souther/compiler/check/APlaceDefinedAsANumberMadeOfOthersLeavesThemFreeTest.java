@@ -280,6 +280,46 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
         assertFalse(left.get("n.b").isEmpty());
     }
 
+    /**
+     * A rule of a factor's own type that could not be read is still a rule the factor is held to,
+     * and nothing is shown free beside it: not read is not the same as not written.
+     */
+    @Test
+    void aFactorWhoseTypeHasARuleNoReadingTookInIsLeftUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data Odd = Decimal
+                    invariant unreadable = loop(value)
+
+                data N = { a: Odd, b: Decimal, c: Decimal }
+                    invariant c == a.value * b
+
+                let loop (d: Decimal): Bool = loop(d)
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "a is held by a rule nothing read");
+    }
+
+    /** And so is the place the number is defined as, held by a rule of its own type. */
+    @Test
+    void aDefinedPlaceWhoseTypeHasARuleNoReadingTookInLeavesItsFactorsUnanswered() {
+        Map<String, List<String>> left = unansweredBelowTheInput("""
+                module demo
+
+                data Odd = Decimal
+                    invariant unreadable = loop(value)
+
+                data N = { a: Decimal, b: Decimal, c: Odd }
+                    invariant c.value == a * b
+
+                let loop (d: Decimal): Bool = loop(d)
+                """ + BEHAVIOR);
+
+        assertFalse(left.get("n.a").isEmpty(), "c is held by a rule nothing read");
+        assertFalse(left.get("n.b").isEmpty());
+    }
+
     @Test
     void aDefinitionOfAPlaceThatAdmitsEverythingTheNumberCanComeToLeavesItsFactorsFree() {
         assertEquals(Map.of("n.a", List.of(), "n.b", List.of(), "n.c", List.of()),

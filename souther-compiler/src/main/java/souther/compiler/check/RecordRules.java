@@ -16,10 +16,23 @@ import java.util.Map;
  * fields together ({@link EntryHeld}, {@link SidesBalanced}). Read off what each rule states
  * ({@link InvariantStatements}), so a rule stated through a helper is the rule written out.
  *
+ * <p>What is read of the rules is not what the record declares. A conjunct whose reading stopped
+ * has no statements at all, so a record with a rule it could not read has fewer statements than
+ * rules, and none where every rule stopped: {@link #statements} empty is no evidence that nothing
+ * is declared. That is {@link #declared}, counted off what is written.
+ *
  * @param fields     the name of each field, by the binding the rules name it by
  * @param statements every statement of every conjunct, the ones nothing was made of included
+ * @param declared   how many conjuncts the record's rules are written as, whether or not any of
+ *                   them was read
  */
-record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements) {
+record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> statements,
+                   int declared) {
+
+    /** Whether the record declares no rule at all, which an unread rule is not. */
+    boolean declaresNothing() {
+        return declared == 0;
+    }
 
     /**
      * The rules written on {@code named}, or null where it is not a record of its own fields: a
@@ -35,15 +48,17 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
         }
         List<InvariantStatement> statements = new ArrayList<>();
         InvariantStatements read = InvariantStatements.ofTheCalls(source);
+        int declared = 0;
         for (DeclaredClauses.OnAName written : DeclaredClauses.of(List.of(named), source)) {
             for (DeclaredClauses.Conjunct each : written.conjuncts()) {
+                declared++;
                 List<InvariantStatement> states = read.of(each.part());
                 if (states != null) {
                     statements.addAll(states);
                 }
             }
         }
-        return new RecordRules(Map.copyOf(fields), List.copyOf(statements));
+        return new RecordRules(Map.copyOf(fields), List.copyOf(statements), declared);
     }
 
     /** The field the place {@code e} is, or null where it is no field of this record. */

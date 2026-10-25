@@ -1199,7 +1199,8 @@ public final class InvariantChecker {
         for (ComputedNumbers.Defining each : definitions) {
             // Only where every clause of the value was read: a rule this did not read may hold
             // any place the number is made of, or the place it defines, to fewer numbers.
-            if (read && ComputedNumbers.leavesFree(each.definition(), k.numbers(), account)) {
+            if (read && notGathered.isEmpty()
+                    && ComputedNumbers.leavesFree(each.definition(), k.numbers(), account)) {
                 took.freedByDefinition(each.rule(), each.definition().operands());
             }
         }
