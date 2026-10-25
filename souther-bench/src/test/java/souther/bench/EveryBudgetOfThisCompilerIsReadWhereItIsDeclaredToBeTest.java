@@ -887,6 +887,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Lsouther/compiler/partition/AskedAt;"
                             + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many counts a container is asked to hold, and whether they were all the"

@@ -1892,6 +1892,41 @@ public final class Partitions {
     }
 
     /**
+     * A record whose fields named in {@code held} stand where those bounds leave them, and whose
+     * other fields are chosen against the rules as {@link #composed} chooses them; nothing where
+     * a field named has no value inside its bounds or the record has no such field.
+     *
+     * <p>For a record that is an element of a container composed under what every element is to
+     * meet: the bounds are what the way leaves a number of each element, and the field is
+     * offered the value nearest its usual place inside them.
+     *
+     * @param held by field name, what the way leaves that field's number
+     */
+    static Proposals composedHeldTo(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                                    RuleReadingContext reading,
+                                    Map<String, NumericDomain.Bounds> held) {
+        RuleReadingSource ruleSource = reading.source();
+        if (!(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums())
+                instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))) {
+            return Proposals.NONE;
+        }
+        Map<String, FixtureTemplate> given = new LinkedHashMap<>();
+        for (Map.Entry<String, NumericDomain.Bounds> each : held.entrySet()) {
+            Type fieldType = fields.get(each.getKey());
+            if (fieldType == null) {
+                return Proposals.NONE;
+            }
+            Proposals stands = representativesOf(fieldType, reading, each.getValue()).firstOf(1);
+            if (stands.isEmpty()) {
+                return Proposals.NONE;
+            }
+            given.put(each.getKey(), stands.values().getFirst());
+        }
+        return composed(record, rulesOn, reading, Set.of(), given);
+    }
+
+    /**
      * Values of {@code record} no two of which are alike, up to {@code many} of them, or none
      * where no field of it has two values to differ at.
      *

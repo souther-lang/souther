@@ -49,7 +49,7 @@ class ARunOfARowShortOfTheWayIsNotEvidenceAboutTheRuleTest {
             data Answer = Yes | No
 
             behavior decides : (r: R) -> Answer
-            let decides (r) = if r.k == K { id = r.n } then Yes else No
+            let decides (r) = if r.k == K { id = r.n + 1000 } then Yes else No
             """;
 
     /** The rule the composed row did not take is not one this says nothing takes. */

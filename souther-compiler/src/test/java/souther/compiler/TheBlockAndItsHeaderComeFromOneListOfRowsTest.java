@@ -116,14 +116,18 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         return said.find() ? Integer.parseInt(said.group(1)) : -1;
     }
 
-    /** Which says the count as well: two edges meet at this input, and one {@code |} is written. */
+    /**
+     * Which says the count as well: two edges meet at this input, and one {@code |} is written for
+     * them. The other is the row the rule `accrued > cap` is taken by.
+     */
     @Test
     void twoEdgesMeetingAtOneInputAreOneRow() {
         String block = block(POLICY, "example.policy");
 
         assertEquals(List.of(
                         "example fee",
-                        "    | (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
+                        "    | (0, Policy { rate = Rate(0), cap = Cap(1) }) -> <?>",
+                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>"),
                 written(block));
     }
 
