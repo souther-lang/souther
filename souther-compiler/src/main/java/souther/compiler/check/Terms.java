@@ -2733,6 +2733,64 @@ final class Terms {
      */
     private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
+        Naming named = namingOf(raw, at, bound, depth, leaf);
+        if (named instanceof Naming.Named it) {
+            orderOfTheValue(it.term(), raw.type());
+        }
+        return named;
+    }
+
+    /**
+     * Files the order the value {@code term} names is counted on, as the type of the expression it
+     * was named from says.
+     *
+     * <p>Of every term and not only the ones taking an atom: an operation answers a type of its own,
+     * which is not the type of what it was given. {@code Decimal.fromInt} takes a whole number and
+     * answers a decimal, {@code Decimal.toInt} the other way about, and a reader asking what a
+     * product of two of them may come to has to ask the product and not guess it from the two.
+     * Two types for one term are not one order, so the term is filed as having none.
+     */
+    private void orderOfTheValue(Term term, Type type) {
+        Carrier carrier = type == null ? null : countedOrderOf(type);
+        if (carrier == null) {
+            return;
+        }
+        Carrier had = termCarriers.putIfAbsent(term, carrier);
+        if (had != null && !had.equals(carrier)) {
+            termsOfTwoOrders.add(term);
+        }
+    }
+
+    /** The order the value {@code term} names is counted on, or null where it is not known or the
+     *  term was met on two. */
+    Carrier carrierOfTerm(Term term) {
+        if (termsOfTwoOrders.contains(term)) {
+            return null;
+        }
+        Carrier carrier = termCarriers.get(term);
+        return carrier != null ? carrier : atomCarriers.get(FactSubject.of(term));
+    }
+
+    /** The order each type is counted on, asked of the declarations once: every term named asks
+     *  it of the type of the expression it came from, and the types met are few. */
+    private final Map<Type, Optional<Carrier>> countedOrders = new HashMap<>();
+
+    /** The order {@code type} is counted on, or null where its values are not counted. */
+    private Carrier countedOrderOf(Type type) {
+        Optional<Carrier> known = countedOrders.get(type);
+        if (known == null) {
+            known = Optional.ofNullable(Carrier.ofValue(type, declarations()))
+                    .filter(Carrier::counts);
+            countedOrders.put(type, known);
+        }
+        return known.orElse(null);
+    }
+
+    private final Map<Term, Carrier> termCarriers = new HashMap<>();
+    private final Set<Term> termsOfTwoOrders = new HashSet<>();
+
+    private Naming namingOf(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
+                            Leaf leaf) {
         long[] counting = COUNTING_NAMED;
         if (counting != null) {
             counting[0]++;

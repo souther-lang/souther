@@ -99,15 +99,19 @@ final class AdmissibleReading {
      * which is what an alternative holding it turns on.
      */
     private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** The rules about a container and a place beside it that the builders of the record keep. */
+    private final StatedByClauses.BuiltFor builtFor;
+
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                               Symbols symbols, SumCases sums,
-                              Allowance<FactSubject> allowed) {
+                              Allowance<FactSubject> allowed, StatedByClauses.BuiltFor builtFor) {
         this.terms = terms;
         this.byName = byName;
         this.chains = chains;
         this.symbols = symbols;
         this.sums = sums;
         this.allowed = allowed;
+        this.builtFor = builtFor;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of.
@@ -117,8 +121,8 @@ final class AdmissibleReading {
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
     static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                                 Symbols symbols, SumCases sums,
-                                Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed);
+                                Allowance<FactSubject> allowed, StatedByClauses.BuiltFor builtFor) {
+        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed, builtFor);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -278,6 +282,19 @@ final class AdmissibleReading {
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
+        // A rule about a container and a place beside it that the builders keep: it says how the
+        // container's entries or elements stand and leaves the values of the place beside it as
+        // they were, so the container alone is short of it. One they do not keep is a form this
+        // did not read, at every place it names.
+        EntryAt entry = entryHeldAt(part, at);
+        FactSubject sides = entry == null ? sidesBalancedAt(part, at) : null;
+        if (entry != null && builtFor.keepsAnEntry(entry.container(), entry.key())) {
+            return shortOf(part, Set.of(entry.container()),
+                    UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
+        }
+        if (sides != null && builtFor.balances(sides)) {
+            return shortOf(part, Set.of(sides), UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
+        }
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
                 : relatesTwoPositions(part, at) ? UnreadReason.RELATES_TWO_POSITIONS
@@ -321,6 +338,48 @@ final class AdmissibleReading {
 
     /** A leaf saying no two elements of {@code container} share what {@code run} reads off one. */
     record KeptApart(FactSubject container, List<String> run) {}
+
+    /**
+     * The map and the key {@code part} asks the map for an entry under, or null where it asks no
+     * map for one ({@link EntryHeld}) or names a map or a key that is no position of this value.
+     *
+     * <p>The same recognition the builders of the map are told the rule by, so that a leaf this
+     * calls read is a rule they keep.
+     */
+    EntryAt entryHeldAt(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()) {
+            return null;
+        }
+        EntryHeld.Stated stated = EntryHeld.read(part.of(), core -> followed(core, at));
+        FactSubject container = stated == null ? null : positionIn(stated.container(), at);
+        FactSubject key = stated == null ? null : positionIn(stated.key(), at);
+        return container == null || key == null ? null : new EntryAt(container, key);
+    }
+
+    /** A leaf asking {@code container} for an entry under the key at {@code key}. */
+    record EntryAt(FactSubject container, FactSubject key) {}
+
+    /**
+     * The list {@code part} says the sides of balance in, or null where it says nothing of the
+     * kind ({@link SidesBalanced}) or names a list that is no position of this value.
+     */
+    FactSubject sidesBalancedAt(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()) {
+            return null;
+        }
+        SidesBalanced.Stated stated = SidesBalanced.read(part.of());
+        return stated == null ? null : positionIn(stated.list(), at);
+    }
+
+    /** What a name stands for where it was given a value, and the expression itself otherwise. */
+    private static Core followed(Core e, Denotations at) {
+        Core here = e;
+        while (Core.withoutStanding(here) instanceof Core.Read read
+                && at.givenTo(read.binding()) instanceof ValueStanding.ReadThrough<Denotations> given) {
+            here = given.value();
+        }
+        return here;
+    }
 
     /**
      * What {@code e} leaves the positions it names, said twice: to the places, and about the clause.

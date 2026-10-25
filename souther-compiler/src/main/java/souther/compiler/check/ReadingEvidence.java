@@ -110,9 +110,31 @@ final class ReadingEvidence {
      */
     private final Set<StatementAt> formStoppedAt = new HashSet<>();
 
+    /** The places each rule defines a number from and so leaves as free as they were. */
+    private final Map<RuleRef.Invariant, Set<FactSubject>> freed = new LinkedHashMap<>();
+
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef.Invariant rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
+    }
+
+    /**
+     * The places {@code rule} defines a number from, which it leaves as free as they were.
+     *
+     * <p>Taken in all the same: a rule that restricts none of the positions it names has nothing
+     * left standing about them, and what the arithmetic could not say of it is not what stands
+     * between the rule and its positions.
+     */
+    void freedByDefinition(RuleRef.Invariant rule, Collection<FactSubject> positions) {
+        freed.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
+        positions.forEach(position -> record(rule, position));
+    }
+
+    /** Whether {@code rule} leaves {@code position} as free as it was, being a place its
+     *  definition of another is made of ({@link #freedByDefinition}). */
+    boolean isFreedByDefinition(RuleRef.Invariant rule, FactSubject position) {
+        Set<FactSubject> here = freed.get(rule);
+        return here != null && here.contains(position);
     }
 
     /**

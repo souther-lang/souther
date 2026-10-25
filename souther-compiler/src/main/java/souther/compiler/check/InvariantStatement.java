@@ -60,6 +60,35 @@ public sealed interface InvariantStatement {
     }
 
     /**
+     * A rule asking a map for an entry under a key, and where it does the value under it
+     * ({@link EntryHeld}).
+     *
+     * <p>Stated and never denied, for the reason an operation is: a map without the entry is not
+     * the rule's denial but the rule's absence.
+     */
+    record HoldsAnEntry(InvariantStatementId id, EntryHeld.Stated held)
+            implements InvariantStatement {
+
+        public HoldsAnEntry {
+            Objects.requireNonNull(id, "a rule asking a map for an entry is some statement");
+            Objects.requireNonNull(held, "and it asks for one");
+        }
+    }
+
+    /**
+     * A rule saying the elements of a list standing at one case of a field add up to what those at
+     * another case do ({@link SidesBalanced}).
+     */
+    record BalancesSides(InvariantStatementId id, SidesBalanced.Stated balanced)
+            implements InvariantStatement {
+
+        public BalancesSides {
+            Objects.requireNonNull(id, "a rule balancing the sides of a list is some statement");
+            Objects.requireNonNull(balanced, "and it balances some");
+        }
+    }
+
+    /**
      * A statement this reading recognised and made nothing of.
      *
      * <p>Not a rule that states nothing, and the difference is what a consumer acts on: from "this
@@ -67,10 +96,18 @@ public sealed interface InvariantStatement {
      * done, and from "it states nothing" follows something about the author's model that is not
      * true.
      */
-    record Unread(InvariantStatementId id) implements InvariantStatement {
+    record Unread(InvariantStatementId id, Core said, boolean positive)
+            implements InvariantStatement {
 
         public Unread {
             Objects.requireNonNull(id, "a statement nothing was made of is still some statement");
+            Objects.requireNonNull(said, "and it says something, which is where it reads from");
         }
     }
+
+    // `said` is what the statement was written as, with the bindings it crossed given their
+    // values. Nothing is made of it, so it is not read for what it states; it is kept for what it
+    // reads from. A consumer that builds a value holding what other statements ask must know that
+    // no statement it does not build for reads from that value, and this is what answers it for a
+    // statement of any shape: a denial, a denied choice, a rule written through a helper.
 }

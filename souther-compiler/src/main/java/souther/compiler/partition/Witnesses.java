@@ -244,7 +244,7 @@ final class Witnesses {
      * for, so a collection past the figure was refused at one door and built at the next. Past it,
      * a value is one this compiler does not build, which is not one the model cannot have.
      */
-    private static CompositionBudget pastTheElements(int count) {
+    static CompositionBudget pastTheElements(int count) {
         return count > CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum()
                 ? CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS : null;
     }
@@ -923,6 +923,81 @@ final class Witnesses {
             FixtureTemplate key = i == under ? filed.key()
                     : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
             entries.add(FixtureTemplate.entry(key, values.get(i)));
+        }
+        return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
+    }
+
+    /**
+     * A map holding every entry in {@code asked}, and as many others as the rules leave room for
+     * at the least — or nothing where no map can.
+     *
+     * <p>Each entry is a key and the value under it, or a key alone where nothing was asked of the
+     * value. A key asked for twice is one entry; asked for two values it is no map at all, and the
+     * answer is nothing rather than either value. The values nothing was asked of, and the entries
+     * that make up the count, are the first value the map's type has and the type's other keys.
+     *
+     * <p>Apart from {@link #holding}, which holds values and files one of them under a key: this is
+     * asked of a map by entries, and every one of them is kept.
+     */
+    static Proposals holdingEntries(Shape.Mapping map, List<Filed> asked,
+                                    DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+        Map<String, Filed> byKey = new LinkedHashMap<>();
+        for (Filed each : asked) {
+            Filed had = byKey.get(each.key().text());
+            if (had == null || had.value() == null) {
+                byKey.put(each.key().text(), each);
+            } else if (each.value() != null
+                    && !had.value().text().equals(each.value().text())) {
+                return Proposals.NONE;
+            }
+        }
+        int count = Math.max(holds.least(), byKey.size());
+        if (count > holds.most()) {
+            return Proposals.NONE;
+        }
+        CompositionBudget past = pastTheElements(count);
+        if (past != null) {
+            return Proposals.NONE.meeting(CompositionShortfall.of(List.of(past)));
+        }
+        CompositionShortfall met = CompositionShortfall.NONE;
+        FixtureTemplate otherwise = null;
+        if (count > byKey.size() || byKey.values().stream().anyMatch(each -> each.value() == null)) {
+            Proposals values = distinctValuesOf(map.value(), 1, reading, Set.of());
+            met = met.and(values.met());
+            if (values.values().isEmpty()) {
+                return Proposals.NONE.meeting(met);
+            }
+            otherwise = values.values().getFirst();
+        }
+        int needed = count - byKey.size();
+        List<FixtureTemplate> others = new ArrayList<>();
+        if (needed > 0) {
+            Set<String> written = new LinkedHashSet<>(byKey.keySet());
+            Proposals keys = distinctValuesOf(map.key(), count + byKey.size(), reading, Set.of());
+            for (Proposals.Entry each : keys.entries()) {
+                if (others.size() == needed) {
+                    break;
+                }
+                switch (each) {
+                    case Proposals.Stopped(CompositionShortfall stop) -> met = met.and(stop);
+                    case Proposals.Offered(FixtureTemplate key) -> {
+                        if (written.add(key.text())) {
+                            others.add(key);
+                        }
+                    }
+                }
+            }
+            if (others.size() < needed) {
+                return Proposals.NONE.meeting(met);
+            }
+        }
+        List<FixtureTemplate> entries = new ArrayList<>();
+        for (Filed each : byKey.values()) {
+            entries.add(FixtureTemplate.entry(each.key(),
+                    each.value() == null ? otherwise : each.value()));
+        }
+        for (FixtureTemplate key : others) {
+            entries.add(FixtureTemplate.entry(key, otherwise));
         }
         return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
     }

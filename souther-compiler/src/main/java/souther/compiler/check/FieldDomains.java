@@ -98,7 +98,7 @@ public final class FieldDomains {
                     NOTHING_NAMED,
                     ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
-                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE,
+                    Map.of(), Map.of(), List.of(), Map.of(), List.of(), StringFacts.NONE,
                     RevisionKnowledge.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
                     SettledOrderEnvelope.nothing(), Map.of());
@@ -313,6 +313,20 @@ public final class FieldDomains {
     private final Map<TypeSymbol.AtModule, Map<RuleKey, List<List<String>>>> writtenApart =
             new ConcurrentHashMap<>();
 
+    /** What the rules of this value ask each map of ({@link #entriesHeldAt}), read the first time
+     *  it is asked. */
+    private volatile Map<RuleKey, List<EntryHeld.Requirement>> entriesHeld;
+
+    /** The numbers these rules write as arithmetic over places, each with the order its steps
+     *  answer on: settling a place states an equality on an atom the rules already have, so they
+     *  are the same for every settling. Read with the rules, where the terms that know those
+     *  orders are. */
+    private final List<ComputedNumbers.Computed> computedNumbers;
+
+    /** What the rules of this value ask of each list about its sides
+     *  ({@link #sidesBalancedAt}), read the first time it is asked. */
+    private volatile Map<RuleKey, List<SidesBalanced.Requirement>> sidesBalanced;
+
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
                          Map<RuleKey, ValueSet> admittedByName,
@@ -336,6 +350,7 @@ public final class FieldDomains {
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          List<InvariantChecker.Written> readings,
                          Map<FactSubject, NumberSpace> spaces,
+                         List<ComputedNumbers.Computed> computedNumbers,
                          StringFacts stringMachines, RevisionKnowledge revision,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
@@ -381,6 +396,7 @@ public final class FieldDomains {
         this.countAt = countAt;
         this.readings = readings;
         this.spaces = spaces;
+        this.computedNumbers = computedNumbers;
     }
 
     /**
@@ -613,7 +629,7 @@ public final class FieldDomains {
                 seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readings(), seeded.spaces(), seeded.stringMachines(),
+                seeded.readings(), seeded.spaces(), seeded.computed(), seeded.stringMachines(),
                 // What the revision has worked out, which is what a counterfactual of this reading
                 // borrows its work from.
                 reading.readings().revision(),
@@ -1151,7 +1167,7 @@ public final class FieldDomains {
                 taken = ConstraintState.settling(taken, atom, each.getValue(), space);
             }
         }
-        return taken;
+        return ComputedNumbers.settled(taken, computedNumbers);
     }
 
     /**
@@ -2074,6 +2090,41 @@ public final class FieldDomains {
         List<List<String>> apart = keptApartAt(path);
         return bounds == null && apart.isEmpty() ? null
                 : new Held(bounds == null ? NumericDomain.Bounds.OPEN : bounds, apart);
+    }
+
+    /**
+     * What the rules of this value ask of the map at {@code path} beside the fields they name, or
+     * nothing where they ask none of it.
+     *
+     * <p>A builder of the value is told it as it is told what the elements of a container are kept
+     * apart at: the rules do not change with where the search is, so they are read once.
+     */
+    public List<EntryHeld.Requirement> entriesHeldAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        Map<RuleKey, List<EntryHeld.Requirement>> held = entriesHeld;
+        if (held == null) {
+            held = EntryHeld.writtenOn(named, source);
+            entriesHeld = held;
+        }
+        return held.getOrDefault(path, List.of());
+    }
+
+    /**
+     * What the rules of this value ask of the list at {@code path} about its sides, or nothing
+     * where they ask none of it ({@link SidesBalanced}), read once like {@link #entriesHeldAt}.
+     */
+    public List<SidesBalanced.Requirement> sidesBalancedAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        Map<RuleKey, List<SidesBalanced.Requirement>> held = sidesBalanced;
+        if (held == null) {
+            held = SidesBalanced.writtenOn(named, source);
+            sidesBalanced = held;
+        }
+        return held.getOrDefault(path, List.of());
     }
 
     /** What the rules keep the elements of the value at {@code path} apart at, worked out once for

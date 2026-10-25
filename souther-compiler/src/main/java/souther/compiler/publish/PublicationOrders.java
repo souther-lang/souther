@@ -349,6 +349,8 @@ public final class PublicationOrders {
                     CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                     CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF,
                     CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
+                    CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER,
+                    CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,
                     // After every figure a search for the value stops at, because what this one

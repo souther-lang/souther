@@ -102,6 +102,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
      * <p>Written {@code owner#field} and {@code owner.method}.
      */
     private static final List<Held> HANDED_IN = List.of(
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated#operator",
+                    "the arithmetic a clause writes a number with, as it is evaluated over the"
+                            + " ranges or the numbers its places are at"),
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated.<init>",
+                    "makes the arithmetic a clause writes a number with"),
             new Held("souther.compiler.ast.Hir.Binary#op",
                     "the resolved tree, which is where an operator is written down"),
             new Held("souther.compiler.core.Core.Binary#op",
@@ -242,6 +247,22 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
+            new Held("souther.compiler.check.EntryHeld.valueIs",
+                    "asks whether a statement about the value a lookup found is an equality with"
+                            + " a written number"),
+            new Held("souther.compiler.check.SidesBalanced.read",
+                    "asks whether two totals are compared for equality"),
+            new Held("souther.compiler.check.SidesBalanced.side",
+                    "asks whether the step of a walk adding a number compares a field of the"
+                            + " element for equality with a case"),
+            new Held("souther.compiler.check.ComputedNumber.operated",
+                    "keeps the three operators that are exact arithmetic over places, and leaves"
+                            + " a number written with any other unread"),
+            new Held("souther.compiler.check.ComputedNumber.bounded",
+                    "does what each of those three does to the range its operands lie in, a"
+                            + " single number being the range of one"),
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated.operator",
+                    "hands back the operator the arithmetic was written with"),
             // Recognising a comparison, which is what carries the claim to everything below.
             new Held("souther.compiler.check.Comparison.of",
                     "asks what the operator places, for a binary of a checked body"),

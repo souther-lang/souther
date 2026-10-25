@@ -32,6 +32,10 @@ public enum UnreadReason {
      * about pairs of them, and what is held here is a set of the position's values. The rule was
      * recognised — the values built for the position keep it — so this is not a form this failed
      * on, and it is not the whole of what the position may hold either.
+     *
+     * <p>And a fact about the container and a place beside it: a map holding an entry under the
+     * key standing at another field, a list whose elements at two cases add up alike. Short of the
+     * container only; what may stand at the place beside it is as the other rules leave it.
      */
     RELATES_ELEMENTS_OF_A_CONTAINER,
 

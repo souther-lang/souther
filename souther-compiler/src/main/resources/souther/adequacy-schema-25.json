@@ -177,7 +177,9 @@
         "runs_repairing_a_row",
         "rows_a_walk_hands_the_choice_of_a_row",
         "pieces_a_string_is_put_together_of",
-        "strings_of_the_row_a_piece_is_taken_from"
+        "strings_of_the_row_a_piece_is_taken_from",
+        "elements_a_side_is_searched_over",
+        "numbers_a_side_is_balanced_from"
       ]
     },
     "workFigure": {
