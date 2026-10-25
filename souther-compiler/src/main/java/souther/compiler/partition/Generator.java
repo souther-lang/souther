@@ -12006,6 +12006,10 @@ public final class Generator {
                                        Requirements additional, Handed handed,
                                        CandidateCheck check, FoundOut found, ValueTaking taking,
                                        Composing[] through, CasesUnderARule cases) {
+        // Every call answers whether it searched anything, and starts from "it did": a caller
+        // reads the answer straight after the call, and a call that says nothing of it has not
+        // left what an earlier call did.
+        cases.leftNothing = false;
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -12146,7 +12150,6 @@ public final class Generator {
                     // Taken before the case is planned: a sum under it asks the same count, and one
                     // asked only afterwards lets every sum on the way down pass it.
                     cases.left--;
-                    cases.leftNothing = false;
                     Outcome made = valueAtOnce(subject, p, decided, asked, settled, narrowed,
                             handed, check, found, taking, through, cases);
                     if (made instanceof Outcome.Built || made instanceof Outcome.PassedOver
@@ -12154,7 +12157,6 @@ public final class Generator {
                         return made;
                     }
                     boolean searched = !cases.leftNothing;
-                    cases.leftNothing = false;
                     if (!searched) {
                         cases.left++;
                     }
@@ -12163,6 +12165,10 @@ public final class Generator {
                         firstSearched = searched;
                     }
                 }
+                // What this planning under the cases came to is that some case was searched, and
+                // that is what a plan above it counts: the cases of a sum inside a case are this
+                // call's own, and the flag a case left behind is not the answer of the call.
+                cases.leftNothing = !firstSearched;
                 return first != null ? first
                         : new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                                 "`" + where + "` stands at no case the row can be");

@@ -104,8 +104,7 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
     private static String blockOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return GeneratedRows.of(compilation, "example.gap", "f",
+        compilation.answerEverything();        return GeneratedRows.of(compilation, "example.gap", "f",
                 SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
@@ -417,6 +416,44 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
                 block);
         assertFalse(block.contains("no row for `n = 3` in `f`: every value tried was refused"),
                 block);
+    }
+
+    /**
+     * Sums inside the cases of a sum, more outer cases than the one count holds: every inner case
+     * of every outer case but the last is one the rules leave no value in, so none of them was
+     * searched and none is counted, however deep the settling was reached. The last outer case is
+     * reached and the rows are written under it.
+     */
+    @Test
+    void casesSettledInsideCasesAreNotCountedAtAnyDepth() {
+        StringBuilder cases = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        int many = CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum() + 2;
+        for (int i = 1; i <= many; i++) {
+            cases.append("data C").append(i).append(" = { ...Paging }\n")
+                    .append(i < many ? "    invariant own = r.k < 0\n" : "");
+            names.append(i == 1 ? "" : " | ").append("C").append(i);
+        }
+        String block = blockOf("""
+                module example.gap
+
+                data Common = { k: Int }
+                data S = { ...Common, s: Int }
+                data T = { ...Common, t: Int }
+                data R = S | T
+                data Paging = { limit: Int, r: R }
+                CASES
+                data Q = NAMES
+                data Holder = { q: Q }
+                    invariant above = q.limit > 100 && q.r.k > 100
+
+                behavior f : (h: Holder, n: Int) -> Bool
+                let f (h, n) = if n >= 3 then true else false
+                """.replace("CASES", cases).replace("NAMES", names));
+
+        assertTrue(block.contains("C" + many + " {"), block);
+        assertFalse(block.contains("no row for `n"), block);
+        assertFalse(block.contains("left something untried"), block);
     }
 
     /**
