@@ -324,9 +324,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/OccurrenceLineage$Expansion;)V", Reading.STRUCTURE,
                 "which copy of an application each node is code of: a name read off a value says"
                         + " nothing of where it is written, so a projection is where its base is");
-        row(out, c + "inputs/InputReads", "readsAnApplied", "(" + core + "L" + c
-                + "check/Symbols;L" + c + "check/DeclarationNewtypes;Ljava/util/Set;)Z",
-                Reading.STRUCTURE, BINDINGS);
+        row(out, c + "inputs/InputReads", "applicationsRead",
+                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "check/Clauses", "substituted", "(" + core + "Ljava/util/Map;)" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);
         row(out, c + "check/ElementBindings", "walk", "(" + core + "Ljava/util/Map;Ljava/util/Map;L"

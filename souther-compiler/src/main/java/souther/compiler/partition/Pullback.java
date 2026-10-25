@@ -1434,9 +1434,43 @@ final class Pullback {
      * many. How many are made in all, along every way, is the other: a value chosen by cases holds
      * the conditions that chose it, so ways that each stay under the first can come to more than
      * any figure in all.
+     *
+     * @param splitting the values the split is of, which decide how many readings it is one of
+     *                  ({@link InputReads#readingsASplitIsOneOf}). Named by every split, so that
+     *                  none counts the applications the values do not turn on
      */
-    private WhyUnread splitInto(InputReads reads, long more) {
-        if (more > 0 && reads.readings() > READINGS.maximum() / more) {
+    private WhyUnread splitInto(InputReads reads, long more, Denotation... splitting) {
+        return splitInto(readingsASplitIsOneOf(reads, splitting), more);
+    }
+
+    /** The same, of a split whose readings are worked out by counting
+     *  ({@link #splitInto(long, LongUnaryOperator)}). */
+    private WhyUnread splitInto(InputReads reads, LongUnaryOperator count,
+                                Denotation... splitting) {
+        return splitInto(readingsASplitIsOneOf(reads, splitting), count);
+    }
+
+    /** How many readings of one condition splitting {@code splitting}, read under {@code reads},
+     *  is one of. */
+    private long readingsASplitIsOneOf(InputReads reads, Denotation... splitting) {
+        return reads.readingsASplitIsOneOf(List.of(splitting));
+    }
+
+    /** {@code closure} and the values {@code occurrences} stand for, which a split into the
+     *  closure's applications on them is of. */
+    private static Denotation[] valuesOf(Denotation closure,
+                                         List<ReadMeaning.Occurrence> occurrences) {
+        List<Denotation> out = new ArrayList<>();
+        out.add(closure);
+        for (ReadMeaning.Occurrence each : occurrences) {
+            out.add(each.value());
+        }
+        return out.toArray(Denotation[]::new);
+    }
+
+    /** The same, of a reading that is one of {@code readingsAlready} readings. */
+    private WhyUnread splitInto(long readingsAlready, long more) {
+        if (more > 0 && readingsAlready > READINGS.maximum() / more) {
             return new WhyUnread.MoreReadingsThanAreMade();
         }
         return made(more);
@@ -1451,12 +1485,13 @@ final class Pullback {
      * Left to run on, a count of every combination of independent conditions is a work that no
      * figure bounds, done to find out that a figure was passed.
      *
+     * @param readingsAlready how many readings of one condition the split is one of
      * @param count the readings the split makes, or the limit it was asked to count to where they
      *              are that many or more
      */
-    private WhyUnread splitInto(InputReads reads, LongUnaryOperator count) {
-        long mostAsked = Math.max(READINGS.maximum() / reads.readings(), readingsLeft) + 1;
-        return splitInto(reads, count.applyAsLong(mostAsked));
+    private WhyUnread splitInto(long readingsAlready, LongUnaryOperator count) {
+        long mostAsked = Math.max(READINGS.maximum() / readingsAlready, readingsLeft) + 1;
+        return splitInto(readingsAlready, count.applyAsLong(mostAsked));
     }
 
     /** Why {@code more} readings are not made in all — or null where they are, taken from what is
@@ -1618,7 +1653,8 @@ final class Pullback {
     private WhichCase answered(Denotation value, WhyUnread.AtNoPosition.Place nowhere) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
-            WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum(), false));
+            WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum(), false),
+                    value);
             if (past != null) {
                 return new WhichCase.Unread(past);
             }
@@ -4234,7 +4270,8 @@ final class Pullback {
                                                            List<ReadMeaning.Occurrence> occurrences,
                                                            Denotation closure, Core.Block block,
                                                            LawProposition<DeclaredArgument> law) {
-            WhyUnread past = splitInto(reads, occurrences.size());
+            WhyUnread past = splitInto(reads, occurrences.size(),
+                    valuesOf(closure, occurrences));
             if (past != null) {
                 return new WrittenOutRead.Stops(past);
             }
@@ -5149,7 +5186,7 @@ final class Pullback {
          */
         private Sized sumOverWrittenOut(DeclaredArgument at, List<Denotation> values,
                                         LawNumber<DeclaredArgument> ofTheElement) {
-            WhyUnread past = splitInto(reads, values.size());
+            WhyUnread past = splitInto(reads, values.size(), values.toArray(Denotation[]::new));
             if (past != null) {
                 return new Sized.NotSized(past);
             }
@@ -7174,8 +7211,8 @@ final class Pullback {
         Boolean[] decided = alreadyDecided(ways);
         // The elements the leaves of the tree read, as a total of elements kept by nothing reads
         // them ({@link #sumOfWrittenOut}); a count reads none of them.
-        WhyUnread past = splitInto(reads,
-                limit -> ways.work(decided, limit, !total.counted()));
+        WhyUnread past = splitInto(reads, limit -> ways.work(decided, limit, !total.counted()),
+                new Denotation(total.call(), total.at()));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
@@ -7283,7 +7320,7 @@ final class Pullback {
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     if (aWayInAt(stopped) instanceof Inside.AChoice(Denotation chosen)) {
                         int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
-                        WhyUnread past = splitInto(element.at(), arms);
+                        WhyUnread past = splitInto(element.at(), arms, chosen);
                         if (past != null) {
                             elementsMet = metBefore;
                             return partOf(at, new Derivation.Stopped(past, fixed));
@@ -7357,7 +7394,7 @@ final class Pullback {
         }
         List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
         if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())
-                || splitInto(at, occurrences.size()) != null) {
+                || splitInto(at, occurrences.size(), container) != null) {
             return null;
         }
         List<LinearForm<Quantity>> forms = new ArrayList<>();
@@ -7402,7 +7439,7 @@ final class Pullback {
         }
         List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
         if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())
-                || splitInto(call.at(), occurrences.size()) != null
+                || splitInto(call.at(), occurrences.size(), container) != null
                 || !(AffineForms.outcome(walk.seed(), call.at(), quantities())
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                                 LinearForm<Quantity> seed))) {
@@ -7784,8 +7821,7 @@ final class Pullback {
                 }
                 // A binding whose value turns on which application this is holds another value on
                 // the next, and its name would name them alike.
-                if (at.turnsOnAnApplication(name, read.rules().symbols(),
-                        read.rules().newtypes())) {
+                if (at.turnsOnAnApplication(name)) {
                     return null;
                 }
                 // What a fold filing an end of each key's numbers finds under the key is the end
@@ -8442,7 +8478,7 @@ final class Pullback {
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
-                WhyUnread past = splitInto(reads, arms);
+                WhyUnread past = splitInto(reads, arms, chosen);
                 if (past != null) {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
@@ -8461,7 +8497,7 @@ final class Pullback {
             case Inside.AFiniteSelection(Core walk, Denotation seed, Core.If step,
                                          BindingId carried, List<InputReads> applications) -> {
                 int candidates = applications.size() + 1;
-                WhyUnread past = splitInto(reads, candidates);
+                WhyUnread past = splitInto(reads, candidates, new Denotation(walk, reads), seed);
                 if (past != null) {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
@@ -8478,7 +8514,7 @@ final class Pullback {
                 yield applications.isEmpty() ? ending : new Derivation.AComparisonOfAChoice(ending);
             }
             case Inside.OneOfTheValues(Core.Read name, List<Denotation> values) -> {
-                WhyUnread past = splitInto(reads, values.size());
+                WhyUnread past = splitInto(reads, values.size(), values.toArray(Denotation[]::new));
                 if (past != null) {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
@@ -8494,7 +8530,7 @@ final class Pullback {
             // library proved its body answers ({@link Choice#casesOf}).
             case Inside.ACallDefinedByCases(Core call, ValueName.Stdlib operation,
                                             List<Choice.ADefinitionCase> cases, InputReads where) -> {
-                WhyUnread past = splitInto(reads, cases.size());
+                WhyUnread past = splitInto(reads, cases.size(), new Denotation(call, where));
                 if (past != null) {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
@@ -9959,7 +9995,7 @@ final class Pullback {
         // reading is one of: counted before any is made.
         long most = READINGS.maximum();
         WhyUnread past = splitInto(reads,
-                readingsOf(left, most, true) * readingsOf(right, most, true));
+                readingsOf(left, most, true) * readingsOf(right, most, true), left, right);
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, false));
         }
@@ -10002,7 +10038,7 @@ final class Pullback {
         if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
             return null;
         }
-        WhyUnread past = splitInto(call.at(), occurrences.size() + 1L);
+        WhyUnread past = splitInto(call.at(), occurrences.size() + 1L, container);
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, false));
         }
@@ -10155,7 +10191,8 @@ final class Pullback {
         long most = READINGS.maximum();
         long readAs = states == Rel.EQ || states == Rel.NE ? 2 : 1;
         WhyUnread past = splitInto(reads, readAs * (readingsOf(seed, most, true)
-                + readingsOf(value, most, true)) * readingsOf(other, most, true));
+                + readingsOf(value, most, true)) * readingsOf(other, most, true),
+                seed, value, other);
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, false));
         }
