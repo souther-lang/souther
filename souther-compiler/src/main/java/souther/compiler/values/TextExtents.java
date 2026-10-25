@@ -203,6 +203,9 @@ public final class TextExtents {
         return set.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
     }
 
+    /** The most code points a {@code String} holds, which no length, count or sum of one passes. */
+    public static final long LONGEST_STRING = Strings.LONGEST_TEXT;
+
     /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds one. */
     public static boolean shownToHoldAValue(ValueSet set) {
         Emptiness held = holdsAValue(set);

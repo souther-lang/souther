@@ -42,6 +42,7 @@ import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
@@ -290,6 +291,23 @@ public final class Partitions {
             return along.getOrDefault(axis.id(), List.of());
         }
 
+        /** Where the lines drawn on {@code term} fall, as numbers. A line at a level that is no
+         *  number is not among them. */
+        private List<ExactRatio> linesOn(NumericTerm term) {
+            List<ExactRatio> out = new ArrayList<>();
+            for (Axis axis : axes()) {
+                if (axis.term().equals(term)) {
+                    for (Border each : along(axis)) {
+                        ExactRatio at = each.cut().cut().at().asANumber();
+                        if (at != null) {
+                            out.add(at);
+                        }
+                    }
+                }
+            }
+            return out;
+        }
+
         /** Whether an edge of this term is a value some row could carry.
          *
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
@@ -314,7 +332,7 @@ public final class Partitions {
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return strings.allowsAnEdgeAt(term)
+            return strings.allowsAnEdgeAt(term, linesOn(term))
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.

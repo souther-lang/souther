@@ -62,10 +62,12 @@ class ALanguageBoundsTheValuesAndProvesNoneExistsTest {
     }
 
     /** Finitely many strings left out can be every string of one length, and not only the empty
-     *  one: no string of ASCII alone is changed by the form, so a length is left without a value
-     *  only when as many of them are out as there are. */
+     *  one. No string of ASCII alone is changed by the form, so a length is shown reached while
+     *  fewer of them are out than there are. That is a sufficient condition: with all of ASCII out
+     *  a length is not shown reached, which does not say it has no value, since strings beyond
+     *  ASCII are values too. */
     @Test
-    void everyStringOfALengthLeftOutLeavesNoValueOfThatLength() {
+    void aLengthWhoseEveryAsciiStringIsLeftOutIsNotShownReached() {
         Set<Value> allButOne = new HashSet<>();
         for (char each = 0; each < 127; each++) {
             allButOne.add(Value.text(String.valueOf(each)));

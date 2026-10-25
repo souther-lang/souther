@@ -127,6 +127,26 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 if n >= 10 then 1 else 0
             """;
 
+    /** A String holds no more than 268435455 code points, and the body draws its line past that. */
+    private static final String TOO_LONG = """
+            module example.toolong
+
+            behavior f : (s: String) -> Int
+
+            let f (s) =
+                if String.length(s) >= 268435456 then 1 else 0
+            """;
+
+    /** The same line a code point short of the longest, which a string can have. */
+    private static final String LONGEST_LINE = """
+            module example.longest
+
+            behavior f : (s: String) -> Int
+
+            let f (s) =
+                if String.length(s) >= 268435455 then 1 else 0
+            """;
+
     /** No value of the element exists, and the empty list is a value of the input all the same. */
     private static final String NO_ELEMENT_EXISTS = """
             module example.noelement
@@ -173,6 +193,22 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 "the body draws a line on n: " + labels(points));
         assertFalse(provedAny(onNumberNamed(points, "10").toList()),
                 "bad may hold no value, and a row is a value of every parameter");
+    }
+
+    @Test
+    void aLineBeyondTheLongestStringIsNotProvedWritten() {
+        List<BorderAssessment.Point> points = owedPoints(TOO_LONG, "example.toolong");
+        assertFalse(points.isEmpty(), "the body draws a line on the length");
+        assertFalse(provedAny(points), "no String has that many code points: " + labels(points));
+    }
+
+    @Test
+    void aLineAtTheLongestStringIsNotProvedEither() {
+        List<BorderAssessment.Point> points = owedPoints(LONGEST_LINE, "example.longest");
+        assertFalse(points.isEmpty(), "the body draws a line on the length");
+        assertFalse(provedAny(points),
+                "the side above the line holds no String, so the line is not proved: "
+                        + labels(points));
     }
 
     @Test

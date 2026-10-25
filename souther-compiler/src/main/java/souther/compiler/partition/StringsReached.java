@@ -13,6 +13,7 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -71,8 +72,37 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      * the input say: the input has a whole value, which is every position every value has holding
      * one, and the number is one its strings reach. Two claims, and neither stands for the other.
      */
-    public boolean allowsAnEdgeAt(NumericTerm term) {
-        return mandatoryPositionsHoldAValue && reaches(term);
+    public boolean allowsAnEdgeAt(NumericTerm term, Collection<ExactRatio> linesOnIt) {
+        return mandatoryPositionsHoldAValue && reaches(term) && linesFitAString(term, linesOnIt);
+    }
+
+    /**
+     * Whether every line drawn on {@code term} is below the most a {@code String} has of it, so
+     * that the value beside the line on its far side is one a string can have. Reaching every
+     * number the rules leave is not reaching a number past what a string holds: the rules leave
+     * every number from nought up, and a string holds no more than {@link
+     * TextExtents#LONGEST_STRING} code points.
+     *
+     * @param linesOnIt where the lines drawn on {@code term} fall
+     */
+    private static boolean linesFitAString(NumericTerm term, Collection<ExactRatio> linesOnIt) {
+        ExactRatio most = mostAStringHas(term);
+        return most == null || linesOnIt.stream().allMatch(at -> at.compareTo(most) < 0);
+    }
+
+    /** The most of {@code term} a string has, or null where it is no number of a string. */
+    private static ExactRatio mostAStringHas(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.CodePointValueSum _ -> ExactRatio.of(
+                    TextExtents.LONGEST_STRING * Character.MAX_CODE_POINT);
+            case NumericTerm.CodePointClassCount _ -> ExactRatio.of(TextExtents.LONGEST_STRING);
+            case NumericTerm.TakenOf taken when isOfAString(taken) ->
+                    ExactRatio.of(TextExtents.LONGEST_STRING);
+            case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
+                 NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
+        };
     }
 
     /** What the strings at {@code positions} reach. */
