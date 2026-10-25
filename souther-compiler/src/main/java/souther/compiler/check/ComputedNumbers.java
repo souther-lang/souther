@@ -168,8 +168,9 @@ final class ComputedNumbers {
      *  algebra. */
     interface Account {
 
-        /** Where the order the place's numbers are worked out in stops: open ends where it does
-         *  not stop, and null where the order is not known, which proves nothing. */
+        /** Where the order the value of {@code place} is counted on stops, a place or a step made
+         *  of places: open ends where it does not stop, and null where the order is not known,
+         *  which proves nothing. */
         NumericDomain.Bounds orderOf(FactSubject place);
 
         /** Whether what is held of the place is what the rules leave it, and not something wider

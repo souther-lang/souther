@@ -19,7 +19,7 @@ record ReadAccount(Terms terms, ConjoinedAdmissibleValues<FactSubject> values)
 
     @Override
     public NumericDomain.Bounds orderOf(FactSubject place) {
-        Carrier order = terms.carrierOf(place);
+        Carrier order = terms.carrierOfTerm(place.identity());
         return order == null ? null : order.whereItStops();
     }
 

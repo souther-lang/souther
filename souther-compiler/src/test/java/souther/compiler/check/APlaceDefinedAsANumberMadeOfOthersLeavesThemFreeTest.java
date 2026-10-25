@@ -128,6 +128,27 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
         assertFalse(left.get("n.b").isEmpty());
     }
 
+    /**
+     * A step answers the order of its own type, and not the order of what it was made of:
+     * {@code Decimal.fromInt} takes a whole number and answers a decimal, so whole numbers made
+     * decimals before they are multiplied are multiplied as decimals, which do not stop, and a
+     * product past the width of a whole number is a value.
+     */
+    @Test
+    void wholeNumbersMadeDecimalsBeforeTheyAreMultipliedLeaveTheFactorsFree() {
+        assertEquals(Map.of("n.a", List.of(), "n.b", List.of(), "n.c", List.of()),
+                unansweredBelowTheInput("""
+                        module demo
+
+                        data Large = Int
+                            invariant value >= 4000000000 && value <= 5000000000
+
+                        data N = { a: Large, b: Large, c: Decimal }
+                            invariant Decimal.compare(c,
+                                Decimal.fromInt(a.value) * Decimal.fromInt(b.value)) == 0
+                        """ + BEHAVIOR));
+    }
+
     /** Where the places lie well inside the width the arithmetic never leaves it. */
     @Test
     void aProductOfWholeNumbersThatStaysInsideTheirWidthLeavesTheFactorsFree() {
