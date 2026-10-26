@@ -4,8 +4,11 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Today;
 import souther.compiler.numeric.UsualPlace;
+import souther.compiler.regex.Language;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.values.ValueSet;
 
 import java.util.function.Supplier;
@@ -45,9 +48,23 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance, 
         return allowance.get();
     }
 
-    /** Where a value for {@code term} counted on {@code carrier} is usually near on the day this
-     *  search is made on ({@link UsualPlaces}). */
+    /**
+     * Where a value for {@code term} counted on {@code carrier} is usually near on the day this
+     * search is made on ({@link UsualPlaces}).
+     *
+     * <p>And how long a string of a format is, which is first looked for near the shortest string
+     * the format holds. A place to start and no bound: a length the format holds no string of is
+     * still one a rule may draw a line at, and a value written there is the format's to refuse.
+     */
     public UsualPlace startingAt(NumericTerm term, Carrier carrier) {
+        if (term instanceof NumericTerm.TakenOf taken
+                && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                && admitted.at(taken.position()) instanceof AdmittedValues.Admitted.Values(
+                        ValueSet.Matching(var language))
+                && language.lengths() instanceof Language.Ends(long shortest, var _)) {
+            return new UsualPlace.Near(Count.of(shortest), Count.of(0),
+                    Count.of(Integer.MAX_VALUE));
+        }
         return UsualPlaces.of(term, carrier, today);
     }
 

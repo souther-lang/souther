@@ -2,8 +2,11 @@ package souther.compiler.check;
 
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
+import souther.compiler.semantics.Accumulation;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
@@ -105,6 +108,85 @@ public final class WhatARunMayEndFor {
                  Core.LetIn _, Core.Block _, Core.ListLit _, Core.OptionSome _, Core.Tuple _,
                  Core.TupleGet _, Core.Match _, Core.Widen _ -> NONE;
         };
+    }
+
+    /**
+     * What {@code e} itself may end a run for, as {@link #itself} says, but for a call of an
+     * operation of the library every function it is handed at which is a closure written at the
+     * call: what the operation ends a run for apart from those
+     * ({@link LibraryEndings#apartFromWhatItIsHanded}). For a reader that asks the body of each
+     * such closure itself, as part of the call. A function handed some other way — a name, a
+     * value worked out elsewhere — has a body in no tree that reader walks, and the call is
+     * answered whole.
+     */
+    public static Endings itselfApartFromTheClosuresWrittenAtIt(Core e) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)
+                || !closuresWrittenAt(kept)) {
+            return itself(e);
+        }
+        AnOperationApplied applied = AnOperationApplied.of(kept);
+        return applied != null && applied.operation() instanceof ValueName.Stdlib.Operation operation
+                ? LibraryEndings.shipped().apartFromWhatItIsHanded(operation)
+                : new Endings.NotKnown();
+    }
+
+    /**
+     * Where {@code e} itself answers ({@link GetsPast}), apart from the closures written at it
+     * as {@link #itselfApartFromTheClosuresWrittenAtIt} reads it, each from the owner of what it
+     * is: an operator's from {@link AbortSites}, a kernel's from {@link KernelContracts}, and an
+     * operation of the library's from {@link LibraryEndings}. Its operands are counted in the order
+     * they are written, a binary's left one first.
+     */
+    public static GetsPast completionApartFromTheClosuresWrittenAtIt(Core e) {
+        if (itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
+            return new GetsPast.Always();
+        }
+        GetsPast total = whereTheTotalFits(e);
+        if (total != null) {
+            return total;
+        }
+        return switch (Core.withoutStanding(e)) {
+            case Core.Binary binary -> AbortSites.completionOfAnOperator(binary.op(), binary.type());
+            case Core.Call call when call.fn() instanceof Core.Reached.OfKernel kernel ->
+                    KernelContracts.completionOf(kernel.kernel());
+            case Core.PreservedCall kept when closuresWrittenAt(kept) -> {
+                AnOperationApplied applied = AnOperationApplied.of(kept);
+                yield applied != null
+                        && applied.operation() instanceof ValueName.Stdlib.Operation operation
+                        ? LibraryEndings.shipped().completionApartFromWhatItIsHanded(operation)
+                        : new GetsPast.NotKnown();
+            }
+            default -> new GetsPast.NotKnown();
+        };
+    }
+
+    /**
+     * Where a call adding up the {@code Int}s of a list answers, or null where {@code e} is no
+     * such call: what it accumulates is the operation's own account ({@link Accumulations}), from
+     * nought by adding, and the total it answers is an {@code Int}.
+     */
+    private static GetsPast whereTheTotalFits(Core e) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)
+                || kept.type() != Type.INT) {
+            return null;
+        }
+        Accumulations.Accumulating accumulating = Accumulations.accumulating(kept);
+        if (accumulating == null || !accumulating.what().equals(new Accumulation(
+                Accumulation.Identity.ZERO, Accumulation.Combine.ADD))) {
+            return null;
+        }
+        for (int at = 0; at < kept.args().size(); at++) {
+            if (kept.args().get(at) == accumulating.container()) {
+                return new GetsPast.WhereTheTotalFits(at);
+            }
+        }
+        return null;
+    }
+
+    /** Whether every function {@code kept} is handed is a closure written at the call. */
+    private static boolean closuresWrittenAt(Core.PreservedCall kept) {
+        return kept.args().stream().allMatch(arg -> !(arg.type() instanceof Type.FnOf)
+                || Core.withoutStanding(arg) instanceof Core.Block);
     }
 
     /** What an operation of the library a call keeps ends a run for, over every call of it

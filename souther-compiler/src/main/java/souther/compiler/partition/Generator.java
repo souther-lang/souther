@@ -7,6 +7,7 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
+import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.ast.Hir;
@@ -32,6 +33,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -42,6 +44,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
@@ -55,6 +58,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -728,6 +732,33 @@ public final class Generator {
             }
 
             /**
+             * Whether a search that came back with this word did not look at every candidate there
+             * was, which a row built beside it must not be held over.
+             *
+             * <p>Asked of the word and answered for each, with no default: a reason added is a
+             * case here, decided when it is added, and not a word that joins whichever side a
+             * reader's condition leaves it on. The searches that looked at everything are the ones
+             * that proved nothing could stand there, the one whose candidates were all refused, and
+             * the one whose rows all reach an {@code unreachable}; each of the others is this
+             * compiler falling short of the candidates, or of reading them.
+             */
+            public boolean leavesSomethingUntried() {
+                return switch (this) {
+                    case NO_VALUE_CAN_STAND_THERE, ONE_POSITION_CANNOT_BE_BOTH,
+                         A_CONDITION_NEVER_COMES_OUT_THAT_WAY, ALL_CANDIDATES_REJECTED,
+                         EVERY_ROW_THERE_REACHES_AN_UNREACHABLE -> false;
+                    case NOTHING_COMPOSES_ONE, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
+                         THE_SEARCH_LEFT_SOMETHING_UNTRIED, NOTHING_STANDS_IN_FOR_A_DEPENDENCY,
+                         A_TABLE_IS_WHAT_THIS_NEEDS, NOTHING_TO_BUILD_AGAINST,
+                         NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
+                         THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
+                         THE_ROWS_WERE_NOT_READ, THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE,
+                         THE_WAY_IN_PLACES_AT_NO_CLASS, NO_CANDIDATE_WAS_OFFERED,
+                         NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> true;
+                };
+            }
+
+            /**
              * The word a search these budgets stopped comes back with.
              *
              * <p>One way only. Which budget stopped a search is what the search hands over, and this
@@ -770,12 +801,22 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
-                             COUNTS_OF_KEYS_TRIED,
+                             TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
+                             // The cases past it were never planned under, so what the search came
+                             // to is about the cases it tried.
+                             CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                             // The strings past this many pieces were never offered, so what the
+                             // search came to is about the strings it tried.
+                             PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                             STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
+                             // The sides past it were made of a number repeated, so what the
+                             // search came to is about the lists it tried.
+                             ELEMENTS_A_SIDE_IS_SEARCHED_OVER, NUMBERS_A_SIDE_IS_BALANCED_FROM,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
                              // The divisors past this one were never asked for, so what the search
@@ -2148,6 +2189,15 @@ public final class Generator {
                             break;
                         }
                     }
+                    // And at the pieces of the strings the rows seen going through it held, where
+                    // the bodies part a string and go on to attempt a construction of each piece.
+                    // Before the rows below are moved, because the runs are one budget and these
+                    // are read off the body: a few strings, each one change from a row seen,
+                    // where moving a row asks for as many as composing a value takes.
+                    for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
+                        seen = demandedFrom(arm.seenThrough().get(at), axes, purposes, looking,
+                                check, answers, read.piecesAttempted());
+                    }
                     // And from the rows seen going through it, which is where a run through the
                     // arm is known to start whatever a reading of the way in could state — an arm
                     // decided by a relation between inputs, which no class of either holds a side
@@ -2158,7 +2208,7 @@ public final class Generator {
                     }
                     yield seen;
                 }
-                case ReplacementOwed.ByOneAnswer _ -> {
+                case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
                     // answering one value is told apart by any row it answers differently, and a
                     // behavior whose positions nothing divides has no class to look in.
@@ -2179,6 +2229,22 @@ public final class Generator {
                                 break;
                             }
                         }
+                    }
+                    // And beside the rows it answered, which is where a run is known to come back
+                    // where the values the classes offer are ones the body gives no answer on. Last,
+                    // because the runs are one budget: asked first, these could spend what a row the
+                    // classes reach is found with, and a rewrite the classes tell apart would be
+                    // left undecided. Not once the runs are spent, which every row would find out
+                    // again.
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
+                        seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
+                                answers);
+                    }
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
+                        seen = demandedFrom(one.answeredOn().get(at), axes, purposes, looking,
+                                check, answers, read.piecesAttempted());
                     }
                     yield seen;
                 }
@@ -2257,6 +2323,105 @@ public final class Generator {
                     witnessedBy(looking, purposes, answers)));
             if (inputs != null) {
                 return new GeneratedRow(purposes, inputs, answers);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found one step from the
+     * inputs of a row a run was seen coming back on — or null where none is.
+     *
+     * <p>Where the classes offer values the body does not answer on, they leave nothing to compare
+     * the rewrite against; the run that came back is the one place known to. One whole number in the
+     * inputs is moved by one at a time and the rest is kept as it was, each candidate written
+     * through the same check a composed value goes through. Which candidate answers, and whether it
+     * answers differently, is what running it says, as it is for every candidate the rewrite is
+     * asked about.
+     */
+    private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
+                                       List<Purpose> purposes, ReplacementWitness looking,
+                                       CandidateCheck check, List<StoodInAnswer> answers) {
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, _) -> NearbyValues.of(value, type, reading));
+    }
+
+    /** The values a candidate puts at the position of one parameter, given the value the run had
+     *  there. */
+    @FunctionalInterface
+    private interface Beside {
+
+        Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading,
+                                   String parameter);
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found beside the inputs
+     * of a row a run was seen going through, at the strings it held where a body parts one and
+     * builds a newtype of its pieces ({@link PieceDemand}).
+     *
+     * <p>Each such string is put as one whose pieces are all ones the newtype is written to
+     * admit, which the position's own rules are met with: a rewrite of which pieces are kept
+     * answers differently only where a piece it keeps and the body does not, or the other way, is
+     * one the construction goes on with. No class of the input holds that, since what the
+     * construction admits is stated of a value made from the string. Which candidate answers, and
+     * whether it answers differently, is what running it says.
+     */
+    private static GeneratedRow demandedFrom(List<ObservedValue> seen,
+                                             MeasuredInput.MeasuredAxes axes,
+                                             List<Purpose> purposes, ReplacementWitness looking,
+                                             CandidateCheck check, List<StoodInAnswer> answers,
+                                             List<PieceDemand> demands) {
+        if (demands.isEmpty()) {
+            return null;
+        }
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, parameter) ->
+                        NearbyValues.demanded(value, type, reading, parameter, demands, seen,
+                                looking::composingStoppedAt));
+    }
+
+    private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
+                                       List<Purpose> purposes, ReplacementWitness looking,
+                                       CandidateCheck check, List<StoodInAnswer> answers,
+                                       Beside how) {
+        MeasuredInput subject = axes.subject();
+        // As the run had them, written once: a candidate moves one position and leaves the others
+        // as they were.
+        List<FixtureTemplate> kept = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate value))) {
+                return null;
+            }
+            kept.add(value);
+        }
+        for (int moved = 0; moved < seen.size(); moved++) {
+            Iterator<ObservedValue> nearer = how.of(seen.get(moved),
+                    subject.types().get(moved), subject.ruleReading(),
+                    subject.parameters().get(moved));
+            while (nearer.hasNext()) {
+                ObservedValue near = nearer.next();
+                if (!(ObservedFixtures.of(near, subject.types().get(moved),
+                        subject.ruleReading())
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate value))
+                        || check.refuse(moved, value).isPresent()) {
+                    continue;
+                }
+                List<FixtureTemplate> inputs = new ArrayList<>(kept);
+                inputs.set(moved, value);
+                GeneratedRow row = new GeneratedRow(purposes, inputs, answers);
+                switch (looking.of(row, null)) {
+                    case TAKEN -> {
+                        return row;
+                    }
+                    case STOPPED -> {
+                        return null;
+                    }
+                    case PASSED -> { }
+                }
             }
         }
         return null;
@@ -3371,7 +3536,7 @@ public final class Generator {
         // What the walks came to, added up the way a combination's readings are. What is pinned
         // is one reading — a class apiece at the positions the requirement names — so what is left
         // to say is whether either walk was stopped in front of work nobody did.
-        Completeness looked = building.builds == 0 && composing.builds == 0
+        Completeness looked = building.tried() == 0 && composing.tried() == 0
                 ? Completeness.NOTHING_YET : Completeness.NOTHING_YET.searched();
         if (stated == Traversal.STOPPED || composed == Traversal.STOPPED) {
             looked = looked.cutShort();
@@ -3467,6 +3632,14 @@ public final class Generator {
         /** How many were built, which is what this is allowed so many of. */
         private int builds;
 
+        /** How many were turned away before being built, for the classes leaving no room. */
+        private int turnedAway;
+
+        /** How many candidates were tried at all, built or turned away. */
+        int tried() {
+            return builds + turnedAway;
+        }
+
         /** The figure this walk stopped at where it ran out of builds, as it stood there. */
         private final Set<Figure> boundsReached = new HashSet<>();
 
@@ -3531,12 +3704,27 @@ public final class Generator {
         }
 
         @Override
+        public void reached(Figure figure) {
+            boundsReached.add(figure);
+        }
+
+        @Override
         public Taken take(Candidate candidate) {
             Map<String, Written> given = candidate.from().writtenAgainst(axes,
                     candidate.delta(), candidate.where(), references);
             known.written(candidate, given);
             if (!candidate.from().composes() && given.isEmpty()) {
                 return Taken.AND_MORE;   // nothing here can be written against the model's value
+            }
+            // What composing it would find out first, found out without building it. A candidate
+            // whose classes leave what the row is held to no room is one nothing can be built
+            // from, and what a search is allowed to build is not spent on it.
+            Attempt noRoom = classesLeaveNoRoom(axes, candidate.where(), held);
+            if (noRoom != null) {
+                turnedAway++;
+                foundOut = foundOut.and(noRoom.found());
+                last = noRoom;
+                return Taken.AND_MORE;
             }
             if (builds >= most) {
                 boundsReached.add(buildsReached());
@@ -3749,6 +3937,9 @@ public final class Generator {
     private interface TakingCandidates extends Taking<Candidate> {
 
         ParameterProjections known();
+
+        /** Takes in that the walk stopped at {@code figure}, in front of work nobody did. */
+        void reached(Figure figure);
     }
 
     /**
@@ -3936,7 +4127,7 @@ public final class Generator {
      * requirements and not every position's: a position is asked again only where what is asked
      * of it changed.
      */
-    private static final class StandingTogether {
+    private static final class StandingTogether implements NearestAssignments.Together {
 
         private final WhatEachClassRequires requires;
 
@@ -3946,8 +4137,15 @@ public final class Generator {
         /** The positions the classes standing leave no case in common. */
         private final Set<TermPath> disagreeing = new HashSet<>();
 
-        StandingTogether(WhatEachClassRequires requires, int[] where) {
+        /** The positions the walk may move, which are the only ones it stands again with a case. */
+        private final boolean[] movable;
+
+        StandingTogether(WhatEachClassRequires requires, int[] where, int[] steps) {
             this.requires = requires;
+            this.movable = new boolean[requires.axes.size()];
+            for (int step : steps) {
+                movable[step] = true;
+            }
             for (int i = 0; i < requires.axes.size() && i < where.length; i++) {
                 if (where[i] != NOT_HERE) {
                     add(i, where[i]);
@@ -3955,14 +4153,80 @@ public final class Generator {
             }
         }
 
+        /**
+         * Moving a case of a sum is the row being another case: the positions under the case it
+         * left stand at no class, and the ones under the case it enters stand at the first class
+         * that can be beside the rest, as {@link #standing} stands them.
+         */
+        @Override
+        public List<int[]> carry(int[] where, int axis, int from, int to) {
+            if (requires.of(axis, from).equals(requires.of(axis, to))) {
+                return List.of();
+            }
+            List<Axis> axes = requires.axes;
+            Requirements leaving = axes.get(axis).requiring(axes.get(axis).classes().get(from));
+            Requirements entering = axes.get(axis).requiring(axes.get(axis).classes().get(to));
+            List<int[]> changed = new ArrayList<>();
+            // Out from under the case left first, so that what is put under the one entered is
+            // asked beside the row as it now is.
+            for (int j = axis + 1; j < where.length; j++) {
+                if (movable[j] && where[j] != NOT_HERE
+                        && !axes.get(j).requirements().compatibleWith(entering)) {
+                    changed.add(new int[] {j, where[j]});
+                    remove(j, where[j]);
+                    where[j] = NOT_HERE;
+                }
+            }
+            for (int j = axis + 1; j < where.length; j++) {
+                Requirements own = axes.get(j).requirements();
+                if (!movable[j] || where[j] != NOT_HERE || own.compatibleWith(leaving)
+                        || !own.compatibleWith(entering)) {
+                    continue;
+                }
+                int here = j;
+                int cls = standingAt(axes.get(j), c -> admits(here, c)
+                        && !leavesNoRoomBeside(requires, where, here, c));
+                if (cls != NOT_HERE) {
+                    changed.add(new int[] {j, NOT_HERE});
+                    add(j, cls);
+                    where[j] = cls;
+                }
+            }
+            return changed;
+        }
+
+        @Override
+        public void restore(int[] where, List<int[]> changed) {
+            for (int i = changed.size() - 1; i >= 0; i--) {
+                int[] one = changed.get(i);
+                if (where[one[0]] != NOT_HERE) {
+                    remove(one[0], where[one[0]]);
+                }
+                if (one[1] != NOT_HERE) {
+                    add(one[0], one[1]);
+                }
+                where[one[0]] = one[1];
+            }
+        }
+
         /** Moves {@code axis} from the class {@code from} to the class {@code to}. */
-        void move(int axis, int from, int to) {
+        @Override
+        public void move(int axis, int from, int to) {
             remove(axis, from);
             add(axis, to);
         }
 
-        boolean holds() {
+        @Override
+        public boolean holds() {
             return disagreeing.isEmpty();
+        }
+
+        /** Whether {@code axis}, at no class now, can stand at {@code cls} beside the rest. */
+        boolean admits(int axis, int cls) {
+            add(axis, cls);
+            boolean holds = holds();
+            remove(axis, cls);
+            return holds;
         }
 
         private void add(int axis, int cls) {
@@ -4087,6 +4351,9 @@ public final class Generator {
         List<Axis> axes = requires.axes;
         int[] about = about(axes, reading);
         Set<String> asked = reading.heads(axes);
+        // One count of looks for every group of origins: a walk that was divided between them
+        // would be allowed what each is, and not what all of them are.
+        NearestAssignments.Looks looks = new NearestAssignments.Looks(MOST_LOOKS);
         // The origins that state most of what the demand is about, whole and at every distance,
         // before any that state less of it.
         for (int grounds = asked.size(); grounds >= 0; grounds--) {
@@ -4099,7 +4366,7 @@ public final class Generator {
             if (here.isEmpty()) {
                 continue;
             }
-            Traversal walked = gather(requires, reading, about, here, admits, taking);
+            Traversal walked = gather(requires, reading, about, here, admits, looks, taking);
             if (walked != Traversal.EXHAUSTED) {
                 return walked;
             }
@@ -4125,11 +4392,13 @@ public final class Generator {
                                        List<ResolvedOrigin> origins, Admits admits,
                                        TakingCandidates taking) {
         int[] about = about(requires.axes, reading);
+        NearestAssignments.Looks looks = new NearestAssignments.Looks(MOST_LOOKS);
         for (ResolvedOrigin origin : origins) {
             if (!origin.composes()) {
                 continue;
             }
-            Traversal walked = gather(requires, reading, about, List.of(origin), admits, taking);
+            Traversal walked = gather(requires, reading, about, List.of(origin), admits, looks,
+                    taking);
             if (walked != Traversal.EXHAUSTED) {
                 return walked;
             }
@@ -4141,17 +4410,20 @@ public final class Generator {
      * Every assignment these origins offer for one reading, nearest first, handed to
      * {@code taking}.
      *
-     * <p>Walked by how many positions it moves and handed over by the distance the assignment came
-     * to, which are two numbers and not one. Moving {@code k} positions moves {@code k} of them; the
-     * reading may move more, where a class it asks for cannot stand beside where the origin's own
-     * value does. So an assignment is never nearer than the number of positions that produced it,
-     * and everything at one distance has been produced by the time the walk finishes moving that
-     * many — which is what lets this hand them over in distance order without holding the whole
-     * space to sort it.
+     * <p>Walked by the distance the assignment comes to, and not by how many positions it moves,
+     * which are two numbers: the base a walk starts from differs from the origin where the reading
+     * settled a position, and a position moved back to where the origin stands brings the
+     * assignment nearer. Each distance is asked of every origin in turn
+     * ({@link NearestAssignments}), and an assignment is handed over as it stands, so nothing is
+     * held while a distance waits to be reached.
+     *
+     * <p>Held to {@code looks}, the work of finding assignments, which the consumer's own bound
+     * never sees where it passes over what it is handed for nothing. Out of them, the walk stops
+     * and says so: the assignments past that point are work nobody did.
      */
     private static Traversal gather(WhatEachClassRequires requires, Interpretation reading,
                                     int[] about, List<ResolvedOrigin> origins, Admits admits,
-                                    TakingCandidates taking) {
+                                    NearestAssignments.Looks looks, TakingCandidates taking) {
         List<Axis> axes = requires.axes;
         // What the demand asks for settled first, and each origin's own classes kept at every
         // position that can keep them beside it. Worked out once per origin: it is where that
@@ -4164,37 +4436,104 @@ public final class Generator {
                 bases.add(new Started(origin, base));   // null is this reading not being one value
             }
         }
-        // Produced further away than the number of positions that produced them, kept until the
-        // walk reaches that distance rather than handed over early.
-        Map<Integer, List<Candidate>> waiting = new LinkedHashMap<>();
-        // What moves is a position the row is not about, so the most that can be moved is every
-        // position but those. Walked further, nothing is produced and the only thing left to do is
-        // hand over what the readings moved beyond them, which is what happens below either way.
-        for (int moved = 0; moved <= axes.size() - about.length; moved++) {
-            for (Started origin : bases) {
-                for (int[] where : assignmentsMoving(axes, requires, origin, about, moved,
-                        taking.known())) {
-                    Candidate candidate = new Candidate(origin.from(), where,
-                            Delta.between(origin.from().stands(), where));
-                    waiting.computeIfAbsent(candidate.delta().size(), _ -> new ArrayList<>())
-                            .add(candidate);
+        bases.sort(Comparator.comparingInt(started -> started.from().index()));
+        int[] classes = new int[axes.size()];
+        for (int i = 0; i < classes.length; i++) {
+            classes[i] = axes.get(i).classes().size();
+        }
+        List<Walking> walks = new ArrayList<>();
+        int nearest = Integer.MAX_VALUE;
+        int farthest = 0;
+        for (Started origin : bases) {
+            int[] steps = movable(axes, about, origin.base());
+            NearestAssignments walk = new NearestAssignments(origin.from().stands(), origin.base(),
+                    steps, classes);
+            walks.add(new Walking(origin, steps, walk));
+            nearest = Math.min(nearest, walk.nearest());
+            farthest = Math.max(farthest, walk.farthest());
+        }
+        // One distance at a time, and within it one origin's assignments before the next origin's.
+        // The assignments are handed to the consumer as they stand, so a consumer that is satisfied
+        // or stops leaves everything after unwalked, and nothing waits for its distance to come.
+        for (int distance = nearest; distance <= farthest; distance++) {
+            for (Walking walking : walks) {
+                Traversal walked = visiting(requires, walking, distance, looks, taking);
+                if (walked != Traversal.EXHAUSTED) {
+                    return walked;
                 }
             }
-            // Everything this far and nearer. Asked of every distance up to this one rather than of
-            // this one alone: what is due is a fact about the distances, and a walk that read it off
-            // how many positions it had just moved would leave a nearer assignment sitting in the
-            // map for as long as the number that produced it was larger than it.
-            Traversal walked = handOut(waiting, moved, taking);
-            if (walked != Traversal.EXHAUSTED) {
-                return walked;
-            }
         }
-        // What the readings moved beyond the most positions walked. Nothing generates at these
-        // distances any more, so they are handed over rather than dropped — and handed over the same
-        // way, because which of two candidates one distance apart comes first is one rule and not
-        // one per place a candidate leaves this walk.
-        return handOut(waiting, Integer.MAX_VALUE, taking);
+        return Traversal.EXHAUSTED;
     }
+
+    /** One origin's walk, and the positions it moves. */
+    private record Walking(Started origin, int[] steps, NearestAssignments walk) {}
+
+    /**
+     * Every assignment {@code distance} from one origin, handed to {@code taking} in the order
+     * {@link NearestAssignments} walks them.
+     *
+     * <p>Less what the consumer has come to pass over by the time the assignment stands, which it
+     * is asked at that moment: what it learns of one parameter's value from one assignment is
+     * what leaves out the next that shares it.
+     */
+    private static Traversal visiting(WhatEachClassRequires requires, Walking walking,
+                                      int distance, NearestAssignments.Looks looks,
+                                      TakingCandidates taking) {
+        Started origin = walking.origin();
+        ParameterProjections known = taking.known();
+        ParameterProjections.Settling settling = known.settling(origin.from(), walking.steps());
+        Traversal[] result = {Traversal.EXHAUSTED};
+        NearestAssignments.Ended ended = walking.walk().visitAt(distance,
+                new StandingTogether(requires, origin.base().clone(), walking.steps()),
+                (where, from, to) -> {
+                    for (int filled = from; filled <= to; filled++) {
+                        if (known.leavesOut(settling, where, filled)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                looks,
+                where -> {
+                    if (known.leavesOut(origin.from(), where)) {
+                        return true;
+                    }
+                    Candidate candidate = new Candidate(origin.from(), where.clone(),
+                            Delta.between(origin.from().stands(), where));
+                    switch (taking.take(candidate)) {
+                        case NOT_TAKEN -> {
+                            result[0] = Traversal.STOPPED;
+                            return false;
+                        }
+                        case AND_DONE -> {
+                            result[0] = Traversal.SATISFIED;
+                            return false;
+                        }
+                        case AND_MORE -> { }
+                    }
+                    return true;
+                });
+        return switch (ended) {
+            case EXHAUSTED -> Traversal.EXHAUSTED;
+            case DECLINED -> result[0];
+            case OUT_OF_LOOKS -> {
+                taking.reached(WorkFigure.ASSIGNMENTS_A_REPAIR_LOOKS_AT.at(MOST_LOOKS));
+                yield Traversal.STOPPED;
+            }
+        };
+    }
+
+    /**
+     * How many assignments a walk repairing a row looks at, across every distance and every origin
+     * of one search.
+     *
+     * <p>Beside {@link #MOST_REPAIRS} and not in place of it. That bounds what is built, and a
+     * candidate the consumer passes over before it builds anything costs it none of it; with the
+     * positions of one parameter numbering in the tens and their classes in the hundreds, the
+     * assignments there are to pass over are more than any search can look at.
+     */
+    private static final int MOST_LOOKS = 100_000;
 
     /**
      * Where one origin's walk for one reading starts: what the reading asks for, and the origin's
@@ -4205,48 +4544,6 @@ public final class Generator {
      * every key is the one instance that was put there, and reads as though it worked either way.
      */
     private record Started(ResolvedOrigin from, int[] base) {}
-
-    /**
-     * Every candidate of {@code waiting} no further than {@code upTo}, nearest first, handed to
-     * {@code taking}.
-     *
-     * <p>Within one distance the origins keep the order they were gathered in. Sorted rather than
-     * generated that way, because an assignment reaches one distance from more than one number of
-     * positions moved.
-     *
-     * <p>Less what the consumer has since come to pass over. These were produced before it had
-     * taken anything they share a parameter with, so they are asked again here rather than where
-     * they were produced.
-     */
-    private static Traversal handOut(Map<Integer, List<Candidate>> waiting, int upTo,
-                                     TakingCandidates taking) {
-        for (int distance : new java.util.TreeSet<>(waiting.keySet())) {
-            if (distance > upTo) {
-                return Traversal.EXHAUSTED;
-            }
-            for (Candidate candidate : sortedByOrigin(waiting.remove(distance))) {
-                if (taking.known().leavesOut(candidate.from(), candidate.where())) {
-                    continue;
-                }
-                switch (taking.take(candidate)) {
-                    case NOT_TAKEN -> {
-                        return Traversal.STOPPED;
-                    }
-                    case AND_DONE -> {
-                        return Traversal.SATISFIED;
-                    }
-                    case AND_MORE -> { }
-                }
-            }
-        }
-        return Traversal.EXHAUSTED;
-    }
-
-    private static List<Candidate> sortedByOrigin(List<Candidate> due) {
-        due.sort(java.util.Comparator.comparingInt(candidate -> candidate.from().index()));
-        return due;
-    }
-
 
     /**
      * Which positions beside the ones a row is about it may move, in the axes' own order.
@@ -4267,69 +4564,6 @@ public final class Generator {
         }
         return Arrays.copyOf(out, n);
     }
-
-    /**
-     * Every assignment over {@code origin}'s base that moves {@code moved} of the positions the row
-     * is not about, each of the rest standing where the base puts it.
-     *
-     * <p>A moved position takes each of its classes in turn, and never the one it already stood
-     * at — so the assignment that moves fewer is the one a smaller number already produced.
-     *
-     * <p>Decided one position at a time in the axes' own order, staying or moving. A class is asked
-     * whether it can stand beside the rest when it is moved to: beside the positions moved before
-     * it, and the base everywhere after.
-     *
-     * <p>Deciding them in turn is what lets the walk stop under a step that settles a parameter
-     * where the consumer has already passed over this origin's candidates — at classes it saw
-     * come to nothing, or, for an origin that writes a value, at classes it could write none of its
-     * parameters at. Everything below such a step would be passed over the same way, whichever of
-     * the positions after it move, and there are as many ways of moving them as there are ways to
-     * choose that many positions.
-     *
-     * <p>Handed back in the order the choosing gave: the moved positions as combinations of the
-     * axes' order, earliest first, and the classes of one choice with the first position slowest.
-     * Which assignment comes first decides which row is offered, so two runs of one model offer
-     * the same rows.
-     */
-    private static List<int[]> assignmentsMoving(List<Axis> axes, WhatEachClassRequires requires,
-                                                 Started origin, int[] about, int moved,
-                                                 ParameterProjections known) {
-        int[] steps = movable(axes, about, origin.base());
-        if (moved > steps.length) {
-            return List.of();
-        }
-        List<Moved> out = new ArrayList<>();
-        // Cloned, because the walk settles the positions in place and puts back what it found. A
-        // row about a class under one case of a sum would otherwise carry the classes of the
-        // positions under another, which is a row that has to be two things at once.
-        int[] where = origin.base().clone();
-        new Moving(axes, steps, known, known.settling(origin.from(), steps),
-                new StandingTogether(requires, where), new int[moved], out).walk(where, 0, 0);
-        out.sort((one, other) -> {
-            int compared = Arrays.compare(one.positions(), other.positions());
-            if (compared != 0) {
-                return compared;
-            }
-            for (int axis : one.positions()) {
-                compared = Integer.compare(one.where()[axis], other.where()[axis]);
-                if (compared != 0) {
-                    return compared;
-                }
-            }
-            return 0;
-        });
-        List<int[]> assignments = new ArrayList<>(out.size());
-        for (Moved each : out) {
-            assignments.add(each.where());
-        }
-        return assignments;
-    }
-
-    /**
-     * One assignment a walk of {@link #assignmentsMoving} produced, and the positions it moved, in
-     * the axes' order — which is what it is ordered by, read once when it was produced.
-     */
-    private record Moved(int[] where, int[] positions) {}
 
     /**
      * Which class each position's value falls in for the value the model already states there, or
@@ -4423,57 +4657,6 @@ public final class Generator {
     /** Where every position stands when a row is composed from the classes alone. */
     private static int[] composes(List<Axis> axes) {
         return standing(new WhatEachClassRequires(axes), null, new int[0]);
-    }
-
-    /**
-     * One walk of {@link #assignmentsMoving}: the positions it decides, in order, and what it
-     * carries from one step to the next.
-     *
-     * @param taken the positions moved so far, as many as the walk moves in all
-     */
-    private record Moving(List<Axis> axes, int[] steps, ParameterProjections known,
-                          ParameterProjections.Settling settling, StandingTogether together,
-                          int[] taken, List<Moved> out) {
-
-        /** Decides the positions from {@code filled} on, {@code count} of them moved already. */
-        void walk(int[] where, int filled, int count) {
-            if (known.leavesOut(settling, where, filled)) {
-                return;
-            }
-            if (filled == steps.length) {
-                out.add(new Moved(where.clone(), taken.clone()));
-                return;
-            }
-            int left = taken.length - count;
-            // Staying, where enough positions are left after this one to move the rest.
-            if (left < steps.length - filled) {
-                walk(where, filled + 1, count);
-            }
-            if (left == 0) {
-                return;
-            }
-            int axis = steps[filled];
-            taken[count] = axis;
-            int stood = where[axis];
-            int at = stood;
-            for (int c = 0; c < axes.get(axis).classes().size(); c++) {
-                // Where it already stands is not a move, and the assignment that makes it is the
-                // one a smaller number of moves already produced.
-                if (c == stood) {
-                    continue;
-                }
-                together.move(axis, at, c);
-                at = c;
-                where[axis] = c;
-                // And a class the rest of the assignment cannot be beside is not a move either: it
-                // is a row that would have to be two things at once, which no value is.
-                if (together.holds()) {
-                    walk(where, filled + 1, count + 1);
-                }
-            }
-            together.move(axis, at, stood);
-            where[axis] = stood;
-        }
     }
 
     /**
@@ -4954,6 +5137,26 @@ public final class Generator {
         CompositionAccount unrepresented();
 
         /**
+         * Whether this is a search that came to no row and left something unlooked at: stopped by
+         * a figure or a plan, or saying in its word or its offer that candidates were not all
+         * looked at. A row built is not one, and neither is a search that proved nothing could
+         * stand there or whose candidates were all refused.
+         *
+         * <p>Read from what each shape says, and never from the shape alone: an {@code Unresolved}
+         * is the word a search came back with, and whether that word is a search that looked at
+         * everything is the word's to say ({@link UnresolvedCombination.Reason#leavesSomethingUntried}).
+         */
+        default boolean stoppedShort() {
+            return switch (this) {
+                case BoundaryAttempt.Built _ -> false;
+                case BoundaryAttempt.Unresolved it -> it.why().reason().leavesSomethingUntried()
+                        || !it.why().alsoShort().isEmpty();
+                case BoundaryAttempt.Stopped _, BoundaryAttempt.Unexhausted _,
+                     BoundaryAttempt.Limited _, BoundaryAttempt.Unplanned _ -> true;
+            };
+        }
+
+        /**
          * This attempt as it came back, with {@code account} said of it in the place of the one it
          * came back with.
          *
@@ -4963,7 +5166,8 @@ public final class Generator {
          */
         default BoundaryAttempt withAccount(CompositionAccount account) {
             return switch (this) {
-                case BoundaryAttempt.Built built -> new BoundaryAttempt.Built(built.row(), account);
+                case BoundaryAttempt.Built built ->
+                        new BoundaryAttempt.Built(built.row(), account, built.refused());
                 case Unresolved none -> new Unresolved(none.why(), account);
                 case Stopped stopped -> new Stopped(stopped.why(), stopped.met(), account);
                 case Unexhausted unexhausted ->
@@ -4987,8 +5191,21 @@ public final class Generator {
          * come from and one place a row is assembled, and they are the same method — which is what
          * makes this cheap to hold and worth holding: the next word added beside these has the same
          * question to answer, and this is where it gets asked.
+         *
+         * <p><b>Built is not reached.</b> A walk held to the run of its rows ({@link RowJudge}) can
+         * come back with a row whose run the judge refused: offered where the walk reached no row
+         * the judge accepts and was not stopped, so that what that run did can be told. Such a row
+         * is a row and is no row the search was for, and whoever walks on past this attempt —
+         * another way of writing the elements, another pair of numbers — goes on past it.
+         *
+         * <p>A row refused is only ever returned by a walk that looked at everything there was to
+         * look at ({@link #aRefusedRowStands}): where a figure ended the walk, or a way was left
+         * unread, what comes back is what that walk came to, so that no layer above has a row
+         * refused to hold in the place of the figure.
+         *
+         * @param refused whether the judge the walk was held to refused the row's run
          */
-        record Built(GeneratedRow row, CompositionAccount unrepresented)
+        record Built(GeneratedRow row, CompositionAccount unrepresented, boolean refused)
                 implements BoundaryAttempt {
 
             public Built {
@@ -4998,6 +5215,11 @@ public final class Generator {
                                 + " take, which is a row that does not arrive: " + gap.anchor());
                     }
                 }
+            }
+
+            /** A row no judge refused. */
+            public Built(GeneratedRow row, CompositionAccount unrepresented) {
+                this(row, unrepresented, false);
             }
         }
 
@@ -5355,24 +5577,69 @@ public final class Generator {
                 return counted;
             }
         }
-        return builtShort.isEmpty() ? whole : builtShort.getFirst();
+        return heldBack(builtShort, whole);
+    }
+
+    /**
+     * The attempt that stands where none of these came back whole and reached: the first row built
+     * that a judge did not refuse, short of the way as it may be, since the run of a row that took
+     * what was asked took it however it was composed; otherwise, where rows a judge refused were
+     * built, the first search that left something unlooked at
+     * ({@link BoundaryAttempt#stoppedShort}), since a row refused is no answer that nothing was
+     * left to find; otherwise the first row built, which says where its run went; otherwise
+     * {@code none}, which is what the way as it stands came to and is what is said where no row
+     * was built.
+     */
+    static BoundaryAttempt heldBack(List<BoundaryAttempt> builtShort, BoundaryAttempt none) {
+        BoundaryAttempt refused = null;
+        BoundaryAttempt stopped = null;
+        for (BoundaryAttempt each : builtShort) {
+            if (!(each instanceof BoundaryAttempt.Built built)) {
+                if (stopped == null) {
+                    stopped = each;
+                }
+            } else if (!built.refused()) {
+                return each;
+            } else if (refused == null) {
+                refused = each;
+            }
+        }
+        if (stopped != null && !none.stoppedShort()) {
+            // The way as it stands is composed against what it states, and says so in its account;
+            // what another way left unlooked at is the word. Neither replaces the other.
+            return refused == null ? stopped.withAccount(none.unrepresented()) : stopped;
+        }
+        if (refused == null) {
+            return none;
+        }
+        return stopped != null ? stopped : refused;
     }
 
     /**
      * Whether {@code attempt} is a row built with nothing its own account names as left out of
-     * the way — and, where it is a row built with something, {@code attempt} put in
-     * {@code builtShort}.
+     * the way, and that no judge refused — and, where it is a row built with something left out
+     * or a row refused, {@code attempt} put in {@code builtShort}.
      *
      * <p>An account naming nothing does not show nothing was left out: a condition the walk had
      * no words for is in no account ({@link CompositionAccount}). One naming something shows that
      * much was, which is all this asks of it.
+     *
+     * <p>A row refused is a row built, and is held back like a row built short: the next way of
+     * composing may reach a row the judge accepts, and a search that stopped at the first row
+     * built would never look.
+     *
+     * <p>A search a figure or a plan stopped is held back too, beside them, since it is what a
+     * row refused must not hide ({@link #heldBack}).
      */
-    private static boolean builtLeavingNothingOut(BoundaryAttempt attempt,
-                                                  List<BoundaryAttempt> builtShort) {
+    static boolean builtLeavingNothingOut(BoundaryAttempt attempt,
+                                          List<BoundaryAttempt> builtShort) {
         if (!(attempt instanceof BoundaryAttempt.Built built)) {
+            if (attempt.stoppedShort()) {
+                builtShort.add(attempt);
+            }
             return false;
         }
-        if (built.unrepresented().onTheWay().isEmpty()
+        if (!built.refused() && built.unrepresented().onTheWay().isEmpty()
                 && built.unrepresented().onAnAnswer().isEmpty()) {
             return true;
         }
@@ -5593,13 +5860,19 @@ public final class Generator {
         // anything applies.
         RowPreference preferring =
                 stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
-                        ? judge.<RowPreference>map(each -> new ReachingWhatIsJudged(each, answers))
+                        ? judge.<RowPreference>map(each -> each.refusesAbsolutely()
+                                        ? new ReachingWhatIsJudged(each, answers)
+                                        : new TellingArmsApart(trial, answers, each))
                                 .orElseGet(() -> new TellingArmsApart(trial, answers))
                 : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
         boolean[] noRowAnswered = {false};
         SearchShortfall[] passedFound = {SearchShortfall.NONE};
+        // The first row a judge refused, which stands where no way of writing the contents under
+        // the cases reaches a row it accepts: a row built and no row the search was for, so
+        // another way is tried past it.
+        List<List<FixtureTemplate>> refusedKept = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -5651,6 +5924,12 @@ public final class Generator {
                     // A row was composed. Which one goes out is the preference's, and the first
                     // composed where nothing ranked them.
                     List<FixtureTemplate> kept = preferring == null ? null : preferring.taken();
+                    if (kept != null && preferring.takenIsRefused()) {
+                        if (refusedKept.isEmpty()) {
+                            refusedKept.add(kept);
+                        }
+                        return false;
+                    }
                     if (kept != null) {
                         kept.toArray(composed);
                         return true;
@@ -5669,8 +5948,19 @@ public final class Generator {
                 }
             }
         });
+        // No way reached a row the judge accepts and every way there is was tried: the row it
+        // refused first is what comes back, built and marked refused. A walk that left ways
+        // untried, by its figure or under a case nobody read, reached no row to say nothing was
+        // left to find, so it comes to what that walk came to and not to a row.
+        boolean refusedOnly = !refusedKept.isEmpty() && preferring.takenIsRefused()
+                && aRefusedRowStands(walked, whatTheWalkLeftUnlookedAt(under.foundOut(walked),
+                        cameToNothing, passedFound[0], preferring.untried()),
+                        cameToNothing.stream().anyMatch(each -> !each.lookedAtWhole()));
+        if (refusedOnly) {
+            refusedKept.getFirst().toArray(composed);
+        }
         ParameterCameToNothing failed = null;
-        if (walked != ContentsAsked.UnderTheCases.Walked.COMPOSED) {
+        if (walked != ContentsAsked.UnderTheCases.Walked.COMPOSED && !refusedOnly) {
             // What every way tried came to, beside the figure where the walk stopped short of the
             // rest and a way under a case nobody read; where no way came to nothing to say it in,
             // the figure, the case nobody read, or that no case held them.
@@ -5794,8 +6084,37 @@ public final class Generator {
                     new UnresolvedCombination(List.of(label), why), where.unrepresented());
             case AnswersStoodIn.Stood(var answers) -> new BoundaryAttempt.Built(
                     new GeneratedRow(List.of(new Purpose.ForAPoint(label)), inputs, answers),
-                    where.unrepresented());
+                    where.unrepresented(), refusedOnly);
         };
+    }
+
+    /**
+     * Whether a row a judge refused may come back as the row of a walk over the ways under the
+     * cases: only when every way was tried and none was left unlooked at. A walk its figure ended,
+     * or one with a way under a case nobody read, did not look at every way, so a row it refused
+     * is no answer that nothing else was there to find; it comes to what that walk found out.
+     */
+    static boolean aRefusedRowStands(ContentsAsked.UnderTheCases.Walked walked,
+                                     SearchShortfall left, boolean aParameterWasNotLookedAtWhole) {
+        return walked == ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED && left.nothing()
+                && !aParameterWasNotLookedAtWhole;
+    }
+
+    /**
+     * What a walk over the ways under the cases left unlooked at, from every place it can be
+     * said: the ways not handed over, what the parameters of each way found out, what the rows
+     * passed over found out, and what the choice among rows left untried. The one value
+     * {@link WhatTheAlternativesCameTo} joins, so that a row refused is held to the same account
+     * as a walk that took no row.
+     */
+    private static SearchShortfall whatTheWalkLeftUnlookedAt(
+            SearchShortfall ways, List<ParameterCameToNothing> cameToNothing,
+            SearchShortfall passedOver, SearchShortfall untried) {
+        SearchShortfall left = ways.and(passedOver).and(untried);
+        for (ParameterCameToNothing each : cameToNothing) {
+            left = left.and(each.found());
+        }
+        return left;
     }
 
     /** The parameters a row writes a value for, in the order they are declared. */
@@ -6007,7 +6326,17 @@ public final class Generator {
      * @param here      the positions of it the caller had decided
      */
     private record ParameterCameToNothing(int parameter, Outcome tried, SearchShortfall found,
-                                          Map<TermPath, List<FixtureTemplate>> here) {}
+                                          Map<TermPath, List<FixtureTemplate>> here) {
+
+        /**
+         * Whether its search ran to the end of what it looked at and came to the word alone: a
+         * figure, a population, an offer short of a rule or a plan cut is a search that did not.
+         */
+        boolean lookedAtWhole() {
+            return tried instanceof Outcome.Unresolved(var reason, var _)
+                    && !reason.leavesSomethingUntried() && found.nothing();
+        }
+    }
 
     /**
      * What composing a row at a point in order came to, for a caller that may pass rows over: the
@@ -6572,6 +6901,36 @@ public final class Generator {
                         CountsAsked::and);
                 continue;
             }
+            // What a division leaves of a form, placed at a value of the form that leaves one of
+            // the remainders asked for.
+            if (cut.demand() instanceof RowDemand.OnARemainder remainder) {
+                // On what each number of the form counts, which is what the form adds up: what the
+                // code points of a string come to is a whole number, and not the string.
+                Function<NumericTerm, Carrier> on = term -> {
+                    TermOrders orders = subject.quantities().ordersOf(term);
+                    return orders == null ? null : orders.answered();
+                };
+                switch (standingOnARemainder(here, remainder, on, looking)) {
+                    case NumericWitness.Standing.Found standing -> {
+                        for (NumericWitness.Standing.Found.Placed placed
+                                : standing.inFixingOrder()) {
+                            RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                            if (out.putIfAbsent(at, placed.place()) == null) {
+                                routed.put(placed.term(), at);
+                                chosen.add(at);
+                                here = here.given(placed.term(), placed.place());
+                            }
+                        }
+                    }
+                    case NumericWitness.Standing.ProvedImpossible _ -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                    case NumericWitness.Standing.NotFound(CompositionShortfall met) -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    ReachabilityGap.Why.ofAWalkThatFoundNothing(met)));
+                }
+                continue;
+            }
             // What an element meets one of several ways, with none chosen: a row whose elements
             // are written alike writes one of them into every element, and which one is chosen
             // before the row is composed ({@link ElementsWrittenAlike}). Composed with none chosen,
@@ -6795,6 +7154,11 @@ public final class Generator {
                         writtenBesides.add(RealizationTarget.of(term).writeRoot());
                     }
                 }
+                case RowDemand.OnARemainder remainder -> {
+                    for (NumericTerm term : remainder.terms()) {
+                        writtenBesides.add(RealizationTarget.of(term).writeRoot());
+                    }
+                }
                 case RowDemand.SoMany many -> writtenBesides.add(new RealizationTarget.ACount(
                         CountedElements.of(subject.behavior(), many.count(), subject.quantities(),
                                 many.anElementMeeting())).writeRoot());
@@ -6991,6 +7355,68 @@ public final class Generator {
     }
 
     /**
+     * Where the numbers of the form {@code remainder} is of stand inside {@code here} so that it
+     * leaves one of the remainders asked for, or what this found out about there being none.
+     *
+     * <p>Each remainder in turn, as a congruence the walk holds its numbers to: every number but
+     * the last is walked as any number of the region is, from where it usually is, and the last
+     * over the class the others leave it ({@link NumericWitness.Congruent}). The form is never put
+     * at a value first — a value chosen before its numbers is one their own runs may not reach
+     * together — and as many remainders are tried as one position on the way is tried at.
+     *
+     * <p>Proof that none stands only where the region leaves the numbers nothing, or no value of
+     * the form leaves any of the remainders: a walk that found no assignment proves nothing, since
+     * it walked some values of each number.
+     */
+    private static NumericWitness.Standing standingOnARemainder(SearchRegion here,
+            RowDemand.OnARemainder remainder, Function<NumericTerm, Carrier> on,
+            WitnessSearch looking) {
+        LinearForm<NumericTerm> dividend = remainder.remainder().dividend();
+        BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
+        BigInteger divisor = remainder.remainder().divisor();
+        BigInteger step = BigInteger.ZERO;
+        for (ExactRatio each : dividend.coefs().values()) {
+            if (!(each.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                    || !each.isWhole()) {
+                return new NumericWitness.Standing.NotFound(CompositionShortfall.NONE);
+            }
+            step = step.gcd(whole);
+        }
+        // What the form's coefficients reach, every multiple of the step they generate: a
+        // remainder whose class holds none of those is one no value of the form leaves.
+        Congruences reached = new Congruences(BigInteger.ZERO,
+                step.signum() == 0 ? BigInteger.ONE : step);
+        List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
+        for (NumericTerm term : NumericTerms.inOrder(dividend.coefs().keySet())) {
+            terms.add(term.atOnePosition());
+        }
+        int left = CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
+        List<NumericWitness.Congruent> tried = new ArrayList<>();
+        boolean cut = false;
+        for (WholeNumberRuns.Run run : remainder.leaves().runs()) {
+            for (BigInteger r = run.from(); !cut && r.compareTo(run.to()) <= 0;
+                 r = r.add(BigInteger.ONE)) {
+                if (new Congruences(r.subtract(moved), divisor).meet(reached) == null) {
+                    continue;
+                }
+                if (left-- <= 0) {
+                    cut = true;
+                } else {
+                    tried.add(new NumericWitness.Congruent(dividend, divisor, r));
+                }
+            }
+        }
+        NumericWitness.Standing standing = NumericWitness.of(here, terms, on, looking, tried);
+        if (!cut || standing instanceof NumericWitness.Standing.Found) {
+            return standing;
+        }
+        CompositionShortfall met = standing instanceof NumericWitness.Standing.NotFound(
+                CompositionShortfall shortOf) ? shortOf : CompositionShortfall.NONE;
+        return new NumericWitness.Standing.NotFound(met.and(CompositionShortfall.of(
+                Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
+    }
+
+    /**
      * What one cut of the way comes to, arrived at whole.
      *
      * <p><b>A value and not a sequence of changes to the row.</b> A cut is placed at every position
@@ -7053,6 +7479,9 @@ public final class Generator {
             // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
+            // Placed beside the counts, at a value of its form ({@link #alsoOnTheWay}).
+            case RowDemand.OnARemainder remainder -> throw new IllegalArgumentException(
+                    "a remainder is placed at a value of its form and not here: " + remainder);
             // Passed over before it is asked, with what the way is owed about it.
             case RowDemand.ForTheRun run -> throw new IllegalArgumentException(
                     "a statement no composer writes toward is placed nowhere: " + run);
@@ -7084,7 +7513,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.counted();
             case RowDemand.ForAll every -> every.counted();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> Optional.empty();
+                 RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                    Optional.empty();
         };
     }
 
@@ -7094,7 +7524,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.container();
             case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> null;
+                 RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                    null;
         };
     }
 
@@ -7123,6 +7554,8 @@ public final class Generator {
             case RowDemand.OneValueAtBoth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
+            // The numbers of the form a remainder is of.
+            case RowDemand.OnARemainder _ -> false;
             // A statement no composer writes toward, which places nothing.
             case RowDemand.ForTheRun _ -> true;
         };
@@ -8827,6 +9260,50 @@ public final class Generator {
     }
 
     /**
+     * Why the classes {@code where} stands at leave a number the comparisons ask for no room, or
+     * null where none does or {@code held} is not what comparisons ask: the first thing composing a
+     * row finds out, and found out without composing it.
+     *
+     * <p>A candidate this refuses is one no building could compose, so a search that is bounded in
+     * what it builds does not count it among them.
+     */
+    private static Attempt classesLeaveNoRoom(MeasuredInput.MeasuredAxes axes, int[] where,
+                                              HeldTogether held) {
+        if (!(held instanceof HeldTogether.Asked holding) || holding.asked().isEmpty()) {
+            return null;
+        }
+        SequencedMap<RealizationTarget, AskedAt> numbers =
+                numbersTheClassesAdmit(axes, where, axes.subject().quantities());
+        for (Map.Entry<RealizationTarget, AskedAt> each : holding.asked().entrySet()) {
+            Attempt noRoom = leavesNoRoom(each.getKey(), each.getValue(), numbers.get(each.getKey()),
+                    axes.subject().quantities());
+            if (noRoom != null) {
+                return noRoom;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why a number asked to stand at {@code asked} has no room in {@code theClass}, the numbers
+     * its class admits — or null where it has, or where the class is of no number.
+     */
+    private static Attempt leavesNoRoom(RealizationTarget key, AskedAt asked, AskedAt theClass,
+                                        Quantities measuring) {
+        // A class is of a number, so only a number is asked by both.
+        if (theClass == null || !(key instanceof RealizationTarget.OfANumber number)) {
+            return null;
+        }
+        Carrier on = carrierOf(number.term(), measuring);
+        if (on != null && asked.named() != null && theClass.walking().holds(asked.named(), on)) {
+            return null;
+        }
+        return new Attempt(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                key.toString(), Optional.of("`" + key
+                        + "` is asked to stand where its class leaves it no room"));
+    }
+
+    /**
      * The numbers this row's classes admit, by the number each is a class of.
      *
      * <p>Read off the classes the row sits in and not off the axes, because an axis is a number the
@@ -9307,6 +9784,11 @@ public final class Generator {
             return trial.run(row.toRun(), this::spend);
         }
 
+        /** Whether this search has no run left to make. */
+        boolean spent() {
+            return runs >= mostRuns;
+        }
+
         /** One more run of this search's own, where one is left. */
         private boolean spend() {
             if (runs >= mostRuns) {
@@ -9386,6 +9868,11 @@ public final class Generator {
                 case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
             }
             return null;
+        }
+
+        /** Composing the rows the search looked through stopped at {@code figure}. */
+        void composingStoppedAt(Figure figure) {
+            composingStopped(List.of(figure));
         }
 
         /** The inputs of the row a composing took, or null ({@link #tookFrom}). */
@@ -9532,9 +10019,26 @@ public final class Generator {
         /** How many rows a walk has handed here, ranked or not. */
         private int handed;
 
+        /** What a row's run is also held to, or null where it is held to nothing. */
+        private final RowJudge judge;
+        /** The first row whose run answered and the judge refused, offered where the walk reaches
+         *  no row it accepts. */
+        private List<FixtureTemplate> refused;
+
         TellingArmsApart(Trial trial, List<StoodInAnswer> answers) {
+            this(trial, answers, null);
+        }
+
+        /**
+         * Ranking the rows {@code judge} accepts. A row it refuses is no candidate: it ranks no
+         * further and moves nothing the ranking keeps, and the walk goes on to the next row. Where
+         * it accepts none, the first row refused whose run answered is the row taken: not ranked
+         * against the others, since what it is taken for is to say where its run went.
+         */
+        TellingArmsApart(Trial trial, List<StoodInAnswer> answers, RowJudge judge) {
             this.trial = runningOnce(trial);
             this.answers = List.copyOf(answers);
+            this.judge = judge;
         }
 
         /**
@@ -9566,10 +10070,22 @@ public final class Generator {
             };
         }
 
-        /** The row taken, or null where nothing offered met the requirement. */
+        /**
+         * The row taken, or null where nothing offered met the requirement.
+         *
+         * <p>Where the judge refused every row the walk reached, the first of them — unless the
+         * walk was stopped at its figure. Stopped, the rows past the figure are rows nobody looked
+         * at, and a row refused is no answer to whether one of them is accepted: nothing is taken,
+         * and the figure is what is told ({@link #untried}).
+         */
         @Override
         public List<FixtureTemplate> taken() {
-            return best;
+            return best != null ? best : stoppedAtItsFigure ? null : refused;
+        }
+
+        @Override
+        public boolean takenIsRefused() {
+            return best == null && !stoppedAtItsFigure && refused != null;
         }
 
         /** Whether a run of a row that met the requirement went past what a run may spend. */
@@ -9611,6 +10127,14 @@ public final class Generator {
             // says what the run comes to where it answers, and nothing of whether it does.
             if (!(ran.answer() instanceof AnswerObservation.Answered)) {
                 aRunRanOut |= ran.answer() instanceof AnswerObservation.RanOut;
+                return Acceptance.PASSED;
+            }
+            // A row the judge refuses is none of the rows ranked: the figure on those is a figure
+            // on the candidates, and what bounds the rows refused is the rows a walk is handed.
+            if (judge != null && !judge.accepts(row)) {
+                if (refused == null) {
+                    refused = List.copyOf(inputs);
+                }
                 return Acceptance.PASSED;
             }
             answering++;
@@ -9668,6 +10192,34 @@ public final class Generator {
 
         /** Whether the run of {@code row} is what was looked for. */
         boolean accepts(RowToRun row);
+
+        /**
+         * Whether a row this refuses is never offered. Where it is not, a row it refuses is the
+         * one offered only when the walk reaches no row it accepts, so that what the refused row
+         * did can still be told.
+         */
+        default boolean refusesAbsolutely() {
+            return true;
+        }
+
+        /**
+         * {@code judge}, as a preference: the rows it accepts are the ones offered, ranked as rows
+         * are, and where the walk reaches none, the first row whose run answered is offered in
+         * their place, so that what that run did can still be told.
+         */
+        static RowJudge preferring(RowJudge judge) {
+            return new RowJudge() {
+                @Override
+                public boolean accepts(RowToRun row) {
+                    return judge.accepts(row);
+                }
+
+                @Override
+                public boolean refusesAbsolutely() {
+                    return false;
+                }
+            };
+        }
     }
 
     /**
@@ -9682,6 +10234,14 @@ public final class Generator {
 
         /** The row taken, or null where nothing offered was. */
         List<FixtureTemplate> taken();
+
+        /**
+         * Whether the row taken is one a judge refused, offered because the walk reached none it
+         * accepts ({@link RowJudge#preferring}).
+         */
+        default boolean takenIsRefused() {
+            return false;
+        }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
         SearchShortfall untried();
@@ -10022,6 +10582,11 @@ public final class Generator {
 
             private Running(int most) {
                 this.most = most;
+            }
+
+            @Override
+            public void reached(Figure figure) {
+                boundsReached.add(figure);
             }
 
             @Override
@@ -10856,16 +11421,12 @@ public final class Generator {
         for (Map.Entry<RealizationTarget, AskedAt> each : holding.asked().entrySet()) {
             AskedAt asked = each.getValue();
             AskedAt theClass = numbers.get(each.getKey());
+            Attempt noRoom = leavesNoRoom(each.getKey(), asked, theClass, subject.quantities());
+            if (noRoom != null) {
+                return RowComposed.Failed.ofTheRow(noRoom);
+            }
             // A class is of a number, so only a number is asked by both.
-            if (theClass != null && each.getKey() instanceof RealizationTarget.OfANumber number) {
-                Carrier on = carrierOf(number.term(), subject.quantities());
-                if (on == null || asked.named() == null
-                        || !theClass.walking().holds(asked.named(), on)) {
-                    return RowComposed.Failed.ofTheRow(new Attempt(null,
-                            UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                            each.getKey().toString(), Optional.of("`" + each.getKey()
-                                    + "` is asked to stand where its class leaves it no room")));
-                }
+            if (theClass != null && each.getKey() instanceof RealizationTarget.OfANumber) {
                 asked = new AskedAt(asked.about().meet(theClass.about()), asked.walked());
             }
             numbers.put(each.getKey(), asked);
@@ -11539,8 +12100,12 @@ public final class Generator {
                                    Requirements additional, Handed handed, CandidateCheck check,
                                    FoundOut found, ValueTaking taking) {
         Composing[] made = {null};
+        // One count of the cases planned under for a rule above, across both walks and every sum
+        // they plan under: what multiplies is the cases of each such sum, and a count per sum would
+        // let the product past it.
+        CasesUnderARule cases = new CasesUnderARule();
         Outcome first = valueAtOnce(subject, p, decided, asked, settled, additional, handed, check,
-                found, taking, made);
+                found, taking, made, cases);
         if (first instanceof Outcome.Built || first instanceof Outcome.PassedOver
                 || first instanceof Outcome.Halted || made[0] == null
                 || made[0].notHeld().isEmpty()) {
@@ -11550,7 +12115,20 @@ public final class Generator {
         Map<TermPath, List<FixtureTemplate>> offered = offeredApart(subject, decided, made[0],
                 found);
         return offered == null ? first : valueAtOnce(subject, p, offered, asked, settled,
-                additional, handed, check, found, taking, new Composing[1]);
+                additional, handed, check, found, taking, new Composing[1], cases);
+    }
+
+    /**
+     * What is left of the one count of cases planned under for a rule above, and whether the
+     * attempt last made under one came to a position its rules leave nothing at.
+     *
+     * <p>The mark is the attempt's answer and is read by the walk that made it, straight after:
+     * a case settled by its rules before anything was searched is not one the count is spent on.
+     */
+    private static final class CasesUnderARule {
+
+        private int left = CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER.maximum();
+        private boolean leftNothing;
     }
 
     /**
@@ -11676,7 +12254,11 @@ public final class Generator {
                                        Map<TermPath, Place> settled,
                                        Requirements additional, Handed handed,
                                        CandidateCheck check, FoundOut found, ValueTaking taking,
-                                       Composing[] through) {
+                                       Composing[] through, CasesUnderARule cases) {
+        // Every call answers whether it searched anything, and starts from "it did": a caller
+        // reads the answer straight after the call, and a call that says nothing of it has not
+        // left what an earlier call did.
+        cases.leftNothing = false;
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -11741,7 +12323,8 @@ public final class Generator {
                 (at, building) -> new ConstructionPlan.ItMayHold(
                         within(heldRange(rules, at, building, subject.ruleReading()),
                                 sized.get(at)),
-                        ElementsKeptApart.heldBy(rules.heldAt(at))));
+                        ElementsKeptApart.heldBy(rules.heldAt(at))),
+                rules::speaksUnder);
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
@@ -11790,6 +12373,55 @@ public final class Generator {
                                                 .collect(java.util.stream.Collectors.joining(" or "))
                                         + ", and nothing said which of them the value under it is");
             }
+            // A rule of a value above names a field under a position that holds nothing until a
+            // narrowing says what stands there, and nobody asked which. Planned under each case in
+            // turn, so the field is a position held to that rule, and the first that composes is
+            // the answer. A case whose plan composes nothing says nothing of the next one, so what
+            // comes back where none composes is what the first case searched came to, unless the
+            // figure stopped the rest.
+            //
+            // Counted where a case was searched, and not where its rules left a position nothing
+            // before anything was searched: that case is settled by the rules, and a count spent
+            // on it is a case further on never tried.
+            case ConstructionPlan.Result.UnderEachCase(TermPath where, List<Refinement> under) -> {
+                Outcome first = null;
+                boolean firstSearched = false;
+                for (Refinement each : under) {
+                    if (!(additional.merge(where.refine(each).requirements())
+                            instanceof Requirements.Merge.Merged(Requirements narrowed))) {
+                        continue;
+                    }
+                    if (cases.left == 0) {
+                        return new Outcome.Stopped(CompositionShortfall.of(
+                                Set.of(CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER)),
+                                new LinkedHashMap<>(), null);
+                    }
+                    // Taken before the case is planned: a sum under it asks the same count, and one
+                    // asked only afterwards lets every sum on the way down pass it.
+                    cases.left--;
+                    Outcome made = valueAtOnce(subject, p, decided, asked, settled, narrowed,
+                            handed, check, found, taking, through, cases);
+                    if (made instanceof Outcome.Built || made instanceof Outcome.PassedOver
+                            || made instanceof Outcome.Halted) {
+                        return made;
+                    }
+                    boolean searched = !cases.leftNothing;
+                    if (!searched) {
+                        cases.left++;
+                    }
+                    if (first == null || (searched && !firstSearched)) {
+                        first = made;
+                        firstSearched = searched;
+                    }
+                }
+                // What this planning under the cases came to is that some case was searched, and
+                // that is what a plan above it counts: the cases of a sum inside a case are this
+                // call's own, and the flag a case left behind is not the answer of the call.
+                cases.leftNothing = !firstSearched;
+                return first != null ? first
+                        : new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                "`" + where + "` stands at no case the row can be");
+            }
         }
         // A position a container of this value is handed the value at, which this plan holds no
         // position at: it is inside a value chosen whole, and what stands inside that is nothing
@@ -11820,6 +12452,19 @@ public final class Generator {
         }
         Choices choices = choicesOf(subject, plan, fixed, rules);
         if (choices.missingAt() != null) {
+            // Marked for a walk planning under each case, which counts only the cases it searched:
+            // one whose rules leave a position nothing was settled before anything was searched.
+            if (choices.leftNothingAt() != null) {
+                cases.leftNothing = true;
+                // The model's answer where the rules leave the position nothing without anything
+                // the caller settled — under the narrowings this row is asked under, which are the
+                // combination's own — and this compiler's where a value settled beside it is why.
+                boolean byTheRules = settled.isEmpty() || ConstructionRules.of(subject, Map.of())
+                        .limitsAt(choices.leftNothingAt()).leavesNothing();
+                return new Outcome.Unresolved(byTheRules
+                        ? UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE
+                        : UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, choices.missingAt());
+            }
             // A position nothing stands at is the declarations' answer where the plan reached
             // everything, and this compiler's where it did not: what the search would have been
             // offered at a position the plan stopped short of is whole values of a type it declined
@@ -12451,6 +13096,7 @@ public final class Generator {
     private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
                            List<List<FixtureTemplate>> reserves, String missingAt,
+                           TermPath leftNothingAt,
                            Set<CompositionBudget> missingUnderAFigure,
                            List<Displacing> displacing, CompositionShortfall met) {
 
@@ -12461,7 +13107,16 @@ public final class Generator {
 
         static Choices missing(ConstructionPlan plan, String at,
                                Set<CompositionBudget> under, CompositionShortfall met) {
-            return new Choices(plan, List.of(), List.of(), List.of(), at, under, List.of(), met);
+            return new Choices(plan, List.of(), List.of(), List.of(), at, null, under, List.of(),
+                    met);
+        }
+
+        /** None, because the rules leave the position {@code at} no value under what this plan
+         *  was made with. */
+        static Choices leavingNothingAt(ConstructionPlan plan, TermPath at) {
+            return new Choices(plan, List.of(), List.of(), List.of(),
+                    "the rules leave no value at `" + at + "`", at, Set.of(), List.of(),
+                    CompositionShortfall.NONE);
         }
 
         /**
@@ -12545,6 +13200,11 @@ public final class Generator {
             }
             FieldDomains.ConstructionLimits limits = left.limitsAt(slot.at());
             NumericDomain.Bounds here = limits.values();
+            // A position the rules leave no value at, under the narrowings this plan was made with
+            // and what the caller settled: no value is offered, and that is said as itself.
+            if (limits.leavesNothing()) {
+                return Choices.leavingNothingAt(plan, slot.at());
+            }
             Proposals stands = subject.representativesHolding(slot.type(), limits);
             met = met.and(stands.met());
             if (stands.isEmpty()) {
@@ -12567,7 +13227,7 @@ public final class Generator {
             reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
             displacing.add(new Displacing(slot.type(), limits));
         }
-        return new Choices(plan, paths, values, reserves, null, Set.of(), displacing, met);
+        return new Choices(plan, paths, values, reserves, null, null, Set.of(), displacing, met);
     }
 
     /** What a position's value is displaced within: its type, and what its rules leave of it. */
@@ -13364,7 +14024,8 @@ public final class Generator {
                 // come to, or how often a value occurs among the elements beside it, or the end of
                 // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                     NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
                      NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;

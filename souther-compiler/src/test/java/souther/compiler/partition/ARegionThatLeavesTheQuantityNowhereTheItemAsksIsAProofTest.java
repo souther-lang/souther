@@ -361,7 +361,8 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     /** The remainder of {@code x} by seven plus {@code y}, at one of the sums. */
     private static Standing remainderPlusAt(long sum) {
         return new Standing.OfARemainderAndAForm(form(1, 0, 0), Map.of(term("x"), Carrier.WHOLE),
-                BigInteger.valueOf(7), form(0, 1, 0), Map.of(term("y"), Carrier.WHOLE),
+                BigInteger.valueOf(7), Standing.OfARemainderAndAForm.every(BigInteger.valueOf(7)),
+                form(0, 1, 0), Map.of(term("y"), Carrier.WHOLE),
                 LevelSpace.steppingBy(ExactRatio.ONE),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(sum)));
     }

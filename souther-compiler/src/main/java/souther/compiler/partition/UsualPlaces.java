@@ -35,6 +35,7 @@ final class UsualPlaces {
             case NumericTerm.TakenOf taken -> ofWhatIsTaken(taken.takenAs(), today);
             // Counts and totals of what a value holds, which start at nought.
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                 NumericTerm.CodePointAt _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
                  NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->

@@ -80,8 +80,17 @@ public enum CompositionBudget {
     /** How many ways of sharing a size out among the values a count's elements are drawn from
      *  are looked at, over every size tried. The ways grow with the size and with how many ways
      *  an element answers the statements, and each is checked against every count before any is
-     *  built. */
+     *  built. Where the elements are shared out kind by kind ({@link SharingsAmongKinds}), a
+     *  way is counted whole or part, once it is not dropped for giving no count asked for. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
+
+    /** How many whole numbers a total is tried at, where what an element answers turns on the total
+     *  of the container it is in: for a way the statements can stand to be shown to be met by an
+     *  element, and for one sharing of a container's elements. The totals either can come to are
+     *  an interval over the rationals, which is exact; the whole numbers in it are walked from the
+     *  one nearest nought and from either end, and one that no whole number tried meets is not
+     *  shown to have none. */
+    TOTALS_A_COUNT_IS_TRIED_AT(8),
 
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a
@@ -108,6 +117,13 @@ public enum CompositionBudget {
      *  sum the names cross, and each way is a row composed whole; a search reaching this goes no
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
+
+    /** How many cases a value is planned under where a rule of a value above names a field under
+     *  a sum and nobody asked which case the value is. Each is a row composed whole, and what
+     *  multiplies here is the cases of every such sum the parameter holds, counted across all of
+     *  them; past it the cases left are not planned under, and the search is carried out with the
+     *  figure. */
+    CASES_A_RULE_ABOVE_IS_PLANNED_UNDER(8),
 
     /** How many ways a search looks along where conditions on the way to a border came out one of
      *  several ways, each a row is composed along whole. Every way of taking their open
@@ -344,6 +360,13 @@ public enum CompositionBudget {
      * every application of every closure it is in and for every case of each side it compares, so
      * what multiplies is the nesting and what is counted is the product along one way down — and
      * so what one condition comes to does not turn on how many others beside it were read first.
+     *
+     * <p>What does not turn on an application is split once for all of them. A total over the
+     * elements a filter keeps, where nothing the filter or the elements read was handed to the
+     * closure, is the same total on every application, so the ways its elements are kept in are
+     * counted against the readings the comparison is one of apart from the applications. What each
+     * application adds is the comparison made in one of those ways, which splits nothing. A value
+     * that does turn on an application is another value on each, and is counted with all of them.
      *
      * <p>Not an {@code if} a comparison is read through. Its arms are read only where a run takes
      * them, so the ways down a chain of them are the ways a run can go, and one of those may pass
@@ -625,7 +648,53 @@ public enum CompositionBudget {
      * parameter multiplies. It stops the walk before a row that answers was found, so the point is
      * one this compiler stopped looking for a row at, and never one no row answers at.
      */
-    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64);
+    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
+
+    /**
+     * How many pieces a string is put together of when a body parts it and builds a newtype of the
+     * pieces: how many it is seen in that a piece of it is changed at, and how many it is made of
+     * for the pieces to be ones the newtype admits.
+     *
+     * <p>The strings past it were never offered, so what a search came to is about the strings it
+     * tried — a string seen in more pieces than this is changed at none of them. The runs those
+     * strings are put to are counted where every candidate's are, and this stops only the making of
+     * them: a string of many pieces is as long as it has pieces, and so are the strings made of it.
+     */
+    PIECES_A_STRING_IS_PUT_TOGETHER_OF(8),
+
+    /**
+     * How many of the strings a row holds in its other inputs, each a string the newtype a body
+     * builds of the pieces of a string admits, a piece of that string is taken from.
+     *
+     * <p>Its own figure and not {@link #PIECES_A_STRING_IS_PUT_TOGETHER_OF}: that one counts the
+     * places of a string and this one the values a place is given, and a string of two pieces in a
+     * row of nine strings reaches this one and not that. The strings past it are never taken from,
+     * so what a search came to is about the strings it tried.
+     */
+    STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM(8),
+
+    /**
+     * How many elements one side of a list that balances against another has for the amounts of
+     * its elements to be searched among every number the amount's type admits.
+     *
+     * <p>Past it a side is made of one number repeated, which gives every total that number times
+     * the count comes to and no other: a balance that needs two different numbers on a side of
+     * more than this many is not found. Where it is the only number the type admits there is
+     * nothing a search would add, and the figure is not met. Met, a search that found no list says
+     * it was reduced to repeating a number, and not that the type admits none.
+     */
+    ELEMENTS_A_SIDE_IS_SEARCHED_OVER(8),
+
+    /**
+     * How many of the numbers the amount of a list's elements admits are offered to balance the
+     * sides from, the ones nearest the ends of the numbers it admits first.
+     *
+     * <p>Its own figure and not {@link #ELEMENTS_A_SIDE_IS_SEARCHED_OVER}: that one counts the
+     * elements a side is searched over and this one the numbers it is searched with, and a balance
+     * can be out of reach of either alone. A type that names every number it admits, and no more
+     * than this, is balanced from all of them and the figure is not met.
+     */
+    NUMBERS_A_SIDE_IS_BALANCED_FROM(12);
 
     private final int maximum;
 
@@ -663,6 +732,9 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case TOTALS_A_COUNT_IS_TRIED_AT ->
+                    "how many whole numbers a total is tried at for a count of the elements that"
+                            + " turns on it";
             case COUNTS_OF_KEYS_TRIED ->
                     "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
@@ -670,6 +742,9 @@ public enum CompositionBudget {
             case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
             case WAYS_UNDER_THE_CASES_TRIED ->
                     "how many ways under the cases of a sum a container is written are tried";
+            case CASES_A_RULE_ABOVE_IS_PLANNED_UNDER ->
+                    "how many cases of a sum a value is built as where a rule above it names a"
+                            + " field of its cases";
             case WAYS_A_WAY_IS_LOOKED_ALONG ->
                     "how many ways a row is looked for along where conditions on the way are"
                             + " one of several things";
@@ -744,6 +819,14 @@ public enum CompositionBudget {
             case RUNS_REPAIRING_A_ROW -> "how many runs looking for a row that goes further may make";
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
                     "how many rows a walk composing a row for a point hands the choice of a row";
+            case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
+                    "how many pieces a string parted by a body is put together of";
+            case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
+                    "how many of the strings a row holds a piece of a parted string is taken from";
+            case ELEMENTS_A_SIDE_IS_SEARCHED_OVER ->
+                    "how many elements a side of a balanced list has for its amounts to be searched";
+            case NUMBERS_A_SIDE_IS_BALANCED_FROM ->
+                    "how many of the numbers an amount admits the sides of a list are balanced from";
         };
     }
 
@@ -786,9 +869,10 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                 SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
@@ -807,7 +891,11 @@ public enum CompositionBudget {
                  COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
-                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW -> null;
+                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                 PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                 STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
+                 ELEMENTS_A_SIDE_IS_SEARCHED_OVER,
+                 NUMBERS_A_SIDE_IS_BALANCED_FROM -> null;
         };
     }
 }

@@ -79,6 +79,22 @@ public record SuppliedRules(Map<BindingOwner, Handed> byExpansion) {
                     .putIfAbsent(parameter, rule);
         }
 
+        /**
+         * Says that {@code to} is {@code from} moved under another owner, so it was handed what
+         * {@code from} was.
+         *
+         * <p>A body already holding expansions is copied whole, and each owner in it becomes the
+         * same owner under what its own owner became. The copy is the same call handed the same
+         * rules; keyed only by the owner it had, the fork a copy carries would find nothing recorded
+         * for the owner it now stands in.
+         */
+        public void moved(BindingOwner from, BindingOwner to) {
+            Map<String, RuleIdentity> rules = byExpansion.get(from);
+            if (rules != null) {
+                rules.forEach((parameter, rule) -> handed(to, of.get(from), parameter, rule));
+            }
+        }
+
         public SuppliedRules built() {
             if (byExpansion.isEmpty()) {
                 return NONE;

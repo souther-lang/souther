@@ -14,8 +14,11 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ConditionJoin;
@@ -522,14 +525,16 @@ public final class InvariantChecker {
                   boolean everyClauseRead, Map<RuleKey, Set<RulesMissed>> notGathered,
                   Set<RuleKey> unreadOfEveryValue, Set<RuleKey> handedOn,
                   List<Written> readings,
-                  Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
+                  Map<FactSubject, NumberSpace> spaces,
+                  List<ComputedNumbers.Computed> computed,
                   Map<RuleKey, ValueSet> admitted,
                   Map<RuleKey, List<StoppedReading>> unreadAt,
                   Set<RuleKey> notSeparated,
                   StringFacts stringMachines,
                   Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                   Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
-                  BoundaryState derived, SettledOrderEnvelope settledOrder) {
+                  BoundaryState derived, SettledOrderEnvelope settledOrder,
+                  Map<RuleKey, OrderedRuns> orderedRegions) {
 
         /** The atom each count is recorded against, for a reader that wants the subject and not
          *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
@@ -845,6 +850,7 @@ public final class InvariantChecker {
         // answer is not in this reading at all.
         Set<RuleKey> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
+        List<WorkedClause> worked = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
         // Per part, because a rule is represented where every part of it is: a conjunct the bounds
@@ -896,6 +902,11 @@ public final class InvariantChecker {
             read = false;
             gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
         }
+        // The places a rule defines as a number made of others, to be asked once every rule of
+        // the value has been taken in: whether the rule leaves what it is made of free turns on
+        // what the other rules hold of both.
+        List<ComputedNumbers.Defining> definitions = new ArrayList<>();
+        Function<Term, ComputedNumber.Range> orders = ComputedNumbers.ordersOf(c.terms);
         for (ClauseMeaning declared :
                 opened ? c.clauses.declared(named) : List.<ClauseMeaning>of()) {
             // Where this clause becomes a rule of the model something can be attributed to.
@@ -939,8 +950,9 @@ public final class InvariantChecker {
                                 .put(of.at(), new PartAsRead(of, partRead(came))));
                 owed = owed == null ? said : owed.and(said);
             }
+            worked.add(new WorkedClause(written.size(), view));
             written.add(new Written(new ReadingId(written.size()), stated, view, constrained,
-                    Map.of()));
+                    Map.of(), Map.of()));
             if (owed == null) {
                 owed = Predicates.Owed.unread();
             }
@@ -949,6 +961,7 @@ public final class InvariantChecker {
             // position itself; `value * value >= 4` comes back about an atom standing for the
             // product, which is not the position and is not a reading of it.
             Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
+            definitions.addAll(ComputedNumbers.definingIn(origin, owed, orders));
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
         }
@@ -969,6 +982,39 @@ public final class InvariantChecker {
                 k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                         atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
                         k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
+            }
+        }
+        // A value is one the clauses are worked out of and come to true, which the forms they came
+        // to do not say: they are the clauses over the whole numbers. What a run needs of the
+        // numbers to work each part out is kept with the reading, for the projection and for what
+        // is shown to exist. And it limits the values themselves only where it leaves none: a sum
+        // that fits wherever the clause holds draws no line of its own. Asked once the fields' own
+        // types are in, so that what a type already holds is not asked of a clause again.
+        ClauseWorkingOut working = new ClauseWorkingOut(c.completion, c.predicates, k,
+                c.terms::inside);
+        Known workedOut = k;
+        for (WorkedClause each : worked) {
+            Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> needs = new LinkedHashMap<>();
+            for (Clauses.StatedPart part : each.view().present()) {
+                WorkingOutNeeds asked = working.of(part.of(), at);
+                needs.put(part.id(), asked);
+                for (NumericConstraint one : asked.asked()) {
+                    workedOut = workedOut.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
+                            c.terms.spacesOf(one.form()));
+                }
+            }
+            written.set(each.reading(), written.get(each.reading()).alsoWorkedOut(needs));
+        }
+        if (workedOut.reachesNothing() && !k.reachesNothing()) {
+            k = workedOut;
+            for (Written each : written) {
+                each.view().present().forEach(part -> {
+                    WorkingOutNeeds asked = each.workedOutAt(part.id());
+                    if (asked != null) {
+                        asked.asked().forEach(one -> one.atoms()
+                                .forEach(spoken -> took.record(part.id().rule(), spoken)));
+                    }
+                });
             }
         }
         Map<RuleKey, FactSubject> atoms = new LinkedHashMap<>();
@@ -1013,10 +1059,12 @@ public final class InvariantChecker {
                 k.numbers().atomsSpokenOf());
         // One reader for this value's positions, used over however many clauses reach it, and
         // the one that decides the choices in what they came to.
+        Map<FactSubject, List<List<String>>> keptApart =
+                keptApartAt(named, atoms, keys, typeAt, world.source());
         StatedByClauses.Reading reader = StatedByClauses
                 .readingOf(c.terms, positions, symbols, alternatives, allowed, c.answers,
                         c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers),
-                        keptApartAt(named, atoms, keys, typeAt, world.source()));
+                        keptApart, builtFor(named, atoms, keys, keptApart, world));
         // What each clause said and what each part of it said, kept as they were read and
         // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
         // read and on machines nobody has made at this point, and every one of these questions
@@ -1142,37 +1190,57 @@ public final class InvariantChecker {
                 || heldApart(values) <= expansion
                 : "a reading of " + named.name() + " expanded to " + heldApart(values)
                         + " alternatives past a counted " + expansion;
+        // The places the rules define from others, with everything the rules hold in hand: the
+        // places a definition is made of are free where the number cannot come to what the
+        // defined place refuses, and then the definition says nothing of any of them.
+        // What the rules leave each place is asked of the values as they were read, which is the
+        // constraints the reading below ends in; the ranges of the algebra alone are the hulls.
+        ConstraintState<FactSubject> constraints = k.constraints()
+                .takingRead(answered.whole().confinement(), allowed, c.answers);
+        ComputedNumbers.Account account = new ReadAccount(c.terms, constraints.values());
+        for (ComputedNumbers.Defining each : definitions) {
+            // Only where every clause of the value was read: a rule this did not read may hold
+            // any place the number is made of, or the place it defines, to fewer numbers.
+            if (read && notGathered.isEmpty()
+                    && ComputedNumbers.leavesFree(each.definition(), k.numbers(), account)) {
+                took.freedByDefinition(each.rule(), each.definition().operands());
+            }
+        }
         // And which of the clauses place an edge, asked once the positions have names to be
         // recognised by.
         Reading reading = c.directsIn(accounted, at, numbers, took,
                 new RulesRead(narrowedBy), settled.isEmpty() && reach.everything()
                         ? new WithoutAPart(named, world, c.answers) : null);
-        ConstraintState<FactSubject> constraints = k.constraints()
-                .takingRead(answered.whole().confinement(), allowed, c.answers);
         // Where the order of every number the rules speak of stops, off the order each was named
         // on: a row of this value holds them inside those ends, and they go with the rules
         // wherever the rules are carried. Every one, since an atom is named on an order or not at
         // all — a count on the whole numbers, whatever it counts.
-        Map<FactSubject, NumericDomain.Bounds> stops = new LinkedHashMap<>();
+        Map<FactSubject, NumberSpace> told = new LinkedHashMap<>();
         for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
             Carrier order = c.terms.carrierOf(atom);
             if (order != null) {
-                stops.put(atom, order.whereItStops());
+                // Spaced as the rules have it: the ends are what this adds.
+                told.put(atom, NumberSpace.stopping(
+                        constraints.numbers().spacingOf(atom), order.whereItStops()));
             }
         }
-        constraints = constraints.heldInsideTheirOrders(stops);
-        // How each atom's values are spaced, kept so that settling one afterwards states the
-        // equality the same way this does. A count is a whole number of things whatever the
+        constraints = constraints.told(told);
+        // What each atom's type says of its values, kept so that settling one afterwards states
+        // the equality the same way this does. A count is a whole number of things whatever the
         // things are spaced by; a position's own value is spaced by its type.
-        Map<FactSubject, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
+        Map<FactSubject, NumberSpace> spaces = new LinkedHashMap<>();
         atoms.forEach((path, atom) -> {
             Type type = typeAt.get(path);
             if (type != null) {
-                spacing.put(atom, c.terms.carrierOf(type).spacing());
+                spaces.put(atom, c.terms.carrierOf(type).space());
             }
         });
-        held.forEach((path, counted) ->
-                spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
+        held.forEach((path, counted) -> {
+            Carrier order = c.terms.carrierOf(counted.atom());
+            spaces.put(counted.atom(), order == null
+                    ? NumberSpace.spacedOnly(Granularity.DISCRETE)
+                    : NumberSpace.stopping(Granularity.DISCRETE, order.whereItStops()));
+        });
         for (Map.Entry<NumberAt<RuleKey>, Count> each : settled.entrySet()) {
             NumberAt<RuleKey> where = each.getKey();
             // The number the caller settled, which is the position's own value or the count
@@ -1189,10 +1257,11 @@ public final class InvariantChecker {
                         NumericMeasures.isMeasure(taken.operation())
                                 ? atomOf(held.get(where.position())) : null;
                 // Nothing a clause is written about either: no declaration says how many of a
-                // string's code points are in a class, what they come to, or what the elements of
-                // a key come to.
+                // string's code points are in a class, what they come to, which one stands at an
+                // index, or what the elements of a key come to.
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                      NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
+                     NumberAt.OfWhatNumber.OfTheCodePointAt _,
                      NumberAt.OfWhatNumber.OfItsMultiplicity _,
                      NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                      NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
@@ -1202,12 +1271,14 @@ public final class InvariantChecker {
                 continue;
             }
             // A count is a whole number of things, whatever the values counted are spaced by.
-            souther.compiler.numeric.Granularity spaced = spacing.get(atom);
-            if (spaced == null) {
+            NumberSpace space = spaces.get(atom);
+            if (space == null) {
                 continue;
             }
-            constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
+            constraints = ConstraintState.settling(constraints, atom, each.getValue(), space);
         }
+        List<ComputedNumbers.Computed> computed = ComputedNumbers.in(constraints, orders);
+        constraints = ComputedNumbers.settled(constraints, computed);
         // And what stands at each name the reading wrote, which is the last of this answer and is
         // built here because here is where the purse is. A name is filed under a subject the
         // interval algebra knows it by and a subject everything else knows it by, and what it
@@ -1262,9 +1333,10 @@ public final class InvariantChecker {
                 notSeparated.add(field);
             }
         }
+        Map<RuleKey, List<FactSubject>> aliases = aliasesOf(atoms, keys);
         return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
-                written, Map.copyOf(spacing), admitted, unreadAt, notSeparated,
+                written, Map.copyOf(spaces), computed, admitted, unreadAt, notSeparated,
                 c.answers.facts(),
                 Collections.unmodifiableMap(new LinkedHashMap<>(endsLeftOpen)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(boundsLeftOpen)),
@@ -1277,7 +1349,10 @@ public final class InvariantChecker {
                 // nothing carried out of it. Both names each position answers to, because a clause
                 // is filed under whichever the reading that read it recognised — asked of one, what
                 // a choice left a position would turn on how the rule was spelled.
-                answered.whole().confinement().envelopeOver(aliasesOf(atoms, keys)));
+                answered.whole().confinement().envelopeOver(aliases),
+                // And what the order leaves each position, for whoever chooses a value there: the
+                // envelope's ends hold the gaps between runs.
+                Map.copyOf(answered.whole().confinement().orderedRegionsOver(aliases)));
     }
 
     /**
@@ -1434,6 +1509,53 @@ public final class InvariantChecker {
                     path.then(field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
+    }
+
+    /**
+     * The rules about a container and a place beside it that the builders of {@code named} keep,
+     * by the subjects the positions are filed under: the same rules, read the same way, as the
+     * builders are told ({@link FieldDomains#entriesHeldAt}, {@link FieldDomains#sidesBalancedAt}).
+     */
+    private static StatedByClauses.BuiltFor builtFor(
+            TypeSymbol.AtModule named, Map<RuleKey, FactSubject> atoms,
+            Map<RuleKey, FactSubject> keys, Map<FactSubject, List<List<String>>> keptApart,
+            RuleReadingContext world) {
+        RuleReadingSource source = world.source();
+        Map<FactSubject, Set<FactSubject>> entryKeys = new LinkedHashMap<>();
+        // Of the maps whose keys are free: a map the builders hold to an entry under a key they may
+        // not be able to for the key chosen is one whose key the rule does say something of.
+        EntryHeld.freelyKeyedOn(named, world).forEach((map, requirements) -> {
+            for (FactSubject container : subjectsAt(map, atoms, keys)) {
+                for (EntryHeld.Requirement each : requirements) {
+                    entryKeys.computeIfAbsent(container, _ -> new LinkedHashSet<>())
+                            .addAll(subjectsAt(each.key(), atoms, keys));
+                }
+            }
+        });
+        // A list whose elements are also kept apart is not balanced by the builders: they make the
+        // elements differ in the side and the amount, and keep nothing else apart.
+        Set<FactSubject> lists = new LinkedHashSet<>();
+        SidesBalanced.writtenOn(named, source).keySet().forEach(list -> {
+            for (FactSubject each : subjectsAt(list, atoms, keys)) {
+                if (!keptApart.containsKey(each)) {
+                    lists.add(each);
+                }
+            }
+        });
+        return new StatedByClauses.BuiltFor(entryKeys, lists);
+    }
+
+    /** Every subject the position at {@code path} is filed under. */
+    private static List<FactSubject> subjectsAt(RuleKey path, Map<RuleKey, FactSubject> atoms,
+                                                Map<RuleKey, FactSubject> keys) {
+        List<FactSubject> out = new ArrayList<>();
+        if (keys.get(path) != null) {
+            out.add(keys.get(path));
+        }
+        if (atoms.get(path) != null) {
+            out.add(atoms.get(path));
+        }
+        return out;
     }
 
     /**
@@ -1640,10 +1762,12 @@ public final class InvariantChecker {
     record Written(ReadingId opened, Core clause, ClauseView view,
                    Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, PartAsRead>>
                            constrained,
-                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted) {
+                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted,
+                   Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> workedOut) {
 
         Written {
             constrained = Map.copyOf(constrained);
+            workedOut = Map.copyOf(workedOut);
         }
 
         /**
@@ -1668,7 +1792,25 @@ public final class InvariantChecker {
             if (authored.isEmpty()) {
                 throw new IllegalArgumentException("a clause reaching a value is written in parts");
             }
-            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of());
+            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of(),
+                    Map.of());
+        }
+
+        /**
+         * The same reading, with what a run needs of the numbers to work each of its parts out.
+         *
+         * <p>Held by the reading it is an account of, for the reason {@link #alsoAdopting} is: it is
+         * read once what holds where the value is built is known, which is after the reading of the
+         * clause was made.
+         */
+        Written alsoWorkedOut(Map<PartId<RuleRef.Invariant>, WorkingOutNeeds> needs) {
+            return new Written(opened, clause, view, constrained, adopted, needs);
+        }
+
+        /** What a run needs to work the part {@code part} out, or null where this reading did not
+         *  ask — which is not the same as its needing nothing. */
+        WorkingOutNeeds workedOutAt(PartId<RuleRef.Invariant> part) {
+            return workedOut.get(part);
         }
 
         /**
@@ -1684,7 +1826,7 @@ public final class InvariantChecker {
             Map<ClauseOccurrence, ReadByClauses.OfAPart> out = new LinkedHashMap<>();
             account.forEach(each -> out.put(each.getKey(), each.getValue()));
             return new Written(opened, clause, view, constrained,
-                    Collections.unmodifiableMap(out));
+                    Collections.unmodifiableMap(out), workedOut);
         }
 
         /** What this reading made of the part at {@code at}, or null where it read no such part —
@@ -2041,6 +2183,15 @@ public final class InvariantChecker {
             stated = List.copyOf(stated);
         }
     }
+
+    /**
+     * One clause of a declaration as it was read, kept until the fields' types are in and what a
+     * run needs of the numbers to work it out can be told from what those already hold.
+     *
+     * @param reading which of the readings it is, where what that comes to is filed
+     * @param view    the parts it was written in
+     */
+    private record WorkedClause(int reading, ClauseView view) {}
 
     /**
      * One occurrence of a part as that reading read it: the shape it is, and what the reading made
@@ -2494,7 +2645,8 @@ public final class InvariantChecker {
             for (FactSubject name : names) {
                 if (here.contains(name)) {
                     took.record(rule, name);
-                } else if (!constrained.contains(name)) {
+                } else if (!constrained.contains(name)
+                        && !took.isFreedByDefinition(rule, name)) {
                     standing.add(name);
                     left = true;
                 }
@@ -3871,6 +4023,11 @@ public final class InvariantChecker {
             }
             case TextExtent.NoNamedRun _ -> {
                 return new Run.NotBounding();
+            }
+            // The strings are a run, and an end of it is no value a line can be drawn at. That is
+            // not the rule drawing no line: it is what was not established about the run.
+            case TextExtent.NotEstablished _ -> {
+                return new Run.Undecided(List.of(new BlockReason.OrderedExtentEndIsNoValue()));
             }
             case TextExtent.NotBuilt it -> {
                 return new Run.Undecided(

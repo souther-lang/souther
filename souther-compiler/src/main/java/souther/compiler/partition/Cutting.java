@@ -47,6 +47,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -483,8 +484,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return readOnce(behavior, comparison, read, reads, answering,
                     conditions.comparison(comparison, reads, read), writtenIn);
         }
-        Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions,
-                writtenIn);
+        Read drawn = onEachApplication(behavior, comparison, read, reads, each, answering,
+                conditions, writtenIn);
         // Where an application is made, and where a line decides on it, is part of what the line
         // is; said in anything but what a row's own numbers answer, a row could not be asked
         // whether it is somewhere the line decides, and none of the lines is drawn.
@@ -558,7 +559,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * comparison, and a reading of it that stopped would stop the applications that are made.
      */
     private static Read onEachApplication(String behavior, StatedComparison comparison,
-                                          InputReading read,
+                                          InputReading read, InputReads reads,
                                           List<ClosureApplications.Application> each,
                                           Arrivals answering, WhatConditionsState conditions,
                                           Optional<ExpansionLineage> writtenIn) {
@@ -633,6 +634,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     ? new Read.AnswersNowhere(answeringNowhere)
                     : new Read.CutsNothing(settled);
         }
+        Read tooMany = linesOnOneQuantityPastTheFigure(lines.keySet(), comparison, read, reads,
+                answering);
+        if (tooMany != null) {
+            return tooMany;
+        }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
         // case on any application.
@@ -643,6 +649,35 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return parts.getFirst().line();
         }
         return new Read.Several(parts);
+    }
+
+    /**
+     * That where each of {@code lines} decides is not worked out, where some one quantity is cut
+     * by more of them than {@link CompositionBudget#READINGS_OF_ONE_CONDITION} allows readings of
+     * one condition — or null where none is.
+     *
+     * <p>Counted here and not along the readings that drew them. The readings of a value no
+     * application is handed are shared by all the applications
+     * ({@link souther.compiler.inputs.InputReads#readingsASplitIsOneOf}), so how many readings
+     * there are says nothing of how many lines come of them, and the work of saying where each
+     * decides grows faster than the lines on one quantity do. Past the figure it is not done,
+     * which is what the readings were held to before they were shared.
+     */
+    private static Read linesOnOneQuantityPastTheFigure(Set<ALineRead> lines,
+                                                        StatedComparison comparison,
+                                                        InputReading read, InputReads reads,
+                                                        Arrivals answering) {
+        CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
+        Map<BorderQuantity, Integer> onOne = new HashMap<>();
+        for (ALineRead each : lines) {
+            if (each.read() instanceof Read.Cuts cuts
+                    && onOne.merge(cuts.cutting().of(), 1, Integer::sum) > figure.maximum()) {
+                return new Read.Stopped(ComparisonAssessment.atEachOf(
+                        GuardThresholds.filedAt(comparison, read, reads, answering),
+                        new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
+            }
+        }
+        return null;
     }
 
     /** The comparison as its author drew it, where its definition chooses nothing on the way. */
@@ -1379,8 +1414,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
+                 Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
@@ -1629,10 +1665,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.WhereItAnswers where ->
                     statesNoRelation(where.answers()) && statesNoRelation(where.states());
             // Settled, a relation, two values being one, or something nobody read: each is read
-            // as what it is ({@link #readOnce}).
+            // as what it is ({@link #readOnce}). And which strings a string is one of, which is
+            // read where the rules about a position's strings are, and is no line of numbers.
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
                  Proposition.Unread _, Proposition.LastToHold _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _ -> false;
+                 Proposition.SomeReachable _, Proposition.InTheStrings _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -1934,7 +1971,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (over != null) {
             return realized(behavior, AffineReading.stating(over,
                     holds ? affine.proposition() : affine.proposition().denied(),
-                    written, reads, read.rules()), read.quantities());
+                    written, reads, read), read.quantities());
         }
         return onANumberNoPositionHolds(behavior, affine, holds, read);
     }

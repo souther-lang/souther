@@ -9,10 +9,10 @@ import souther.compiler.types.ReferenceDerivationCause;
 import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
@@ -2286,27 +2286,28 @@ final class Terms {
         return carrier;
     }
 
-    /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of
-     * them was named here, so one that is not is a form built somewhere this cannot answer for. */
-    Map<FactSubject, Granularity> kindsOf(LinearForm<FactSubject> f) {
-        return kindsOfAtoms(f.coefs().keySet());
+    /** What the type of every atom {@code f} is written over says of its values — its spacing and
+     * where its order stops — for the domain to record as one. Every one of them was named here, so
+     * one that is not is a form built somewhere this cannot answer for. */
+    Map<FactSubject, NumberSpace> spacesOf(LinearForm<FactSubject> f) {
+        return spacesOfAtoms(f.coefs().keySet());
     }
 
-    /** The spacing of {@code atom}, or nothing where no form was ever written over it: a place a
+    /** The space of {@code atom}, or nothing where no form was ever written over it: a place a
      *  closure was handed and never read is one no form names. */
-    Map<FactSubject, Granularity> kindsOfIfNamed(FactSubject atom) {
+    Map<FactSubject, NumberSpace> spacesOfIfNamed(FactSubject atom) {
         Carrier carrier = atomCarriers.get(atom);
-        return carrier == null ? Map.of() : Map.of(atom, carrier.spacing());
+        return carrier == null ? Map.of() : Map.of(atom, carrier.space());
     }
 
-    private Map<FactSubject, Granularity> kindsOfAtoms(Set<FactSubject> atoms) {
-        Map<FactSubject, Granularity> out = new HashMap<>();
+    private Map<FactSubject, NumberSpace> spacesOfAtoms(Set<FactSubject> atoms) {
+        Map<FactSubject, NumberSpace> out = new HashMap<>();
         for (FactSubject atom : atoms) {
             Carrier carrier = atomCarriers.get(atom);
             if (carrier == null) {
                 throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
-            out.put(atom, carrier.spacing());
+            out.put(atom, carrier.space());
         }
         return out;
     }
@@ -2404,7 +2405,7 @@ final class Terms {
      */
     private Computed aWholeNumberOfAQuotient(Core e, Denotations at) {
         AnOperationApplied applied = AnOperationApplied.of(e);
-        BoundOperationFact.RoundsToAWholeNumber rounds = applied == null ? null
+        BoundOperationFact.RoundsToAStep rounds = applied == null ? null
                 : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
         Core value = rounds == null ? null : applied.argument(rounds.value());
         Given rounded = value == null ? null : given(value, at);
@@ -2732,6 +2733,64 @@ final class Terms {
      */
     private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
+        Naming named = namingOf(raw, at, bound, depth, leaf);
+        if (named instanceof Naming.Named it) {
+            orderOfTheValue(it.term(), raw.type());
+        }
+        return named;
+    }
+
+    /**
+     * Files the order the value {@code term} names is counted on, as the type of the expression it
+     * was named from says.
+     *
+     * <p>Of every term and not only the ones taking an atom: an operation answers a type of its own,
+     * which is not the type of what it was given. {@code Decimal.fromInt} takes a whole number and
+     * answers a decimal, {@code Decimal.toInt} the other way about, and a reader asking what a
+     * product of two of them may come to has to ask the product and not guess it from the two.
+     * Two types for one term are not one order, so the term is filed as having none.
+     */
+    private void orderOfTheValue(Term term, Type type) {
+        Carrier carrier = type == null ? null : countedOrderOf(type);
+        if (carrier == null) {
+            return;
+        }
+        Carrier had = termCarriers.putIfAbsent(term, carrier);
+        if (had != null && !had.equals(carrier)) {
+            termsOfTwoOrders.add(term);
+        }
+    }
+
+    /** The order the value {@code term} names is counted on, or null where it is not known or the
+     *  term was met on two. */
+    Carrier carrierOfTerm(Term term) {
+        if (termsOfTwoOrders.contains(term)) {
+            return null;
+        }
+        Carrier carrier = termCarriers.get(term);
+        return carrier != null ? carrier : atomCarriers.get(FactSubject.of(term));
+    }
+
+    /** The order each type is counted on, asked of the declarations once: every term named asks
+     *  it of the type of the expression it came from, and the types met are few. */
+    private final Map<Type, Optional<Carrier>> countedOrders = new HashMap<>();
+
+    /** The order {@code type} is counted on, or null where its values are not counted. */
+    private Carrier countedOrderOf(Type type) {
+        Optional<Carrier> known = countedOrders.get(type);
+        if (known == null) {
+            known = Optional.ofNullable(Carrier.ofValue(type, declarations()))
+                    .filter(Carrier::counts);
+            countedOrders.put(type, known);
+        }
+        return known.orElse(null);
+    }
+
+    private final Map<Term, Carrier> termCarriers = new HashMap<>();
+    private final Set<Term> termsOfTwoOrders = new HashSet<>();
+
+    private Naming namingOf(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
+                            Leaf leaf) {
         long[] counting = COUNTING_NAMED;
         if (counting != null) {
             counting[0]++;

@@ -100,8 +100,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     case Relation.Ordered ordered -> isIn(ordered.term());
                 };
                 case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                     Proposition.Carried _, Proposition.Unread _ -> false;
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.Unread _ -> false;
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
                      Proposition.WhereItAnswers _ ->
@@ -1084,10 +1085,13 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                                 alike(same.one(), apart) && alike(same.other(), apart);
                         // Which element holding the value is the last to, what some element of a
                         // container meets, what an operation answered of something: each turns on
-                        // which element it is asked of, or on what nothing here reads.
+                        // which element it is asked of, or on what nothing here reads. And which
+                        // strings a string is one of, which no model has been shown to ask of the
+                        // element a value is held by.
                         case Proposition.LastToHold _, Proposition.Some _,
                              Proposition.OnAnApplication _, Proposition.SomeReachable _,
-                             Proposition.Unread _, Proposition.Carried _ -> false;
+                             Proposition.Unread _, Proposition.Carried _,
+                             Proposition.InTheStrings _ -> false;
                     };
                 }
 

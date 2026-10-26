@@ -8,7 +8,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleRef;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
@@ -20,6 +22,7 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -27,6 +30,7 @@ import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The value a position is inside: what it is called, and what its rules leave each position of it
@@ -107,6 +111,20 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         return new PlacedRules(root, read, Rules.of(read, reading), alsoReaching,
                 reading.policy().allowanceForAdmittedValues(answersFor(read, machines).lending()),
                 machines);
+    }
+
+    /**
+     * These rules read again without the rules {@code parts} name, and the rules of the value above
+     * likewise.
+     *
+     * <p>Everything else is the same reading: the value, where it stands, what it may admit.
+     */
+    static PlacedRules leavingOut(PlacedRules placed, Set<PartId<RuleRef.Invariant>> parts) {
+        Reaching above = placed.alsoReaching;
+        return new PlacedRules(placed.root, placed.value, placed.rules.leavingOut(parts),
+                above == null ? null
+                        : new Reaching(leavingOut(above.outer(), parts), above.crossing()),
+                placed.sets, placed.machines);
     }
 
     /**
@@ -243,6 +261,19 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
             return here;
         }
         NumericDomain.Bounds outer = alsoReaching.outer().leftAt(above, kind);
+        return here == null ? outer : outer == null ? here : here.meet(outer);
+    }
+
+    /**
+     * What the order leaves the position at {@code path}, or null where no rule of it stops the
+     * position: this value's own, met with what it leaves the value this was narrowed out of, as
+     * {@link #admits} meets what each admits. Whatever shape the meet comes to — one run, runs
+     * apart, or none — is the answer.
+     */
+    OrderedRuns orderedRegionAt(TermPath path) {
+        OrderedRuns here = rules.orderedRegionAt(under(path));
+        TermPath above = alsoAt(path);
+        OrderedRuns outer = above == null ? null : alsoReaching.outer().orderedRegionAt(above);
         return here == null ? outer : outer == null ? here : here.meet(outer);
     }
 

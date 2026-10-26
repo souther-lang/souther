@@ -237,6 +237,7 @@ final class Intervals {
                     + count.counted() + (count.through().equals(CaseMapping.NONE) ? ""
                     : " in " + count.through().writtenAround("the string"));
             case NumericTerm.CodePointValueSum _ -> "sum of the code points";
+            case NumericTerm.CodePointAt point -> "code point at " + point.index();
         };
     }
 

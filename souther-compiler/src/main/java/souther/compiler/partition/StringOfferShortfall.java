@@ -4,9 +4,11 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.regex.PatternPlan;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What did not reach the values offered at a position, and what stopped each of them.
@@ -45,6 +47,26 @@ public record StringOfferShortfall(List<NotOffered> these) {
     /** Whether everything the rules about the strings had to offer reached the offer. */
     public boolean isEmpty() {
         return these.isEmpty();
+    }
+
+    /**
+     * The first refusal by a limit that kept something from the offer, and the allowance it was
+     * refused under — or nothing where what is missing was kept out by something else, such as a
+     * rule that was not read.
+     */
+    Optional<PatternPlan.Refused> refusedBy() {
+        for (NotOffered each : these) {
+            switch (each.why()) {
+                case Why.TooCostly it -> {
+                    return Optional.of(Partitions.refusedAsAWitness(it.stopped()));
+                }
+                case Why.PatternTooCostly it -> {
+                    return Optional.of(Partitions.PatternForAWitness.refusedAt(it.stopped()));
+                }
+                default -> { }
+            }
+        }
+        return Optional.empty();
     }
 
     /** This and {@code those} together, which is what a caller holding two readings has. */

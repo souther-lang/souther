@@ -48,6 +48,9 @@ public enum WorkFigure {
     /** How many candidates a walk repairing a row builds. */
     CANDIDATES_A_REPAIR_BUILDS("how many candidates a walk repairing a row builds"),
 
+    /** How many assignments a walk repairing a row looks at, passed over or built. */
+    ASSIGNMENTS_A_REPAIR_LOOKS_AT("how many assignments a walk repairing a row looks at"),
+
     /** States one machine for the values a position admits may have, and what making it may look
      *  at. */
     ADMITTED_VALUES_ONE_MACHINE("how many states one machine for the values a position admits may"
@@ -84,6 +87,16 @@ public enum WorkFigure {
      *  at. */
     RULE_SETS_IN_ALL("how much building the machines for the sets each rule of a position admits"
             + " may make and look at"),
+
+    /** States one machine for the strings that part into pieces of a type may have, and what
+     *  making it may look at. */
+    STRINGS_PARTED_ONE_MACHINE("how many states one machine for the strings that part into"
+            + " pieces of a type may have, and how much making it may look at"),
+
+    /** What building the machines for the strings that part into pieces of a type may make and
+     *  look at. */
+    STRINGS_PARTED_IN_ALL("how much building the machines for the strings that part into pieces"
+            + " of a type may make and look at"),
 
     /** How many steps the run of one row may take. */
     EVALUATION_STEPS("how many steps the run of one row may take"),

@@ -206,8 +206,7 @@ public final class ElementsApart {
      * <p>A newtype's one field is its value, so a run read off it is a run under the value; a
      * record's fields are each a place of their own.
      */
-    private static RuleKey placeOf(Core container, Map<BindingId, String> fields,
-                                   boolean record) {
+    static RuleKey placeOf(Core container, Map<BindingId, String> fields, boolean record) {
         List<String> read = readOffABinding(container);
         if (read == null) {
             return null;

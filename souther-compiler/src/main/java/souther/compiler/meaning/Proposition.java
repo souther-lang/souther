@@ -76,8 +76,8 @@ public sealed interface Proposition {
             case SomeReachable reached -> reached.noneBelow()
                     .map(none -> List.of(reached.atANode(), none))
                     .orElseGet(() -> List.of(reached.atANode()));
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _, Unread _, Carried _ -> List.of();
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, LastToHold _, Unread _, Carried _ -> List.of();
         };
     }
 
@@ -102,6 +102,11 @@ public sealed interface Proposition {
             case Truth truth -> mayBeAnElementOf(truth.of(), container);
             case InCases cases -> mayBeAnElementOf(cases.of(), container);
             case Present present -> mayBeAnElementOf(present.of(), container);
+            case InTheStrings(InTheStrings.Strings.AtAPosition(var at), var _, var _, var _) ->
+                    isAnElementOf(new DecisionSubject.AnInput(at), container);
+            // A piece is whatever the statement it is read inside says it is, which is about the
+            // string and no container's element.
+            case InTheStrings _ -> false;
             case SameValue same -> mayBeAnElementOf(same.one(), container)
                     || mayBeAnElementOf(same.other(), container);
             case LastToHold last -> isAnElementOf(last.position(), container);
@@ -323,6 +328,86 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new Present(of, !holds);
+        }
+    }
+
+    /**
+     * A string being one of the strings a pattern accepts, or not.
+     *
+     * <p>Of a string a position holds, or of a piece of one: which of them is {@code of}. What
+     * accepts says is the language and not the pattern that was written — the strings some piece
+     * of a split string is in a pattern are the strings of another language, and that one is
+     * what a statement about the string is read as. A statement and its denial hold the one
+     * language, so turning a statement over spells nothing again.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
+     */
+    record InTheStrings(Strings of, StringsLanguage accepts, boolean holds, String key)
+            implements Proposition {
+
+        /** The string a statement of this kind is about. */
+        public sealed interface Strings {
+
+            String spelled();
+
+            /**
+             * The string that stands at a position of the input.
+             *
+             * <p>Of the input and of nothing a dependency answered: what the pieces of such a
+             * string are is read off the string, and a string that no row writes is no string a
+             * statement about its pieces divides.
+             */
+            record AtAPosition(TermPath at) implements Strings {
+
+                public AtAPosition {
+                    if (at == null) {
+                        throw new IllegalArgumentException("a string stands at some position");
+                    }
+                }
+
+                @Override
+                public String spelled() {
+                    return at.toString();
+                }
+            }
+
+            /** The piece of a string that {@code within} statements about some piece in is. */
+            record OfAPiece(int within) implements Strings {
+
+                public OfAPiece {
+                    if (within < 0) {
+                        throw new IllegalArgumentException(
+                                "a piece is of a statement some number of statements in: "
+                                        + within);
+                    }
+                }
+
+                @Override
+                public String spelled() {
+                    return "piece#" + within;
+                }
+            }
+        }
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
+        public InTheStrings(Strings of, StringsLanguage accepts, boolean holds) {
+            this(of, accepts, holds, null);
+        }
+
+        public InTheStrings {
+            if (of == null || accepts == null) {
+                throw new IllegalArgumentException("a string is one of the strings of a language");
+            }
+            key = (holds ? "" : "!") + of.spelled() + " in " + accepts.spelled();
+        }
+
+        @Override
+        public Proposition denied() {
+            return new InTheStrings(of, accepts, !holds);
         }
     }
 
@@ -692,8 +777,8 @@ public sealed interface Proposition {
                 case WhereItAnswers where ->
                         quantifiesOverInside(container, where.answers(), rebound)
                                 || quantifiesOverInside(container, where.states(), rebound);
-                case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                     LastToHold _, Carried _, Unread _ -> false;
+                case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                     SameValue _, LastToHold _, Carried _, Unread _ -> false;
             };
         }
 
@@ -716,9 +801,10 @@ public sealed interface Proposition {
                         .collect(Collectors.toUnmodifiableSet());
                 case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.key());
                 // One part, whatever it says: two spelled alike are one statement.
-                case Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _, Any _,
-                     Some _, Carried _, SomeReachable _, Unread _, OnAnApplication _,
-                     SoManyHold _, WhereItAnswers _ -> Set.of(ofTheElement.key());
+                case Compared _, Truth _, InCases _, Present _, InTheStrings _, SameValue _,
+                     LastToHold _, Any _, Some _, Carried _, SomeReachable _, Unread _,
+                     OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
+                        Set.of(ofTheElement.key());
             });
         }
 
@@ -1357,8 +1443,8 @@ public sealed interface Proposition {
             case Unread unread -> into.add(unread.why());
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
                  WhereItAnswers _ -> stopsIn(stated.partsHeld(), into, first);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _, Carried _ -> false;
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, LastToHold _, Carried _ -> false;
         };
     }
 
@@ -1406,8 +1492,8 @@ public sealed interface Proposition {
             case SomeReachable _ -> true;
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
-                 Carried _, LastToHold _ -> false;
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, Unread _, Carried _, LastToHold _ -> false;
         };
     }
 
@@ -1431,6 +1517,8 @@ public sealed interface Proposition {
             case Truth truth -> truth.of() instanceof DecisionSubject.AnAnswer;
             case InCases cases -> cases.of() instanceof DecisionSubject.AnAnswer;
             case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
+            // Of the input, and of no answer.
+            case InTheStrings _ -> false;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
@@ -1719,8 +1807,8 @@ public sealed interface Proposition {
             // What one of these holds of is read on every row, by its constructor.
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
                     "a count or a quantifier is of statements answering on every row: " + stated);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Unread _ -> stated;
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, LastToHold _, Carried _, Unread _ -> stated;
         };
     }
 
@@ -1733,8 +1821,8 @@ public sealed interface Proposition {
             case Some _, SoManyHold _, SomeReachable _ -> false;
             case All _, Any _, OnAnApplication _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Unread _ -> false;
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, LastToHold _, Carried _, Unread _ -> false;
         };
     }
 
@@ -1757,8 +1845,9 @@ public sealed interface Proposition {
             case WhereItAnswers _, OnAnApplication _, Unread _ -> false;
             case All all -> all.parts().stream().allMatch(Proposition::deniedWhereverItFails);
             case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Some _, SoManyHold _, SomeReachable _ -> true;
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, LastToHold _, Carried _, Some _, SoManyHold _, SomeReachable _ ->
+                    true;
         };
     }
 

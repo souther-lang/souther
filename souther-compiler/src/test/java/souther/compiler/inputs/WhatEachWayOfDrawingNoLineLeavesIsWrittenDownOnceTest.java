@@ -82,6 +82,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // value rule in a form nothing read are met again however much a run is allowed.
         table.put("UnreadComparisonForm", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         table.put("UnreadComparisonDomain", "UNSUPPORTED_DOMAIN/UNAFFECTED");
+        table.put("OrderedExtentEndIsNoValue", "UNSUPPORTED_DOMAIN/UNAFFECTED");
         // A line that falls at a number no exact ratio holds. Its own word beside the one above:
         // the values carry an order and the line is written, and what has no place is a constant of
         // the rule. Nothing was compared against a figure, so a run allowed more meets it again.
@@ -183,6 +184,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // row searched for and the search stopped at a figure: a run allowed more may find it.
         table.put("RelationNotShownWhereTheSearchStopped",
                 "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/MAY_CHANGE");
+        // Read to the end, and a relation a run may stop on the way to on what nothing says: not
+        // every value here is shown to get to it, and a run allowed more stops where it stopped.
+        table.put("RelationNotShownReachedAtEveryValue",
+                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
         // many parts a step states, or at how far a container is written out, is one a run
@@ -509,6 +514,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         List<BlockReason> every = new ArrayList<>(List.of(
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
+                new BlockReason.OrderedExtentEndIsNoValue(),
                 new BlockReason.LineAtANumberNoRatioHolds(),
                 new BlockReason.LineSideNotWorkedOut(
                         souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
@@ -535,6 +541,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
+                new BlockReason.RelationNotShownReachedAtEveryValue(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

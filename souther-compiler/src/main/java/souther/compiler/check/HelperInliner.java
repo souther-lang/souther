@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.core.TheWalk;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.ast.DefinitionName;
@@ -1811,7 +1812,7 @@ public final class HelperInliner {
         // stamp says that is what it is doing, so nothing downstream reads the call as the place the
         // code is written.
         DeclaringCode declaring = whereTheBodyIs(call, helper);
-        Copy copy = new Copy(helper.writtenBody(), ours);
+        Copy copy = new Copy(helper.writtenBody(), ours, supplied);
         // What was proved of the bindings this body has, said again of the ones the copy gives them.
         // The body being copied is one already expanded — a lambda registered here is registered
         // with its calls spliced in — so the operation that proved anything of it is gone from what
@@ -2510,7 +2511,7 @@ public final class HelperInliner {
         ExpansionSite site = siteOf(at, call);
         BindingOwner mine = new BindingOwner.Expansion(writing.enclosing(), applied, at);
         Hir.Expr written = value.definition().writtenBody();
-        Copy copy = new Copy(written, new Hir.Binders(mine));
+        Copy copy = new Copy(written, new Hir.Binders(mine), supplied);
         provenance.carriedAcross(copy.renaming());
         Renaming renaming = new Renaming(Map.of(), copy, null, null);
         Hir.Expr body = insideThisCopy(mine,
@@ -3385,7 +3386,8 @@ public final class HelperInliner {
          *                expansion has already written its arguments from it, and the body's direct
          *                bindings are numbered after those rather than over them
          */
-        private Copy(Hir.Expr body, Hir.Binders binders) {
+        private Copy(Hir.Expr body, Hir.Binders binders, SuppliedRules.Builder supplied) {
+            this.supplied = supplied;
             this.root = binders.owner();
             minters.put(root, binders);
             eachBinder(body, binder ->
@@ -3395,6 +3397,9 @@ public final class HelperInliner {
         }
 
         private final BindingOwner root;
+
+        /** Which rules each expansion was handed, which an expansion moved here carries with it. */
+        private final SuppliedRules.Builder supplied;
 
         /**
          * This copy's owner for one the body has.
@@ -3415,8 +3420,12 @@ public final class HelperInliner {
                 return moved;
             }
             BindingOwner made = switch (original) {
-                case BindingOwner.Expansion it ->
-                        new BindingOwner.Expansion(ownerOf(it.within()), it.expanded(), it.at());
+                case BindingOwner.Expansion it -> {
+                    BindingOwner.Expansion under =
+                            new BindingOwner.Expansion(ownerOf(it.within()), it.expanded(), it.at());
+                    supplied.moved(it, under);
+                    yield under;
+                }
                 case BindingOwner.Synthesized it ->
                         new BindingOwner.Synthesized(ownerOf(it.within()), it.pass(), it.ordinal());
                 case BindingOwner.Build it ->

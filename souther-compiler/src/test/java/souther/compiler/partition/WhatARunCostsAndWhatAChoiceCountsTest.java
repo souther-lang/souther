@@ -207,6 +207,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertEquals("3", text(choosing.taken()));
     }
 
+
     /** A walk that hands more rows than the choice may be handed is stopped, and says so. */
     @Test
     void aWalkHandingMoreRowsThanTheFigureIsStoppedAndSaysSo() {
@@ -227,6 +228,97 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
                 choosing.untried().met().figures());
         assertNull(choosing.taken());
+    }
+
+    /** A row the judge refuses is no candidate: the walk goes on, and takes the one it accepts. */
+    @Test
+    void aRowTheJudgeRefusesIsPassedOverForOneItAccepts() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(
+                        row -> text(row.inputs()).equals("5")));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
+        assertEquals("0", text(choosing.taken()), "the row refused stands until one is accepted");
+        assertTrue(choosing.takenIsRefused());
+
+        assertEquals(Generator.Acceptance.TAKEN, taking.take(List.of(FixtureTemplate.integer(5))));
+        assertEquals("5", text(choosing.taken()));
+        assertFalse(choosing.takenIsRefused(), "and the row accepted is the one taken");
+    }
+
+    /** Where the judge accepts none and the walk is not stopped, the first row refused is taken. */
+    @Test
+    void theFirstRowRefusedIsTakenAndSaidSoWhereNoneIsAccepted() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(_ -> false));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        taking.take(List.of(FixtureTemplate.integer(3)));
+        taking.take(List.of(FixtureTemplate.integer(4)));
+
+        assertEquals("3", text(choosing.taken()));
+        assertTrue(choosing.takenIsRefused());
+        assertEquals(SearchShortfall.NONE, choosing.untried(), "nothing was left untried");
+    }
+
+    /**
+     * The figure on the rows ranked is a figure on candidates, and a row refused is none: more of
+     * them than that figure, and the row the judge accepts after them is still reached.
+     */
+    @Test
+    void rowsTheJudgeRefusesUseUpNoneOfTheRowsTheChoiceMayRank() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(
+                        row -> text(row.inputs()).equals("-1")));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        for (int i = 1; i <= Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS + 1; i++) {
+            assertEquals(Generator.Acceptance.PASSED,
+                    taking.take(List.of(FixtureTemplate.integer(i))));
+        }
+
+        taking.take(List.of(FixtureTemplate.integer(-1)));
+        assertEquals("-1", text(choosing.taken()));
+        assertFalse(choosing.takenIsRefused());
+    }
+
+    /**
+     * Stopped at its figure with every row refused, the walk takes nothing and says the figure: the
+     * rows past it were not looked at, and a row refused is no answer to whether one of them is
+     * accepted.
+     */
+    @Test
+    void aWalkStoppedAtItsFigureWithEveryRowRefusedTakesNothingAndSaysTheFigure() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(_ -> false));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+        int figure = CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW.maximum();
+
+        for (int i = 1; i <= figure; i++) {
+            assertEquals(Generator.Acceptance.PASSED,
+                    taking.take(List.of(FixtureTemplate.integer(i))));
+        }
+        assertEquals(Generator.Acceptance.STOPPED,
+                taking.take(List.of(FixtureTemplate.integer(figure + 1))));
+
+        assertNull(choosing.taken());
+        assertFalse(choosing.takenIsRefused());
+        assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                choosing.untried().met().figures());
+    }
+
+    /** A judge that refuses absolutely is never given its refused row back. */
+    @Test
+    void aJudgeThatRefusesAbsolutelyOffersNoRowItRefused() {
+        Generator.ReachingWhatIsJudged judging = new Generator.ReachingWhatIsJudged(
+                _ -> false, List.of());
+        Generator.RowTaking taking = judging.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(1))));
+
+        assertNull(judging.taken());
+        assertFalse(judging.takenIsRefused());
     }
 
     private static AnswerObservation answer() {

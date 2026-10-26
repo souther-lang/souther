@@ -52,16 +52,20 @@ class ATotalOverTheInputsRunSaysWhatStoppedItsElementTest {
         assertFalse(report.contains("outside_the_linear_fragment"), report);
     }
 
+    /** A rounding is read through the law the library states of it, and stops nothing. */
     @Test
-    void aRoundedElementIsSaidToHaveNoForm() {
+    void aRoundedElementIsRead() {
         String report = json("List.map(r -> Decimal.round(2, HALF_UP, r.a), ls)");
-        assertTrue(report.contains("no_form_of_what_it_answers"), report);
+        assertFalse(report.contains("no_form_of_what_it_answers"), report);
         assertFalse(report.contains(OF_THE_WHOLE_ANSWER), report);
+        assertFalse(report.contains("outside_the_linear_fragment"), report);
     }
 
+    /** A field times itself, which no field held still makes a form of. A product of two fields
+     *  is read ({@link ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest}). */
     @Test
-    void aProductOfTwoValuesIsSaidToBeOutsideTheLinearFragment() {
-        String report = json("List.map(r -> r.q * r.price, ls)");
+    void aSquareIsSaidToBeOutsideTheLinearFragment() {
+        String report = json("List.map(r -> r.q * r.q, ls)");
         assertTrue(report.contains("outside_the_linear_fragment"), report);
         assertFalse(report.contains(OF_THE_WHOLE_ANSWER), report);
     }

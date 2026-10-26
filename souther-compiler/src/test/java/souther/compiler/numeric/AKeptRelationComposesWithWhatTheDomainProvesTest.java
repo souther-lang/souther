@@ -40,10 +40,10 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
         return SmallForm.small(atom(A)).plus(atom(B)).minus(atom(c)).form();
     }
 
-    private static Map<String, Granularity> dense(String... atoms) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> dense(String... atoms) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : atoms) {
-            out.put(each, Granularity.DENSE);
+            out.put(each, NumberSpace.spacedOnly(Granularity.DENSE));
         }
         return out;
     }

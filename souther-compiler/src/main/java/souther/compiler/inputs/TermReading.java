@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -95,7 +96,19 @@ final class TermReading {
             case NumericTerm.CodePointClassCount count ->
                     codePointsOfAClass(count.counted(), count.through(), at);
             case NumericTerm.CodePointValueSum _ -> whatTheCodePointsComeTo(at);
+            case NumericTerm.CodePointAt point -> theCodePointAt(point.index(), at);
         };
+    }
+
+    /** The code point at {@code index} of the text, where the text holds that many and more; a
+     *  shorter text has no such number. */
+    private static Reading theCodePointAt(int index, ObservedValue at) {
+        if (!(at instanceof ObservedValue.Text text)) {
+            return new Reading.NotNumber();
+        }
+        OptionalInt held = text.value().codePoints().skip(index).findFirst();
+        return held.isPresent() ? new Reading.Number(Count.of(held.getAsInt()))
+                : new Reading.NotNumber();
     }
 
     /**

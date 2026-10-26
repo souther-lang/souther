@@ -207,7 +207,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 // A count is composed with the container's other numbers, where its value is
                 // written ({@link CardinalityComposer}), and asks no value written into it here.
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.ForTheRun _ -> { }
+                     RowDemand.OnARemainder _, RowDemand.ForTheRun _ -> { }
                 case RowDemand.OneValueAtBoth both -> related.add(both);
                 case RowDemand.Exists exists -> asked(exists.container(), true,
                         exists.ofAnElement().theWay(), Optional.empty(), out);

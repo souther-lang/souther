@@ -4,7 +4,7 @@ import souther.compiler.collect.AppendOnly;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ClosedStates;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
@@ -202,8 +202,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * clauses are read at all, and both readings are asked about the same clauses. */
     record Unguarded(ConstraintState<FactSubject> constraints) {
 
-        Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
-            return new Unguarded(constraints.taking(f, rel, kinds));
+        Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, NumberSpace> spaces) {
+            return new Unguarded(constraints.taking(f, rel, spaces));
         }
 
         Unguarded taking(FactSubject key, boolean positive) {
@@ -246,7 +246,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * agreement — which is the shape this question already came apart along once.
      */
     boolean reachesNothing() {
-        return constraints.isBottom();
+        return constraints.leavesNoRow();
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
@@ -275,9 +275,9 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
-    Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
-        return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases,
+    Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, NumberSpace> spaces) {
+        return new Known(constraints.taking(f, rel, spaces), quantified, spoken,
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, spaces) : unguarded, cases,
                 oneOf);
     }
 

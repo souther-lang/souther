@@ -97,6 +97,7 @@ public final class NumericTerms {
             case NumericTerm.OccurrencesOfAKey _ -> "9";
             case NumericTerm.GatheredUnderItsKey _ -> "10";
             case NumericTerm.GatheredUnderAKey _ -> "11";
+            case NumericTerm.CodePointAt _ -> "12";
         };
     }
 }

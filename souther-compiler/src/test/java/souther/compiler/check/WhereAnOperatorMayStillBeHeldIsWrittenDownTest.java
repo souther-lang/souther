@@ -102,6 +102,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
      * <p>Written {@code owner#field} and {@code owner.method}.
      */
     private static final List<Held> HANDED_IN = List.of(
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated#operator",
+                    "the arithmetic a clause writes a number with, as it is evaluated over the"
+                            + " ranges or the numbers its places are at"),
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated.<init>",
+                    "makes the arithmetic a clause writes a number with"),
             new Held("souther.compiler.ast.Hir.Binary#op",
                     "the resolved tree, which is where an operator is written down"),
             new Held("souther.compiler.core.Core.Binary#op",
@@ -140,10 +145,30 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.LibraryEndings.Reading.operator",
                     "hands the operator a library operation's body writes to AbortSites, which"
                             + " answers what it ends a run for"),
+            new Held("souther.compiler.abort.AbortSites.completionOfAnOperator",
+                    "which operator answers where the collection it answers fits, and of which"
+                            + " operands: the join of two lists"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.answerOfTheBody",
+                    "hands the operator a way of a library operation's body ends in to"
+                            + " AbortSites, which answers where it answers"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.counted",
+                    "names the addition a walk of the library counts by"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.putInOne",
+                    "names the join a walk of the library puts one element in by"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.everyNumberStaysAnInt",
+                    "asks WhereAnOperatorAnswers where the addition a walk of the library counts"
+                            + " by answers"),
+            new Held("souther.compiler.check.ContainerSizesUnderAWitness.anIntSumAnswersAt",
+                    "asks WhereAnOperatorAnswers where the addition a total of Ints is worked"
+                            + " out by answers"),
+            new Held("souther.compiler.check.WhatARunMayEndFor"
+                    + ".completionApartFromTheClosuresWrittenAtIt",
+                    "hands an operator the analysis reads to AbortSites, which answers where it"
+                            + " answers"),
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),
-            new Held("souther.compiler.check.PathCompletion.operated",
+            new Held("souther.compiler.check.PathCompletion.whereItAnswers",
                     "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
                             + " answers a value, once for every question asked of the evaluation"),
             new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
@@ -152,6 +177,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.PathCompletion.operationAt",
                     "whether the operator is one a recipe is recorded against, which a product and"
                             + " a quotient are and a sum and a difference are not"),
+            new Held("souther.compiler.check.PathCompletion.workedOut",
+                    "which side of a connective inside an operand a run works out whenever the part"
+                            + " is: the left, and not the right"),
             new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
                     "hands each operator a closure's body was worked out through to"
                             + " WhereAnOperatorAnswers, for where an application of it answers"),
@@ -219,6 +247,22 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
+            new Held("souther.compiler.check.EntryHeld.valueIs",
+                    "asks whether a statement about the value a lookup found is an equality with"
+                            + " a written number"),
+            new Held("souther.compiler.check.SidesBalanced.read",
+                    "asks whether two totals are compared for equality"),
+            new Held("souther.compiler.check.SidesBalanced.side",
+                    "asks whether the step of a walk adding a number compares a field of the"
+                            + " element for equality with a case"),
+            new Held("souther.compiler.check.ComputedNumber.operated",
+                    "keeps the three operators that are exact arithmetic over places, and leaves"
+                            + " a number written with any other unread"),
+            new Held("souther.compiler.check.ComputedNumber.bounded",
+                    "does what each of those three does to the range its operands lie in, a"
+                            + " single number being the range of one"),
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated.operator",
+                    "hands back the operator the arithmetic was written with"),
             // Recognising a comparison, which is what carries the claim to everything below.
             new Held("souther.compiler.check.Comparison.of",
                     "asks what the operator places, for a binary of a checked body"),
@@ -574,7 +618,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"
-                            + " placed"));
+                            + " placed"),
+            new Held("souther.compiler.check.LookupsAClauseNeeds.work",
+                    "names the conjunction and the disjunction, which are the two forms that carry"
+                            + " a false part on to the whole clause; any other operator says"
+                            + " nothing of the lookup"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {

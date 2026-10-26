@@ -589,7 +589,7 @@ final class AWayReadForARelation {
                     }
                 }
                 case RowDemand.Exists _, RowDemand.ForAll _, RowDemand.OneValueAtBoth _,
-                     RowDemand.SoMany _, RowDemand.ForTheRun _ -> {
+                     RowDemand.SoMany _, RowDemand.OnARemainder _, RowDemand.ForTheRun _ -> {
                     return false;
                 }
             }

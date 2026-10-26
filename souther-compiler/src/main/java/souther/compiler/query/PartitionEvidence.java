@@ -265,6 +265,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                                 + count.through().writtenAround(at()) + ")";
                                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                                         "List.sum(String.codePoints(" + at() + "))";
+                                case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                                        "List.get(" + point.index() + ", String.codePoints("
+                                                + at() + "))";
                                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
                                         "multiplicity(" + at() + ")";
                                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->

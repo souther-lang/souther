@@ -54,7 +54,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
             let fee (days, policy) = {
                 let accrued = days * policy.rate.value
 
-                if accrued > policy.cap.value then policy.cap.value else accrued
+                if accrued >= policy.cap.value then policy.cap.value else accrued
             }
 
             example fee
@@ -116,6 +116,11 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         return said.find() ? Integer.parseInt(said.group(1)) : -1;
     }
 
+    /** The same model, whose cap is reached only past it, so that a row of its own is owed to the
+     *  rule that takes the cap. */
+    private static final String POLICY_CAPPED_PAST_THE_CAP = POLICY.replace(
+            "accrued >= policy.cap.value", "accrued > policy.cap.value");
+
     /** Which says the count as well: two edges meet at this input, and one {@code |} is written. */
     @Test
     void twoEdgesMeetingAtOneInputAreOneRow() {
@@ -124,6 +129,22 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         assertEquals(List.of(
                         "example fee",
                         "    | (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
+                written(block));
+    }
+
+    /**
+     * A rule of the decision that a row takes only past the edges is one more row beside them: the
+     * edge it fills is the one its inputs stand on, and the other edge is filled by a row of its
+     * own.
+     */
+    @Test
+    void aRuleOnlyARowPastTheEdgesTakesIsOneMoreRowBesideThem() {
+        String block = block(POLICY_CAPPED_PAST_THE_CAP, "example.policy");
+
+        assertEquals(List.of(
+                        "example fee",
+                        "    | (0, Policy { rate = Rate(0), cap = Cap(1) }) -> <?>",
+                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>"),
                 written(block));
     }
 

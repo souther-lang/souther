@@ -7,7 +7,9 @@ import souther.compiler.check.ConstraintState;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
@@ -19,10 +21,16 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.StringsHeldAsWritten;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -427,6 +435,34 @@ final class ReadQuantities implements Quantities {
         return fixed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
                         assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
+    }
+
+    /**
+     * This reading without the relation the rules {@code parts} name hold between the places they
+     * read, under the parameter they are listed under, and what a caller fixed or took in kept.
+     *
+     * <p>The rules are left out of what is read again, and what was worked out of each place by
+     * itself ({@code byPath}) is kept as it was: the run a place is left with the rules in force
+     * is the run it still has. That is the contract and not an accident of what is shared — the
+     * proof that a row near a line is in the original region needs each place held to its own
+     * ends and to nothing else the rule said, and a region read from declarations that never had
+     * the rule would widen the ends it gave each place as well.
+     *
+     * <p>Per parameter, since a rule of a declaration is a rule of every value of it: left out of
+     * one parameter it stays in another that holds a value of the same declaration.
+     *
+     * <p>A reading of its own, with nothing shared with this one that was worked out from the rules:
+     * the contexts and what was answered under them are made again from the rules that are left.
+     */
+    ReadQuantities withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+        Map<TermPath, OpenedRules> rest = new LinkedHashMap<>();
+        byRoot.forEach((root, opened) -> {
+            Set<PartId<RuleRef.Invariant>> here = parts.get(root.head());
+            rest.put(root, here == null ? opened : new OpenedRules(
+                    PlacedRules.leavingOut(opened.rules(), here), opened.opening()));
+        });
+        return new ReadQuantities(rest, roots, byPath, cases, typeAt, fixed, ruleReading, assumed,
+                heldAgainst, new Contexts(), null, null, new ConcurrentHashMap<>());
     }
 
     /**
@@ -866,7 +902,7 @@ final class ReadQuantities implements Quantities {
         // Walked by the terms, because which term is named in the refusal is the answer here and a
         // form holds its terms without holding an order they were written in.
         for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
-            if (spacingOf(constraints(under).numbers(), term, called(term, under)) == null) {
+            if (spaceOf(constraints(under).numbers(), term, called(term, under)) == null) {
                 return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(term));
             }
         }
@@ -1087,19 +1123,19 @@ final class ReadQuantities implements Quantities {
                 || !stands(each.form().coefs().keySet(), under)) {
             return made;
         }
-        Map<InputAtom, Granularity> spacing = new LinkedHashMap<>();
+        Map<InputAtom, NumberSpace> spaces = new LinkedHashMap<>();
         for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
-            Granularity spaced = spacingOf(made.numbers(), term, called(term, under));
-            if (spaced == null) {
+            NumberSpace space = spaceOf(made.numbers(), term, called(term, under));
+            if (space == null) {
                 return made;
             }
-            spacing.put(called(term, under), spaced);
+            spaces.put(called(term, under), space);
         }
         // Where the caller's own form cannot be carried into this input's terms, this rule is one
         // the state is not narrowed by — an unheld sum is a step short, and the sound answer with
         // less is not to take a step at all.
         LinearForm<InputAtom> over = over(each.form(), under);
-        return over == null ? made : insideItsOrder(made.taking(over, each.rel(), spacing),
+        return over == null ? made : insideItsOrder(made.taking(over, each.rel(), spaces),
                 each.form().coefs().keySet(), under);
     }
 
@@ -1235,11 +1271,10 @@ final class ReadQuantities implements Quantities {
                     return rules;
                 }
                 InputAtom atom = called(counted, under);
-                souther.compiler.numeric.Granularity spaced =
-                        spacingOf(rules.numbers(), counted, atom);
-                return spaced == null ? rules : rules.taking(
+                NumberSpace space = spaceOf(rules.numbers(), counted, atom);
+                return space == null ? rules : rules.taking(
                         LinearForm.<InputAtom>atomMinusConstant(atom, ExactRatio.ONE),
-                        Rel.GE, Map.of(atom, spaced));
+                        Rel.GE, Map.of(atom, space));
             }
         }
     }
@@ -1493,11 +1528,11 @@ final class ReadQuantities implements Quantities {
             return rules;
         }
         InputAtom atom = called(term, under);
-        souther.compiler.numeric.Granularity spaced = spacingOf(rules.numbers(), term, atom);
-        if (spaced == null) {
+        NumberSpace space = spaceOf(rules.numbers(), term, atom);
+        if (space == null) {
             return rules;
         }
-        return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, spaced)),
+        return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, space)),
                 Set.of(term), under);
     }
 
@@ -1509,7 +1544,7 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * How the values of one term are spaced.
+     * What is said of the values of one term: how they are spaced, and where their order stops.
      *
      * <p>What the rules already record about it where they record anything, and what its type says
      * where they do not. Asked of the rules first because that is where the two could disagree, and
@@ -1525,9 +1560,9 @@ final class ReadQuantities implements Quantities {
      * a strict bound is either wrongly sharpened on it or silently left blunt — so what is not
      * known is left out, and what the rules leave is then wider rather than wrong.
      */
-    private Granularity spacingOf(NumericDomain<InputAtom> rules, NumericTerm term,
-                                  InputAtom atom) {
-        Granularity had = rules.spacingOf(atom);
+    private NumberSpace spaceOf(NumericDomain<InputAtom> rules, NumericTerm term,
+                                InputAtom atom) {
+        NumberSpace had = rules.spaceOf(atom);
         if (had != null) {
             return had;
         }
@@ -1540,7 +1575,7 @@ final class ReadQuantities implements Quantities {
         // the order was there to be had, and a count under more steps than the enumeration goes
         // down would lose the floor every count has.
         Carrier carrier = ordersOf(term).answered();
-        return carrier == null ? null : carrier.spacing();
+        return carrier == null ? null : carrier.space();
     }
 
     @Override
@@ -1665,15 +1700,20 @@ final class ReadQuantities implements Quantities {
     private ConstraintState<InputAtom> insideItsOrder(ConstraintState<InputAtom> rules,
                                                       Set<NumericTerm> terms,
                                                       StructuralContext under) {
-        Map<InputAtom, NumericDomain.Bounds> stops = new LinkedHashMap<>();
+        Map<InputAtom, NumberSpace> told = new LinkedHashMap<>();
         for (NumericTerm each : NumericTerms.inOrder(terms)) {
             TermOrders orders = ordersOf(each);
             Carrier order = orders == null ? null : orders.answered();
             if (order != null) {
-                stops.put(called(each, under), order.whereItStops());
+                InputAtom atom = called(each, under);
+                // Spaced as the rules already have it, where they have it: the ends are what this
+                // adds, and a position is spaced one way.
+                Granularity spacing = rules.numbers().spacingOf(atom);
+                told.put(atom, NumberSpace.stopping(
+                        spacing == null ? order.spacing() : spacing, order.whereItStops()));
             }
         }
-        return rules.heldInsideTheirOrders(stops);
+        return rules.told(told);
     }
 
     /**
@@ -1836,6 +1876,33 @@ final class ReadQuantities implements Quantities {
      * are taken in the order they are written down, so two contradictions of one kind are told
      * apart by where they sit rather than by when they were found.
      */
+    @Override
+    public StringsOfOneLength stringsOfOneLength(TermPath at) {
+        // Refused where no value this reading holds is around the place, the way a term under
+        // nothing this behavior takes is refused: "no format holds it" would be said of a place
+        // this reading has never been.
+        if (rootOf(at) == null) {
+            throw new IllegalArgumentException("`" + at + "` is under nothing this input takes,"
+                    + " so there is nothing here to say what strings it holds");
+        }
+        Position position = byPath.get(at);
+        Type string = typeAt.apply(at);
+        NumericTerm.TakenOf length = position == null || string == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(ValueName.Stdlib.operation("String", "length"),
+                        at, string, ruleReading.source().inners(),
+                        ruleReading.source().symbols());
+        Integer held = length == null ? null : position.codePointsHeld(length);
+        if (held == null
+                || !(position.admitted().approximation() instanceof ValueSet.Matching(var format))) {
+            return null;
+        }
+        // Each string of the format is one the rules leave only where the format is the whole of
+        // what they say, and a value only where the format's sequence is one a String holds.
+        StringsHeldAsWritten everyOneHeld = position.completeness()
+                instanceof AdmissibleSet.Completeness.Complete ? format.heldAsWritten() : null;
+        return new StringsOfOneLength(format, everyOneHeld, held);
+    }
+
     @Override
     public Optional<EmptyInput> emptiness() {
         Optional<EmptyInput> had = emptiness;
@@ -2230,6 +2297,13 @@ final class ReadQuantities implements Quantities {
         return classFixedAt(place, true);
     }
 
+    /** What the order the position {@code place} is the value of was read to leave it, or null
+     *  where no rule of the order stops it or no position is there. */
+    public OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
+        Position at = byPath.get(place.position());
+        return at == null ? null : at.orderedRegion();
+    }
+
     /**
      * The values the position {@code term} is read of was read to admit, or every value where no
      * position is there.
@@ -2251,6 +2325,11 @@ final class ReadQuantities implements Quantities {
     public ValueSet heldAt(NumericTerm.FromOnePosition term) {
         if (term instanceof NumericTerm.ValueOf) {
             return admittedAt(term);
+        }
+        Language.Ends sums = whereAFormatLeaves(term);
+        if (sums != null) {
+            return ValueSet.wholeNumbers(WholeNumberRuns.one(BigInteger.valueOf(sums.least()),
+                    sums.most() == null ? null : BigInteger.valueOf(sums.most())));
         }
         if (!(admittedAt(term) instanceof ValueSet.Finite admitted)) {
             return ValueSet.ANY;
@@ -2463,7 +2542,35 @@ final class ReadQuantities implements Quantities {
     private NumericDomain.Bounds ownOf(NumericTerm.FromOnePosition term) {
         Position at = byPath.get(term.position());
         PositionBounds bounds = at == null ? null : at.boundsFor(term);
-        return bounds == null ? null : bounds.admissible();
+        if (bounds != null) {
+            return bounds.admissible();
+        }
+        Language.Ends sums = whereAFormatLeaves(term);
+        return sums == null ? null : new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(sums.least())),
+                sums.most() == null ? null : Endpoint.inclusive(Count.of(sums.most())));
+    }
+
+    /**
+     * Where a number of the code points of a string of a format lies — what they come to, or the
+     * one at an index — where {@code term} is such a number of a position whose values are a
+     * format's strings; null for any other number.
+     *
+     * <p>Between the least and the greatest the format's strings come to, or hold there, which is
+     * every such number and may be some more: a format of {@code a} and {@code c} holds no string
+     * coming to 98. No clause states it, so no position's bounds hold it; it is what the strings
+     * the rules admit are.
+     */
+    private Language.Ends whereAFormatLeaves(NumericTerm.FromOnePosition term) {
+        if (!(admittedAt(term) instanceof ValueSet.Matching(var language))) {
+            return null;
+        }
+        return switch (term) {
+            case NumericTerm.CodePointValueSum _ -> language.sumsOfCodePoints();
+            case NumericTerm.CodePointAt at -> language.codePointsAt(at.index());
+            case NumericTerm.ValueOf _, NumericTerm.TakenOf _,
+                 NumericTerm.CodePointClassCount _ -> null;
+        };
     }
 
     /**

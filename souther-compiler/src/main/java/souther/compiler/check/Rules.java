@@ -1,12 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The rules written about a value, or the fact that a value of this kind has none to write.
@@ -51,6 +53,14 @@ public sealed interface Rules {
      */
     record NoneWritten() implements Rules {}
 
+    /** These rules read again without the rules {@code parts} name ({@link FieldDomains#leavingOut}). */
+    default Rules leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+        return switch (this) {
+            case Read read -> new Read(read.domains().leavingOut(parts));
+            case NoneWritten _ -> this;
+        };
+    }
+
     /**
      * Whether any rule at all was written about this value.
      *
@@ -60,6 +70,7 @@ public sealed interface Rules {
      * was found — and a caller wanting the second and reading the first counts a record nobody wrote
      * a rule about as a value that spoke.
      */
+
     default boolean anythingWasWritten() {
         return switch (this) {
             case Read read -> read.domains().anythingWasWritten();
@@ -87,6 +98,15 @@ public sealed interface Rules {
         return switch (this) {
             case Read read -> read.domains().admits(path);
             case NoneWritten _ -> AdmissibleSet.complete(ValueSet.ANY);
+        };
+    }
+
+    /** What the order leaves {@code path}, or null where no rule of it stops the path
+     *  ({@link FieldDomains#orderedRegionAt}). */
+    default OrderedRuns orderedRegionAt(RuleKey path) {
+        return switch (this) {
+            case Read read -> read.domains().orderedRegionAt(path);
+            case NoneWritten _ -> null;
         };
     }
 

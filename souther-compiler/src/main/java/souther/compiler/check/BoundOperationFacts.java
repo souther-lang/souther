@@ -310,9 +310,24 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
     }
 
-    /** How {@code operation} rounds a number to a whole one, or null where it rounds none. */
-    public BoundOperationFact.RoundsToAWholeNumber roundsToAWholeNumber(ValueName operation) {
-        return one(BoundOperationFact.RoundsToAWholeNumber.class, operation);
+    /** How {@code operation} rounds a number to a whole one, or null where it rounds none to a
+     *  whole number. */
+    public BoundOperationFact.RoundsToAStep roundsToAWholeNumber(ValueName operation) {
+        BoundOperationFact.RoundsToAStep rounds = roundsToAStep(operation);
+        return rounds != null && rounds.toAWholeNumber() ? rounds : null;
+    }
+
+    /** How {@code operation} rounds a number to a step, at a scale or to a whole number, or null
+     *  where it rounds none. */
+    public BoundOperationFact.RoundsToAStep roundsToAStep(ValueName operation) {
+        return one(BoundOperationFact.RoundsToAStep.class, operation);
+    }
+
+    /** {@code applied} as a rounding of a number to a step, or null where the operation it
+     *  applies rounds none or it hands nothing where the law reads. */
+    public ARounding rounding(AnOperationApplied applied) {
+        BoundOperationFact.RoundsToAStep rounds = roundsToAStep(applied.operation());
+        return rounds == null ? null : ARounding.of(applied, rounds);
     }
 
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
@@ -769,6 +784,18 @@ public final class BoundOperationFacts {
                                 SideAnswered side)), var _)
                 && aspect == AnswerAspect.TRUTH && side.aspect() == AnswerAspect.TRUTH
                 && !side.holds() && of.position() == 0;
+    }
+
+    /**
+     * Whether {@code operation} comes out true exactly where some element of a container it is
+     * handed meets what it asks of an element, or exactly where none does, as the law settling its
+     * truth says: the quantifiers over a container, and whatever is written like them.
+     */
+    public boolean quantifiesOverTheElementsItIsHanded(ValueName operation) {
+        return settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
+                        LawProposition.SomeElement<DeclaredArgument> _), var _)
+                && aspect == AnswerAspect.TRUTH;
     }
 
     /**

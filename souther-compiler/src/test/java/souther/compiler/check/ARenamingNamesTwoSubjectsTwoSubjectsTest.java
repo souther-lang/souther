@@ -6,6 +6,8 @@ import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
@@ -149,6 +151,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
                                 .resolve(AsACompilationAllows.forAdmittedValues()),
                         AsACompilationAllows.forAdmittedValues())
                 .taking(LinearForm.atomMinusConstant(ONLY_IN_NUMBERS, ExactRatio.of(3)),
-                        Rel.LE, Map.of(ONLY_IN_NUMBERS, souther.compiler.numeric.Granularity.DISCRETE));
+                        Rel.LE, Map.of(ONLY_IN_NUMBERS,
+                                NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)));
     }
 }

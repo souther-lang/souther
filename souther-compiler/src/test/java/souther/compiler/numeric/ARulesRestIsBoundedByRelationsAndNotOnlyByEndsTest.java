@@ -33,8 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
 
-    private static final Map<String, Granularity> WHOLE = Map.of(
-            "x", Granularity.DISCRETE, "y", Granularity.DISCRETE, "z", Granularity.DISCRETE);
+    private static final NumberSpace COUNTED = NumberSpace.spacedOnly(Granularity.DISCRETE);
+
+    private static final Map<String, NumberSpace> WHOLE =
+            Map.of("x", COUNTED, "y", COUNTED, "z", COUNTED);
 
     private static LinearForm<String> form(Object... parts) {
         Map<String, ExactRatio> coefs = new LinkedHashMap<>();

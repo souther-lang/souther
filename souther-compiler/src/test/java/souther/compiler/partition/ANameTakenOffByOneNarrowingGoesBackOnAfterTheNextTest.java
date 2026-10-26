@@ -122,7 +122,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
                         read.rules().symbols(),
                         read.rules().kinds(), read.rules().sums(), Set.of(),
                         axis.requiring(cls), ConstructionPlan.ContentsComposed.NONE,
-                        ONE_AT_LEAST),
+                        ONE_AT_LEAST, _ -> false),
                 "nothing here asks one position to be two things").plan();
 
         return names(under(plan.root(), axis.path().refine(cls.selects())));

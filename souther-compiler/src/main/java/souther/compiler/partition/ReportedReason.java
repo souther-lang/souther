@@ -280,7 +280,9 @@ public final class ReportedReason {
             case BlockReason.ValueRulesNotReached _,
                  BlockReason.ValueRulesNotReachedPastDepthLimit _ ->
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
-            case BlockReason.UnreadComparisonDomain _ ->
+            // One word for the two: the values the line would be drawn at are not ones a line can
+            // be drawn on here, whether they carry no order or are not values of the type.
+            case BlockReason.UnreadComparisonDomain _, BlockReason.OrderedExtentEndIsNoValue _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             // Its own word, and not the one above. The values carry an order and the line is
             // written; what has no place is the number it falls at, and a reader acts on the
@@ -310,6 +312,10 @@ public final class ReportedReason {
             case BlockReason.RelationNotShownToReachEveryValue _,
                  BlockReason.RelationNotShownWhereTheSearchStopped _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
+            // Its own word and not the one above: what falls short is the values here getting to
+            // the rule, and a reader looks at what the run works out before it.
+            case BlockReason.RelationNotShownReachedAtEveryValue _ ->
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two

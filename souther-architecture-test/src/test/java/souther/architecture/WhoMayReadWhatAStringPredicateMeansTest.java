@@ -93,6 +93,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_PATTERNS_PRODUCER =
             "souther/compiler/partition/Partitions$PatternForAWitness -> " + OWNER;
 
+    /** The question of strings a position admits that part into pieces of another type, which
+     *  takes the pattern of a piece as the rule's reading handed it out. */
+    private static final String STRINGS_IN_PIECES =
+            "souther/compiler/partition/Partitions$StringsPartedInto -> " + OWNER;
+
     /** What the rules about a position's strings came to, as that reading holds it. */
     private static final String THE_PATTERNS_STATED =
             "souther/compiler/partition/Partitions$PatternsStated -> " + OWNER;
@@ -246,6 +251,14 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             ONE_STATED_RULE,
             ONE_STATED_RULE + IN_A_DESCRIPTOR,
             ONE_STATED_RULE + "$StatedPattern",
+            // The strings that part into pieces of a type, which are met with what the position
+            // admits: the pattern of a piece is carried and asked what it means, and nothing is
+            // read of any clause here.
+            STRINGS_IN_PIECES,
+            STRINGS_IN_PIECES + IN_A_DESCRIPTOR,
+            STRINGS_IN_PIECES + "$StatedPattern",
+            STRINGS_IN_PIECES
+                    + "$StatedPattern#meaning()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,
             A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"
@@ -266,7 +279,22 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_CHARACTER_MATCHED,
             A_CHARACTER_MATCHED + IN_A_DESCRIPTOR,
             A_CHARACTER_MATCHED + "#of(Lsouther/compiler/core/Kernel;)L" + OWNER + ";",
-            A_CHARACTER_MATCHED + "#subject()I");
+            // And a predicate applied to a piece of a string, which the table reads as it reads
+            // one applied to a position: what the predicate holds of is its answer, and the
+            // reading of the pieces takes it as it came.
+            A_CHARACTER_MATCHED + "#statedBy(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
+                    + OWNER + "$Stated;",
+            A_CHARACTER_MATCHED + "#subject()I",
+            A_CHARACTER_MATCHED + "$Reading",
+            A_CHARACTER_MATCHED + "$Reading$Accepting",
+            A_CHARACTER_MATCHED
+                    + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
+            A_CHARACTER_MATCHED + "$Stated",
+            A_CHARACTER_MATCHED + "$Stated#reading()L" + OWNER + "$Reading;",
+            A_CHARACTER_MATCHED + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
+            A_CHARACTER_MATCHED + "$Stated#subject()Lsouther/compiler/core/Core;",
+            A_CHARACTER_MATCHED + "$WrittenText");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

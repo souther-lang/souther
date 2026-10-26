@@ -8,6 +8,7 @@ import souther.compiler.check.ClassMembers;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
@@ -28,6 +29,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
@@ -35,12 +37,15 @@ import souther.compiler.numeric.Text;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Language;
+import souther.compiler.values.ValueSet;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -392,7 +397,8 @@ final class TermRealizations {
                 case NumericTerm.ValueOf _ -> itself = target;
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.
-                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> {
+                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                     NumericTerm.CodePointAt _ -> {
                     takenOfIt.add(target);
                     ofItsCodePoints.add(target);
                 }
@@ -1739,7 +1745,8 @@ final class TermRealizations {
                 // A string is chosen whole, and what its code points come to is read off it: no
                 // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                     NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
                      NumericTerm.GatheredUnderAKey _ -> false;
@@ -1962,7 +1969,7 @@ final class TermRealizations {
             }
             // A string written for its code points alone, which is the search that writes one for
             // several numbers of a string, asked one.
-            case NumericTerm.CodePointValueSum _ -> {
+            case NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _ -> {
                 nothingInside(inside);
                 SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
                 demands.put(target, asked);
@@ -2055,7 +2062,7 @@ final class TermRealizations {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
             case TakenAs.HowManyItHolds _ ->
-                    holding(sourceType, keptApart, asked, orders, reading);
+                    holding(sourceType, keptApart, asked, orders, within, reading);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
@@ -2238,7 +2245,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         Realization below = holdingExactly(sourceType, keptApart,
-                Count.of(BigDecimal.valueOf(many - 1)), reading);
+                Count.of(BigDecimal.valueOf(many - 1)), ElementsHeldTo.NOTHING, reading);
         return below instanceof Realization.None
                 ? treesNotWritten("a tree of " + many + " nodes is deeper than a root and the"
                         + " nodes below it")
@@ -2811,18 +2818,28 @@ final class TermRealizations {
                                     SearchRegion within, UsualPlace usual) {
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+        // What the declarations leave the value on its order, and which of its values they admit:
+        // a place either refuses is one every row written at it is refused at.
+        NumericTerm.ValueOf value = orders.term() instanceof NumericTerm.ValueOf it && within != null
+                ? it : null;
+        OrderedRuns declared = value == null ? null : within.orderedRegionAt(value);
+        ValueSet admits = value == null ? ValueSet.ANY : within.admittedAt(value);
         switch (wanted) {
-            // A set of one number is that number, and there is nothing else it could have been.
+            // A set of one number is that number, and there is nothing else it could have been —
+            // and where the order the declarations leave the value holds it nowhere, the set holds
+            // no value of the position at all.
             case NumericSet.At one -> {
-                return Tried.theOne(one.value());
+                return declared == null || declared.admits(one.value())
+                        ? Tried.theOne(one.value())
+                        : new Tried(List.of(), new Remainder.Exhausted());
             }
             // Anything but the values a rule singled out. Which place beside them to try is a
             // witness somebody pays for, and what a witness may cost is named where witnesses are
             // paid for — so a caller that paid names one and this tries it. Nothing built at it is
             // an answer about that number: the set holds every other one, and none was looked at.
             case NumericSet.AwayFrom _ -> {
-                return new Tried(named == null ? List.of() : List.of(named),
-                        new Remainder.SomeOf(ofTheRun));
+                return new Tried(named == null || (declared != null && !declared.admits(named))
+                        ? List.of() : List.of(named), new Remainder.SomeOf(ofTheRun));
             }
             // A run, with or without values taken out of it, is looked in below — in the runs the
             // set makes up, so a place a run holds is never offered for one that has it taken out.
@@ -2843,47 +2860,96 @@ final class TermRealizations {
             }
             case null -> leaves = null;
         }
+        // In each run the declarations leave the value on its order, since between the ends of the
+        // first and the last are gaps every alternative refuses. Where the rules leave the number
+        // room and the declarations' runs hold nothing of it, the declarations leave no value
+        // there, which they say.
+        List<NumericDomain.Bounds> runs = LevelRealizer.runsOf(leaves, declared);
+        if (runs.isEmpty()) {
+            return new Tried(List.of(), new Remainder.Exhausted());
+        }
         // A value held to a class is a value of the class, so what is offered are its members: the
         // end of a run is one only by luck, and a place the class refuses is no candidate whatever
         // else is asked of it afterwards.
-        HeldClass members = orders.term() instanceof NumericTerm.ValueOf value && within != null
-                ? within.classAt(value) : HeldClass.NONE;
+        HeldClass members = value == null ? HeldClass.NONE : within.classAt(value);
         if (!(members instanceof HeldClass.None)) {
-            return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun, usual);
+            return membersOnTheOrder(wanted, orders, members, runs, admits, ofTheRun, usual);
         }
-        Place found = Criterion.Within.standingIn(wanted.region(orders.answered()),
-                orders.answered(), leaves == null ? null : leaves.min(),
-                leaves == null ? null : leaves.max(), usual);
-        return new Tried(found == null ? List.of() : List.of(found),
-                new Remainder.SomeOf(ofTheRun));
+        // One place of each run of the set inside each of those, standing for it — and where the
+        // one standing for it is a value the position's values refuse, one of the run they take,
+        // found among what the set and the order have in hand: the place standing for a run is
+        // chosen by where the number is usually near, and a rule singling a value out may single
+        // out that one. No machine is built for it, which a witness's own writer pays for. Where
+        // the order names no place for a run, nothing is put in its stead: an order declines on
+        // purpose, as above a string a rule stops short of, where every value would carry a
+        // character nobody wrote.
+        Carrier carrier = orders.answered();
+        LevelSpace space = LevelSpace.onACarrier(carrier);
+        List<Place> offered = new ArrayList<>();
+        for (NumericDomain.Bounds run : runs) {
+            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+                    run == null ? null : run.min(), run == null ? null : run.max())) {
+                if (!(space.standingFor(look, usual).level() instanceof Level.OnACarrier on)) {
+                    continue;
+                }
+                Place found = carrier.admitted(admits, on.at()) ? on.at()
+                        : takenInstead(look, carrier, admits, on.at());
+                if (!offered.contains(found)) {
+                    offered.add(found);
+                }
+            }
+        }
+        return new Tried(List.copyOf(offered), new Remainder.SomeOf(ofTheRun));
     }
 
     /**
-     * The members of {@code members} that the runs of {@code wanted} hold inside what the rules
-     * leave the number, nearest the end the search starts from, run by run.
+     * A place of {@code look} the position's values take in, found without a machine — or
+     * {@code refused} where none is in hand, which the row built at it is then refused at as it
+     * would have been.
+     */
+    private static Place takenInstead(LevelInterval look, Carrier carrier, ValueSet admits,
+                                      Place refused) {
+        OrderedInterval run = LevelRealizer.runOf(look, carrier);
+        Place taken = run == null ? null
+                : carrier.somewhereInHand(admits, run, PlacesApart.NONE);
+        return taken != null ? taken : refused;
+    }
+
+    /**
+     * The members of {@code members} that the runs of {@code wanted} hold inside each of
+     * {@code leaves} and that the position's values take in, nearest the end the search starts
+     * from, run by run.
      *
      * <p>More than one, so that what is refused of the first is not the end of the search: the next
      * member is the one a caller reads back and tries. A run holding more than are offered says so,
      * for the figure it was cut at.
+     *
+     * @param leaves the runs the declarations and the region leave the number, lowest first
      */
     private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
-                                           HeldClass members, NumericDomain.Bounds leaves,
-                                           Set<CompositionRepertoire> ofTheRun,
+                                           HeldClass members, List<NumericDomain.Bounds> leaves,
+                                           ValueSet admits, Set<CompositionRepertoire> ofTheRun,
                                            UsualPlace usual) {
         Carrier carrier = orders.answered();
         List<Place> offered = new ArrayList<>();
         boolean more = false;
-        for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
-                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max())) {
-            OrderedInterval run = LevelRealizer.runOf(look, carrier);
-            if (run == null) {
-                continue;
+        for (NumericDomain.Bounds within : leaves) {
+            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+                    within == null ? null : within.min(), within == null ? null : within.max())) {
+                OrderedInterval run = LevelRealizer.runOf(look, carrier);
+                if (run == null) {
+                    continue;
+                }
+                ClassMembers inside = members.standingIn(
+                        new NumericDomain.Bounds(run.low(), run.high()), carrier, usual,
+                        CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
+                for (Place each : inside.notApart(PlacesApart.NONE)) {
+                    if (carrier.admitted(admits, each)) {
+                        offered.add(each);
+                    }
+                }
+                more |= inside.stoppedShort();
             }
-            ClassMembers inside = members.standingIn(
-                    new NumericDomain.Bounds(run.low(), run.high()), carrier, usual,
-                    CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
-            offered.addAll(inside.notApart(PlacesApart.NONE));
-            more |= inside.stoppedShort();
         }
         return new Tried(offered, more
                 ? new Remainder.StoppedAt(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED)
@@ -3235,15 +3301,76 @@ final class TermRealizations {
      * for is not a set nothing writes a value in.
      */
     private static Realization holding(Type sourceType, List<List<String>> keptApart,
-                                       AskedAt asked, TermOrders orders,
+                                       AskedAt asked, TermOrders orders, SearchRegion within,
                                        RuleReadingContext reading) {
+        ElementsHeldTo heldTo = new ElementsHeldTo(orders.term().subjectPath(), within);
         // From none upward, which is as far as a count runs and as many of them as the figure
         // allows. A count is the one account whose numbers are whole and whose window is the whole
         // of what it can be asked for, so a walk that reaches the end of it has walked the set.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlace.NONE),
-                count -> holdingExactly(sourceType, keptApart, count, reading));
+                count -> holdingExactly(sourceType, keptApart, count, heldTo, reading));
+    }
+
+    /**
+     * What the way leaves a number of each element of a container, which the elements it is
+     * composed with are held to.
+     *
+     * <p>A condition that every element meets something is a bound on the elements and not a
+     * value of one of them ({@link Generator.ElementBound}); the region carries it as what is left
+     * of the element's numbers, and a container composed by its size would otherwise write
+     * elements the region has no say in.
+     *
+     * @param container the container, which the elements are inside
+     * @param within    what the way leaves, or null where it is not asked
+     */
+    private record ElementsHeldTo(TermPath container, SearchRegion within) {
+
+        static final ElementsHeldTo NOTHING = new ElementsHeldTo(null, null);
+
+        /**
+         * The container of elements written inside what the way leaves their fields, in place of
+         * {@code seeds}: the elements {@code seeds} hold are written from the type alone, and a
+         * container holding them is no container the way asks for.
+         *
+         * <p>{@code seeds} stand where the way bounds no field of the element, the element is no
+         * record, or the elements are kept apart or are in a set. And they stand where no element
+         * could be composed inside the bounds, with what that composing met beside what building
+         * them did: the offer is then short of the way, and says so.
+         *
+         * <p>Only of a container a parameter roots. A container inside an element of another is
+         * the element's own, and the bounds the way puts on elements are on those of the container
+         * a condition names; the region has no answer for a position under an element of it.
+         */
+        Proposals over(Proposals seeds, TypeView holder, int many, List<List<String>> keptApart,
+                       RuleReadingContext reading) {
+            if (container == null || within == null || !keptApart.isEmpty()
+                    || container.insideAContainer()
+                    || !(holder.shape() instanceof Shape.Sequence carrier)
+                    || carrier.kind() != Shape.Sequence.Kind.LIST
+                    || !(carrier.element() instanceof Type.Ref ref)
+                    || !(ref.name() instanceof TypeSymbol.AtModule record)) {
+                return seeds;
+            }
+            Map<String, NumericDomain.Bounds> held =
+                    Partitions.leftTheFieldsOfAnElement(record, container, within, reading);
+            if (held.isEmpty()) {
+                return seeds;
+            }
+            Proposals element = Partitions.composedHeldTo(record,
+                    Partitions.rulesOver(carrier.element(), record, reading.source()), reading,
+                    held);
+            if (element.isEmpty()) {
+                return seeds.meeting(element.met());
+            }
+            List<FixtureTemplate> elements = new ArrayList<>();
+            for (int i = 0; i < many; i++) {
+                elements.add(element.values().getFirst());
+            }
+            return Proposals.of(List.of(FixtureTemplate.collection(elements)))
+                    .meeting(seeds.met().and(element.met()));
+        }
     }
 
     /**
@@ -3402,6 +3529,74 @@ final class TermRealizations {
         }
         return out;
     }
+
+    /**
+     * For each of {@code sums}, a string the rules on {@code holder} leave whose code points come
+     * to it, of a length every length asked admits, and holding at each index a code point is
+     * asked at one of the code points tried there.
+     *
+     * <p>Looked for among the strings the rules leave rather than written and moved, since a string
+     * of a format is made of the code points the format places, and moving one of them to reach a
+     * sum writes one the format refuses. Every index asked is asked of the one string, so a string
+     * holding them is written once for all of them. Each is a proposal like the others, read back
+     * against every demand by whoever adopts it. Each sum is looked for in {@code steps}, and one
+     * that ran out of them is said, since a sum whose string was not found is not a sum with none.
+     */
+    private static LeftComingTo leftComingTo(TypeView holder, RuleReadingContext reading,
+                                             List<OfAString> wanted, List<Long> sums,
+                                             int steps) {
+        Map<Integer, CodePoints> at = new LinkedHashMap<>();
+        boolean asksASum = false;
+        for (OfAString each : wanted) {
+            switch (each.number()) {
+                case NumberOfAString.At point -> {
+                    CodePoints tried = CodePoints.NONE;
+                    for (Place one : each.tried().numbers()) {
+                        if (one instanceof Count count && count.whole()
+                                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
+                                        BigInteger value)
+                                && value.signum() >= 0
+                                && value.compareTo(BigInteger.valueOf(CodePoints.LAST)) <= 0
+                                && !CodePoints.isSurrogate(value.intValue())) {
+                            tried = tried.or(CodePoints.of(value.intValue()));
+                        }
+                    }
+                    at.merge(point.index(), tried, CodePoints::and);
+                }
+                case NumberOfAString.CodePointSum _ -> asksASum = true;
+                case NumberOfAString.Length _, NumberOfAString.InAClass _ -> { }
+            }
+        }
+        if (asksASum ? sums.isEmpty() : at.isEmpty()) {
+            return new LeftComingTo(List.of(), false);
+        }
+        Partitions.StringsTheRulesLeave left = Partitions.stringsTheRulesLeave(holder, reading);
+        if (left == null) {
+            return new LeftComingTo(List.of(), false);
+        }
+        IntPredicate lengths = length -> wanted.stream()
+                .filter(each -> each.number() instanceof NumberOfAString.Length)
+                .allMatch(each -> each.holds().test(Count.of(length)));
+        List<String> out = new ArrayList<>();
+        boolean pastTheWork = false;
+        List<Long> each = new ArrayList<>(asksASum ? sums : List.of());
+        if (!asksASum) {
+            each.add(null);
+        }
+        for (Long sum : each) {
+            switch (left.leaves().holding(at, sum, lengths, Integer.MAX_VALUE - 1, READABLE,
+                    steps)) {
+                case Language.ComingTo.Written(String text) -> out.add(text);
+                case Language.ComingTo.NoneDoes _ -> { }
+                case Language.ComingTo.PastTheWork _ -> pastTheWork = true;
+            }
+        }
+        return new LeftComingTo(out, pastTheWork);
+    }
+
+    /** The strings the rules leave that came to the sums, and whether looking for one ran out of
+     *  the steps it was given. */
+    private record LeftComingTo(List<String> found, boolean pastTheWork) {}
 
     /**
      * Strings written for the number alone: {@code many} code points of the class, and the ones
@@ -3583,22 +3778,27 @@ final class TermRealizations {
 
         record CodePointSum() implements NumberOfAString {}
 
-        /** This number of {@code text}, as the language holds it. */
+        /** The code point at {@code index} of the string's code points, counted from nought. */
+        record At(int index) implements NumberOfAString {}
+
+        /** This number of {@code text}, as the language holds it; for a code point at an index the
+         *  string does not reach, a number below nought, which no demand admits. */
         default long of(String text) {
             return switch (this) {
                 case Length _ -> text.codePointCount(0, text.length());
                 case InAClass in -> countIn(in.counted(), in.through(), text);
                 case CodePointSum _ -> text.codePoints().asLongStream().sum();
+                case At at -> text.codePoints().skip(at.index()).findFirst().orElse(-1);
             };
         }
 
         /** Whether this counts the code points of {@code kind}, which every length does and no
-         *  sum. */
+         *  sum or single code point. */
         default boolean counts(KindOfCodePoint kind) {
             return switch (this) {
                 case Length _ -> true;
                 case InAClass in -> in.counted().contains(kind.held().least());
-                case CodePointSum _ -> false;
+                case CodePointSum _, At _ -> false;
             };
         }
 
@@ -3611,6 +3811,7 @@ final class TermRealizations {
                 case NumericTerm.CodePointClassCount count ->
                         new InAClass(count.counted(), count.through());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
+                case NumericTerm.CodePointAt at -> new At(at.index());
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
@@ -3701,11 +3902,17 @@ final class TermRealizations {
             // A sum is held to its demand at every way of writing a string, by what the counts can
             // come to, so the sums tried are where the moving aims and not the whole question.
             everyNumberTried &= each.number() instanceof NumberOfAString.CodePointSum
+                    || each.number() instanceof NumberOfAString.At
                     || each.tried().rest() instanceof Remainder.Exhausted;
             if (each.tried().numbers().isEmpty() && each.tried().rest()
                     instanceof Remainder.Exhausted) {
                 return new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            // A code point at an index is no count of any kind and no sum: it is asked of the
+            // string the rules leave, at its index ({@link #leftComingTo}).
+            if (each.number() instanceof NumberOfAString.At) {
+                continue;
             }
             for (Place each2 : each.tried().numbers()) {
                 if (each.number() instanceof NumberOfAString.CodePointSum) {
@@ -3767,6 +3974,10 @@ final class TermRealizations {
         for (String each : admittedStrings(holder, reading, lengths)) {
             search.adopt(each);
         }
+        LeftComingTo left = leftComingTo(holder, reading, wanted, sums, steps);
+        for (String each : left.found()) {
+            search.adopt(each);
+        }
         if (search.found().isEmpty()) {
             search.over(0, new int[kindsOfCodePoint], kinds);
         }
@@ -3791,6 +4002,9 @@ final class TermRealizations {
                 && wanted.stream().noneMatch(each -> each.number()
                         instanceof NumberOfAString.InAClass in && in.ofAnAnswer())
                 && search.looked() < steps && !search.leftUnwritten()
+                // The ways of writing a string count its code points, and say nothing of which one
+                // stands at an index.
+                && wanted.stream().noneMatch(each -> each.number() instanceof NumberOfAString.At)
                 && (wanted.stream().noneMatch(
                         each -> each.number() instanceof NumberOfAString.CodePointSum)
                     || wanted.stream().anyMatch(
@@ -3810,7 +4024,7 @@ final class TermRealizations {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
         }
-        if (search.looked() >= steps || (inFull && kinds.size() <= largest)) {
+        if (search.looked() >= steps || (inFull && kinds.size() <= largest) || left.pastTheWork()) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
         }
@@ -4181,7 +4395,8 @@ final class TermRealizations {
 
     /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
     private static Realization holdingExactly(Type sourceType, List<List<String>> keptApart,
-                                              Place answer, RuleReadingContext reading) {
+                                              Place answer, ElementsHeldTo heldTo,
+                                              RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
             return new Realization.None(
@@ -4200,7 +4415,8 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        Proposals built = Witnesses.ofSize(holder, many, keptApart, reading, Set.of());
+        Proposals built = heldTo.over(Witnesses.ofSize(holder, many, keptApart, reading, Set.of()),
+                holder, many, keptApart, reading);
         if (built.isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
             // stopped as two halves of one answer for exactly this — what stopped it includes what

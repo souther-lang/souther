@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.NumericMeasures;
@@ -14,6 +15,7 @@ import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -25,6 +27,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
@@ -195,8 +198,9 @@ final class ContainersAddingUp {
                                 Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
                         null);
             }
-            return throughEach(ways, solved -> composedThrough(solved, answer, container,
-                    keptApart, orders, within, reading, alsoHolding, alsoAddingUp, inside));
+            return throughEach(ways, solved -> walkedInPartWhereHeldStill(solved,
+                    composedThrough(solved, answer, container, keptApart, orders, within,
+                            reading, alsoHolding, alsoAddingUp, inside)));
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
                 alsoHolding, alsoAddingUp, inside);
@@ -286,21 +290,51 @@ final class ContainersAddingUp {
     }
 
     /**
+     * {@code made}, said as a walk of some of the containers where {@code way} held fields of the
+     * elements still: nothing written for those is nothing written for the ones it did not try,
+     * and a search of some of the containers is no answer that the total has none.
+     */
+    private static TermRealizations.Realization walkedInPartWhereHeldStill(
+            FieldSolved way, TermRealizations.Realization made) {
+        return way.fixing() != null && made instanceof TermRealizations.Realization.None none
+                ? new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
+                        Set.of(CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL)),
+                        none.detail())
+                : made;
+    }
+
+    /**
      * What is written for {@code answer} where the elements are chosen on what {@code solved}
      * solves for, or on the total's own values where it is null.
      */
     private static TermRealizations.Realization composedThrough(
-            FieldSolved solved, Place answer, Type container, List<List<String>> keptApart,
+            FieldSolved unsettled, Place answer, Type container, List<List<String>> keptApart,
             TermOrders orders, SearchRegion within, RuleReadingContext reading,
             HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
             DemandsInside demanded) {
+        // A field held still at no value the region leaves it is a way this did not try, which is
+        // not the region leaving the total no row.
+        FieldSolved solved = unsettled == null ? null : unsettled.settledIn(within);
+        if (unsettled != null && solved == null) {
+            return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL)),
+                    "no value held the other fields of the elements still");
+        }
+        // The fields a sum of products is fixed at are asked of every element, beside whatever
+        // else each is asked to hold.
+        DemandsInside inside = demanded;
+        if (solved != null && solved.fixing() != null) {
+            inside = holdingWhatIsFixed(solved.fixing(), orders, demanded, reading);
+            if (inside == null) {
+                return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+        }
         // An arm whose case is taken of a place beside the field asks every element to be of it,
         // beside whatever else each is asked to hold.
-        DemandsInside inside = demanded;
         if (solved != null && solved.ofTheCase() != null) {
-            switch (demanded.required().merge(solved.ofTheCase().requirements())) {
+            switch (inside.required().merge(solved.ofTheCase().requirements())) {
                 case Requirements.Merge.Merged(Requirements both) ->
-                        inside = new DemandsInside(demanded.among(), both);
+                        inside = new DemandsInside(inside.among(), both);
                 case Requirements.Merge.Conflict _ -> {
                     return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                 }
@@ -395,6 +429,9 @@ final class ContainersAddingUp {
         WhatWasLeft left = new WhatWasLeft();
         if (solved != null && solved.ofOneCase()) {
             left.notAllOf(CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER);
+        }
+        if (solved != null && solved.fixing() != null) {
+            left.notAllOf(CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL);
         }
         // What the planning gave up at, which is a way that was there to try and was not. A way down
         // that was never planned is a value never composed, and a reader told only that nothing was
@@ -767,9 +804,9 @@ final class ContainersAddingUp {
      * are then chosen exactly as for a total of the field itself, on the field's own order and under
      * the rules that bound it.
      *
-     * <p>Only a form of one field. With a second, what one element's number is depends on a value
-     * nothing here chooses, and solving for the first would be solving against a guess at the
-     * second.
+     * <p>A form of one field is solved for as it is. With a second, what one element's number is
+     * depends on the value of the second, and the second is chosen: fixed, as the fields of a sum of
+     * products are below, and asked of every element.
      *
      * <p>A choice by case is solved for through each arm whose answer is a form of one field of the
      * case it took ({@link #throughEach}), or of a field beside the place the case is taken of. The
@@ -784,6 +821,13 @@ final class ContainersAddingUp {
      * total, and the rest stand at the field's start and add their number whatever they hold. A
      * total of the first elements, or of those from an index on, is that.
      *
+     * <p>A sum of products of fields, and a form of several, is solved for each field it reads with
+     * every other one it reads fixed ({@link Fixing}): with them fixed it is a form of the one left,
+     * and every element
+     * is asked to hold the values they were fixed at. Those are some of the containers the total is
+     * over — the ones whose elements agree at every fixed field — and that is said beside whatever
+     * is written.
+     *
      * @param field     where each element's field stands
      * @param carrier   the order the field's values are written on
      * @param weight    what the field is multiplied by, never nought
@@ -795,10 +839,82 @@ final class ContainersAddingUp {
      * @param ofTheCase the place each element is asked to be of the case at, narrowed to it, where
      *                  the arm's case is taken of a place the field does not stand under; null
      *                  where it is
+     * @param fixing    the other fields of a sum of products and what each is fixed at, which
+     *                  {@code weight} and {@code constant} are worked out from; null for a form
      */
     private record FieldSolved(TermPath field, Carrier carrier, ExactRatio weight,
                                ExactRatio constant, boolean ofOneCase, Kept kept,
-                               TermPath ofTheCase) {
+                               TermPath ofTheCase, Fixing fixing) {
+
+        /**
+         * The fields of a sum of products held still while the one left is solved for.
+         *
+         * @param products what each element comes to, as products of its fields at their weights;
+         *                 a form of several fields is a sum of products of one field each
+         * @param free     the field solved for
+         * @param elements where the elements stand
+         * @param at       each other field the sum reads, and what every element holds there
+         */
+        record Fixing(LinearForm<ElementValue.Monomial> products, ElementProjection free,
+                      TermPath elements, Map<ElementProjection, ExactRatio> at) {
+
+            Fixing {
+                at = Collections.unmodifiableMap(new LinkedHashMap<>(at));
+            }
+        }
+
+        /**
+         * This way with the fields it fixes at values {@code within} leaves each of them, and the
+         * weight and constant worked out at those values — or null where the region leaves some
+         * fixed field no value, or none that leaves the field solved for in the sum.
+         *
+         * <p>One where the region holds it, since then the field solved for is weighed by what the
+         * products weigh it by and nothing else; otherwise the whole number nearest one the region
+         * leaves. Nought would take the field out of every product it is in.
+         */
+        FieldSolved settledIn(SearchRegion within) {
+            if (fixing == null) {
+                return this;
+            }
+            Map<ElementProjection, ExactRatio> at = new LinkedHashMap<>();
+            for (ElementProjection other : fixing.at().keySet()) {
+                ExactRatio value = within.projectionOf(new NumericTerm.ValueOf(
+                        other.from(fixing.elements())))
+                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds left)
+                        ? nearestOne(left == null ? NumericDomain.Bounds.OPEN : left) : null;
+                if (value == null) {
+                    return null;
+                }
+                at.put(other, value);
+            }
+            LinearForm<ElementProjection> left =
+                    ElementValue.solvedThrough(fixing.products(), fixing.free(), at);
+            ExactRatio weighs = left == null ? null : left.coefs().get(fixing.free());
+            if (weighs == null || weighs.isZero()) {
+                return null;
+            }
+            return new FieldSolved(field, carrier, weighs, left.constant(), ofOneCase, kept,
+                    ofTheCase, new Fixing(fixing.products(), fixing.free(), fixing.elements(), at));
+        }
+
+        /** One where {@code left} holds it, and otherwise the whole number nearest it that
+         *  {@code left} holds and is not nought; or null where it holds none. */
+        private static ExactRatio nearestOne(NumericDomain.Bounds left) {
+            if (left.admits(ExactRatio.ONE)) {
+                return ExactRatio.ONE;
+            }
+            List<BigInteger> tried = new ArrayList<>();
+            if (left.min() != null) {
+                tried.add(left.min().wholeAdmitted(true));
+            }
+            if (left.max() != null) {
+                tried.add(left.max().wholeAdmitted(false));
+            }
+            return tried.stream().filter(Objects::nonNull).filter(whole -> whole.signum() != 0)
+                    .filter(whole -> left.admits(ExactRatio.of(whole)))
+                    .min(Comparator.comparing(whole -> whole.subtract(BigInteger.ONE).abs()))
+                    .map(ExactRatio::of).orElse(null);
+        }
 
         /**
          * The positions of a container that take the form a total is solved through, and what the
@@ -851,8 +967,13 @@ final class ContainersAddingUp {
             switch (computation) {
                 case ElementValue.Affine affine -> {
                     FieldSolved solved = ofAForm(affine, null, elements, orders);
+                    LinearForm<ElementValue.Monomial> products =
+                            solved != null || affine.form().coefs().size() < 2 ? null
+                                    : ElementValue.asProducts(affine);
                     if (solved != null) {
                         out.add(solved);
+                    } else if (products != null) {
+                        out.addAll(ofProducts(products, elements, orders));
                     }
                 }
                 case ElementValue.OfItsCase choice -> {
@@ -876,6 +997,8 @@ final class ContainersAddingUp {
                 // A choice by a flag chooses per element on a value nothing here chooses, and a
                 // weight made of the position, or a choice between two forms of the field, weighs
                 // each position apart: the fields adding up to a total are no one quotient of it.
+                case ElementValue.Multilinear products ->
+                        out.addAll(ofProducts(products.form(), elements, orders));
                 case ElementValue.Choose _, ElementValue.Indexed _,
                      ElementValue.SumOfChoices _ -> { }
             }
@@ -906,7 +1029,7 @@ final class ContainersAddingUp {
                     : new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
                             solved.constant(), false, new Kept(
                                     formWhereItHolds ? choice.test() : choice.test().denied(),
-                                    direction, rest.form().constant()), null);
+                                    direction, rest.form().constant()), null, null);
         }
 
         /**
@@ -935,7 +1058,34 @@ final class ContainersAddingUp {
             Carrier carrier = orders.fieldCarrier(only.getKey());
             return carrier == null ? null
                     : new FieldSolved(field, carrier, only.getValue(), affine.form().constant(),
-                            taken != null, null, ofTheCase);
+                            taken != null, null, ofTheCase, null);
+        }
+
+        /**
+         * One way for each field {@code products} reads: that field solved for, with every other
+         * one fixed at one until the region the point is in says what it may be
+         * ({@link #settledIn}).
+         */
+        private static List<FieldSolved> ofProducts(LinearForm<ElementValue.Monomial> products,
+                                                    TermPath elements, TermOrders orders) {
+            Set<ElementProjection> reads = new LinkedHashSet<>();
+            products.coefs().keySet().forEach(term -> reads.addAll(term.reads()));
+            List<FieldSolved> out = new ArrayList<>();
+            for (ElementProjection free : reads) {
+                Carrier carrier = orders.fieldCarrier(free);
+                if (carrier == null) {
+                    continue;
+                }
+                Map<ElementProjection, ExactRatio> at = new LinkedHashMap<>();
+                reads.stream().filter(other -> !other.equals(free))
+                        .sorted(Comparator.comparing(ElementProjection::toString))
+                        .forEach(other -> at.put(other, ExactRatio.ONE));
+                out.add(new FieldSolved(free.from(elements), carrier, ExactRatio.ONE,
+                        ExactRatio.ZERO, false, null, null,
+                        new Fixing(products, free, elements, at)));
+            }
+            out.sort(Comparator.comparing(way -> way.field().toString()));
+            return out;
         }
 
         /** How many of {@code many} elements carry the field the total is solved through: every
@@ -2015,6 +2165,17 @@ final class ContainersAddingUp {
                 // A narrowing to state, and the walk states each of them. Asked again rather than
                 // planned around: a second narrowing may stand under the first, and which one that
                 // is depends on the case this settled on.
+                // And a case the element's own rules want stated because one of them names a field
+                // under it: stated the same way, each in turn.
+                case ConstructionPlan.Result.UnderEachCase(TermPath where, List<Refinement> cases) -> {
+                    if (!alsoAt.isEmpty() && !fixed.isAtOrUnder(where)) {
+                        narrowingBeyondTheFirst = true;
+                        continue;
+                    }
+                    for (Refinement narrowing : cases) {
+                        asking.add(narrowed(fixed, where, narrowing));
+                    }
+                }
                 case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
                     // A position nothing stands under is not a way that was tried and refused.
                     // Kept as itself so that a reader is told there was never a way down rather
@@ -2128,12 +2289,17 @@ final class ContainersAddingUp {
             decided.add(asked);
             decided.addAll(inside.among().keySet());
             decided.addAll(apart);
+            // The element's own rules are the ones it is built to: what is above a container says
+            // of the container and not of what stands in it.
+            PlacesTheRulesRead rules = PlacesTheRulesRead.of(element, reading.source());
             return ConstructionPlan.of(element, at, reading.source().inners(),
                     reading.source().symbols(),
                     reading.source().kinds(), reading.source().sums(), decided,
                     inside.required(), ConstructionPlan.ContentsComposed.NONE,
                     (_, building) -> ConstructionPlan.ItMayHold.counting(
-                            Partitions.heldRange(building, reading, null)));
+                            Partitions.heldRange(building, reading, null)),
+                    here -> RuleAddress.of(at, here) instanceof RuleAddress address
+                            && rules.readUnder(address.key()));
         }
 
         /** The way the last answer is about. */
@@ -2164,6 +2330,39 @@ final class ContainersAddingUp {
         Set<CompositionBudget> stoppedBy() {
             return stoppedBy;
         }
+    }
+
+    /**
+     * {@code inside} with every element also asked to hold, at each field {@code fixing} holds
+     * still, the value it was fixed at — or null where one of them is asked for another value
+     * already, or is no value its order writes.
+     */
+    private static DemandsInside holdingWhatIsFixed(FieldSolved.Fixing fixing, TermOrders orders,
+                                                    DemandsInside inside,
+                                                    RuleReadingContext reading) {
+        Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+        for (Map.Entry<ElementProjection, ExactRatio> each : fixing.at().entrySet()) {
+            Carrier carrier = orders.fieldCarrier(each.getKey());
+            BigDecimal written = each.getValue().writtenDecimal()
+                    instanceof ExactAnswer.Held<Optional<BigDecimal>>(Optional<BigDecimal> held)
+                    ? held.orElse(null) : null;
+            // A value of the position, wearing every name the declaration puts there: what is
+            // asked inside an element is written there as it stands.
+            FixtureTemplate number = carrier == null || written == null ? null
+                    : FixtureTemplate.on(carrier, Count.of(written),
+                            reading.source().symbols().scope()::reach);
+            FixtureTemplate value = number == null ? null
+                    : WornNames.under(orders.wornAt(each.getKey()), number, reading.source());
+            if (value == null) {
+                return null;
+            }
+            List<FixtureTemplate> had =
+                    among.put(each.getKey().from(fixing.elements()), List.of(value));
+            if (had != null && !had.equals(List.of(value))) {
+                return null;
+            }
+        }
+        return new DemandsInside(among, inside.required());
     }
 
     /** {@code inside} with every position it asks for spelled under the cases it names. */

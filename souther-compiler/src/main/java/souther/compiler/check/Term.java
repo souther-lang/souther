@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -748,16 +749,30 @@ final class Term {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof Term term && same(this, term, new IdentityHashMap<>());
+        if (!(other instanceof Term term)) {
+            return false;
+        }
+        // Answered before the table of pairs is made: most questions end at the same term or at a
+        // difference the term carries on its face, and a table made for each of them is most of
+        // what this costs.
+        if (term == this) {
+            return true;
+        }
+        return !differsOnItsFace(this, term) && same(this, term, new IdentityHashMap<>());
+    }
+
+    /** Whether two terms are told apart by what each carries, without looking at their parts. */
+    private static boolean differsOnItsFace(Term one, Term other) {
+        return other.hash != one.hash || other.shape != one.shape
+                || !Objects.equals(other.of, one.of)
+                || other.parts.size() != one.parts.size();
     }
 
     private static boolean same(Term one, Term other, Map<Term, Map<Term, Boolean>> met) {
         if (one == other) {
             return true;
         }
-        if (other.hash != one.hash || other.shape != one.shape
-                || !java.util.Objects.equals(other.of, one.of)
-                || other.parts.size() != one.parts.size()) {
+        if (differsOnItsFace(one, other)) {
             return false;
         }
         Map<Term, Boolean> against = met.computeIfAbsent(one, _ -> new IdentityHashMap<>());
@@ -1186,6 +1201,11 @@ final class Term {
     /** The parts, for a reader that walks one. */
     List<Term> parts() {
         return parts;
+    }
+
+    /** What this term carries beside its parts: an operator, a written number, a case's data. */
+    Object carried() {
+        return of;
     }
 
     /**

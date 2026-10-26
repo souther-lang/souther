@@ -238,6 +238,9 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 case RowDemand.ForAll _ -> List.of();
                 // How many elements meet a statement, which is no number a region holds.
                 case RowDemand.SoMany _ -> List.of();
+                // The values of a form that leave a remainder are a class, which a region holds
+                // no run of.
+                case RowDemand.OnARemainder _ -> List.of();
                 // A statement no composer writes toward, which a region holds nothing of.
                 case RowDemand.ForTheRun _ -> List.of();
                 // Which of two values stands at a position no region measures. The row is

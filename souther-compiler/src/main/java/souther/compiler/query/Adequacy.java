@@ -3257,9 +3257,20 @@ public final class Adequacy {
             // that went elsewhere says that of the case it carried and not of the rule.
             // Nothing of the item is fixed here, so there is no number of one this is a candidate
             // out of: what the row has to be is the way's, and the way is asked below.
+            //
+            // The walk is held to the run: a row the run places at another rule is passed over for
+            // the next assignment of the values below, and where no row it reaches is placed at the
+            // rule, the first row whose run answered is what comes back and says where it went.
+            Generator.RowJudge atTheRule = Generator.RowJudge.preferring(row -> {
+                RowAsRead read = probe.read(row);
+                return read.watched() instanceof Generator.Watched.Ran
+                        && taken.takenBy(read.asRun())
+                                instanceof RulesTaken.WhichRule.TookThis took
+                        && took.rule().equals(ruled.rule());
+            });
             List<Generator.BoundaryAttempt> ways = probe.attempt("a rule of the decision", Map.of(),
                     souther.compiler.partition.NumbersAskedFor.ANYTHING,
-                    reaching, ruled.demands());
+                    reaching, ruled.demands(), Optional.of(atTheRule));
             // The proof, where every way of standing the dependencies in came back with one. Asked
             // of the ways together and before the fold below: what that fold joins on is how much
             // one way established about the rule, and a proof is not more of that — it is the one
@@ -3302,9 +3313,12 @@ public final class Adequacy {
                 Function<Generator.BoundaryAttempt.Built, RuleSettlement> run,
                 WayToTheBorder way, AnswersDemanded demands) {
             RuleSettlement established = null;
+            RuleSettlement refusedSettlement = null;
+            boolean someLeftUnlookedAt = false;
             List<CameToNothing> cameToNothing = new ArrayList<>();
             CompositionAccount without = null;
             for (Generator.BoundaryAttempt made : ways) {
+                someLeftUnlookedAt |= made.stoppedShort();
                 switch (made) {
                     // What the composing came to, said on the axis it is about. The rule is left
                     // where it was and nothing here is a word about the model: the way may be the
@@ -3317,14 +3331,30 @@ public final class Adequacy {
                     }
                     case Generator.BoundaryAttempt.Built built -> {
                         RuleSettlement here = run.apply(built);
-                        established = established == null
-                                || establishes(here) > establishes(established)
-                                ? here : established;
+                        if (built.refused()) {
+                            // What it was composed without is what the rule is arrived at without
+                            // if what the ways left unlooked at is the answer in its place.
+                            without = without == null ? built.unrepresented()
+                                    : without.alongside(built.unrepresented());
+                            refusedSettlement = refusedSettlement == null
+                                    || establishes(here) > establishes(refusedSettlement)
+                                    ? here : refusedSettlement;
+                        } else {
+                            established = established == null
+                                    || establishes(here) > establishes(established)
+                                    ? here : established;
+                        }
                     }
                 }
             }
             if (established != null) {
                 return established;
+            }
+            // A row the judge refused says where its run went and is no row the search was for:
+            // it is the answer only where no way beside it left something unlooked at, and
+            // otherwise what those ways came to is.
+            if (refusedSettlement != null && !someLeftUnlookedAt) {
+                return refusedSettlement;
             }
             if (!cameToNothing.isEmpty()) {
                 return RuleSettlement.nothingToTryWith(RuleSearch.CameToNothing.of(cameToNothing),
@@ -3754,7 +3784,7 @@ public final class Adequacy {
                 // dependencies in that came with it: a row built whole is a row, and another way
                 // of standing in that came to nothing beside it takes nothing from it.
                 List<Generator.BoundaryAttempt> nearest = null;
-                long nearestBuilt = -1;
+                Nearness nearestNearness = null;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
                         InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf,
                                 ofTheRow);
@@ -3768,11 +3798,13 @@ public final class Adequacy {
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
                     }
-                    long built = out.stream()
-                            .filter(Generator.BoundaryAttempt.Built.class::isInstance).count();
-                    if (built > nearestBuilt) {
+                    // The pair that came nearest is the one with the most rows built that no judge
+                    // refused, and then the most rows built: a refused row says where its run went
+                    // and is no row the search was for.
+                    Nearness nearness = Nearness.of(out);
+                    if (nearest == null || nearness.compareTo(nearestNearness) > 0) {
                         nearest = out;
-                        nearestBuilt = built;
+                        nearestNearness = nearness;
                     }
                 }
                 // No pair composed a row whole. What the pair that came nearest built stays, since
@@ -3829,10 +3861,47 @@ public final class Adequacy {
                 : attempt.withAccount(said);
     }
 
-    /** Whether a row was built and nothing asked of an answer was left uncomposed. */
-    private static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {
-        return attempt instanceof Generator.BoundaryAttempt.Built built
-                && built.unrepresented().onAnAnswer().isEmpty();
+    /**
+     * How near the attempts of one pair of numbers came: first by the rows built that no judge
+     * refused, then by whether some search a figure stopped is among them, then by the rows built.
+     * Compared in turn, since the number of attempts differs from pair to pair and no weight of
+     * one count makes the next a tie-break for every pair. A search a figure stopped is what a
+     * pair of rows all refused must not hide.
+     */
+    record Nearness(long reached, boolean stoppedShort, long built)
+            implements Comparable<Nearness> {
+
+        static Nearness of(List<Generator.BoundaryAttempt> attempts) {
+            return new Nearness(
+                    attempts.stream().filter(Adequacy::builtAndNotRefused).count(),
+                    attempts.stream().anyMatch(Generator.BoundaryAttempt::stoppedShort),
+                    attempts.stream().filter(Generator.BoundaryAttempt.Built.class::isInstance)
+                            .count());
+        }
+
+        @Override
+        public int compareTo(Nearness other) {
+            int byReached = Long.compare(reached, other.reached);
+            if (byReached != 0) {
+                return byReached;
+            }
+            int byStopped = Boolean.compare(stoppedShort, other.stoppedShort);
+            return byStopped != 0 ? byStopped : Long.compare(built, other.built);
+        }
+    }
+
+    /**
+     * Whether a row was built that no judge refused and nothing asked of an answer was left
+     * uncomposed. A row refused is a row built and is no reason to stop: the next pair of numbers
+     * may reach a row the judge accepts.
+     */
+    static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {
+        return builtAndNotRefused(attempt)
+                && attempt.unrepresented().onAnAnswer().isEmpty();
+    }
+
+    private static boolean builtAndNotRefused(Generator.BoundaryAttempt attempt) {
+        return attempt instanceof Generator.BoundaryAttempt.Built built && !built.refused();
     }
 
     /**
@@ -6844,7 +6913,8 @@ public final class Adequacy {
                             continue;
                         }
                         BorderQuantity quantity = drawn.at(edge.border()).quantity();
-                        if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
+                        if (new LevelRealizer().realize(
+                                quantity.standingAt(owed.criterion()).alongTheWay(able),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
                             return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(

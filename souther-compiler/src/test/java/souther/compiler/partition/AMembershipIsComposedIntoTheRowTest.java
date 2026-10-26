@@ -225,11 +225,15 @@ class AMembershipIsComposedIntoTheRowTest {
     /**
      * Where the element type has too few values to fill the container with none of them the one
      * kept out, that is a row nothing composes — and not a condition this compiler could not read.
+     *
+     * <p>The way as it stands is composed against what it states, which its account says. The
+     * elements composed one by one for a count are a way that was cut by a figure, so the search
+     * is said to have left something unlooked at, and the account stays the way's.
      */
     @Test
     void tooFewValuesLeftIsWhatTheComposingCameTo() {
-        Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(
-                Generator.BoundaryAttempt.Unresolved.class,
+        Generator.BoundaryAttempt.Stopped none = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class,
                 composedPast("paired", false, Generator.CandidateCheck.ANY));
         assertNotEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
                 none.why().reason(), "nothing here proved the model leaves no row");

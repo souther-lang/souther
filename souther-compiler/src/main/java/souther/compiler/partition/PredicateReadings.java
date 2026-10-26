@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleRef;
@@ -13,11 +14,15 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.StringsLanguage;
 
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,19 +93,28 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
      *
      * @param origin which rule this is, which of the body's readings of it, and where a reader is
      *               sent to find it
-     * @param stated the argument the rule is about and what the predicate states of it
+     * @param stated the argument the rule is about and what the predicate states of it — or null
+     *               where the rule is about the pieces of a string ({@code ofPieces})
      * @param reads  what the names in force here stand for, which is what resolves the subject to a
      *               position. It travels with the reading because it is not the same at every
      *               application: a predicate inside an expanded helper is about the argument the
      *               call handed it
+     * @param ofPieces what the rule says of a string whose pieces a call asks about, where it
+     *               does — and then it is that string the rule divides, at the position the
+     *               reading of the call found it at
      */
-    record Reading(PredicateOrigin origin, StringPredicates.Stated stated, InputReads reads) {
+    record Reading(PredicateOrigin origin, StringPredicates.Stated stated, InputReads reads,
+                   OfPieces ofPieces) {
 
         Reading {
-            if (origin == null || stated == null || reads == null) {
+            if (origin == null || reads == null || (stated == null) == (ofPieces == null)) {
                 throw new IllegalArgumentException(
                         "a predicate that was read is some rule, read as something, somewhere");
             }
+        }
+
+        Reading(PredicateOrigin origin, StringPredicates.Stated stated, InputReads reads) {
+            this(origin, stated, reads, null);
         }
 
         /** The argument the rule is about, for a caller that resolves it to a position. */
@@ -116,9 +130,21 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         /** What the rule states, for a reader that names what it divides a position into. Null
          *  only where the text an author wrote was not worked out. */
         PredicateStatement statement() {
-            return stated.statement();
+            return stated != null ? stated.statement() : ofPieces.statement();
         }
     }
+
+    /**
+     * What a call says of the pieces of a string, as a rule about the string.
+     *
+     * @param at        where the string stands
+     * @param accepts   the strings with such pieces
+     * @param outside   whether the call comes out true for the strings {@code accepts} leaves, and
+     *                  not for the ones it holds
+     * @param statement the rule, in the words of the pieces
+     */
+    record OfPieces(TermPath at, StringsLanguage accepts, boolean outside,
+                    PredicateStatement statement) {}
 
     /**
      * One reading of {@code body}.
@@ -242,7 +268,44 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                         at -> reads.writtenStringOf(at, symbols, read.newtypes()));
         if (stated != null) {
             read(call, written.application(), behavior, stated, reads, out, reaches);
+        } else if (call.operation() instanceof ValueName.Stdlib.Operation operation
+                && DefaultBoundOperationFacts.get().quantifiesOverTheElementsItIsHanded(operation)) {
+            // Asked of what the operation is proved to come to, and not of the shape of what it is
+            // handed: a quantifier is one whether its closure is written at it or named.
+            piecesRead(call, written.application(), behavior, read, reads, out, reaches);
         }
+    }
+
+    /**
+     * A call that asks of the pieces of a string that some, or every, one of them is held to a
+     * predicate, as a rule about that string.
+     *
+     * <p>The reading of the call is the reading of any condition ({@link Pullback}), and what it
+     * comes to is taken from there: a rule written about the pieces is not read a second time by a
+     * walk that knows what the quantifier is without knowing what the pieces are. What is found is
+     * a language the string at a position is in, and that is the rule's whether it is written as
+     * {@code List.any} of a predicate or as {@code List.all} of its denial.
+     */
+    private static void piecesRead(Core.PreservedCall call, SourceConstructOrigin written,
+                                   String behavior, InputReading read, InputReads reads,
+                                   List<Reading> out, RuleReachNumbering reaches) {
+        Pullback.StringByItsPieces found = Pullback.ofTheStringByItsPieces(call, reads, read);
+        if (found == null) {
+            return;
+        }
+        Derivation.SomePieceInALanguage.Said says = found.says();
+        PredicateStatement statement = new PredicateStatement.OfThePieces(says.inIt(),
+                !found.denied(), says.separator(), says.operation(), says.written(), says.from(),
+                says.until().orElse(-1));
+        // The call reads true for the strings the language leaves where the statement is of
+        // them, which is how the same call written the other way round divides the same way.
+        out.add(new Reading(
+                new PredicateOrigin(new PredicateOccurrence(out.size()),
+                        new RuleRef.Predicate(behavior, written),
+                        reaches.anchorOf(written, Citation.of(call.pos())),
+                        ModelOccurrence.statedAt(call.occurrence())),
+                null, reads,
+                new OfPieces(found.at(), found.accepts(), !found.holds(), statement)));
     }
 
     /**

@@ -3,6 +3,7 @@ package souther.compiler.proof;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
@@ -569,9 +570,12 @@ final class Validity {
         return new LinearForm<>(form.constant(), coefs);
     }
 
-    private Map<Integer, Granularity> spacings(LinearForm<LawNumber<Value>> form) {
-        Map<Integer, Granularity> out = new HashMap<>();
-        form.coefs().keySet().forEach(number -> out.put(idOf(number), spacingOf(number)));
+    /** What is told of each number of {@code form}: how its values are spaced, and nothing of
+     *  where they stop, since a law is argued about numbers and not about a type's. */
+    private Map<Integer, NumberSpace> spacings(LinearForm<LawNumber<Value>> form) {
+        Map<Integer, NumberSpace> out = new HashMap<>();
+        form.coefs().keySet().forEach(number ->
+                out.put(idOf(number), NumberSpace.spacedOnly(spacingOf(number))));
         return out;
     }
 

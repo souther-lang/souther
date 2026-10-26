@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Core;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
@@ -25,6 +27,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
@@ -33,7 +36,9 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -795,14 +800,65 @@ final class DemandReading {
      *                  reader that takes two places to take any pair of values asks
      * @param unsaid    whether an operator not said may stop the run on something that is no
      *                  number of a place: no two places are then known free of one another
+     * @param owed      the operators the run may stop at whose owner says where they answer, each
+     *                  owed a proof that some run gets past it ({@link Pullback.StopObligation}):
+     *                  until a reader shows that, the places it reads are as tied as those above
+     * @param before    what the applications of a closure before the one a comparison is reached
+     *                  in work out, for each closure it is read in ({@link PriorApplications}):
+     *                  until a reader shows a run with none, as much the run's as the above
      */
-    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
+    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
+                    List<Pullback.StopObligation> owed, List<PriorApplications> before) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
         Answered {
             narrowing = List.copyOf(narrowing);
             tied = List.copyOf(tied);
+            owed = List.copyOf(owed);
+            before = List.copyOf(before);
+        }
+
+        /** What a run asks of a row with no application before it. */
+        Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
+                 List<Pullback.StopObligation> owed) {
+            this(narrowing, tied, unsaid, owed, List.of());
+        }
+
+        /** What a run asks of a row with nothing owed beside it. */
+        Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
+            this(narrowing, tied, unsaid, List.of());
+        }
+
+        /** The places each of {@code tied} names, and each owed operator reads — those the
+         *  applications before work out among them. */
+        List<Set<TermPath>> tiedOrOwed() {
+            List<Set<TermPath>> out = new ArrayList<>(tied);
+            owed.forEach(each -> out.add(each.places()));
+            before.forEach(each -> out.addAll(each.workedOut().tiedOrOwed()));
+            return out;
+        }
+
+        /** Whether the run may stop on something no place names, unsaid or owed — here or in the
+         *  applications before. */
+        boolean unsaidOrOwedOnWhatNoPlaceHolds() {
+            return unsaid || owed.stream().anyMatch(Pullback.StopObligation::onWhatNoPlaceHolds)
+                    || before.stream()
+                            .anyMatch(each -> each.workedOut().unsaidOrOwedOnWhatNoPlaceHolds());
+        }
+
+        /** This, with {@code prior} worked out by the applications before it. */
+        Answered after(PriorApplications prior) {
+            List<PriorApplications> all = new ArrayList<>(before);
+            all.add(prior);
+            return new Answered(narrowing, tied, unsaid, owed, all);
+        }
+
+        /** The same, without the statements of {@code met} among what the run narrows. */
+        Answered without(Collection<TakenConstraint.Affine> met) {
+            return new Answered(narrowing.stream().filter(each ->
+                    !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
+                    .toList(), tied, unsaid);
         }
 
         /**
@@ -861,10 +917,15 @@ final class DemandReading {
                     && !TakenConstraint.holdsOverTheRunsOf(form, rel, declarations);
         }
 
-        /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run. */
-        static Answered leavingUnsaid(Pullback.OperatorsAnswer operators) {
-            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere() ? NOTHING
-                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere());
+        /** What the operators not said of ({@link Pullback.OperatorsAnswer}) leave of a run, the
+         *  part they were read in standing in {@code body}, where the names an owed operator is
+         *  handed are bound. */
+        static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
+            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere()
+                    && operators.obligations().isEmpty() ? NOTHING
+                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere(),
+                            operators.obligations().stream().map(each -> each.readIn(body))
+                                    .toList());
         }
 
         /** This and {@code other}, both. */
@@ -873,8 +934,52 @@ final class DemandReading {
             narrows.addAll(other.narrowing);
             List<Set<TermPath>> places = new ArrayList<>(tied);
             places.addAll(other.tied);
-            return new Answered(narrows, places, unsaid || other.unsaid);
+            List<Pullback.StopObligation> both = new ArrayList<>(owed);
+            both.addAll(other.owed);
+            List<PriorApplications> priors = new ArrayList<>(before);
+            priors.addAll(other.before);
+            return new Answered(narrows, places, unsaid || other.unsaid, both, priors);
         }
+    }
+
+    /**
+     * What the applications of the closures a comparison stands in before the one it is reached in
+     * work out: each runs the closure's body whole, the comparison's own working out apart, and
+     * the call works out what it does between them.
+     *
+     * <p>A run whose every walked container holds one element makes none: its one application of
+     * each closure is the one the comparison is reached in. So what they work out is owed only of
+     * a run that holds more, and a reader showing a run of one owes nothing of it.
+     *
+     * <p>Equal only to itself, as an owed operator is.
+     */
+    static final class PriorApplications {
+
+        private final Optional<List<WalkedOver>> walked;
+        private final Answered workedOut;
+
+        /**
+         * @param walked    what each call applying one of the closures walks, as the names stand
+         *                  there — or empty where some call is not shown to apply its closure to
+         *                  its elements one after another from the first, so that no run is shown
+         *                  to make none before
+         * @param workedOut what those applications work out
+         */
+        PriorApplications(Optional<List<WalkedOver>> walked, Answered workedOut) {
+            this.walked = walked.map(List::copyOf);
+            this.workedOut = workedOut;
+        }
+
+        Optional<List<WalkedOver>> walked() {
+            return walked;
+        }
+
+        Answered workedOut() {
+            return workedOut;
+        }
+
+        /** A container a closure is applied over, with the names as they stand where it is. */
+        record WalkedOver(Core container, InputReads reads) {}
     }
 
     /** Whether {@code constraint} is an ordering of one number that holds at the least
@@ -1160,6 +1265,8 @@ final class DemandReading {
                     List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
+            case Proposition.InTheStrings _ ->
+                    List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE));
             // The elements of a container are written alike, so the last of them is the last of
             // its value as well; that a later element holds the same value is two of them being
             // one, which no composer writes.
@@ -1584,6 +1691,13 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT))
                             : AnElementsWay.ofTheRow(each));
+            // A remainder, asked of the row where its numbers are none of the element's. Of the
+            // element's numbers it is no relation an element is written to meet here.
+            case Read.Demands(RowDemand.OnARemainder remainder) ->
+                    List.of(everyElement || anyInside(remainder.positions(), element)
+                            ? AnElementsWay.ofTheRow(forTheRun(whole,
+                                    RowDemand.NoComposer.A_REMAINDER_OF_A_FORM))
+                            : AnElementsWay.ofTheRow(each));
             // Two values being one, asked of the row where neither is inside the element. Inside
             // it, the element is written alike with every other and no value is written into it
             // from another position here.
@@ -1924,6 +2038,11 @@ final class DemandReading {
             // and not a count against a number that is not yet there.
             case Relation.Affine affine when countAndNumbers(affine, read) != null ->
                     soManyAgainstNumbers(compared, affine, met, read);
+            // What a division leaves of a form of numbers a row writes, alone against a number:
+            // the remainders that meet it, which a composer places a value of the form at.
+            case Relation.Affine affine
+                    when onARemainderAlone(affine, met, read) instanceof RowDemand.OnARemainder on ->
+                    new Read.Demands(on);
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
@@ -2015,6 +2134,43 @@ final class DemandReading {
                 scale.signum() < 0 ? met.turned() : met, scaled.constant().negated(),
                 new LinearForm<>(ExactRatio.ZERO, added),
                 anElementMeeting(AStatementAtARow.elementsOf(count), read)));
+    }
+
+    /**
+     * The remainders {@code affine} coming out {@code met} leaves, where it holds what a division
+     * leaves of a form against a number and nothing else — or null where it is no such relation,
+     * where a number of the form is none a row writes at one place and counts, or where no
+     * remainder meets it.
+     *
+     * <p>Read off the relation as {@code w·r + c met 0} over the remainders a division by the
+     * divisor leaves, which is a run of them, its bounds turned over where the weight is below
+     * nought.
+     */
+    private static RowDemand.OnARemainder onARemainderAlone(Relation.Affine affine, Rel met,
+                                                            InputReading read) {
+        if (affine.form().coefs().size() != 1
+                || !(affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.RemainderOfADividend remainder)
+                || !(remainder.dividend().constant().floor() instanceof ExactAnswer.Held<?>)) {
+            return null;
+        }
+        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (term.atOnePosition() == null || orders == null || orders.answered() == null
+                    || !orders.answered().counts()) {
+                return null;
+            }
+        }
+        ExactRatio weight = affine.form().coefs().get(remainder);
+        if (!(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+            return null;
+        }
+        WholeNumberRuns leaves = WholeNumberRuns.standing(
+                weight.signum() < 0 ? met.turned() : met, threshold)
+                .and(WholeNumberRuns.one(BigInteger.ZERO,
+                        remainder.divisor().subtract(BigInteger.ONE)));
+        return leaves.isNone() ? null : new RowDemand.OnARemainder(remainder, leaves);
     }
 
     /**

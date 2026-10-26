@@ -2,12 +2,18 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -394,6 +400,18 @@ final class Clauses {
         return fieldsReadBy(clause, named).reads();
     }
 
+    /**
+     * Whether {@code clause} states exactly comparisons of one sum of the places it reads
+     * ({@link ClauseAffineMeaning}), named as the rules of the value name them.
+     */
+    ClauseAffineMeaning affineMeaning(Core clause, TypeSymbol.AtModule named) {
+        Map<BindingId, String> declared = new HashMap<>();
+        bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
+        return new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
+                new HashMap<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>())
+                .exactly(clause, symbols, source.declarations());
+    }
+
     /** Both answers about what {@code clause} reads, from one walk of it. */
     private FieldsRead fieldsReadBy(Core clause, TypeSymbol.AtModule named) {
         return readsFields.computeIfAbsent(clause, read -> {
@@ -402,7 +420,7 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    bindings, reads).walk(read);
+                    new HashMap<>(), new ArrayList<>(), bindings, reads).readsOf(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
                 String name = declared.get(each);
@@ -437,17 +455,53 @@ final class Clauses {
      *               record's fields are each a place of their own
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
-                                  DeclarationNewtypes newtypes,
+                                  DeclarationNewtypes newtypes, Map<BindingId, Location> aliases,
+                                  List<Lookup> lookups,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
+
+        /** The operations that take what to look for and the container to look in, in that order,
+         *  and read the member that is looked for. */
+        private static final Set<ValueName> LOOKUPS = Set.of(
+                ValueName.Stdlib.operation("Map", "get"),
+                ValueName.Stdlib.operation("Map", "containsKey"),
+                ValueName.Stdlib.operation("Set", "contains"),
+                ValueName.Stdlib.operation("List", "contains"));
 
         ReadsOfAClause {
             Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
+            Objects.requireNonNull(aliases, "a walk of a clause knows what a name was given");
+            Objects.requireNonNull(lookups, "a walk of a clause gathers its lookups somewhere");
             Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
             Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
         }
 
-        void walk(Core e) {
+        /** A lookup in a container that is a place of the value: the lookup, and the container. */
+        private record Lookup(Core lookup, Location container) {}
+
+        /**
+         * Every place of {@code clause} it reads. The containers it looks members up in are read
+         * once the whole clause has been walked, because whether a lookup is one the clause
+         * cannot be true without is a question about the clause around it.
+         */
+        void readsOf(Core clause) {
+            walk(clause);
+            for (Lookup each : lookups) {
+                read(each.container(), LookupsAClauseNeeds.needs(clause, each.lookup())
+                        ? ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS
+                        : ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+            }
+        }
+
+        private void walk(Core e) {
+            if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null) {
+                Location given = locationOf(let.value());
+                if (given != null) {
+                    aliases.put(let.binder().binding(), given);
+                    walk(let.body());
+                    return;
+                }
+            }
             Location at = locationOf(e);
             if (at != null) {
                 read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
@@ -464,29 +518,199 @@ final class Clauses {
                 bindings.add(r.binding());
             }
             Core counted = call == null ? null : countedArgument(call);
+            Core looked = entryLookedUp(e);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
                     read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
+                } else if (child == looked) {
+                    lookups.add(new Lookup(e, locationOf(child)));
                 } else {
                     walk(child);
                 }
             });
         }
 
+        /** The container {@code e} looks a member up in or asks the membership of, where that is a
+         *  place of the value; null otherwise. */
+        private Core entryLookedUp(Core e) {
+            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(var operation, var args))
+                    || !LOOKUPS.contains(operation)) {
+                return null;
+            }
+            Core container = args.get(1);
+            return locationOf(container) != null ? container : null;
+        }
+
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
+            reads.add(new ClauseRead(keyOf(at), kind, run));
+        }
+
+        /** What the rules of the value call the place {@code at}. */
+        private RuleKey keyOf(Location at) {
             List<String> steps = new ArrayList<>();
             if (!wraps) {
                 steps.add(fields.get(at.root()));
             }
             steps.addAll(at.path());
-            reads.add(new ClauseRead(new RuleKey(steps), kind, run));
+            return new RuleKey(steps);
+        }
+
+        /**
+         * The clause as the comparisons of one sum it comes to exactly, or {@link
+         * ClauseAffineMeaning#UNREAD} where any part of it is something else.
+         *
+         * <p>Every part is accounted for: a conjunction of comparisons whose sides are whole numbers
+         * read as arithmetic over places of the value. What a connective, a denial and a binding
+         * make of the clause is {@link ClauseExpr}'s, what a comparison states is
+         * {@link StatedComparison}'s and what a side comes to is {@link AffineForms}', so a shape
+         * those learn to read is read here as well. A part that is a choice, a call nothing says
+         * is arithmetic or a product of two places is no comparison of that kind, and the clause
+         * holds back more than the others say.
+         */
+        ClauseAffineMeaning exactly(Core clause, Symbols symbols, DeclarationAccess declarations) {
+            AffineForms.Reading<RuleKey, Map<BindingId, Core>> places =
+                    placesOfTheValue(symbols, declarations);
+            List<ClauseAffineMeaning.Comparison> conjuncts = new ArrayList<>();
+            if (!conjunctsOf(ClauseExpr.of(clause, true), Map.of(), places, conjuncts)
+                    || conjuncts.isEmpty()) {
+                return ClauseAffineMeaning.UNREAD;
+            }
+            return ClauseAffineMeaning.ofComparisons(conjuncts);
+        }
+
+        /** Whether every part of {@code shape} that holds with it is a comparison, added to
+         *  {@code out}; the parts of a choice hold with it only one at a time, so it is none. */
+        private boolean conjunctsOf(ClauseExpr shape, Map<BindingId, Core> held,
+                                    AffineForms.Reading<RuleKey, Map<BindingId, Core>> places,
+                                    List<ClauseAffineMeaning.Comparison> out) {
+            return switch (shape) {
+                case ClauseExpr.Joined joined -> joined.how() == ConditionJoin.BOTH
+                        && conjunctsOf(joined.left(), held, places, out)
+                        && conjunctsOf(joined.right(), held, places, out);
+                case ClauseExpr.Scoped scoped -> conjunctsOf(scoped.body(),
+                        places.inside(scoped.binding(), held), places, out);
+                case ClauseExpr.Leaf leaf -> comparison(leaf, held, places, out);
+            };
+        }
+
+        private boolean comparison(ClauseExpr.Leaf leaf, Map<BindingId, Core> held,
+                                   AffineForms.Reading<RuleKey, Map<BindingId, Core>> places,
+                                   List<ClauseAffineMeaning.Comparison> out) {
+            StatedComparison stated = StatedComparison.of(leaf);
+            if (stated == null || Core.withoutStanding(stated.left()).type() != Type.INT
+                    || Core.withoutStanding(stated.right()).type() != Type.INT) {
+                return false;
+            }
+            LinearForm<RuleKey> left = AffineForms.of(stated.left(), held, places);
+            LinearForm<RuleKey> right = AffineForms.of(stated.right(), held, places);
+            LinearForm<RuleKey> between = left == null || right == null ? null
+                    : left.minus(right).orNull();
+            if (between == null || between.coefs().isEmpty() || !between.constant().isWhole()
+                    || !between.coefs().values().stream().allMatch(ExactRatio::isWhole)) {
+                return false;
+            }
+            ClauseAffineMeaning.Comparison said = canonical(between, stated.relationUnder(true));
+            if (said == null) {
+                return false;
+            }
+            out.add(said);
+            return true;
+        }
+
+        /**
+         * A whole number of the value is a place of it, and a name is the value it was given.
+         *
+         * <p>The answers {@link AffineForms} asks of its caller and nothing it can work out itself:
+         * a place of the value is an atom, and a name that is no field of it stands for what a
+         * binding of the clause gave it.
+         */
+        private AffineForms.Reading<RuleKey, Map<BindingId, Core>> placesOfTheValue(
+                Symbols symbols, DeclarationAccess declarations) {
+            return new AffineForms.Reading<>() {
+
+                @Override
+                public Symbols symbols() {
+                    return symbols;
+                }
+
+                @Override
+                public DeclarationAccess declarations() {
+                    return declarations;
+                }
+
+                @Override
+                public LinearForm<RuleKey> leafOf(Core e, Map<BindingId, Core> at) {
+                    Core bare = Core.withoutStanding(e);
+                    Location place = bare.type() == Type.INT ? locationOf(bare) : null;
+                    return place == null ? null : LinearForm.atom(keyOf(place));
+                }
+
+                @Override
+                public Map<BindingId, Core> inside(Core.LetIn li, Map<BindingId, Core> at) {
+                    if (li.binder().binding() == null) {
+                        return at;
+                    }
+                    Map<BindingId, Core> inner = new HashMap<>(at);
+                    inner.put(li.binder().binding(), li.value());
+                    return inner;
+                }
+
+                @Override
+                public ValueStanding.ReadThrough<Map<BindingId, Core>> readThrough(
+                        Core.Read read, Map<BindingId, Core> at) {
+                    Core value = at.get(read.binding());
+                    return value == null ? null : new ValueStanding.ReadThrough<>(value, at);
+                }
+
+                @Override
+                public List<ValueStanding.ReadThrough<Map<BindingId, Core>>> alternativesOf(
+                        Core.Read read, Map<BindingId, Core> at) {
+                    return null;
+                }
+
+                @Override
+                public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
+                    return locationOf(fa.target()) == null
+                            && !Location.isStep(fa.target().type(), fa.field(), newtypes);
+                }
+            };
+        }
+
+        /**
+         * The comparison {@code form rel 0} with the first place by name weighing one, so that
+         * {@code 100 <= a + b} and {@code 2 * a + 2 * b >= 200} are the one comparison
+         * {@code a + b - 100 >= 0}. Null where the exact arithmetic cannot hold it.
+         */
+        private static ClauseAffineMeaning.Comparison canonical(LinearForm<RuleKey> form, Rel rel) {
+            RuleKey first = form.coefs().keySet().stream()
+                    .min(Comparator.comparing(key -> String.join(".", key.steps()))).orElseThrow();
+            ExactRatio weight = form.coefs().get(first);
+            LinearForm<RuleKey> scaled = form.dividedBy(weight.abs()).orNull();
+            if (scaled == null) {
+                return null;
+            }
+            return weight.signum() < 0
+                    ? new ClauseAffineMeaning.Comparison(scaled.negate(), turnedAround(rel))
+                    : new ClauseAffineMeaning.Comparison(scaled, rel);
+        }
+
+        /** The relation that holds of the negation of a value where {@code rel} holds of it. */
+        private static Rel turnedAround(Rel rel) {
+            return switch (rel) {
+                case GE -> Rel.LE;
+                case GT -> Rel.LT;
+                case LE -> Rel.GE;
+                case LT -> Rel.GT;
+                case EQ, NE -> rel;
+            };
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */
         private Location locationOf(Core e) {
             return Location.of(e, newtypes,
-                    binding -> fields.containsKey(binding) ? Location.of(binding) : null,
+                    binding -> fields.containsKey(binding) ? Location.of(binding)
+                            : aliases.get(binding),
                     this::stepsOf);
         }
 

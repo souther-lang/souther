@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.HeldClass;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -15,7 +15,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.values.AdmissibleSet;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,6 +60,8 @@ final class ConstructionRules {
     /** Each value's rules with nothing settled, which every settling is taken onto. */
     private final Map<TermPath, FieldDomains> readBare = new HashMap<>();
     private final Map<Taken, FieldDomains.Composing> composed = new HashMap<>();
+    /** The places each value's rules read, by where the value stands. */
+    private final Map<TermPath, PlacesTheRulesRead> readAt = new HashMap<>();
 
     private ConstructionRules(MeasuredInput subject, Map<TermPath, Place> settled) {
         this.subject = subject;
@@ -122,20 +123,15 @@ final class ConstructionRules {
      */
     FieldDomains.ConstructionLimits limitsAt(TermPath path, Settling settling) {
         List<RuleRoots.Naming> named = namingOf(path);
-        NumericDomain.Bounds values = null;
-        FieldDomains.Held held = null;
-        AdmissibleSet admits = FieldDomains.ConstructionLimits.NONE.admits();
-        HeldClass heldTo = FieldDomains.ConstructionLimits.NONE.heldTo();
+        // Every value naming the position, met: a gap one value's rules leave is a gap in the
+        // position, and a value leaving it nothing leaves the position nothing.
+        FieldDomains.ConstructionLimits limits = FieldDomains.ConstructionLimits.NONE;
         for (int i = 0; i < named.size(); i++) {
             RuleRoots.Naming each = named.get(i);
-            FieldDomains.ConstructionLimits here = composedUnder(each, settling.fixed().get(i))
-                    .at(each.address().key());
-            values = meet(values, here.values());
-            held = meet(held, here.held());
-            admits = admits.narrower(here.admits());
-            heldTo = heldTo.and(here.heldTo());
+            limits = limits.meet(composedUnder(each, settling.fixed().get(i))
+                    .at(each.address().key()));
         }
-        return new FieldDomains.ConstructionLimits(values, held, admits, heldTo);
+        return limits;
     }
 
     /**
@@ -179,17 +175,45 @@ final class ConstructionRules {
                 ? FieldDomains.of(name, reading) : FieldDomains.NONE;
     }
 
+    /**
+     * Whether a value whose rules name {@code here} says something of a position strictly under it.
+     *
+     * <p>What a plan asks before choosing a value whole at {@code here}. A value chosen whole is
+     * composed by its own declaration's rules, and a rule of a value above it about a field under
+     * it — a name a sum's cases share — is not one of those: the value comes back holding whatever
+     * its own rules leave that field, and every row built at it is refused by the rule above. Laid
+     * out as positions instead, each field is a position {@link #limitsAt} meets every naming at.
+     */
+    boolean speaksUnder(TermPath here) {
+        for (RuleRoots.Naming each : namingOf(here)) {
+            if (placesRead(each).readUnder(each.address().key())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The places the rules of the value {@code value} names a position in read. */
+    private PlacesTheRulesRead placesRead(RuleRoots.Naming value) {
+        return readAt.computeIfAbsent(value.address().root(),
+                at -> PlacesTheRulesRead.of(value.value(), reading.source()));
+    }
+
     private List<RuleRoots.Naming> namingOf(TermPath path) {
         return subject.rulesNaming(path);
+    }
+
+    /** The rules of the value {@code value} names a position in, with nothing settled. */
+    private FieldDomains bare(RuleRoots.Naming value) {
+        return readBare.computeIfAbsent(value.address().root(),
+                at -> rulesOf(value.value(), reading));
     }
 
     private FieldDomains.Composing composedUnder(RuleRoots.Naming value,
                                                  Map<RuleKey, Count> fixed) {
         TermPath root = value.address().root();
         return composed.computeIfAbsent(new Taken(root, fixed),
-                taken -> readBare.computeIfAbsent(root,
-                                at -> rulesOf(value.value(), reading))
-                        .composing(FieldDomains.atValues(fixed)));
+                taken -> bare(value).composing(FieldDomains.atValues(fixed)));
     }
 
     /** One value's rules with one settling taken on, which is what the same answer is to. */
@@ -219,18 +243,4 @@ final class ConstructionRules {
         return Collections.unmodifiableMap(out);
     }
 
-    private static NumericDomain.Bounds meet(NumericDomain.Bounds one, NumericDomain.Bounds other) {
-        return one == null ? other : other == null ? one : one.meet(other);
-    }
-
-    /** Both values' answers: how many the two leave together, and every run either keeps the
-     *  elements apart at. */
-    private static FieldDomains.Held meet(FieldDomains.Held one, FieldDomains.Held other) {
-        if (one == null || other == null) {
-            return one == null ? other : one;
-        }
-        List<List<String>> apart = new ArrayList<>(one.keptApart());
-        apart.addAll(other.keptApart());
-        return new FieldDomains.Held(one.bounds().meet(other.bounds()), List.copyOf(apart));
-    }
 }
