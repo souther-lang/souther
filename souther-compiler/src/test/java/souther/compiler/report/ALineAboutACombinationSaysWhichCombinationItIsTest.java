@@ -5,7 +5,6 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
-import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.Compilation;
@@ -23,7 +22,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,15 +33,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * A line about a combination of a body's decisions says which combination it is, and the one it
- * says is the one the line is about.
+ * A line about the combinations no row makes says which of them it is about, and what it says is
+ * what the group of the body's decisions holds.
  *
- * <p>Two questions, checked apart. Whether each condition said is the place a run of the
- * combination is recorded at — every step of the copy it stands in included — is checked against
- * the claims the measure holds the combination to, read here without the reading's own walk. And
- * whether two combinations a page names read as two is checked on the page itself. The first does
- * not give the second: a condition of a combination can be a case of a position, which no claim
- * names, and the page is what has to tell such combinations apart.
+ * <p>Two questions, checked apart. Whether each condition said is the place a run of the choices is
+ * recorded at — every step of the copy it stands in included — is checked against the claims the
+ * group holds its choices to, read here without the reading's own walk. And whether the patterns a
+ * page names are the choices no row makes, once each, is checked on the page and the document.
  */
 class ALineAboutACombinationSaysWhichCombinationItIsTest {
 
@@ -175,98 +171,98 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             "KEPT", KEPT);
 
     /**
-     * Each condition under a line is a place a run of that combination is recorded at, with every
-     * step of the copy it stands in, and the alternatives under it are the ways the measure holds
-     * it to that no other way is inside.
+     * Each condition under a line is a place a run of the choices is recorded at, with every step
+     * of the copy it stands in: one of the places the group holds its choices to.
      */
     @ParameterizedTest
     @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
             "MEETS_TWICE", "KEPT"})
-    void eachConditionSaidIsAPlaceTheCombinationIsRecordedAt(String fixture) {
+    void eachConditionSaidIsAPlaceTheChoicesAreRecordedAt(String fixture) {
         Compilation compilation = measured(FIXTURES.get(fixture));
         AdequacyReport.BehaviorReport behavior =
                 AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
-        Set<ObligationIdentity.OfACombinationOfDecisions> about = aboutOf(behavior);
-        assertTrue(about.size() >= 3, () -> "lines about combinations: " + about);
+        assertTrue(!behavior.unobserved().isEmpty(), () -> "choices no row makes: " + fixture);
 
-        for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
-            Set<Set<List<Object>>> asked = new HashSet<>();
-            for (InteractionRequirements.Way way : waysOf(behavior, combination)) {
-                Set<List<Object>> claimed = new HashSet<>();
-                for (ControlClaim claim : way.claims()) {
-                    claimed.add(claimed(compilation, claim));
-                }
-                asked.add(claimed);
-            }
-            Set<Set<List<Object>>> alternatives = new HashSet<>();
-            for (Set<List<Object>> way : asked) {
-                if (asked.stream().noneMatch(other -> other != way && way.containsAll(other))) {
-                    alternatives.add(way);
+        Set<List<Object>> places = new HashSet<>();
+        for (InteractionRequirements.OfferedGroup offered : meetingsOf(behavior).asked().groups()) {
+            offered.reach().claims().forEach(claim -> places.add(claimed(compilation, claim)));
+            for (List<InteractionRequirements.Outcome> factor : offered.byFactor()) {
+                for (InteractionRequirements.Outcome outcome : factor) {
+                    outcome.claims().forEach(claim -> places.add(claimed(compilation, claim)));
                 }
             }
-            Set<Set<List<Object>>> said = new HashSet<>();
-            for (List<AdequacyReport.ShownCondition> way : behavior.waysOf(combination)) {
-                List<List<Object>> read = way.stream()
-                        .map(ALineAboutACombinationSaysWhichCombinationItIsTest::read).toList();
-                assertEquals(read.size(), new HashSet<>(read).size(),
-                        () -> "no condition said twice in one way: " + read);
-                said.add(new HashSet<>(read));
+        }
+        for (AdequacyReport.UnobservedGroup group : behavior.unobserved()) {
+            List<AdequacyReport.ShownCondition> said = new ArrayList<>(group.wayIn());
+            group.choices().forEach(each -> said.addAll(each.decided()));
+            for (AdequacyReport.ShownCondition each : said) {
+                List<Object> read = read(each);
+                assertTrue(places.contains(read), () -> "a place no choice is recorded at: " + read);
             }
-            assertEquals(alternatives, said, () -> "what is said under " + combination);
         }
     }
 
-    /** Every combination a page names reads as its own, and only the ways the page needs are said
-     *  as alternatives. */
+    /**
+     * The patterns of a group hold each choice no row makes once: their counts add up to the
+     * combinations the rows did not make, and a group that several groups arrive at is not counted
+     * in each.
+     */
     @ParameterizedTest
     @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
             "MEETS_TWICE", "KEPT"})
-    void combinationsAPageNamesReadApart(String fixture) {
+    void thePatternsHoldTheCombinationsNoRowMakesOnceEach(String fixture) {
+        AdequacyReport.BehaviorReport behavior = behaviorOf(FIXTURES.get(fixture));
+        var meetings = meetingsOf(behavior);
+        Set<ObligationIdentity.OfACombinationOfDecisions> missing = new HashSet<>();
+        Set<ObligationIdentity.OfACombinationOfDecisions> made =
+                meetings.made().made().orElseThrow().met();
+        for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
+            if (!made.contains(each)) {
+                missing.add(each);
+            }
+        }
+        int held = behavior.unobserved().stream().flatMap(each -> each.choices().stream())
+                .mapToInt(AdequacyReport.UnobservedChoices::count).sum();
+        assertTrue(held >= missing.size(),
+                () -> held + " choices in the patterns, " + missing.size() + " combinations");
+        if (meetings.asked().groups().size() == 1) {
+            assertEquals(missing.size(), held, () -> "one group, so each combination once");
+        }
+    }
+
+    /** Every pattern a page names is a line, and the document has the same patterns as findings
+     *  with the same counts. */
+    @ParameterizedTest
+    @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
+            "MEETS_TWICE", "KEPT"})
+    void thePageAndTheDocumentNameTheSamePatterns(String fixture) {
         Compilation compilation = measured(FIXTURES.get(fixture));
         AdequacyReport report = AdequacyReport.of(compilation);
-        Set<ObligationIdentity.OfACombinationOfDecisions> about =
-                aboutOf(report.modules().getFirst().behaviors().getFirst());
-        List<Set<String>> blocks =
-                blocksOf(report.human(SourceRendering.namedByIdentity(compilation.texts())));
-        assertEquals(about.size(), blocks.size(), () -> "a line per combination: " + blocks);
-        assertEquals(blocks.size(), new HashSet<>(blocks).size(),
-                () -> "and no two alike: " + blocks);
-    }
-
-    /**
-     * Where a combination has more than one way, the page writes one line for it and says the
-     * ways under it as alternatives, leaving out a way that has another inside it. The document
-     * names the combination once whatever its ways.
-     */
-    @Test
-    void waysAreSaidAsAlternativesUnderOneLine() {
-        Compilation compilation = measured(MEETS_TWICE);
-        AdequacyReport report = AdequacyReport.of(compilation);
         AdequacyReport.BehaviorReport behavior = report.modules().getFirst().behaviors().getFirst();
-        Set<ObligationIdentity.OfACombinationOfDecisions> about = aboutOf(behavior);
-        for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
-            assertEquals(3, waysOf(behavior, combination).size(),
-                    () -> "the meeting in each call and the one between them: " + combination);
-            assertEquals(2, behavior.waysOf(combination).size(),
-                    () -> "the one between them holds both of the others: " + combination);
-        }
-        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertEquals(about.size(), blocksOf(page).size(), page);
-        assertEquals(about.size(), linesSaying(page, "either"), page);
-        assertEquals(about.size(), linesSaying(page, "or"), page);
+        List<AdequacyReport.UnobservedChoices> patterns = behavior.unobserved().stream()
+                .flatMap(each -> each.choices().stream()).toList();
 
-        JsonNode interaction = JsonMapper.builder().build().readTree(
-                report.json(SourceRendering.namedByIdentity(compilation.texts())))
-                .findValue("interaction");
-        int unmade = 0;
-        for (JsonNode each : interaction.get("obligations")) {
-            unmade += each.get("made").asBoolean() ? 0 : 1;
+        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertEquals(patterns.size(), blocksOf(page).size(), page);
+
+        JsonNode document = JsonMapper.builder().build().readTree(
+                report.json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<Integer> counted = new ArrayList<>();
+        Set<String> identities = new HashSet<>();
+        for (JsonNode each : document.findValue("findings")) {
+            if (each.get("kind").asString().equals("interaction_uncovered")) {
+                counted.add(each.get("combinations").asInt());
+                identities.add(each.get("obligationId").toString());
+            }
         }
-        assertEquals(about.size(), unmade, () -> "one obligation per line: " + interaction);
+        assertEquals(patterns.stream().map(AdequacyReport.UnobservedChoices::count).toList(),
+                counted);
+        assertEquals(counted.size(), identities.size(), () -> "no two under one identity");
     }
 
     /**
-     * Two combinations of which elements a comparison keeps are two identities in the document.
+     * Two combinations of which elements are kept are two identities in the document, whether they
+     * are made or stated as missing.
      *
      * <p>The same construct is the decision of each element, so the combinations differ only in
      * which evaluation of it came out which way. An identity that left the evaluation out would be
@@ -276,17 +272,44 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
     void combinationsOfWhichElementsAreKeptAreTwoIdentitiesInTheDocument() {
         Compilation compilation = measured(KEPT);
         AdequacyReport report = AdequacyReport.of(compilation);
-        JsonNode obligations = JsonMapper.builder().build().readTree(
-                report.json(SourceRendering.namedByIdentity(compilation.texts())))
-                .findValue("interaction").get("obligations");
+        JsonNode document = JsonMapper.builder().build().readTree(
+                report.json(SourceRendering.namedByIdentity(compilation.texts())));
 
         List<String> identities = new ArrayList<>();
-        for (JsonNode each : obligations) {
+        int choices = 0;
+        for (JsonNode each : document.findValue("interaction").get("obligations")) {
             identities.add(each.get("obligationId").toString());
+            choices += each.has("combinations") ? each.get("combinations").asInt() : 1;
         }
-        assertEquals(4, identities.size(), () -> "a combination for each choice: " + identities);
-        assertEquals(4, new HashSet<>(identities).size(),
+        assertEquals(4, choices, () -> "a combination for each choice: " + identities);
+        assertEquals(identities.size(), new HashSet<>(identities).size(),
                 () -> "and no two under one identity: " + identities);
+        for (JsonNode each : document.findValue("findings")) {
+            if (each.get("kind").asString().equals("interaction_uncovered")) {
+                assertTrue(identities.contains(each.get("obligationId").toString()),
+                        () -> "a finding joins an entry: " + each);
+            }
+        }
+    }
+
+    /**
+     * A pattern of one choice names every decision of the combination, so its identity is the one
+     * the combination had; a pattern of more names fewer.
+     */
+    @Test
+    void aPatternOfOneChoiceHasTheIdentityOfTheCombination() {
+        AdequacyReport.BehaviorReport behavior = behaviorOf(MEETING);
+        var meetings = meetingsOf(behavior);
+        Set<Set<?>> combinations = new HashSet<>();
+        meetings.asked().ways().keySet().forEach(each -> combinations.add(each.settled()));
+        for (AdequacyReport.UnobservedGroup group : behavior.unobserved()) {
+            for (AdequacyReport.UnobservedChoices each : group.choices()) {
+                if (each.count() == 1) {
+                    assertTrue(combinations.contains(each.settled()),
+                            () -> "a combination of the body: " + each.settled());
+                }
+            }
+        }
     }
 
     /**
@@ -327,8 +350,9 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
     @Test
     void aWayThatReadsLikeAnEarlierOneIsSaidOnce() {
         AdequacyReport.BehaviorReport behavior = behaviorOf(MEETING);
-        List<AdequacyReport.ShownCondition> way =
-                behavior.waysOf(aboutOf(behavior).iterator().next()).getFirst();
+        AdequacyReport.UnobservedGroup group = behavior.unobserved().getFirst();
+        List<AdequacyReport.ShownCondition> way = new ArrayList<>(group.wayIn());
+        way.addAll(group.choices().getFirst().decided());
         assertTrue(way.size() > 1, () -> "a way of more than one condition: " + way);
 
         assertEquals(List.of(way), AdequacyReport.distinctWays(List.of(way, way.reversed())));
@@ -402,39 +426,22 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         }).toList();
     }
 
-    private static List<InteractionRequirements.Way> waysOf(
-            AdequacyReport.BehaviorReport behavior,
-            ObligationIdentity.OfACombinationOfDecisions combination) {
+    private static souther.compiler.query.InteractionEvidence meetingsOf(
+            AdequacyReport.BehaviorReport behavior) {
         if (!(behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
                 var meetings))) {
             return fail("held to the combinations of its decisions: " + behavior.name());
         }
-        return meetings.asked().ways().get(combination);
+        return meetings;
     }
 
-    /** The combinations a line under {@code behavior} is about. */
-    private static Set<ObligationIdentity.OfACombinationOfDecisions> aboutOf(
-            AdequacyReport.BehaviorReport behavior) {
-        Set<ObligationIdentity.OfACombinationOfDecisions> out = new LinkedHashSet<>();
-        for (AdequacyReport.ReportedFinding each : behavior.reported()) {
-            if (each.finding().about() instanceof About.ACombinationNoRowMakes(var combination)) {
-                out.add(combination);
-            }
-        }
-        for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
-                each : CoveredOnlyByRowsThatDoNotHold.combinationsOf(
-                        behavior.evidence().combinations())) {
-            out.add(each.obligation());
-        }
-        return out;
-    }
-
-    /** The lines a page writes under each line about a combination, in no order. */
+    /** The lines a page writes under each line about missing combinations, in no order. */
     private static List<Set<String>> blocksOf(String page) {
         List<Set<String>> out = new ArrayList<>();
         Set<String> block = null;
         for (String line : page.lines().toList()) {
-            if (line.contains("this combination of the decisions")) {
+            if (line.contains("no row makes this combination of the decisions")
+                    || line.contains("no row makes any of these")) {
                 block = new HashSet<>();
                 out.add(block);
             } else if (block != null && line.startsWith("          ")) {
@@ -444,11 +451,6 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             }
         }
         return out;
-    }
-
-    /** How many lines of {@code page} say {@code word} and nothing else. */
-    private static long linesSaying(String page, String word) {
-        return page.lines().filter(line -> line.strip().equals(word)).count();
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String source) {

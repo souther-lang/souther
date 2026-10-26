@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.check.PathReachability;
+import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.publish.ReachProofWord;
 import souther.compiler.types.ConstructOccurrence;
@@ -37,6 +38,8 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundaryLine;
+import souther.compiler.partition.ChoicePattern;
+import souther.compiler.partition.DecisionSet;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
@@ -287,7 +290,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 25;
+    public static final int SCHEMA_VERSION = 26;
 
     /**
      * Where the schema this writes documents ships.
@@ -652,6 +655,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  PathReachability.Answers.Contradictions reachShownWrong,
                                  Map<ObligationIdentity.OfACombinationOfDecisions,
                                          List<List<ShownCondition>>> combinationReadings,
+                                 List<UnobservedGroup> unobserved,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces) {
         public BehaviorReport {
             Objects.requireNonNull(reachShownWrong,
@@ -664,6 +668,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ruleReadings = Map.copyOf(ruleReadings);
             ruleSettlements = Map.copyOf(ruleSettlements);
             combinationReadings = Map.copyOf(combinationReadings);
+            unobserved = List.copyOf(unobserved);
             rowPlaces = Map.copyOf(rowPlaces);
         }
 
@@ -1087,6 +1092,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     reachShownWrong(arrived, behavior.name()),
                     combinationReadings(compilation, name, behavior.name(),
                             evidence.combinations(), reported),
+                    unobserved(compilation, name, behavior.name(), evidence.combinations(),
+                            reported),
                     rowPlaces));
         }
         Adequacy.DeclaredBoundaries declared =
@@ -1276,11 +1283,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             return Map.of();
         }
         Set<ObligationIdentity.OfACombinationOfDecisions> about = new LinkedHashSet<>();
-        for (ReportedFinding each : reported) {
-            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
-                about.add(combination);
-            }
-        }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
                 made : CoveredOnlyByRowsThatDoNotHold.combinationsOf(criterion)) {
             about.add(made.obligation());
@@ -1295,6 +1297,147 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.put(combination, waysOf(compilation.db(), module, places, meetings, combination));
         }
         return out;
+    }
+
+    /**
+     * What a group of the body's decisions has no row making, as sets of its choices.
+     *
+     * <p>The group is the unit and the pattern is how it is said ({@link ChoicePattern}): the
+     * choices the rows were not seen making, in one standing, are each stated by the outcomes some
+     * factors take, and a set that no outcome of a factor tells apart is not told one choice at a
+     * time. A set that is one choice names every factor, so a group with a few choices missing is
+     * said choice by choice and a group with most of them missing is said by what they have in
+     * common — by one rule, and the same for both.
+     *
+     * <p>The standing is what a finding of the choice says besides that no row makes it: what its
+     * reading went without and what is open about whether a row making it can be written. Two
+     * choices in different standing are two patterns, so that a gap the rows established and one
+     * nobody could decide are never counted as one.
+     *
+     * <p>Read off the findings the measure raised, one to a combination, which are not changed:
+     * what a build refuses over and what a row is generated for are those, and this is how they
+     * are said.
+     */
+    private static List<UnobservedGroup> unobserved(Compilation compilation, String module,
+                                                   String behavior,
+                                                   CombinationCriterion criterion,
+                                                   List<ReportedFinding> reported) {
+        if (!(criterion instanceof CombinationCriterion.Interactions(var meetings))
+                || meetings.made().made().isEmpty()) {
+            return List.of();
+        }
+        Map<ObligationIdentity.OfACombinationOfDecisions, ReportedFinding> findingOf =
+                new LinkedHashMap<>();
+        for (ReportedFinding each : reported) {
+            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
+                findingOf.putIfAbsent(combination, each);
+            }
+        }
+        if (findingOf.isEmpty()) {
+            return List.of();
+        }
+        Set<ObligationIdentity.OfACombinationOfDecisions> made =
+                meetings.made().made().orElseThrow().met();
+        DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
+        Object madeState = new Object();
+        Set<Set<Condition>> stated = new HashSet<>();
+        List<UnobservedGroup> out = new ArrayList<>();
+        for (InteractionRequirements.OfferedGroup offered : meetings.asked().groups()) {
+            Map<Standing, ReportedFinding> standingOf = new LinkedHashMap<>();
+            List<Object> states = new ArrayList<>();
+            for (ObligationIdentity.OfACombinationOfDecisions each : offered.at()) {
+                ReportedFinding finding = each == null ? null : findingOf.get(each);
+                if (each != null && made.contains(each)) {
+                    states.add(madeState);
+                } else if (finding == null) {
+                    states.add(null);
+                } else {
+                    Standing standing = new Standing(finding.finding().weakenedBy(),
+                            finding.finding().open());
+                    standingOf.putIfAbsent(standing, finding);
+                    states.add(standing);
+                }
+            }
+            List<UnobservedChoices> choices = new ArrayList<>();
+            for (ChoicePattern.Found<Object> found
+                    : ChoicePattern.of(offered.widths(), states, each -> each != madeState)) {
+                List<ControlClaim> claims = new ArrayList<>();
+                Set<Condition> settled = new LinkedHashSet<>(offered.reach().settles());
+                for (int factor = 0; factor < found.pattern().fixed().size(); factor++) {
+                    Integer outcome = found.pattern().fixed().get(factor);
+                    if (outcome != null) {
+                        InteractionRequirements.Outcome taken =
+                                offered.byFactor().get(factor).get(outcome);
+                        claims.addAll(taken.claims());
+                        settled.addAll(taken.settles());
+                    }
+                }
+                DecisionSet decided = DecisionSet.of(settled);
+                if (stated.add(decided)) {
+                    choices.add(new UnobservedChoices(standingOf.get(found.state()),
+                            shownWay(compilation.db(), module, places, claims), decided,
+                            found.pattern().count()));
+                }
+            }
+            if (!choices.isEmpty()) {
+                out.add(new UnobservedGroup(shownWay(compilation.db(), module, places,
+                        offered.reach().claims()), choices));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** What two findings of a choice share when they are said as one: what the reading went
+     *  without and what is open about the choice. */
+    private record Standing(WeakeningSet weakening,
+                            CanonicalSelection<ObligationDisposition.Uncertainty> open) {
+    }
+
+    /**
+     * The choices of one group that no row makes, in one standing.
+     *
+     * @param finding the first finding of a choice in it, which says what its standing is
+     * @param decided the conditions of the outcomes the pattern names, which is what decides the
+     *                choices in it; the factors it leaves either way are not among them
+     * @param settled the decisions the choices share, which is what the pattern is told apart by:
+     *                a pattern naming every factor is the one combination of that name
+     * @param count   how many choices of the group are in it
+     */
+    public record UnobservedChoices(ReportedFinding finding, List<ShownCondition> decided,
+                                    Set<Condition> settled, int count) {
+
+        public UnobservedChoices {
+            Objects.requireNonNull(finding, "a pattern of missing choices has a finding");
+            decided = List.copyOf(decided);
+            settled = DecisionSet.of(settled);
+        }
+    }
+
+    /**
+     * One group of the body's decisions and what no row makes of it.
+     *
+     * @param wayIn   the conditions every choice of the group is under, said once
+     * @param choices the patterns, the choices in different standing apart
+     */
+    public record UnobservedGroup(List<ShownCondition> wayIn, List<UnobservedChoices> choices) {
+
+        public UnobservedGroup {
+            wayIn = List.copyOf(wayIn);
+            choices = List.copyOf(choices);
+        }
+    }
+
+    /** The conditions a run along {@code claims} is seen at, as a reader is told them. */
+    private static List<ShownCondition> shownWay(Db db, String module,
+                                                 DecisionRuleReading.Places places,
+                                                 List<ControlClaim> claims) {
+        List<ShownCondition> shown = new ArrayList<>();
+        for (DecisionRuleReading.Seen each : DecisionRuleReading.ofAWay(claims, places)) {
+            shown.add(new ShownCondition(each.read(), whereItIsWritten(db, each.read()),
+                    each.through().isEmpty() ? List.of()
+                            : List.of(callsOf(db, module, each.through()))));
+        }
+        return shown;
     }
 
     /**
@@ -1316,14 +1459,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         List<List<ShownCondition>> read = new ArrayList<>();
         for (InteractionRequirements.Way way : ways) {
-            List<ShownCondition> shown = new ArrayList<>();
-            for (DecisionRuleReading.Seen each
-                    : DecisionRuleReading.ofAWay(way.claims(), places)) {
-                shown.add(new ShownCondition(each.read(), whereItIsWritten(db, each.read()),
-                        each.through().isEmpty() ? List.of()
-                                : List.of(callsOf(db, module, each.through()))));
-            }
-            read.add(shown);
+            read.add(shownWay(db, module, places, way.claims()));
         }
         return distinctWays(read);
     }
@@ -4066,11 +4202,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .orElseGet(() -> String.format("    interaction combinations %d   %s%s%n",
                         meetings.counted(),
                         ReasonProse.of(meetings.made().why()).sentence(), held)));
-        for (ReportedFinding f : behavior.reported()) {
-            if (f.finding().about() instanceof About.ACombinationNoRowMakes(var combination)) {
-                out.append(String.format("      %s %smakes this combination of the decisions%s%n",
-                        mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
-                ways(out, behavior.waysOf(combination), declaredIn, rendering);
+        for (UnobservedGroup group : behavior.unobserved()) {
+            for (UnobservedChoices missing : group.choices()) {
+                Adequacy.Finding finding = missing.finding().finding();
+                out.append(String.format("      %s %smakes %s of the decisions%s%n",
+                        mark(finding), noRow(finding),
+                        missing.count() == 1 ? "this combination"
+                                : "any of these " + missing.count() + " combinations",
+                        onAPremise(finding)));
+                List<ShownCondition> said = new ArrayList<>(group.wayIn());
+                missing.decided().stream().filter(each -> !said.contains(each))
+                        .forEach(said::add);
+                ways(out, List.of(said), declaredIn, rendering);
             }
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
@@ -8164,6 +8307,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ArrayNode all = out.putArray("obligations");
         Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
         for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
+            // The combinations no row makes are written below as the patterns they come to, one
+            // entry for the choices that share their decisions and not one for each.
+            if (met.isPresent() && !met.get().met().contains(each)) {
+                continue;
+            }
             ObjectNode one = all.addObject();
             combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
             met.ifPresent(rows -> {
@@ -8173,6 +8321,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     onlyWitnessedBy(one, by, behavior.rowPlace(), sources);
                 }
             });
+        }
+        for (UnobservedGroup group : behavior.unobserved()) {
+            for (UnobservedChoices missing : group.choices()) {
+                ObjectNode one = all.addObject();
+                combinationId(one.putObject("obligationId"),
+                        ((About.ACombinationNoRowMakes) missing.finding().finding().about())
+                                .combination().behavior(),
+                        missing.settled());
+                one.put("made", false);
+                if (missing.count() > 1) {
+                    one.put("combinations", missing.count());
+                }
+            }
         }
     }
 
@@ -8504,8 +8665,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * line or a class, that coordinate is not where the reader would go.
      */
     private void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
-        findings(DocumentPart.FINDINGS.putArray(behavior), of.reported(), sources,
-                of.rulePlace());
+        findingsAndPatterns(DocumentPart.FINDINGS.putArray(behavior), of.reported(),
+                of.unobserved().stream().flatMap(each -> each.choices().stream()).toList(),
+                sources, of.rulePlace());
     }
 
     /**
@@ -8724,50 +8886,84 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private void findings(DocumentArray out, List<ReportedFinding> written,
                           DocumentSources sources,
                           PublishedRuleHandle.WhereARuleIs places) {
+        findingsAndPatterns(out, written, List.of(), sources, places);
+    }
+
+    /**
+     * The same entries, with the combinations no row makes written as the patterns they are said
+     * as: an entry for each, where the first finding of a combination stood.
+     *
+     * <p>A pattern names the decisions its choices share, which for a pattern of one choice are the
+     * decisions of that combination and so the identity the combination had, and says how many
+     * choices it holds.
+     */
+    private void findingsAndPatterns(DocumentArray out, List<ReportedFinding> written,
+                                     List<UnobservedChoices> patterns, DocumentSources sources,
+                                     PublishedRuleHandle.WhereARuleIs places) {
+        boolean patternsWritten = false;
         for (ReportedFinding reported : written) {
-            Adequacy.Finding finding = reported.finding();
-            DocumentItem found = out.addObject();
-            ObjectNode f = found.node();
-            f.put("kind", word(finding.kind()));
-            f.put("disposition", word(finding.disposition()));
-            RuleHandleSurface.FINDING_SUBJECT.put(found, subject(finding, places),
-                    sources.rendering(), null);
-            // Which rule this is about, where the finding is about one. The words in `subject` are
-            // how a reader finds it, and two rules an author named alike have the same words — so a
-            // consumer joining findings to the questions they came from wants this.
-            //
-            // Asked of the subject rather than matched against the kinds that have one. Listed
-            // here, a kind added and not listed wrote no identity, and one rule's findings came out
-            // identical in every field with nothing to join them by.
-            if (finding.about() instanceof About.OfARule about) {
-                ruleId(f.putObject("ruleId"), about.rule());
+            if (reported.finding().about() instanceof About.ACombinationNoRowMakes) {
+                if (!patternsWritten) {
+                    patternsWritten = true;
+                    for (UnobservedChoices each : patterns) {
+                        finding(out, each.finding(), each, sources, places);
+                    }
+                }
+                continue;
             }
-            // And which thing a row is owed for, where the finding is about one. The words in
-            // `subject` do not tell two of them apart — a rule read at one level in one role owes
-            // two points where two cases stop the run in different places, and a fork whose caller
-            // supplies the rule owes one arm per rule at one place — so a consumer joining a
-            // finding to the account's entry joins on this.
-            //
-            // Asked of the subject, for the reason the rule above is: the accounts that keep such
-            // things are not a list this holds, and one written here would leave a finding about
-            // the next of them named by words that tell two of its obligations apart nowhere.
-            if (finding.about() instanceof About.OfAnObligation owed) {
-                obligationId(f.putObject("obligationId"), owed.obligationIdentity(), sources);
-            }
-            // And which limit stopped it, where the finding is about one being in the way. Two
-            // conjuncts of one clause about one position can stop for two different limits, so
-            // written without this a rule's findings there are one object twice — and the entry
-            // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
-            if (finding.about() instanceof About.OfSomethingNotRead about) {
-                f.put("reason", word(about.finding().reason()));
-            }
-            // Present where the kind has one. A finding a build is not told about under any code is
-            // not one with an empty code, and a consumer joining these to the diagnostics a build
-            // printed reads the difference.
-            finding.code().ifPresent(code -> f.put("code", code.name()));
-            if (hasAPlaceOfItsOwn(finding)) {
-                at(f, reported.at(), sources);
-            }
+            finding(out, reported, null, sources, places);
+        }
+    }
+
+    private void finding(DocumentArray out, ReportedFinding reported, UnobservedChoices pattern,
+                         DocumentSources sources, PublishedRuleHandle.WhereARuleIs places) {
+        Adequacy.Finding finding = reported.finding();
+        DocumentItem found = out.addObject();
+        ObjectNode f = found.node();
+        f.put("kind", word(finding.kind()));
+        f.put("disposition", word(finding.disposition()));
+        RuleHandleSurface.FINDING_SUBJECT.put(found, subject(finding, places),
+                sources.rendering(), null);
+        // Which rule this is about, where the finding is about one. The words in `subject` are
+        // how a reader finds it, and two rules an author named alike have the same words — so a
+        // consumer joining findings to the questions they came from wants this.
+        //
+        // Asked of the subject rather than matched against the kinds that have one. Listed
+        // here, a kind added and not listed wrote no identity, and one rule's findings came out
+        // identical in every field with nothing to join them by.
+        if (finding.about() instanceof About.OfARule about) {
+            ruleId(f.putObject("ruleId"), about.rule());
+        }
+        // And which thing a row is owed for, where the finding is about one. The words in
+        // `subject` do not tell two of them apart — a rule read at one level in one role owes
+        // two points where two cases stop the run in different places, and a fork whose caller
+        // supplies the rule owes one arm per rule at one place — so a consumer joining a
+        // finding to the account's entry joins on this.
+        //
+        // Asked of the subject, for the reason the rule above is: the accounts that keep such
+        // things are not a list this holds, and one written here would leave a finding about
+        // the next of them named by words that tell two of its obligations apart nowhere.
+        if (pattern != null) {
+            combinationId(f.putObject("obligationId"),
+                    ((About.ACombinationNoRowMakes) finding.about()).combination().behavior(),
+                    pattern.settled());
+            f.put("combinations", pattern.count());
+        } else if (finding.about() instanceof About.OfAnObligation owed) {
+            obligationId(f.putObject("obligationId"), owed.obligationIdentity(), sources);
+        }
+        // And which limit stopped it, where the finding is about one being in the way. Two
+        // conjuncts of one clause about one position can stop for two different limits, so
+        // written without this a rule's findings there are one object twice — and the entry
+        // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
+        if (finding.about() instanceof About.OfSomethingNotRead about) {
+            f.put("reason", word(about.finding().reason()));
+        }
+        // Present where the kind has one. A finding a build is not told about under any code is
+        // not one with an empty code, and a consumer joining these to the diagnostics a build
+        // printed reads the difference.
+        finding.code().ifPresent(code -> f.put("code", code.name()));
+        if (hasAPlaceOfItsOwn(finding)) {
+            at(f, reported.at(), sources);
         }
     }
 

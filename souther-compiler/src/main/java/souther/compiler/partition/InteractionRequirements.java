@@ -7,8 +7,10 @@ import souther.compiler.reading.WhyNotJoined;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
 
@@ -42,9 +44,66 @@ import java.util.SequencedMap;
 public record InteractionRequirements(
         int read,
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways,
+        List<OfferedGroup> groups,
         List<InteractionCells.NotOffered> notMeasured,
         List<InteractionCells.NotPlaced> notPlaced,
         int notJoined) {
+
+    /**
+     * One outcome of a factor, or the way in to the group, as what a run that took it is seen
+     * doing and the decisions it settles.
+     *
+     * <p>The classes the outcome leaves open are not here: they steer a search and say nothing of
+     * what a choice is, and a value that holds them is one an answer cannot be compared by.
+     */
+    public record Outcome(List<ControlClaim> claims,
+                          List<souther.compiler.reading.Condition> settles) {
+
+        public Outcome {
+            claims = List.copyOf(claims);
+            settles = List.copyOf(settles);
+        }
+
+        static Outcome of(InteractionCells.Placed placed) {
+            return new Outcome(placed.claims(), placed.settles());
+        }
+    }
+
+    /**
+     * One group of the body's decisions and the requirement each of its choices states.
+     *
+     * <p>Kept beside {@code ways} because the group is the structure the requirements were counted
+     * off: a reader that says which requirements are missing as a set of choices, and not one by
+     * one, needs the factors the choices are made of.
+     *
+     * @param reach    what every choice of the group is under
+     * @param byFactor the outcomes of each factor, in the order the group takes them
+     * @param at       the requirement of the {@code index}th choice of the group, the first factor
+     *                 varying fastest, or null where the factors it takes leave a position nothing
+     *                 and the choice is no combination
+     */
+    public record OfferedGroup(Outcome reach, List<List<Outcome>> byFactor,
+                               List<ObligationIdentity.OfACombinationOfDecisions> at) {
+
+        public OfferedGroup {
+            Objects.requireNonNull(reach, "a group of decisions has a way in");
+            byFactor = byFactor.stream().map(List::copyOf).toList();
+            at = Collections.unmodifiableList(new ArrayList<>(at));
+            int choices = 1;
+            for (List<Outcome> factor : byFactor) {
+                choices *= factor.size();
+            }
+            if (at.size() != choices) {
+                throw new IllegalArgumentException("a group of " + choices
+                        + " choices states " + at.size() + " requirements");
+            }
+        }
+
+        /** How many outcomes each factor has, in the order the group takes them. */
+        public List<Integer> widths() {
+            return byFactor.stream().map(List::size).toList();
+        }
+    }
 
     /**
      * One way to a requirement: the rows that take it, and what a run that took it is seen doing.
@@ -74,6 +133,7 @@ public record InteractionRequirements(
 
     public InteractionRequirements {
         ways = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(ways));
+        groups = List.copyOf(groups);
         notMeasured = List.copyOf(notMeasured);
         notPlaced = List.copyOf(notPlaced);
         if (read < 0 || notJoined < 0) {
@@ -89,7 +149,8 @@ public record InteractionRequirements(
 
     /** Nothing asked of a behavior whose decisions meet nowhere, which is not a group of none. */
     public static final InteractionRequirements NONE =
-            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of(), 0);
+            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of(), List.of(),
+                    0);
 
     /**
      * Whether the body has meetings at all, which is what says the criterion this behavior is held
@@ -119,15 +180,22 @@ public record InteractionRequirements(
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, mostCellsPerGroup);
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways =
                 new LinkedHashMap<>();
+        List<OfferedGroup> kept = new ArrayList<>();
+        // What each decision hashes to, by the decision itself: the choices of a group are taken
+        // from the same few outcomes, so a decision is hashed once and not once per choice.
+        Map<souther.compiler.reading.Condition, Integer> hashes = new IdentityHashMap<>();
         for (InteractionCells.Group group : offered.groups()) {
+            List<ObligationIdentity.OfACombinationOfDecisions> at = new ArrayList<>();
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection == null) {
+                    at.add(null);
                     continue;
                 }
                 ObligationIdentity.OfACombinationOfDecisions item =
                         new ObligationIdentity.OfACombinationOfDecisions(
-                                behavior, group.settledAt(index));
+                                behavior, DecisionSet.of(group.settledAt(index), hashes));
+                at.add(item);
                 List<Way> already = ways.computeIfAbsent(item, _ -> new ArrayList<>());
                 Way way = new Way(RowRegion.of(List.of(
                         RowRegion.Cell.of(selection.cell(), axes.axes()))), selection.claims());
@@ -135,8 +203,12 @@ public record InteractionRequirements(
                     already.add(way);
                 }
             }
+            kept.add(new OfferedGroup(Outcome.of(group.reach()),
+                    group.byFactor().stream()
+                            .map(factor -> factor.stream().map(Outcome::of).toList()).toList(),
+                    at));
         }
-        return new InteractionRequirements(groups.size() + notJoined.size(), ways,
+        return new InteractionRequirements(groups.size() + notJoined.size(), ways, kept,
                 offered.notOffered(), offered.notPlaced(), notJoined.size());
     }
 

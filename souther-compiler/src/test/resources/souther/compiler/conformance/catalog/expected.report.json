@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 25,
+  "schemaVersion" : 26,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
@@ -8276,6 +8276,108 @@
             "decisions" : [ {
               "kind" : "case",
               "at" : "指示.区分",
+              "outcome" : "速達"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "kind" : "expansion",
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "kind" : "expansion",
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "denied"
+            } ]
+          },
+          "made" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "通常"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "kind" : "expansion",
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "kind" : "expansion",
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "held"
+            } ]
+          },
+          "made" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "冷蔵"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "kind" : "expansion",
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "kind" : "expansion",
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "held"
+            } ]
+          },
+          "made" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
               "outcome" : "通常"
             }, {
               "kind" : "comparison",
@@ -8334,108 +8436,6 @@
                   "lowered" : 0
                 } ]
               },
-              "outcome" : "denied"
-            } ]
-          },
-          "made" : true
-        }, {
-          "obligationId" : {
-            "behavior" : "送料を出す",
-            "decisions" : [ {
-              "kind" : "case",
-              "at" : "指示.区分",
-              "outcome" : "冷蔵"
-            }, {
-              "kind" : "comparison",
-              "construct" : {
-                "module" : "conformance.shipping",
-                "definition" : "午前の集荷か",
-                "construct" : 1,
-                "lowered" : 0,
-                "through" : [ {
-                  "kind" : "expansion",
-                  "expanded" : "conformance.shipping.夜間割増",
-                  "module" : "conformance.shipping",
-                  "definition" : "送料を出す",
-                  "call" : 1,
-                  "lowered" : 0
-                }, {
-                  "kind" : "expansion",
-                  "expanded" : "conformance.shipping.午前の集荷か",
-                  "module" : "conformance.shipping",
-                  "definition" : "夜間割増",
-                  "call" : 1,
-                  "lowered" : 0
-                } ]
-              },
-              "outcome" : "denied"
-            } ]
-          },
-          "made" : false
-        }, {
-          "obligationId" : {
-            "behavior" : "送料を出す",
-            "decisions" : [ {
-              "kind" : "case",
-              "at" : "指示.区分",
-              "outcome" : "通常"
-            }, {
-              "kind" : "comparison",
-              "construct" : {
-                "module" : "conformance.shipping",
-                "definition" : "午前の集荷か",
-                "construct" : 1,
-                "lowered" : 0,
-                "through" : [ {
-                  "kind" : "expansion",
-                  "expanded" : "conformance.shipping.夜間割増",
-                  "module" : "conformance.shipping",
-                  "definition" : "送料を出す",
-                  "call" : 1,
-                  "lowered" : 0
-                }, {
-                  "kind" : "expansion",
-                  "expanded" : "conformance.shipping.午前の集荷か",
-                  "module" : "conformance.shipping",
-                  "definition" : "夜間割増",
-                  "call" : 1,
-                  "lowered" : 0
-                } ]
-              },
-              "outcome" : "held"
-            } ]
-          },
-          "made" : true
-        }, {
-          "obligationId" : {
-            "behavior" : "送料を出す",
-            "decisions" : [ {
-              "kind" : "case",
-              "at" : "指示.区分",
-              "outcome" : "速達"
-            }, {
-              "kind" : "comparison",
-              "construct" : {
-                "module" : "conformance.shipping",
-                "definition" : "午前の集荷か",
-                "construct" : 1,
-                "lowered" : 0,
-                "through" : [ {
-                  "kind" : "expansion",
-                  "expanded" : "conformance.shipping.夜間割増",
-                  "module" : "conformance.shipping",
-                  "definition" : "送料を出す",
-                  "call" : 1,
-                  "lowered" : 0
-                }, {
-                  "kind" : "expansion",
-                  "expanded" : "conformance.shipping.午前の集荷か",
-                  "module" : "conformance.shipping",
-                  "definition" : "夜間割増",
-                  "call" : 1,
-                  "lowered" : 0
-                } ]
-              },
               "outcome" : "held"
             } ]
           },
@@ -8470,10 +8470,10 @@
                   "lowered" : 0
                 } ]
               },
-              "outcome" : "held"
+              "outcome" : "denied"
             } ]
           },
-          "made" : true
+          "made" : false
         } ]
       },
       "replacement" : {
@@ -8687,43 +8687,7 @@
             "outcome" : "denied"
           } ]
         },
-        "code" : "E1936"
-      }, {
-        "kind" : "interaction_uncovered",
-        "disposition" : "refused",
-        "subject" : "送料を出す",
-        "obligationId" : {
-          "behavior" : "送料を出す",
-          "decisions" : [ {
-            "kind" : "case",
-            "at" : "指示.区分",
-            "outcome" : "冷蔵"
-          }, {
-            "kind" : "comparison",
-            "construct" : {
-              "module" : "conformance.shipping",
-              "definition" : "午前の集荷か",
-              "construct" : 1,
-              "lowered" : 0,
-              "through" : [ {
-                "kind" : "expansion",
-                "expanded" : "conformance.shipping.夜間割増",
-                "module" : "conformance.shipping",
-                "definition" : "送料を出す",
-                "call" : 1,
-                "lowered" : 0
-              }, {
-                "kind" : "expansion",
-                "expanded" : "conformance.shipping.午前の集荷か",
-                "module" : "conformance.shipping",
-                "definition" : "夜間割増",
-                "call" : 1,
-                "lowered" : 0
-              } ]
-            },
-            "outcome" : "denied"
-          } ]
-        },
+        "combinations" : 1,
         "code" : "E1936"
       }, {
         "kind" : "interaction_uncovered",
@@ -8761,6 +8725,45 @@
             "outcome" : "held"
           } ]
         },
+        "combinations" : 1,
+        "code" : "E1936"
+      }, {
+        "kind" : "interaction_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "decisions" : [ {
+            "kind" : "case",
+            "at" : "指示.区分",
+            "outcome" : "冷蔵"
+          }, {
+            "kind" : "comparison",
+            "construct" : {
+              "module" : "conformance.shipping",
+              "definition" : "午前の集荷か",
+              "construct" : 1,
+              "lowered" : 0,
+              "through" : [ {
+                "kind" : "expansion",
+                "expanded" : "conformance.shipping.夜間割増",
+                "module" : "conformance.shipping",
+                "definition" : "送料を出す",
+                "call" : 1,
+                "lowered" : 0
+              }, {
+                "kind" : "expansion",
+                "expanded" : "conformance.shipping.午前の集荷か",
+                "module" : "conformance.shipping",
+                "definition" : "夜間割増",
+                "call" : 1,
+                "lowered" : 0
+              } ]
+            },
+            "outcome" : "denied"
+          } ]
+        },
+        "combinations" : 1,
         "code" : "E1936"
       }, {
         "kind" : "decision_rule_uncovered",
