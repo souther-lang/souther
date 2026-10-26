@@ -9189,7 +9189,7 @@ final class Pullback {
      * which runs once its value has been worked out.
      */
     private boolean whatItRunsAsWrittenEndsNone(Core written, InputReads at) {
-        if (written instanceof Core.LetIn let) {
+        if (Core.withoutStanding(written) instanceof Core.LetIn let) {
             return endsNoRun(new Denotation(let.value(), at))
                     && endsNoRun(new Denotation(let.body(), at));
         }
