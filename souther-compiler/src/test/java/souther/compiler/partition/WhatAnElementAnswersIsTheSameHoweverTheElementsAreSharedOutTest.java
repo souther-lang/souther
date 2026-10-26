@@ -20,6 +20,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WaysSamples;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -145,10 +146,8 @@ class WhatAnElementAnswersIsTheSameHoweverTheElementsAreSharedOutTest {
             sameWhereverTheyAreWritten(Proposition.SoManyHold.counting(List.of(around), List.of(1),
                     List.of(1)))});
         decided.put(Proposition.OfTheWays.class, new Boolean[] {
-            sameWhereverTheyAreWritten(new Proposition.OfTheWays(
-                    new Proposition.WrittenWays("inside", true, 2, () -> inside), true)),
-            sameWhereverTheyAreWritten(new Proposition.OfTheWays(
-                    new Proposition.WrittenWays("around", true, 2, () -> around), true))});
+            sameWhereverTheyAreWritten(WaysSamples.over(inside)),
+            sameWhereverTheyAreWritten(WaysSamples.over(around))});
         // A quantifier over a list reads the list.
         decided.put(Proposition.Some.class, new Boolean[] {
             null, sameWhereverTheyAreWritten(new Proposition.Some(at(FORECASTS), inside, true))});

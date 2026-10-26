@@ -240,6 +240,10 @@ public sealed interface ReadingGap {
             /** A part of it is about a container holding more than a walk writes out. */
             MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
 
+            /** A part of it states something over more ways of keeping the elements of a
+             *  container than are written out. */
+            MORE_WAYS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_WAYS),
+
             /** It is no value the row writes: what a dependency answered, a case nothing here
              *  puts to a row, or an element of a container made of the input's in another order
              *  or of other elements. */

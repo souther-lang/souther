@@ -3,56 +3,133 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A statement over the ways its elements are kept is held as how it is written out. Holding it,
- * telling it from another and denying it write nothing out; asking for its cases does, once.
+ * A statement over the ways its elements are kept is held as what its cases are written out from.
+ * Holding it, telling it from another and denying it write nothing out; asking for its cases
+ * does, once. How many ways there are is the work of writing them out and not how many parts they
+ * come to, so ways that all state alike are read however many they are, up to the work that is
+ * done; and a number that no way can hold is found where the cases are written, whichever way
+ * the statement is asked about.
  */
 class AStatementOverTheWaysIsWrittenOutWhereItIsAskedTest {
 
-    private static final Proposition CASES = new Proposition.Any(List.of(truth("a"), truth("b")));
+    private static final Quantity.TheKeptTotal SUM = new Quantity.TheKeptTotal(1, false);
 
     private static Proposition truth(String at) {
         return new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of(at)), true);
     }
 
-    private static Proposition.OfTheWays over(String spelled, AtomicInteger writes) {
-        return new Proposition.OfTheWays(new Proposition.WrittenWays(spelled, true, 2, () -> {
-            writes.incrementAndGet();
-            return CASES;
-        }), true);
+    /** {@code total >= 1}. */
+    private static Proposition totalAtLeastOne() {
+        LinearForm<Quantity> form = LinearForm.<Quantity>atom(SUM)
+                .plus(LinearForm.<Quantity>constant(ExactRatio.of(-1))).orNull();
+        Relation.OneWay<Quantity> oneWay = Relation.OneWay.of(form, Rel.GE);
+        return Proposition.compared(
+                new Relation.Affine(oneWay.form(), oneWay.proposition()), oneWay.holds());
+    }
+
+    /** Elements numbered from nought, each kept by a truth of its own. */
+    private static KeptWays eachKeptByItsOwnTruth(int elements) {
+        return new KeptWays(IntStream.range(0, elements)
+                .mapToObj(i -> List.of(new KeptWays.Keep(i, true))).toList(), elements);
+    }
+
+    private static Proposition.WaysToWrite waysOf(List<LinearForm<Quantity>> forms,
+                                                  Proposition reading) {
+        Map<Integer, Proposition> conditions = new HashMap<>();
+        for (int i = 0; i < forms.size(); i++) {
+            conditions.put(i, truth("t" + i));
+        }
+        return new Proposition.WaysToWrite(eachKeptByItsOwnTruth(forms.size()), conditions,
+                reading, forms, SUM, Optional.empty(), 0, false, Optional.empty(), 0);
+    }
+
+    private static List<LinearForm<Quantity>> ones(int elements) {
+        List<LinearForm<Quantity>> forms = new ArrayList<>();
+        for (int i = 0; i < elements; i++) {
+            forms.add(LinearForm.constant(ExactRatio.ONE));
+        }
+        return forms;
+    }
+
+    /** The derivation of ways that all state alike, whatever each keeps. */
+    private static Derivation.WaysWrittenWhenAsked alike(int elements) {
+        Map<Integer, Derivation> conditions = new HashMap<>();
+        for (int i = 0; i < elements; i++) {
+            conditions.put(i, new Derivation.ATruthOfASubject(
+                    new DecisionSubject.AnInput(TermPath.of("t" + i)), true));
+        }
+        return new Derivation.WaysWrittenWhenAsked(eachKeptByItsOwnTruth(elements), conditions,
+                new Derivation.ACutThatCutsNothing(true, Set.of()), ones(elements), SUM,
+                Optional.empty(), 0, Map.of(), false);
     }
 
     @Test
-    void holdingAndDenyingItWriteNothingOut() {
-        AtomicInteger writes = new AtomicInteger();
-        Proposition.OfTheWays ways = over("ways", writes);
+    void holdingDenyingAndComparingItWriteNothingOut() {
+        Proposition.OfTheWays ways = WaysSamples.over(truth("a"));
         assertEquals(ways, ways.denied().denied());
         assertNotEquals(ways, ways.denied());
-        assertEquals(0, writes.get());
+        assertEquals(ways, WaysSamples.over(truth("a")));
+        assertNotEquals(ways, WaysSamples.over(truth("b")));
     }
 
     @Test
     void itsCasesAreWrittenOutOnceHoweverOftenAndWhicheverWayRoundItIsAsked() {
-        AtomicInteger writes = new AtomicInteger();
-        Proposition.OfTheWays ways = over("ways", writes);
+        Proposition.OfTheWays ways = WaysSamples.over(truth("a"));
         assertSame(ways.written(), ways.written());
-        assertEquals(CASES.denied(), ((Proposition.OfTheWays) ways.denied()).written());
-        assertEquals(1, writes.get());
+        assertEquals(ways.written().denied(), ((Proposition.OfTheWays) ways.denied()).written());
     }
 
     @Test
-    void twoStatementsAreToldApartByWhatTheirWaysAreMadeOf() {
-        AtomicInteger writes = new AtomicInteger();
-        assertEquals(over("ways", writes), over("ways", writes));
-        assertNotEquals(over("ways", writes), over("other ways", writes));
-        assertEquals(0, writes.get());
+    void waysThatAllStateAlikeAreReadHoweverManyTheyAreWithinTheWorkThatIsDone() {
+        // 2^13 ways: past what a statement may come to if each way were a case of its own, and
+        // one condition after another where they all state alike.
+        Proposition stated = new Conclusion(Optional.empty()).of(alike(13));
+        Proposition.OfTheWays ways = assertInstanceOf(Proposition.OfTheWays.class, stated);
+        assertNull(Proposition.firstStopIn(ways),
+                "the cases come to few parts however many ways there are");
+    }
+
+    @Test
+    void waysPastTheWorkThatIsDoneAreAPartNothingReadAndSayWhy() {
+        Proposition stated = new Conclusion(Optional.empty()).of(alike(15));
+        assertInstanceOf(WhyUnread.MoreWaysThanAreWrittenOut.class,
+                Proposition.firstStopIn(stated));
+    }
+
+    @Test
+    void aNumberOfSomeWaysThatNoNumberHoldsIsFoundWhereTheCasesAreWritten() {
+        List<LinearForm<Quantity>> forms = ones(7);
+        LinearForm<Quantity> greatest = LinearForm.constant(ExactRatio.tenTo(Long.MAX_VALUE));
+        forms.set(0, greatest);
+        forms.set(1, greatest);
+        Proposition.OfTheWays ways = new Proposition.OfTheWays(
+                waysOf(forms, totalAtLeastOne()), true);
+        assertInstanceOf(WhyUnread.ANumberNotHeld.class, Proposition.firstStopIn(ways),
+                "only the ways that keep both are owed one, and they are found without asking"
+                        + " for the cases");
+        assertTrue(Proposition.stopsIn(ways).size() > 1,
+                "each way that keeps both is a part nothing read");
+        assertNull(Proposition.firstStopIn(new Proposition.OfTheWays(
+                waysOf(ones(7), totalAtLeastOne()), true)));
     }
 }

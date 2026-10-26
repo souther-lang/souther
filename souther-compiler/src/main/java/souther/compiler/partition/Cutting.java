@@ -1444,7 +1444,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
-                 WhyUnread.MorePartsThanAreConcluded _,
+                 WhyUnread.MorePartsThanAreConcluded _, WhyUnread.MoreWaysThanAreWrittenOut _,
                  WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,

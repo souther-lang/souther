@@ -23,7 +23,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -529,14 +528,16 @@ public sealed interface Proposition {
      * and written out where a reader asks for the cases.
      *
      * <p>Written out, a statement over the ways is a case for each way, which grows with the ways
-     * and not with what is stated. Held as how it is written, its key is spelled from what the
-     * ways are made of, so it is held, compared and filed at the size of that.
+     * and not with what is stated. Held as what the ways are and what states each, its key is
+     * spelled from those, so it is held, compared and filed at the size of that. What is held is
+     * all there is to the cases: written out again from it, they are the same however often and
+     * by whoever.
      *
-     * @param ways  how it is written out, shared by this and its denial
+     * @param ways  what the cases are written out from, shared by this and its denial
      * @param holds whether the statement holds or its denial does
      * @param key   spelled from the ways' own when it is made, whatever is handed in
      */
-    record OfTheWays(WrittenWays ways, boolean holds, String key) implements Proposition {
+    record OfTheWays(WaysToWrite ways, boolean holds, String key) implements Proposition {
 
         @Override
         public int hashCode() {
@@ -549,18 +550,20 @@ public sealed interface Proposition {
                     && key.hashCode() == that.key.hashCode() && key.equals(that.key));
         }
 
-        public OfTheWays(WrittenWays ways, boolean holds) {
+        public OfTheWays(WaysToWrite ways, boolean holds) {
             this(ways, holds, null);
         }
 
         public OfTheWays {
-            Objects.requireNonNull(ways, "a statement over the ways is written out somehow");
+            Objects.requireNonNull(ways, "a statement over the ways is written out from something");
             key = (holds ? "" : "!") + ways.spelled();
         }
 
-        /** The statement written out: a case for each way. */
+        /** The statement written out: a case for each way, written once while the ways are held
+         *  by anything. */
         public Proposition written() {
-            Proposition out = ways.written();
+            Proposition out = SharedPropositions.writtenOut(ways,
+                    () -> Conclusion.writtenOutOver(ways));
             return holds ? out : out.denied();
         }
 
@@ -571,54 +574,126 @@ public sealed interface Proposition {
     }
 
     /**
-     * How a statement over the ways is written out, which is done once, by whoever asks first.
+     * What the cases of a statement over the ways are written out from: which truths keep which
+     * elements, what each truth that decides a way states, the comparison read over the totals,
+     * and the elements the totals are taken over. Written out by {@link Conclusion#writtenOutOver},
+     * which gives a way whose number cannot be held the parts nothing read it is owed from
+     * {@code firstNumber} on.
+     *
+     * <p>Only what the cases follow from, so that it is a value: alike where it is spelled alike,
+     * and the same cases come of it however often they are written out.
      */
-    final class WrittenWays {
+    final class WaysToWrite {
 
+        private final KeptWays kept;
+        private final Map<Integer, Proposition> conditions;
+        private final Proposition reading;
+        private final List<LinearForm<Quantity>> forms;
+        private final Quantity.TheKeptTotal sum;
+        private final Optional<Quantity.TheKeptTotal> count;
+        private final int counted;
+        private final boolean fixed;
+        private final Optional<ModelOccurrence> where;
+        private final long firstNumber;
         private final String spelled;
-        private final boolean leavesNothingUnread;
-        private final long cases;
-        private final Supplier<Proposition> writing;
-        private volatile Proposition written;
 
         /**
-         * @param leavesNothingUnread whether no part of the statement is one nothing read, which is
-         *                            known of the parts it is made of before it is written out
-         * @param cases               how many cases it is written out as, at most
+         * @param kept        which truths keep which elements
+         * @param conditions  what each truth that decides a way states
+         * @param reading     the comparison, read over the stand-ins for the totals
+         * @param forms       what the elements of the total come to, in the order they are written
+         * @param sum         the stand-in for the total
+         * @param count       the stand-in for how many a way keeps, where the reading met a count
+         * @param counted     how many elements the count is over, which follow those of the total
+         * @param fixed       whether a number that cannot be held is the same whatever the input
+         * @param where       the construct of the model the condition is, where it is known
+         * @param firstNumber the number of the first part nothing read a way is owed, one number
+         *                    for each way
          */
-        public WrittenWays(String spelled, boolean leavesNothingUnread, long cases,
-                           Supplier<Proposition> writing) {
-            this.spelled = Objects.requireNonNull(spelled, "the ways are told apart by a spelling");
-            this.leavesNothingUnread = leavesNothingUnread;
-            this.cases = cases;
-            this.writing = Objects.requireNonNull(writing, "the ways are written out somehow");
+        public WaysToWrite(KeptWays kept, Map<Integer, Proposition> conditions,
+                           Proposition reading, List<LinearForm<Quantity>> forms,
+                           Quantity.TheKeptTotal sum, Optional<Quantity.TheKeptTotal> count,
+                           int counted, boolean fixed, Optional<ModelOccurrence> where,
+                           long firstNumber) {
+            this.kept = Objects.requireNonNull(kept, "the ways are of some elements");
+            this.conditions = Map.copyOf(conditions);
+            this.reading = Objects.requireNonNull(reading, "the ways are given their totals");
+            this.forms = List.copyOf(forms);
+            this.sum = Objects.requireNonNull(sum, "the ways keep a total");
+            this.count = Objects.requireNonNull(count, "the ways keep a count or none");
+            this.counted = counted;
+            this.fixed = fixed;
+            this.where = Objects.requireNonNull(where, "the condition is somewhere or not known");
+            this.firstNumber = firstNumber;
+            this.spelled = spell();
         }
 
-        /** How many cases it is written out as, or one past the most that are written out. */
-        long cases() {
-            return cases;
+        KeptWays kept() {
+            return kept;
         }
 
+        Map<Integer, Proposition> conditions() {
+            return conditions;
+        }
+
+        Proposition reading() {
+            return reading;
+        }
+
+        List<LinearForm<Quantity>> forms() {
+            return forms;
+        }
+
+        Quantity.TheKeptTotal sum() {
+            return sum;
+        }
+
+        Optional<Quantity.TheKeptTotal> count() {
+            return count;
+        }
+
+        int counted() {
+            return counted;
+        }
+
+        boolean fixed() {
+            return fixed;
+        }
+
+        Optional<ModelOccurrence> where() {
+            return where;
+        }
+
+        long firstNumber() {
+            return firstNumber;
+        }
+
+        /** What these are made of, which tells them from others. */
         String spelled() {
             return spelled;
         }
 
-        boolean leavesNothingUnread() {
-            return leavesNothingUnread;
+        private String spell() {
+            StringBuilder out = new StringBuilder("ways ").append(kept.spelled()).append('|')
+                    .append(reading.key());
+            new TreeMap<>(conditions).forEach((truth, condition) ->
+                    out.append('|').append(truth).append('=').append(condition.key()));
+            return out.append('|').append(forms).append('|').append(sum).append('|')
+                    .append(count).append('|').append(counted).append('|').append(fixed)
+                    .append('|').append(where).append('|').append(firstNumber).toString();
         }
 
-        Proposition written() {
-            Proposition known = written;
-            if (known == null) {
-                synchronized (this) {
-                    known = written;
-                    if (known == null) {
-                        known = Objects.requireNonNull(writing.get(), "the ways are written out");
-                        written = known;
-                    }
-                }
-            }
-            return known;
+        /** Alike where they are spelled alike: the cases follow from what is spelled. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof WaysToWrite that
+                    && spelled.hashCode() == that.spelled.hashCode()
+                    && spelled.equals(that.spelled));
+        }
+
+        @Override
+        public int hashCode() {
+            return spelled.hashCode();
         }
     }
 
@@ -1564,8 +1639,8 @@ public sealed interface Proposition {
     private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
         return switch (stated) {
             case Unread unread -> into.add(unread.why());
-            // Known of what it is made of, so it is not written out to be told it holds none.
-            case OfTheWays ways when ways.ways().leavesNothingUnread() -> false;
+            // Written out to be told: whether a number of some way cannot be held is not known of
+            // the parts it is made of, and is found where the cases are.
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ -> stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,

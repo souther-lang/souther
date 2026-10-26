@@ -7536,20 +7536,22 @@ final class Pullback {
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
-        Derivation.ReadOverTotals shared = new Derivation.ReadOverTotals(read);
         Derivation[] conditions = new Derivation[ways.truthCount()];
         conditionsOf(ways, decided, conditions);
-        Quantity.TheKeptTotal count = reading.count;
+        Map<Integer, Derivation> deciding = new HashMap<>();
+        Map<Integer, ConstructOccurrence> madeAt = new HashMap<>();
+        for (int truth = 0; truth < conditions.length; truth++) {
+            if (conditions[truth] != null) {
+                deciding.put(truth, conditions[truth]);
+                ConstructOccurrence constructed = occurrenceMadeBy(ways.truth(truth).value());
+                if (constructed != null) {
+                    madeAt.put(truth, constructed);
+                }
+            }
+        }
         int counted = reading.counted == null ? 0 : reading.counted.size();
-        long figure = CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum();
-        long cases = ways.work(ways.undecided(), figure + 1, false);
-        Derivation.WaysTaken taken = new Derivation.WaysTaken(() -> cases <= figure
-                ? new Derivation.AComparisonOfAChoice(waysTaken(ways, forms, sum, count,
-                        counted, shared, conditions, ways.undecided(), fixed))
-                : new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), fixed));
-        return new Derivation.WaysWrittenWhenAsked(taken,
-                Arrays.stream(conditions).filter(Objects::nonNull).toList(), shared,
-                "ways " + forms + " " + ways.spelled() + " " + count, cases);
+        return new Derivation.WaysWrittenWhenAsked(ways.kept(), deciding, read, forms, sum,
+                Optional.ofNullable(reading.count), counted, madeAt, fixed);
     }
 
     /**
@@ -7633,59 +7635,6 @@ final class Pullback {
                 return;
             }
         }
-    }
-
-    /**
-     * The ways of keeping decided in turn as {@link #keptAs} does, each leaf the comparison read
-     * over the totals with what that way makes of them. Made of what the ways are and nothing the
-     * reading holds, so it is made where it is asked for.
-     *
-     * @param forms   what the elements of the total come to, which are the first of the elements
-     *                the ways are of
-     * @param count   the stand-in for how many a way keeps, or null where the reading met none
-     * @param counted how many elements the count is over, which follow those of the total
-     */
-    private static Derivation waysTaken(WaysOfKeeping ways, List<LinearForm<Quantity>> forms,
-                                        Quantity.TheKeptTotal sum, Quantity.TheKeptTotal count,
-                                        int counted, Derivation.ReadOverTotals read,
-                                        Derivation[] conditions, Boolean[] decided,
-                                        boolean fixed) {
-        int next = ways.nextEvaluated(decided);
-        if (next >= 0) {
-            Derivation[] each = new Derivation[2];
-            for (int way = 0; way < 2; way++) {
-                decided[next] = way == 0;
-                try {
-                    each[way] = waysTaken(ways, forms, sum, count, counted, read, conditions,
-                            decided, fixed);
-                } finally {
-                    decided[next] = null;
-                }
-            }
-            return madeBy(ways.truth(next).value(),
-                    new Derivation.IfThenElse(conditions[next], each[0], each[1]));
-        }
-        List<LinearForm<Quantity>> there = new ArrayList<>();
-        for (int i = 0; i < forms.size(); i++) {
-            if (ways.isThere(i, decided)) {
-                there.add(forms.get(i));
-            }
-        }
-        LinearForm<Quantity> total;
-        switch (LinearForm.sum(there)) {
-            case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> total = held;
-            case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
-                return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed);
-            }
-        }
-        Map<Quantity, LinearForm<Quantity>> totals = new HashMap<>();
-        totals.put(sum, total);
-        if (count != null) {
-            long kept = IntStream.range(forms.size(), forms.size() + counted)
-                    .filter(i -> ways.isThere(i, decided)).count();
-            totals.put(count, LinearForm.constant(ExactRatio.of(kept)));
-        }
-        return new Derivation.WithTheTotalsOfAWay(read, totals);
     }
 
     /**
@@ -11083,11 +11032,17 @@ final class Pullback {
      * source wrote ({@link Derivation.AChoiceAt}); {@code choice} alone where it is not.
      */
     private static Derivation madeBy(Core node, Derivation choice) {
+        ConstructOccurrence at = occurrenceMadeBy(node);
+        return at == null ? choice : new Derivation.AChoiceAt(at, choice);
+    }
+
+    /** The construct some source wrote that {@code node} is, or null where it is none. */
+    private static ConstructOccurrence occurrenceMadeBy(Core node) {
         // A call a representation kept standing says where it stands as a call does, whatever
         // wider type it stands as; the copies of an application are asked of the node's own shape.
         ConstructOccurrence at = Core.withoutStanding(node) instanceof Core.PreservedCall kept
                 ? kept.occurrence() : ACopyOfAnApplication.occurrenceOf(node);
-        return at == null || !at.isWritten() ? choice : new Derivation.AChoiceAt(at, choice);
+        return at == null || !at.isWritten() ? null : at;
     }
 
     /**

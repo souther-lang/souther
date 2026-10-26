@@ -746,24 +746,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // What a step of a reading concludes, written out. Past the figure the step is
             // concluded as a part nothing read, naming it.
             Map.entry("souther.compiler.meaning.Conclusion#<clinit>()V",
-                    "how many parts a step of a reading is concluded with"),
-            Map.entry("souther.compiler.meaning.Conclusion#of("
-                            + "Lsouther/compiler/meaning/Derivation;)"
+                    "how many parts a step of a reading is concluded with, and how many ways of"
+                            + " keeping elements a statement over them is written out from"),
+            Map.entry("souther.compiler.meaning.Conclusion#withinTheParts("
+                            + "Lsouther/compiler/meaning/Proposition;)"
                             + "Lsouther/compiler/meaning/Proposition;",
                     "past the figure concludes the step as a part nothing read, naming it"),
             // The ways a comparison over the elements a filter keeps is made in: counted where the
-            // reading is made, and past the figure they are not written out.
-            Map.entry("souther.compiler.partition.Pullback#keptOnceFor("
-                            + "Lsouther/compiler/partition/Pullback$Inside$ATotalByKeeping;"
-                            + "Lsouther/compiler/inputs/InputReads;"
-                            + "Lsouther/compiler/inputs/Denotation;ZLjava/util/function/Function;)"
-                            + "Lsouther/compiler/meaning/Derivation;",
-                    "counts the ways of keeping, and past the figure makes no ways and carries the"
-                            + " statement out as a part nothing read, naming it"),
-            Map.entry("souther.compiler.meaning.Derivation$WaysWrittenWhenAsked#conclusion("
-                            + "Lsouther/compiler/meaning/Conclusion;)"
+            // statement over them is concluded, and past the figure they are not written out.
+            Map.entry("souther.compiler.meaning.Conclusion#overTheWays("
+                            + "Lsouther/compiler/meaning/Derivation$WaysWrittenWhenAsked;)"
                             + "Lsouther/compiler/meaning/Proposition;",
-                    "past the figure writes the ways out as a part nothing read, naming it"),
+                    "past the figure carries the statement out as a part nothing read, naming it"),
             // Where one line of a statement of several decides: the statement read, its cases
             // taken apart, and each asked whether rows stand on both sides of the line. Past any
             // of the figures the line is one where it decides was not worked out, naming the

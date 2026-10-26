@@ -4812,6 +4812,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 + " took more readings in all than are made";
                         case MORE_PARTS_THAN_ARE_CONCLUDED -> "a part of the way whose statement"
                                 + " comes to more parts than a step is concluded with";
+                        case MORE_WAYS_THAN_ARE_WRITTEN_OUT -> "a part of the way whose statement is"
+                                + " over more ways of keeping elements than are written out";
                         case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> "a part of the way about a"
                                 + " container holding more than is written out";
                         case NO_VALUE_OF_THE_ROW -> "something the row does not write";
@@ -5485,6 +5487,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.MorePartsThanAreConcluded _ -> "a condition whose statement, with"
                     + " every part written out as often as it is held, comes to more parts than"
                     + " this compiler concludes one step of a reading with";
+            case WhyUnread.MoreWaysThanAreWrittenOut _ -> "a condition whose statement is over"
+                    + " more ways of keeping the elements of a container than this compiler writes"
+                    + " out to find what it comes to";
             case WhyUnread.MoreElementsThanAreWrittenOut _ -> "a condition about a container"
                     + " holding more than this compiler writes out one element at a time";
             // Not a figure: nothing was counted, and the reading did not go in.
@@ -6148,6 +6153,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             "more_total_readings_than_are_made";
                     case WhyUnread.MorePartsThanAreConcluded _ ->
                             "more_parts_than_are_concluded";
+                    case WhyUnread.MoreWaysThanAreWrittenOut _ ->
+                            "more_ways_than_are_written_out";
                     case WhyUnread.MoreElementsThanAreWrittenOut _ ->
                             "more_elements_than_are_written_out";
                     case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";

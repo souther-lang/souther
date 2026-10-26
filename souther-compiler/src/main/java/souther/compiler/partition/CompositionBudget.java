@@ -428,6 +428,24 @@ public enum CompositionBudget {
     PARTS_A_DERIVATION_CONCLUDES(4096),
 
     /**
+     * How many ways of keeping the elements of a container are written out to find what a
+     * statement over all of them comes to
+     * ({@link souther.compiler.meaning.Proposition.OfTheWays}).
+     *
+     * <p>Beside {@link #PARTS_A_DERIVATION_CONCLUDES} and not in place of it. That one bounds what
+     * the statement comes to, and ways that all state alike come to a few parts however many they
+     * are, so how many ways there are says nothing of how many parts. This bounds the work of
+     * writing them out, which is a way each: what is stated of the ways is held as it is read and
+     * written out only where a reader asks for the cases, and then only up to this many.
+     *
+     * <p><b>Reaching it gives the cases up and says so.</b> The reader is handed a part nothing
+     * read, naming this as why
+     * ({@link souther.compiler.meaning.WhyUnread.MoreWaysThanAreWrittenOut}), and the reading
+     * that held the statement over the ways is as it was.
+     */
+    WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER(1 << 14),
+
+    /**
      * How many parts the choices of which of some statements hold come to written out, every count
      * one reader is handed together, for a reader that takes counts apart into those choices
      * ({@link souther.compiler.meaning.CountsWrittenOut}).
@@ -794,6 +812,9 @@ public enum CompositionBudget {
                     "how many times one condition is read in all, along every case and value";
             case PARTS_A_DERIVATION_CONCLUDES ->
                     "how many parts what one step of a reading states comes to, written out";
+            case WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER ->
+                    "how many ways of keeping the elements of a container are written out to find"
+                            + " what a statement over all of them comes to";
             case PARTS_THE_CHOICES_OF_A_COUNT_COME_TO ->
                     "how many parts the choices of which of some statements hold come to, written"
                             + " out for a reader that takes a count of them apart";
@@ -883,7 +904,7 @@ public enum CompositionBudget {
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
-                 PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
+                 WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER, PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,

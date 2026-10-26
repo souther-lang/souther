@@ -288,6 +288,7 @@ public sealed interface BlockReason {
                     case MORE_TOTAL_READINGS_THAN_ARE_MADE -> 17;
                     case MORE_PARTS_THAN_ARE_CONCLUDED -> 18;
                     case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 19;
+                    case MORE_WAYS_THAN_ARE_WRITTEN_OUT -> 28;
                     case A_PART_NOT_READ -> 20;
                     case A_NUMBER_NO_POSITION_HOLDS -> 21;
                     case NO_RELATION_OF_NUMBERS -> 22;
@@ -1339,6 +1340,11 @@ public sealed interface BlockReason {
             /** A part about a container holding more than a walk writes out: a figure of this
              *  compiler's work was reached, and none of the ones above. */
             MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
+
+            /** A part whose statement is over more ways of keeping the elements of a container
+             *  than are written out: a figure of this compiler's work was reached, and none of
+             *  the ones above. */
+            MORE_WAYS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_WAYS),
 
             /** Some other part of what it states was not read. */
             A_PART_NOT_READ(null),

@@ -8,7 +8,6 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.core.WhatABodyReads;
-import souther.compiler.partition.CompositionBudget;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
@@ -35,6 +34,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -44,7 +44,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.function.Supplier;
+import java.util.TreeMap;
 import java.util.function.ToIntFunction;
 
 /**
@@ -372,9 +372,11 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            Proposition cond = numbering.of(condition);
-            Proposition yes = numbering.of(then);
-            Proposition no = numbering.of(otherwise);
+            return joined(numbering.of(condition), numbering.of(then), numbering.of(otherwise));
+        }
+
+        /** What an if states, given what its condition and its two arms state. */
+        static Proposition joined(Proposition cond, Proposition yes, Proposition no) {
             // The condition is worked out before either arm, so where it stops the if does.
             if (yes.key().equals(no.key()) && Proposition.firstStopIn(yes) == null) {
                 return Proposition.afterIt(cond, yes);
@@ -698,33 +700,68 @@ public sealed interface Derivation {
      * ({@link Quantity.TheKeptTotal}), stated for one way: what it states with each total given as
      * that way makes it.
      *
-     * <p>The reading is one however many ways there are, and shared by all of them; what a way adds
-     * is only its totals. The statement is {@link GivenTotals#in}, which a reading that makes this
-     * has already found the reading to be made of.
+     * <p>The reading is one however many ways there are; what a way adds is the elements it keeps.
+     * The total is the sum of their forms, the count is how many of the elements it is over there
+     * are, and the statement is {@link GivenTotals#in} of the reading, which a reading that makes
+     * this has already found the reading to be made of ({@link GivenTotals#canBeGiven}). A reading
+     * that is that holds no part nothing read and no carried value, so what it concludes does not
+     * turn on how parts are numbered or on what a walk carried.
      *
      * @param reading the comparison, read over the stand-ins
-     * @param totals  what each stand-in comes to in this way
+     * @param sum     the stand-in for the total
+     * @param there   the forms of the elements this way keeps, whose sum the total is
+     * @param count   the stand-in for how many this way keeps, where the reading met a count
+     * @param kept    how many of the elements the count is over this way keeps
+     * @param fixed   whether a total that cannot be held is the same whatever the input
      */
-    record WithTheTotalsOfAWay(ReadOverTotals reading, Map<Quantity, LinearForm<Quantity>> totals)
+    record WithTheTotalsOfAWay(Derivation reading, Quantity.TheKeptTotal sum,
+                               List<LinearForm<Quantity>> there,
+                               Optional<Quantity.TheKeptTotal> count, long kept, boolean fixed)
             implements Derivation {
 
         public WithTheTotalsOfAWay {
             Objects.requireNonNull(reading, "a way states what a reading does");
-            totals = Map.copyOf(totals);
+            Objects.requireNonNull(sum, "a way keeps a total");
+            there = List.copyOf(there);
+            Objects.requireNonNull(count, "a way keeps a count or none");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return switch (GivenTotals.in(reading.concluded(numbering), totals)) {
+            Proposition concluded = numbering.concludedAt(reading);
+            return stated(numbering, concluded != null ? concluded : numbering.of(reading), sum,
+                    there, count, kept, fixed);
+        }
+
+        /**
+         * What {@code reading} states of a way that keeps the elements whose forms are
+         * {@code there}, {@code kept} of those the count is over: each total given as the way
+         * makes it, or a part nothing read where a number of the way cannot be held.
+         */
+        static Proposition stated(Conclusion numbering, Proposition reading,
+                                  Quantity.TheKeptTotal sum, List<LinearForm<Quantity>> there,
+                                  Optional<Quantity.TheKeptTotal> count, long kept,
+                                  boolean fixed) {
+            LinearForm<Quantity> total;
+            switch (LinearForm.sum(there)) {
+                case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> total = held;
+                case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
+                    return numbering.numberNotHeld(why, fixed);
+                }
+            }
+            Map<Quantity, LinearForm<Quantity>> totals = new HashMap<>();
+            totals.put(sum, total);
+            count.ifPresent(each -> totals.put(each, LinearForm.constant(ExactRatio.of(kept))));
+            return switch (GivenTotals.in(reading, totals)) {
                 case ExactAnswer.Held<Proposition>(var given) -> given;
-                case ExactAnswer.Unheld<Proposition>(var why) -> numbering.unread(
-                        new Stopped(new WhyUnread.ANumberNotHeld(why), false));
+                case ExactAnswer.Unheld<Proposition>(var why) ->
+                        numbering.numberNotHeld(why, false);
             };
         }
 
         @Override
         public List<Derivation> oneOf() {
-            return List.of(reading.read());
+            return List.of(reading);
         }
     }
 
@@ -734,138 +771,84 @@ public sealed interface Derivation {
      * every way is given its totals in are concluded now, and the cases are written out where a
      * reader asks for them.
      *
-     * <p>The ways themselves, decided in turn with each leaf given its totals, are made where a
-     * reader of the derivation asks for them, as the cases are where one asks for the statement.
+     * <p>Held as what the ways are and what states each, and nothing that writes them: the
+     * derivation of every way is {@link #ways}, made from this where a reader of the derivation
+     * asks for it, and the cases of the statement are written out from what {@link Conclusion}
+     * concluded of the conditions and the reading, where a reader of the statement asks for them.
      *
-     * @param taken      the ways, decided in turn, each leaf given its totals
-     * @param conditions the conditions that decide the ways, each read once
+     * @param kept       which truths keep which elements, and so which ways there are
+     * @param conditions what decides each truth that decides a way, each read once
      * @param reading    the comparison, read over the totals
-     * @param spelled    what the ways are made of, which tells this from another
-     * @param cases      how many ways there are, or one past
-     *                   {@link CompositionBudget#PARTS_A_DERIVATION_CONCLUDES} where there are that
-     *                   many or more: past it the ways are not written out, and the statement is a
-     *                   part nothing read
+     * @param forms      what the elements of the total come to as forms, in the order they are
+     *                   written
+     * @param sum        the stand-in for how much the elements a way keeps come to
+     * @param count      the stand-in for how many a way keeps, where the reading met a count
+     * @param counted    how many elements the count is over, which follow those of the total
+     * @param madeAt     the construct of the model a truth is, where some source wrote it
+     * @param fixed      whether a number that cannot be held is the same whatever the input
      */
-    record WaysWrittenWhenAsked(WaysTaken taken, List<Derivation> conditions,
-                                ReadOverTotals reading, String spelled, long cases)
+    record WaysWrittenWhenAsked(KeptWays kept, Map<Integer, Derivation> conditions,
+                                Derivation reading, List<LinearForm<Quantity>> forms,
+                                Quantity.TheKeptTotal sum, Optional<Quantity.TheKeptTotal> count,
+                                int counted, Map<Integer, ConstructOccurrence> madeAt,
+                                boolean fixed)
             implements Derivation {
 
-        /**
-         * The most ways that are written out where the statement is concluded. More are held as
-         * how they are written, and written out where a reader asks for the cases.
-         */
-        private static final long WRITTEN_AT_ONCE = 64;
-
         public WaysWrittenWhenAsked {
-            Objects.requireNonNull(taken, "the ways are made somehow");
-            conditions = List.copyOf(conditions);
+            Objects.requireNonNull(kept, "the ways are of some elements");
+            conditions = Map.copyOf(conditions);
             Objects.requireNonNull(reading, "the ways are given their totals in a reading");
-            Objects.requireNonNull(spelled, "the ways are told apart by a spelling");
+            forms = List.copyOf(forms);
+            Objects.requireNonNull(sum, "the ways keep a total");
+            Objects.requireNonNull(count, "the ways keep a count or none");
+            madeAt = Map.copyOf(madeAt);
         }
 
-        /** The ways, made. */
+        /** The ways, decided in turn, each leaf given its totals. */
         public Derivation ways() {
-            return taken.made();
+            return new AComparisonOfAChoice(kept.made(new KeptWays.Making<Derivation>() {
+                @Override
+                public Derivation split(int truth, Derivation where, Derivation otherwise) {
+                    Derivation choice = new IfThenElse(conditions.get(truth), where, otherwise);
+                    ConstructOccurrence at = madeAt.get(truth);
+                    return at == null ? choice : new AChoiceAt(at, choice);
+                }
+
+                @Override
+                public Derivation leaf(Boolean[] decided) {
+                    return new WithTheTotalsOfAWay(reading, sum, kept.thereOf(forms, decided),
+                            count, kept.countThere(forms.size(), counted, decided), fixed);
+                }
+            }, kept.undecided()));
         }
 
-        /** Alike where the conditions, the reading and what the ways are made of are: the ways
-         *  follow from them. */
-        @Override
-        public boolean equals(Object other) {
-            return this == other || (other instanceof WaysWrittenWhenAsked that
-                    && spelled.equals(that.spelled) && conditions.equals(that.conditions)
-                    && reading.read().equals(that.reading.read()));
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(spelled, conditions, reading.read());
+        /**
+         * The steps this is made of, for a reader that walks every step: the ways where there are
+         * few, and where there are many what every way shares — the conditions that decide them and
+         * the reading each is given its totals in.
+         *
+         * <p>A way adds only which elements it keeps, so a walk down every way meets the one
+         * reading once for each of them. Walked once, a stop in the reading is found under the
+         * conditions that stand above this and not under the choice of a way, so it is found for
+         * more rows than reach it, which a stop is allowed to be.
+         */
+        public List<Derivation> premises() {
+            if (Conclusion.writtenAtOnce(kept)) {
+                return List.of(ways());
+            }
+            List<Derivation> shared = new ArrayList<>(new TreeMap<>(conditions).values());
+            shared.add(reading);
+            return shared;
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            if (cases <= WRITTEN_AT_ONCE) {
-                return numbering.of(ways());
-            }
-            boolean withinTheFigure = cases <= CompositionBudget.PARTS_A_DERIVATION_CONCLUDES
-                    .maximum();
-            StringBuilder told = new StringBuilder(spelled).append('|')
-                    .append(reading.concluded(numbering).key());
-            boolean leavesNothingUnread = Proposition.firstStopIn(reading.concluded(numbering))
-                    == null;
-            for (Derivation each : conditions) {
-                Proposition condition = numbering.of(each);
-                told.append('|').append(condition.key());
-                leavesNothingUnread &= Proposition.firstStopIn(condition) == null;
-            }
-            return new Proposition.OfTheWays(new Proposition.WrittenWays(told.toString(),
-                    leavesNothingUnread && withinTheFigure, cases,
-                    () -> withinTheFigure ? numbering.of(ways()) : numbering.unread(
-                            new Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))), true);
+            return numbering.overTheWays(this);
         }
 
         @Override
         public List<Derivation> oneOf() {
             return List.of(ways());
-        }
-    }
-
-    /**
-     * Ways of keeping decided in turn, each leaf given its totals, made once by whoever asks first.
-     */
-    final class WaysTaken {
-
-        private final Supplier<Derivation> making;
-        private volatile Derivation made;
-
-        public WaysTaken(Supplier<Derivation> making) {
-            this.making = Objects.requireNonNull(making, "the ways are made somehow");
-        }
-
-        Derivation made() {
-            Derivation known = made;
-            if (known == null) {
-                synchronized (this) {
-                    known = made;
-                    if (known == null) {
-                        known = Objects.requireNonNull(making.get(), "the ways are made");
-                        made = known;
-                    }
-                }
-            }
-            return known;
-        }
-    }
-
-    /**
-     * A comparison read over the totals of the elements a way keeps, shared by every way that is
-     * given its totals.
-     *
-     * <p>What it concludes is the same in every way and does not turn on how parts nothing read
-     * are numbered or on what a walk's carried value is supposed to be, since a reading that
-     * has either is not given ways ({@link GivenTotals#canBeGiven}). It is concluded once, by
-     * whichever way is asked first.
-     */
-    final class ReadOverTotals {
-
-        private final Derivation read;
-        private volatile Proposition concluded;
-
-        public ReadOverTotals(Derivation read) {
-            this.read = Objects.requireNonNull(read, "a reading is of something");
-        }
-
-        public Derivation read() {
-            return read;
-        }
-
-        Proposition concluded(Conclusion numbering) {
-            Proposition known = concluded;
-            if (known == null) {
-                known = numbering.of(read);
-                concluded = known;
-            }
-            return known;
         }
     }
 
