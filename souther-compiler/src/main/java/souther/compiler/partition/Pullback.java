@@ -9172,11 +9172,10 @@ final class Pullback {
         if (!endsNoRunItself(value)) {
             return false;
         }
-        boolean[] parts = {true};
-        Core.forEachChild(written, child -> parts[0] = parts[0]
-                && endsNoRun(new Denotation(child, at)));
-        if (!parts[0]) {
-            return false;
+        for (Core part : whatIsRunWith(written)) {
+            if (!endsNoRun(new Denotation(part, at))) {
+                return false;
+            }
         }
         for (Denotation bound : at.boundTo(written, read.rules().symbols(),
                 read.rules().newtypes())) {
@@ -9185,6 +9184,37 @@ final class Pullback {
             }
         }
         return true;
+    }
+
+    /**
+     * The parts of {@code written} whose ending a run is the ending of a run of it: what
+     * {@link Evaluated#inOrder} says is evaluated, and every branch and arm, which are not
+     * evaluated by reaching the node but one of which is, so that all of them are asked.
+     *
+     * <p>A function value is made and not run where it is written, so its body is not a part. The
+     * construction an {@code if} tests for is a part by its fields alone: a refusal of its
+     * invariant is the branch the {@code if} takes and ends nothing.
+     */
+    private static List<Core> whatIsRunWith(Core written) {
+        List<Core> parts = new ArrayList<>();
+        if (written instanceof Core.IfConstructed tested) {
+            tested.construct().values().forEach(field -> parts.add(field.value()));
+            parts.add(tested.then());
+            tested.els().forEach(arm -> parts.add(arm.body()));
+            return parts;
+        }
+        for (Evaluated.Step step : Evaluated.inOrder(written)) {
+            parts.add(step.expression());
+        }
+        switch (written) {
+            case Core.If fork -> {
+                parts.add(fork.then());
+                parts.add(fork.els());
+            }
+            case Core.Match match -> match.cases().forEach(arm -> parts.add(arm.body()));
+            default -> { }
+        }
+        return parts;
     }
 
     /**
@@ -9218,13 +9248,6 @@ final class Pullback {
      * declaration's, and a call of a behavior, whose body is read with its parameters standing
      * for what it was handed.
      *
-     * <p>A value the module declares runs in the one place its module builds it, and reading it
-     * from a run ends none of that run's.
-     *
-     * <p>A construction that reads no input is the same on every run, so it is refused on every
-     * run or on none, and the compile refuses it where it is refused: a table built out of
-     * constants is no run's to end.
-     *
      * <p>Asked of the expression as it is written, and never of the value it stands as: standing
      * leaves out a part that is run without coming into the value (the initializer of a
      * {@code let}, the other fields of a construction an access takes one of), and a name leads
@@ -9234,12 +9257,7 @@ final class Pullback {
     private boolean endsNoRunItself(Denotation value) {
         Core written = Core.withoutStanding(value.value());
         if (written instanceof Core.Construct made) {
-            return holdsNoInvariant(made.typeName()) || InputReads.readsNothingOutside(made)
-                    || holdsWhatItIsHanded(made, value.at());
-        }
-        if (written instanceof Core.Call call && (call.fn() instanceof Core.Reached.OfValue
-                || call.fn() instanceof Core.Reached.OfPublishedValue)) {
-            return true;
+            return holdsNoInvariant(made.typeName()) || holdsWhatItIsHanded(made, value.at());
         }
         return WhatARunMayEndFor.itself(written).endsNone() || endsNoRunInTheBodyOfACall(value);
     }

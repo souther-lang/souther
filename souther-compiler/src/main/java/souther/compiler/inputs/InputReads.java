@@ -1200,14 +1200,6 @@ public final class InputReads {
         record PastWhatIsWrittenOut() implements Applications {}
     }
 
-    /**
-     * Whether {@code e} reads nothing it does not make itself: the same value on every run,
-     * whatever the inputs are.
-     */
-    public static boolean readsNothingOutside(Core e) {
-        return !namesSomething(e);
-    }
-
     /** Whether {@code e} reads a binding it does not make itself. */
     private static boolean namesSomething(Core e) {
         Set<BindingId> made = new HashSet<>();
