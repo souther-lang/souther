@@ -82,6 +82,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -989,7 +990,7 @@ final class Coverages {
     static List<ReadingOfALine> assess(
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            ItemAssessment.WritabilityProjection projection,
+            Function<Border, ItemAssessment.WritabilityProjection> projection,
             RowsPutToTheLines put, ReachingCuts reaching) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
@@ -1000,7 +1001,8 @@ final class Coverages {
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
         for (Border each : lines) {
-            out.add(assessed(each, reading(read.at(each), projection, elsewhere(lines, each),
+            out.add(assessed(each, reading(read.at(each), projection.apply(each),
+                            elsewhere(lines, each),
                             wayTo(each, reaching), subject.quantities().region()),
                     observed, put));
         }

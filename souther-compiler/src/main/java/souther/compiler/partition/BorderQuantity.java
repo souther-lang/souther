@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
@@ -1888,6 +1889,16 @@ public sealed interface BorderQuantity
     /** What a count of elements runs between: none at the least, and no most it is told. */
     NumericDomain.Bounds NONE_OR_MORE = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
             null);
+
+    /**
+     * What the language holds of this quantity whatever the rules leave it: a form is its terms
+     * weighed, each held to what the language holds of it.
+     */
+    default HeldByTheLanguage heldByTheLanguage() {
+        return this instanceof LinearQuantity form
+                ? new HeldByTheLanguage(RepresentationBounds.ofAForm(form.direction()))
+                : HeldByTheLanguage.NOWHERE;
+    }
 
     /** What {@code region} leaves this quantity, or that it leaves it nothing. */
     default NumericDomain.FormProjection projectedIn(SearchRegion region) {

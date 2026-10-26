@@ -53,10 +53,13 @@ public sealed interface TakenConstraint {
      * quiet answer is a region wider than every reader of it was told it had been narrowed to.
      */
     default SearchRegion narrowing(SearchRegion region) {
+        // What the language holds of the numbers it names comes in with it: a condition on a
+        // length past the longest string is one no row meets.
+        SearchRegion held = HeldByTheLanguage.assumedOn(region, terms());
         return switch (this) {
-            case Affine affine -> region.assuming(affine.form(), affine.rel()).taken();
-            case Ordered ordered -> region.assuming(ordered.term(), ordered.at(), ordered.rel());
-            case AwayFrom away -> region.apartFrom(away.term(), away.at());
+            case Affine affine -> held.assuming(affine.form(), affine.rel()).taken();
+            case Ordered ordered -> held.assuming(ordered.term(), ordered.at(), ordered.rel());
+            case AwayFrom away -> held.apartFrom(away.term(), away.at());
         };
     }
 
