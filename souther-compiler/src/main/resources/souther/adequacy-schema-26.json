@@ -6553,12 +6553,12 @@
               }
             }
           },
-          "description": "One entry per combination a row was seen making, with the rows; where the coverage has no number, one per combination the body has, since nothing says which a row made. The combinations no row makes are under `groups`, as the sets of choices they come to, and not entries here."
+          "description": "One entry per combination a row was seen making, with the rows. Empty where the coverage has no number: nothing says which a row made, and one entry for each combination the body has would be one for each choice of each group, as many as the factors multiplied out. What the body has is under `groups`, and the combinations no row makes are the sets of choices there."
         },
         "groups": {
           "type": "array",
           "minItems": 1,
-          "description": "The groups of this body's decisions that have combinations no row makes, and those combinations. Absent where there are none, and where the coverage has no number: a combination nothing was read about is not one no row makes.",
+          "description": "The groups of this body's decisions that were walked, whatever was read of the rows, and where something was the combinations of each that no row makes. Absent where the body has no group the measure walked.",
           "items": {
             "$ref": "#/$defs/interactionGroup"
           }
@@ -6567,12 +6567,12 @@
     },
     "interactionGroup": {
       "type": "object",
-      "description": "One group of a body's decisions: the decisions that settle one value together. A group is its way in and its factors, a factor being one decision of the body with the outcomes it can come out as, and a choice of the group is one outcome of each factor. The combinations of the group are its choices that leave every position something, so a group can hold fewer choices than the product of its factors. `unobserved` states the choices no row makes as sets, which is how what is written grows with the factors and not with the choices.",
+      "description": "One group of a body's decisions: the decisions that settle one value together. A group is its way in and its factors, a factor being one decision of the body with the outcomes it can come out as, and a choice of the group is one outcome of each factor. The combinations of the group are its choices that leave every position something, so a group can hold fewer choices than the product of its factors. A group is written whether or not anything was read of the rows, and `unobserved` states the choices no row makes as sets where something was, which is how what is written grows with the factors and not with the choices.",
       "required": [
         "group",
         "wayIn",
         "factors",
-        "unobserved"
+        "choices"
       ],
       "additionalProperties": false,
       "properties": {
@@ -6612,10 +6612,14 @@
             }
           }
         },
+        "choices": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many choices the group has that leave every position something: its combinations. Not the product of its factors' outcomes where some choices leave a position nothing."
+        },
         "unobserved": {
           "type": "array",
-          "minItems": 1,
-          "description": "The choices of the group no row makes, as sets that cover each of them once. Two choices are in one set only where the findings about them stand alike: what the reading went without and what is open about whether a row can be written are never mixed.",
+          "description": "Present exactly where the coverage has a number, and empty where every choice was made. The choices of the group no row makes, as sets that cover each of them once. Two choices are in one set only where the findings about them stand alike: what the reading went without and what is open about whether a row can be written are never mixed.",
           "items": {
             "type": "object",
             "required": [

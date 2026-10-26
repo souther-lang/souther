@@ -8441,6 +8441,7 @@
               "outcome" : "held"
             } ] ]
           } ],
+          "choices" : 6,
           "unobserved" : [ {
             "fixed" : [ 0, 0 ],
             "combinations" : 1,

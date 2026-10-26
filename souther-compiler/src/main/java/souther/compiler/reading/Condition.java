@@ -220,6 +220,16 @@ public sealed interface Condition {
         }
 
         /**
+         * Spread over the whole of an int, for the reason {@link Side#hashCode} is: the arms of
+         * one fork differ in their part number alone, which the hash of the fields takes in
+         * linearly, so a set of arms of several forks depends only on the sum of the parts taken.
+         */
+        @Override
+        public int hashCode() {
+            return mixed(Objects.hash(arm, decidedBy));
+        }
+
+        /**
          * The construct whose answer {@code decides} comes to, past the names bound on the way to
          * it: a comparison, a call, a fork. Empty where it ends at anything else.
          *

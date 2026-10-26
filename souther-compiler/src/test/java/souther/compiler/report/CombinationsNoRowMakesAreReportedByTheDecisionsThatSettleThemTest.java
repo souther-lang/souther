@@ -50,6 +50,32 @@ class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
                 """.formatted(params, names, names, values, elements);
     }
 
+    /**
+     * Where the rows were not run with the instrumentation a combination is seen by, nothing says
+     * which combinations they made, and the document is still as large as the decisions: the groups
+     * are written, each with how many choices it has, and none of its choices one by one.
+     */
+    @Test
+    void whereNothingWasReadOfTheRowsTheDocumentStillGrowsWithTheDecisions() {
+        Compilation compilation = Compilation.ofSource(lengthOfWhatWasKept(ELEMENTS), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+
+        String written = report.json(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(written.length() < 1_000_000L,
+                () -> "a document about " + ELEMENTS + " decisions of " + written.length()
+                        + " characters");
+        JsonNode interaction = JsonMapper.builder().build().readTree(written)
+                .findValue("interaction");
+        assertEquals(0, interaction.get("obligations").size(), "nothing was seen made");
+        assertEquals(1, interaction.get("groups").size());
+        JsonNode group = interaction.get("groups").get(0);
+        assertEquals(1 << ELEMENTS, group.get("choices").asInt());
+        assertEquals(ELEMENTS, group.get("factors").size());
+        assertTrue(!group.has("unobserved"), "and nothing is said to be missing");
+    }
+
     @Test
     void theCombinationsOfManyDecisionsAreOneSetForEachDecision() {
         Compilation compilation = Compilation.ofSource(lengthOfWhatWasKept(ELEMENTS), "Main");

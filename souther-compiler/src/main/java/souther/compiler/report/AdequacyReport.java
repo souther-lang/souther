@@ -219,6 +219,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -4242,18 +4243,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * How many of the combinations the body settles a value by the rows were seen making.
      *
-     * <p>The count and the gaps beside it, which the findings under the behavior name one to a
-     * line.
+     * <p>The count and the gaps beside it.
      *
      * <p>The meetings the measure would not walk are said beside the count rather than folded into
      * it. What they hold is combinations nobody counted, and a reader told only the ratio would
      * take a behavior measured in part for one measured in full.
      *
-     * <p>Every meeting the count holds and no row makes, and every one only rows that do not hold
-     * make, said one to a line the way an arm or a decision rule is — and under it which
-     * combination it is, so that two of them are two things to act on. Said by the places a run
-     * making it is seen at and never by the decisions the account keys it on, which are in terms
-     * that would show an author comparisons they did not write ({@link BehaviorReport#waysOf}).
+     * <p>Every group that has combinations no row makes is said once, as what it is made of, and
+     * under it the sets of its choices that no row makes, one to a line the way an arm or a
+     * decision rule is. A set of one choice is a combination of the body and is said by the ways a
+     * run can make it; a set of more is said by the outcomes it takes. Then every combination only
+     * rows that do not hold make, one to a line and under it which combination it is, so that two
+     * of them are two things to act on. Said by the places a run making it is seen at and never by
+     * the decisions the account keys it on, which are in terms that would show an author
+     * comparisons they did not write ({@link BehaviorReport#waysOf}).
      */
     private void interaction(StringBuilder out, BehaviorReport behavior,
                              InteractionEvidence meetings,
@@ -6279,34 +6282,48 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * The groups of the body's decisions that have combinations no row makes, and those
-     * combinations as the sets of choices they come to.
+     * The groups of the body's decisions, and where a reading was made the combinations of each
+     * that no row makes, as the sets of choices they come to.
      *
-     * <p>A group is its way in and its factors, each factor the outcomes it can come out as; a
-     * pattern is the outcome it takes at each factor, by the position of the outcome among the
-     * factor's, and null where it holds the factor either way. So a pattern is told apart from every
-     * other by its group and what it takes, and which choices it holds can be worked out from the
-     * document alone. Only a pattern of one choice is a combination of the body, and then it names
-     * that combination as the combinations of the account are named.
+     * <p>A group is its way in and its factors, each factor the outcomes it can come out as, and it
+     * is written whether or not anything was read of the rows: the combinations the body has are
+     * the choices of its groups, and written one by one they would be as many as the choices
+     * multiplied out. A pattern is the outcome it takes at each factor, by the position of the
+     * outcome among the factor's, and null where it holds the factor either way. So a pattern is
+     * told apart from every other by its group and what it takes, and which choices it holds can be
+     * worked out from the document alone. Only a pattern of one choice is a combination of the
+     * body, and then it names that combination as the combinations of the account are named.
      */
-    private static void unobservedGroups(ObjectNode into, BehaviorReport behavior) {
-        if (behavior.unobserved().isEmpty()) {
+    private static void groups(ObjectNode into, BehaviorReport behavior,
+                               InteractionEvidence meetings) {
+        List<InteractionRequirements.OfferedGroup> offered = meetings.asked().groups();
+        if (offered.isEmpty()) {
             return;
         }
+        Map<Integer, UnobservedGroup> missingOf = new HashMap<>();
+        behavior.unobserved().forEach(group -> missingOf.put(group.ordinal(), group));
+        boolean read = meetings.made().made().isPresent();
         ArrayNode groups = into.putArray("groups");
-        for (UnobservedGroup group : behavior.unobserved()) {
+        for (int ordinal = 0; ordinal < offered.size(); ordinal++) {
+            InteractionRequirements.OfferedGroup group = offered.get(ordinal);
             ObjectNode one = groups.addObject();
-            one.put("group", group.ordinal());
-            decisions(one.putArray("wayIn"), group.wayInSettles());
+            one.put("group", ordinal);
+            decisions(one.putArray("wayIn"), group.reach().settles());
             ArrayNode factors = one.putArray("factors");
-            for (List<FactorOutcome> factor : group.factors()) {
+            for (List<InteractionRequirements.Outcome> factor : group.byFactor()) {
                 ArrayNode outcomes = factors.addObject().putArray("outcomes");
-                for (FactorOutcome outcome : factor) {
+                for (InteractionRequirements.Outcome outcome : factor) {
                     decisions(outcomes.addArray(), outcome.settles());
                 }
             }
+            one.put("choices", group.at().stream().filter(Objects::nonNull).count());
+            if (!read) {
+                continue;
+            }
             ArrayNode missing = one.putArray("unobserved");
-            for (UnobservedChoices pattern : group.choices()) {
+            UnobservedGroup unobserved = missingOf.get(ordinal);
+            for (UnobservedChoices pattern
+                    : unobserved == null ? List.<UnobservedChoices>of() : unobserved.choices()) {
                 ObjectNode each = missing.addObject();
                 ArrayNode fixed = each.putArray("fixed");
                 pattern.fixed().forEach(outcome -> {
@@ -8435,9 +8452,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * published: a finding names the combination it is about by an identity, and a consumer acting
      * on one looks it up here.
      *
-     * <p>One entry per combination the body has a path to, whatever the rows did. Whether a row
-     * made it is the entry's own answer and is absent where the coverage has no value — a
-     * combination nothing was read about is not one no row makes.
+     * <p>An entry for each combination a row was seen making, with the rows, and none where nothing
+     * was read: a combination nothing was read about is not one no row makes, and listing the body's
+     * combinations there would write one for each choice of each group, as many as the factors
+     * multiplied out. What the body has is its groups, written below whatever was read, and the
+     * combinations no row makes are the sets of choices of those groups that the reading left
+     * missing.
      *
      * <p>The groups the measure would not walk are counted beside the entries rather than left out
      * of the number. What they hold is combinations nobody counted, and an account whose total said
@@ -8453,23 +8473,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
         ArrayNode all = out.putArray("obligations");
         Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
-        for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
-            // The combinations no row makes are the groups' below, written as the sets of choices
-            // they come to and not one entry for each.
-            if (met.isPresent() && !met.get().met().contains(each)) {
-                continue;
-            }
-            ObjectNode one = all.addObject();
-            combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
-            met.ifPresent(rows -> {
-                one.put("made", rows.met().contains(each));
-                RowWitnesses by = rows.made().get(each);
+        if (met.isPresent()) {
+            for (ObligationIdentity.OfACombinationOfDecisions each
+                    : meetings.asked().ways().keySet()) {
+                if (!met.get().met().contains(each)) {
+                    continue;
+                }
+                ObjectNode one = all.addObject();
+                combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
+                one.put("made", true);
+                RowWitnesses by = met.get().made().get(each);
                 if (by != null) {
                     onlyWitnessedBy(one, by, behavior.rowPlace(), sources);
                 }
-            });
+            }
         }
-        unobservedGroups(out, behavior);
+        groups(out, behavior, meetings);
     }
 
     /**
