@@ -479,6 +479,28 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /**
+     * Weighed alike the two are about their sum, and read as the difference is: a sum no two dates
+     * come to is no outcome, and one the middle date reaches either side of is. Weighed alike but
+     * not by one, or one way and another by different amounts, they are neither.
+     */
+    @Test
+    void twoValuesWeighedAlikeAreReadByTheirSum() {
+        assertEquals(Set.of("a", "b"), apart(pair(1, 1, A_DATE), -14, Rel.EQ));
+        assertEquals(Set.of("a", "b"), apart(pair(-1, -1, A_DATE), 14, Rel.GT));
+        assertEquals(Set.of(), apart(pair(1, 1, A_DATE), -10_000_000_000_000L, Rel.EQ));
+        assertEquals(Set.of(), apart(pair(2, 1, A_DATE), -14, Rel.EQ));
+    }
+
+    /** What the way holds of the sum is where it has to come out both ways, as of a difference. */
+    @Test
+    void whatTheWayHoldsOfTheSumIsWhereItHasToComeOutBothWays() {
+        assertEquals(Set.of("a", "b"),
+                apart(pair(1, 1, A_DATE), -14, Rel.EQ, held(1, -10, Rel.GE)));
+        assertEquals(Set.of(),
+                apart(pair(1, 1, A_DATE), -14, Rel.GT, held(1, -14, Rel.EQ)));
+    }
+
+    /**
      * Held at nought or more, the difference is at nought, where {@code a - b <= 0} holds, and at
      * one, where it fails. Held at nought to ten, every difference is at fourteen or less; held at
      * nought exactly, none is past fourteen.
