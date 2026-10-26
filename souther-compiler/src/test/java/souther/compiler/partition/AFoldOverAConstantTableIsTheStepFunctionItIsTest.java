@@ -245,6 +245,50 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         }
     }
 
+    /**
+     * A construction that reads no input is the same on every run, so a run is not one its
+     * invariant ends: the compile refuses it where it does not hold, even built through a helper.
+     * That is what lets a table of constants, whose invariant is about the table as a whole and is
+     * not worked out here, be read as the rows it holds.
+     */
+    @Test
+    void aTableOfConstantsIsReadAsItsRowsWhateverItsWholeTableInvariantAsks() {
+        Compilation refused = Compilation.ofSource("""
+                module demo
+
+                data Row = { grade: Int, lowerBound: Int }
+                    invariant grade >= 0
+                let rowOf (g: Int): Row = Row { grade = g, lowerBound = 100 }
+                let table: List<Row> = [ rowOf(0 - 1), rowOf(2) ]
+
+                behavior f : (cur: Int, pay: Int) -> Int
+                let f (cur, pay) = List.length(table)
+                """, "Main");
+        refused.answerEverything();
+        assertFalse(refused.errors().isEmpty(), "a closed construction that breaks its invariant");
+
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        String declarations = """
+                data Row = { grade: Int, lowerBound: Int }
+                data Table = List<Row>
+                    invariant threeRows = List.length(value) == 3
+                    invariant distinctGrades = List.allDistinctBy(.grade, value)
+                let rowOf (g: Int, lo: Int): Row = Row { grade = g, lowerBound = lo }
+                let table = Table([ rowOf(1, 100), rowOf(2, 200), rowOf(3, 300) ])
+                """;
+        Proposition literal = stated(compared("List.fold(%s, 0, %s)".formatted(step, ASCENDING)));
+        Proposition stored = stated(declarations,
+                compared("List.fold(%s, 0, table.value)".formatted(step)));
+        assertEquals(literal, stored);
+        // The same table built out of an input is worked out on each run, and is not taken so.
+        Proposition fromAnInput = stated(
+                declarations.replace("let table = Table([ rowOf(1, 100), rowOf(2, 200), "
+                        + "rowOf(3, 300) ])\n", ""),
+                "let table = Table([ rowOf(cur, 100), rowOf(2, 200), rowOf(3, 300) ])\n"
+                        + compared("List.fold(%s, 0, table.value)".formatted(step)));
+        assertNotEquals(literal, fromAnInput);
+    }
+
     /** A place a walk is worked out from: the walk with PLACED where it goes, and what stands there
      *  when nothing is run on the way. */
     private record Place(String name, String fold, String payload, String type) {}

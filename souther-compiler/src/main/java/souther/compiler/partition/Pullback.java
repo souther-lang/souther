@@ -9218,6 +9218,13 @@ final class Pullback {
      * declaration's, and a call of a behavior, whose body is read with its parameters standing
      * for what it was handed.
      *
+     * <p>A value the module declares runs in the one place its module builds it, and reading it
+     * from a run ends none of that run's.
+     *
+     * <p>A construction that reads no input is the same on every run, so it is refused on every
+     * run or on none, and the compile refuses it where it is refused: a table built out of
+     * constants is no run's to end.
+     *
      * <p>Asked of the expression as it is written, and never of the value it stands as: standing
      * leaves out a part that is run without coming into the value (the initializer of a
      * {@code let}, the other fields of a construction an access takes one of), and a name leads
@@ -9227,7 +9234,12 @@ final class Pullback {
     private boolean endsNoRunItself(Denotation value) {
         Core written = Core.withoutStanding(value.value());
         if (written instanceof Core.Construct made) {
-            return holdsNoInvariant(made.typeName()) || holdsWhatItIsHanded(made, value.at());
+            return holdsNoInvariant(made.typeName()) || InputReads.readsNothingOutside(made)
+                    || holdsWhatItIsHanded(made, value.at());
+        }
+        if (written instanceof Core.Call call && (call.fn() instanceof Core.Reached.OfValue
+                || call.fn() instanceof Core.Reached.OfPublishedValue)) {
+            return true;
         }
         return WhatARunMayEndFor.itself(written).endsNone() || endsNoRunInTheBodyOfACall(value);
     }
