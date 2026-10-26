@@ -11,9 +11,9 @@ import souther.compiler.source.SourceId;
  *
  * <p>Two of the things deciding whether Souther accepts a program need the program to run: a
  * constant construction, and a value a module declares, have to satisfy the invariant of what they
- * build, and an {@code example} row has to hold — in Souther a row that disagrees is a compile error and not a test failure. ADR-0032
- * settles how they are run: by the same program that will ship, with no second evaluator that could
- * disagree. That is not what this is about. This is about which way the dependency runs.
+ * build, and an {@code example} row has to hold — in Souther a row that disagrees is a compile
+ * error and not a test failure. ADR-0032 settles how they are run: by the same program that will
+ * ship, with no second evaluator that could disagree. That is not what this is about. This is about which way the dependency runs.
  *
  * <p>Acceptance asked those questions of the JVM. It reflected over a generated class name, built
  * class loaders, and handed an artifact of emitted classes to the thing that runs rows, so a caller
