@@ -94,7 +94,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
      *  one that needs an hour of the day past the last is not. */
     @Test
     void aDecisionRuleNeedingAStringPastTheLongestIsOwedNoRow() {
-        String phrase = "no value can stand at a rule of the decision";
+        String phrase = "no row is owed at 1 decision rule";
         String past = report("s: String",
                 "if String.length(s) >= 268435456 then true else String.length(s) >= 3");
         String within = report("s: String",
@@ -141,6 +141,52 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         assertTrue(AdequacyReport.of(within)
                 .human(SourceRendering.namedByIdentity(within.texts()))
                 .contains("String.length(s)/7 <= x"), "the control: a class a string reaches");
+    }
+
+    /** The arm a guard past the longest string opens is reached by no String, so it and the outcome
+     *  it answers are owed no row; the same guard at a length a String has is owed both. */
+    @Test
+    void anArmAndAnOutcomeNoStringReachesAreOwedNoRow() {
+        String source = """
+                module m
+
+                data Yes = { v: Int }
+                data No = { why: Int }
+
+                behavior f : (s: String) -> Yes | No
+                    constructs Yes
+                    constructs No
+
+                let f (s) = {
+                    guard String.length(s) < %s else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "r" : ("x") -> Yes { v = 1 }
+                """;
+        String owedBoth = "no row expects `No`";
+        String owedTheArm = "no row goes through `else`";
+        for (String past : new String[] {"268435456", "268435457"}) {
+            Compilation compilation = Compilation.ofSource(source.formatted(past), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+            assertFalse(report.contains(owedBoth), report);
+            assertFalse(report.contains(owedTheArm), report);
+        }
+        for (String within : new String[] {"268435455", "7"}) {
+            Compilation compilation = Compilation.ofSource(source.formatted(within), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+            assertTrue(report.contains(owedBoth), within + " " + report);
+            assertTrue(report.contains(owedTheArm), within + " " + report);
+        }
     }
 
     @Test

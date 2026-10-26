@@ -1,10 +1,14 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.ResultBound;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtents;
 
@@ -60,12 +64,28 @@ public final class RepresentationBounds {
             case NumericTerm.CodePointValueSum _ ->
                     TextExtents.LONGEST_STRING * Character.MAX_CODE_POINT;
             case NumericTerm.CodePointClassCount _ -> TextExtents.LONGEST_STRING;
-            case NumericTerm.TakenOf taken when isALength(taken) -> TextExtents.LONGEST_STRING;
-            case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
+            case NumericTerm.TakenOf taken -> whereItsOperationStops(taken);
+            case NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
                  NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
         };
+    }
+
+    /** Where the operation {@code taken} is the result of says its answers stop, as it declares it,
+     *  or null where it declares no such end. */
+    private static Long whereItsOperationStops(NumericTerm.TakenOf taken) {
+        Long stops = null;
+        for (ResultBound<DeclaredArgument> row
+                : DefaultBoundOperationFacts.get().everyBoundOnTheResult(taken.operation())) {
+            if (!row.isALineOfTheOperation() && row.against() == null
+                    && row.rel() == Rel.LE && row.offset().scale() == 0
+                    && row.offset().unscaledValue().bitLength() < Long.SIZE) {
+                long at = row.offset().longValue();
+                stops = stops == null ? at : Math.min(stops, at);
+            }
+        }
+        return stops;
     }
 
     /** The run {@link #mostOf} leaves {@code term}: open below, and ended above where it is. */

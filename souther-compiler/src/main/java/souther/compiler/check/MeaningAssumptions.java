@@ -589,9 +589,14 @@ final class MeaningAssumptions {
     /** {@code atom} held between the ends {@code operation} bounds what it answers to, for the
      *  arguments it was given beside the value. */
     private void carryingBothEnds(FactSubject atom, ValueName operation, TakenArguments given) {
-        NumericDomain.Bounds range = ResultRange.of(
-                DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
-                argument -> Optional.ofNullable(given.at(argument.position())));
+        carrying(atom, ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation),
+                argument -> Optional.ofNullable(given.at(argument.position()))));
+    }
+
+    /** {@code atom} held between the ends of {@code range}, where the representation stops
+     *  included: whether the arm a condition opens can be reached asks what a value can be. */
+    private void carrying(FactSubject atom, NumericDomain.Bounds range) {
         if (range.min() != null) {
             ExactRatio at = Count.number(range.min().at()).exactly();
             known = known.taking(LinearForm.atomMinusConstant(atom, at),
@@ -952,15 +957,9 @@ final class MeaningAssumptions {
 
     /** {@code atom} holding where {@code operation} bounds what it answers. */
     private void carrying(FactSubject atom, ValueName operation) {
-        Endpoint least = ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
-                ConstantArguments.none()).min();
-        if (least == null) {
-            return;
-        }
-        ExactRatio at = Count.number(least.at()).exactly();
-        known = known.taking(LinearForm.atomMinusConstant(atom, at),
-                least.inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
-                terms.spacesOf(LinearForm.atom(atom)));
+        carrying(atom, ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation),
+                ConstantArguments.none()));
     }
 
     /**

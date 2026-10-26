@@ -34,6 +34,8 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.TextExtents;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -888,7 +890,18 @@ final class OperationFactBinder {
                     new ResultBound.Provided.ConstantBelowZero<>(
                             holdBoundArgument(declaration, constant.argument()));
         };
-        return new ResultBound<>(against, bound.offset(), bound.rel(), provided);
+        BigDecimal offset = switch (bound.origin()) {
+            case ResultBound.Origin.OfTheOperation _ -> bound.offset();
+            case ResultBound.Origin.OfTheRepresentation(var limit) -> valueOf(limit);
+        };
+        return new ResultBound<>(against, offset, bound.rel(), provided, bound.origin());
+    }
+
+    /** The number the language keeps {@code limit} at, read from the one place it is kept. */
+    private static BigDecimal valueOf(ResultBound.Limit limit) {
+        return switch (limit) {
+            case LONGEST_STRING -> BigDecimal.valueOf(TextExtents.LONGEST_STRING);
+        };
     }
 
     private static DeclaredArgument holdBoundArgument(CompleteSignature declaration,

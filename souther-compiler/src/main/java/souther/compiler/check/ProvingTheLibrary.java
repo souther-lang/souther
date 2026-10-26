@@ -136,6 +136,9 @@ final class ProvingTheLibrary implements LibraryProofs {
         ValueName.Stdlib.Operation operation =
                 (ValueName.Stdlib.Operation) fact.operation().operation();
         return switch (fact) {
+            // Where the representation stops is a limit the language keeps, which no body proves.
+            case BoundOperationFact.BoundsItsResult bounded
+                    when !bounded.bound().isALineOfTheOperation() -> true;
             case BoundOperationFact.BoundsItsResult bounded -> bounds(operation, bounded.bound());
             case BoundOperationFact.IsDefinedByCases defined ->
                     answersInTheCase(operation, defined.one());

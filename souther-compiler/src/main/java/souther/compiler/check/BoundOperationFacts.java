@@ -88,6 +88,7 @@ public final class BoundOperationFacts {
             Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>>> several =
             new LinkedHashMap<>();
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> bounds;
+    private final Map<ValueName, List<ResultBound<DeclaredArgument>>> linesOfTheOperation;
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
@@ -151,7 +152,8 @@ public final class BoundOperationFacts {
                 BoundOperationFact.ResultIsNoSmallerThan::container);
         bounds = projected(BoundOperationFact.BoundsItsResult.class,
                 BoundOperationFact.BoundsItsResult::bound);
-        cases = projected(BoundOperationFact.IsDefinedByCases.class,
+        linesOfTheOperation = ofTheOperation(bounds);
+        cases =projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
     }
 
@@ -190,6 +192,21 @@ public final class BoundOperationFacts {
                 computing.add(operation);
             }
         }
+        return Collections.unmodifiableMap(out);
+    }
+
+    /** {@code all} less the ends that are where the representation stops, and less an operation
+     *  left with none. */
+    private static Map<ValueName, List<ResultBound<DeclaredArgument>>> ofTheOperation(
+            Map<ValueName, List<ResultBound<DeclaredArgument>>> all) {
+        Map<ValueName, List<ResultBound<DeclaredArgument>>> out = new LinkedHashMap<>();
+        all.forEach((operation, rows) -> {
+            List<ResultBound<DeclaredArgument>> lines = rows.stream()
+                    .filter(ResultBound::isALineOfTheOperation).toList();
+            if (!lines.isEmpty()) {
+                out.put(operation, lines);
+            }
+        });
         return Collections.unmodifiableMap(out);
     }
 
@@ -330,15 +347,22 @@ public final class BoundOperationFacts {
         return rounds == null ? null : ARounding.of(applied, rounds);
     }
 
-    /** What holds of the number {@code operation} answers, wherever it is called, in the order
-     *  declared. */
+    /** What the operation holds of the number {@code operation} answers, wherever it is called, in
+     *  the order declared: the lines a model can draw, and not where the representation stops
+     *  ({@link #everyBoundOnTheResult}). What a position is divided into reads these. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
+        return operation == null ? List.of() : linesOfTheOperation.getOrDefault(operation, List.of());
+    }
+
+    /** Every end of the number {@code operation} answers, the places the representation stops
+     *  included: what a value can be, for a reader asking whether one can stand. */
+    public List<ResultBound<DeclaredArgument>> everyBoundOnTheResult(ValueName operation) {
         return operation == null ? List.of() : bounds.getOrDefault(operation, List.of());
     }
 
     /** The operations something holds of the result of. */
     public Set<ValueName> boundsOnTheResult() {
-        return bounds.keySet();
+        return linesOfTheOperation.keySet();
     }
 
     /** What {@code operation} builds its result from, or null where it builds none. */

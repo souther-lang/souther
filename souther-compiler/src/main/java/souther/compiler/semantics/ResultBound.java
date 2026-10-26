@@ -27,19 +27,65 @@ import java.math.BigDecimal;
  * @param offset   added to that argument, or the constant itself where there is no argument
  * @param rel      how the result stands to it
  * @param provided what has to hold of the arguments for this to be the operation's answer
+ * @param origin   whose line the end is: the operation's, or the place the representation stops
  * @param <A>      the word for an argument of the operation
  */
-public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> provided) {
+public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> provided,
+                             Origin origin) {
+
+    /** A bound that is a line of the operation. */
+    public ResultBound(A against, BigDecimal offset, Rel rel, Provided<A> provided) {
+        this(against, offset, rel, provided, new Origin.OfTheOperation());
+    }
 
     public ResultBound {
         java.util.Objects.requireNonNull(offset, "a bound stands somewhere");
         java.util.Objects.requireNonNull(rel, "and stands some way to it");
         java.util.Objects.requireNonNull(provided, "and under some condition, `Always` if none");
+        java.util.Objects.requireNonNull(origin, "and is somebody's line");
         if (rel == Rel.NE) {
             throw new IllegalArgumentException(
                     "a bound says where a result stops, and `NE` says where it does not stand: "
                             + against + " " + rel + " " + offset);
         }
+    }
+
+    /** Whether the end is a line a model can draw: the operation's own, and not the place the
+     *  representation stops. */
+    public boolean isALineOfTheOperation() {
+        return origin instanceof Origin.OfTheOperation;
+    }
+
+    /**
+     * Whose line a bound is.
+     *
+     * <p>A length ends at nought because a count does, a line of the operation that a model writes
+     * as the empty string. It ends above where a {@code String} stops, which is where a value cannot
+     * stand and no distinction a model made. A reader asking whether a value can stand takes every
+     * end; one asking what a position is divided into takes the operation's.
+     */
+    public sealed interface Origin {
+
+        /** The end is a line of the operation. */
+        record OfTheOperation() implements Origin {}
+
+        /**
+         * The end is where the representation stops, named and not written: the number is read
+         * where the bound is held to the library, from the one place the language's limit is
+         * kept, because the declaring side cannot name that place.
+         */
+        record OfTheRepresentation(Limit limit) implements Origin {
+
+            public OfTheRepresentation {
+                java.util.Objects.requireNonNull(limit, "this one names the limit it stops at");
+            }
+        }
+    }
+
+    /** A limit the language keeps. */
+    public enum Limit {
+        /** The most code points a {@code String} holds. */
+        LONGEST_STRING
     }
 
     /**

@@ -172,6 +172,8 @@ public final class OperationFacts {
             // is what holds the four of them to it.
             about("List", "length", bounded(Rel.GE, 0)),
             about("String", "length", bounded(Rel.GE, 0)),
+            about("String", "length",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LONGEST_STRING)),
             about("Set", "size", bounded(Rel.GE, 0)),
             about("Map", "size", bounded(Rel.GE, 0)),
 
@@ -1453,6 +1455,12 @@ public final class OperationFacts {
                                          ResultBound.Provided<ArgumentRef> provided) {
         return new OperationFact.BoundsItsResult(
                 new ResultBound<>(against, java.math.BigDecimal.valueOf(offset), rel, provided));
+    }
+
+    /** The result stops at the limit the language keeps, on the side {@code rel} says. */
+    private static OperationFact boundedByTheRepresentation(Rel rel, ResultBound.Limit limit) {
+        return new OperationFact.BoundsItsResult(new ResultBound<>(null, java.math.BigDecimal.ZERO,
+                rel, always(), new ResultBound.Origin.OfTheRepresentation(limit)));
     }
 
     private static ResultBound.Provided<ArgumentRef> always() {

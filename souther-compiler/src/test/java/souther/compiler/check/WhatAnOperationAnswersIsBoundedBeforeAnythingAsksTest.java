@@ -8,6 +8,7 @@ import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.TextExtents;
 
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +35,21 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
                                               ConstantArguments<DeclaredArgument> arguments) {
         return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
                 arguments);
+    }
+
+    /** A length stops at nought because a count does, and at the longest string because that is
+     *  where a String stops: the second is a line of the representation, so the classes of a
+     *  position never draw to it and a reader of what a value can be does. */
+    @Test
+    void aLengthEndsAtTheLongestStringOnlyForAReaderAskingWhatAValueCanBe() {
+        ValueName length = ValueName.Stdlib.operation("String", "length");
+        NumericDomain.Bounds everything = ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(length),
+                ConstantArguments.none());
+
+        assertEquals(atLeast(0), asked(length, ConstantArguments.none()));
+        assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                Endpoint.inclusive(Count.of(TextExtents.LONGEST_STRING))), everything);
     }
 
     private static NumericDomain.Bounds asked(String module, String operation,
