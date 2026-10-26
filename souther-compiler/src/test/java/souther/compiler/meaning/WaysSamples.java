@@ -33,7 +33,7 @@ public final class WaysSamples {
                 new KeptWays(List.of(List.of(new KeptWays.Keep(0, true))), 1),
                 Map.of(0, condition), atLeastOne,
                 List.of(LinearForm.constant(ExactRatio.ONE)), sum,
-                Optional.empty(), 0, false, Optional.empty(), 0);
+                Optional.empty(), 0, false, Optional.empty(), 0, 3);
     }
 
     /** The statement over the ways {@link #ofOneTruth} holds. */

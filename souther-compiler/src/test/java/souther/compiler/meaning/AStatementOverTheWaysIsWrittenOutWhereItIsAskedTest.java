@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,7 +61,16 @@ class AStatementOverTheWaysIsWrittenOutWhereItIsAskedTest {
             conditions.put(i, truth("t" + i));
         }
         return new Proposition.WaysToWrite(eachKeptByItsOwnTruth(forms.size()), conditions,
-                reading, forms, SUM, Optional.empty(), 0, false, Optional.empty(), 0);
+                reading, forms, SUM, Optional.empty(), 0, false, Optional.empty(), 0,
+                2 * (1L << forms.size()) - 1);
+    }
+
+    /** The numbers of the parts nothing read that stand in {@code stated}. */
+    private static void numbersIn(Proposition stated, Set<Integer> into) {
+        if (stated instanceof Proposition.Unread unread) {
+            into.add(unread.ordinal());
+        }
+        stated.partsHeld().forEach(each -> numbersIn(each, into));
     }
 
     private static List<LinearForm<Quantity>> ones(int elements) {
@@ -114,6 +124,35 @@ class AStatementOverTheWaysIsWrittenOutWhereItIsAskedTest {
         Proposition stated = new Conclusion(Optional.empty()).of(alike(15));
         assertInstanceOf(WhyUnread.MoreWaysThanAreWrittenOut.class,
                 Proposition.firstStopIn(stated));
+    }
+
+    @Test
+    void thePartsNothingReadInTheCasesAreNumberedWithinWhatTheStatementWasOwed() {
+        // Every way that keeps both of the first two cannot hold its total: half of the ways, and
+        // the steps that join them are numbered beside, from the same numbers.
+        List<LinearForm<Quantity>> forms = ones(7);
+        LinearForm<Quantity> greatest = LinearForm.constant(ExactRatio.tenTo(Long.MAX_VALUE));
+        forms.set(0, greatest);
+        forms.set(1, greatest);
+        Proposition.WaysToWrite ways = waysOf(forms, totalAtLeastOne());
+        Set<Integer> numbers = new TreeSet<>();
+        numbersIn(new Proposition.OfTheWays(ways, true).written(), numbers);
+        assertTrue(numbers.size() > 1);
+        assertTrue(numbers.stream().allMatch(number -> number >= ways.firstNumber()
+                && number < ways.firstNumber() + ways.numbersOwed()), () -> "numbered " + numbers);
+    }
+
+    @Test
+    void aStatementOverManyWaysIsOwedNumbersForEveryWayAndEveryStepThatJoinsTwo() {
+        Conclusion concluding = new Conclusion(Optional.empty());
+        Proposition.OfTheWays ways = assertInstanceOf(Proposition.OfTheWays.class,
+                concluding.of(alike(13)));
+        Proposition beside = concluding.of(new Derivation.Stopped(new WhyUnread.NotArithmetic(),
+                false));
+        // 2^13 ways and one fewer steps that join two of them.
+        assertEquals((1 << 14) - 1, ((Proposition.Unread) beside).ordinal(),
+                "a part concluded beside the statement is numbered after all it is owed");
+        assertEquals((1 << 14) - 1, ways.ways().numbersOwed());
     }
 
     @Test

@@ -201,31 +201,56 @@ public final class Conclusion {
         Map<Integer, Proposition> conditions = new HashMap<>();
         ways.conditions().forEach((truth, condition) -> conditions.put(truth, of(condition)));
         Proposition reading = of(ways.reading());
+        long owed = numbersOwed(cases);
         String spelled = new Proposition.WaysToWrite(kept, conditions, reading, ways.forms(),
-                ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where, 0).spelled();
+                ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where, 0, owed)
+                .spelled();
         Long first = shared.reserved.get(spelled);
         if (first == null) {
             first = (long) shared.unread;
-            shared.unread += (int) cases;
+            shared.unread += (int) owed;
             shared.reserved.put(spelled, first);
         }
         return new Proposition.OfTheWays(new Proposition.WaysToWrite(kept, conditions, reading,
                 ways.forms(), ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where,
-                first), true);
+                first, owed), true);
+    }
+
+    /**
+     * How many numbers the cases of {@code cases} ways are written out with at the most. A part
+     * nothing read is made at a way, where a number of it cannot be held, or at a step that joins
+     * two ways, where it comes to more parts than a step is concluded with; never twice at one.
+     * The steps are a tree whose every step joins two, so there is one fewer of them than there
+     * are ways.
+     */
+    private static long numbersOwed(long cases) {
+        return 2 * cases - 1;
     }
 
     /**
      * The cases of a statement over the ways, written out from what it is held as: every way,
      * decided in turn, with the totals it makes given to the reading.
      *
-     * <p>Each part nothing read that a way is owed is numbered from where the statement was
+     * <p>Each part nothing read the cases come to is numbered from where the statement was
      * concluded to be owed them, so the cases are the same however often and by whoever they are
-     * written out. Counted as each step of them is, as a step of a derivation is concluded.
+     * written out, and none of them is numbered as a part that is concluded beside the statement.
+     * Counted as each step of them is, as a step of a derivation is concluded.
      */
     static Proposition writtenOutOver(Proposition.WaysToWrite ways) {
         Conclusion at = new Conclusion(new Shared(ways.where(), false), Map.of());
         at.shared.unread = (int) ways.firstNumber();
         KeptWays kept = ways.kept();
+        Proposition written = writtenOutBy(at, ways, kept);
+        if (at.shared.unread > ways.firstNumber() + ways.numbersOwed()) {
+            throw new IllegalStateException("the cases of ways were written out with more numbers"
+                    + " than they were owed: " + (at.shared.unread - ways.firstNumber()) + " of "
+                    + ways.numbersOwed());
+        }
+        return written;
+    }
+
+    private static Proposition writtenOutBy(Conclusion at, Proposition.WaysToWrite ways,
+                                            KeptWays kept) {
         return kept.made(new KeptWays.Making<Proposition>() {
             @Override
             public Proposition split(int truth, Proposition where, Proposition otherwise) {

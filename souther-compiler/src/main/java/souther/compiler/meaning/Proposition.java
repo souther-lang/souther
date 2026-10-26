@@ -577,8 +577,8 @@ public sealed interface Proposition {
      * What the cases of a statement over the ways are written out from: which truths keep which
      * elements, what each truth that decides a way states, the comparison read over the totals,
      * and the elements the totals are taken over. Written out by {@link Conclusion#writtenOutOver},
-     * which gives a way whose number cannot be held the parts nothing read it is owed from
-     * {@code firstNumber} on.
+     * which numbers the parts nothing read the cases come to from {@code firstNumber} on, and has
+     * {@code numbersOwed} of them to number.
      *
      * <p>Only what the cases follow from, so that it is a value: alike where it is spelled alike,
      * and the same cases come of it however often they are written out.
@@ -595,6 +595,7 @@ public sealed interface Proposition {
         private final boolean fixed;
         private final Optional<ModelOccurrence> where;
         private final long firstNumber;
+        private final long numbersOwed;
         private final String spelled;
 
         /**
@@ -607,14 +608,16 @@ public sealed interface Proposition {
          * @param counted     how many elements the count is over, which follow those of the total
          * @param fixed       whether a number that cannot be held is the same whatever the input
          * @param where       the construct of the model the condition is, where it is known
-         * @param firstNumber the number of the first part nothing read a way is owed, one number
-         *                    for each way
+         * @param firstNumber the number of the first part nothing read the cases come to
+         * @param numbersOwed how many numbers the cases are written out with, at the most: a part
+         *                    nothing read is made at a way or at a step that joins two, and no
+         *                    more than once at either
          */
         public WaysToWrite(KeptWays kept, Map<Integer, Proposition> conditions,
                            Proposition reading, List<LinearForm<Quantity>> forms,
                            Quantity.TheKeptTotal sum, Optional<Quantity.TheKeptTotal> count,
                            int counted, boolean fixed, Optional<ModelOccurrence> where,
-                           long firstNumber) {
+                           long firstNumber, long numbersOwed) {
             this.kept = Objects.requireNonNull(kept, "the ways are of some elements");
             this.conditions = Map.copyOf(conditions);
             this.reading = Objects.requireNonNull(reading, "the ways are given their totals");
@@ -625,6 +628,7 @@ public sealed interface Proposition {
             this.fixed = fixed;
             this.where = Objects.requireNonNull(where, "the condition is somewhere or not known");
             this.firstNumber = firstNumber;
+            this.numbersOwed = numbersOwed;
             this.spelled = spell();
         }
 
@@ -668,6 +672,10 @@ public sealed interface Proposition {
             return firstNumber;
         }
 
+        long numbersOwed() {
+            return numbersOwed;
+        }
+
         /** What these are made of, which tells them from others. */
         String spelled() {
             return spelled;
@@ -680,7 +688,8 @@ public sealed interface Proposition {
                     out.append('|').append(truth).append('=').append(condition.key()));
             return out.append('|').append(forms).append('|').append(sum).append('|')
                     .append(count).append('|').append(counted).append('|').append(fixed)
-                    .append('|').append(where).append('|').append(firstNumber).toString();
+                    .append('|').append(where).append('|').append(firstNumber).append('+')
+                    .append(numbersOwed).toString();
         }
 
         /** Alike where they are spelled alike: the cases follow from what is spelled. */
