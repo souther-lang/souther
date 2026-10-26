@@ -114,6 +114,10 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many records down an element a field is looked for to be given another"
                             + " value where the statement does not name one; a field past it is"
                             + " not varied, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_REWRITES_LOOKED_AT",
+                    "how many rewrites of one row are looked at for the order of a repeated key,"
+                            + " admitted by the decoder or not; a case with no row is not found,"
+                            + " which claims nothing of the model"),
             Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CANDIDATES",
                     "how many rewrites of one row are run for the order of a repeated key; a case"
                             + " with no row is not found, which claims nothing of the model"),

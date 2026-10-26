@@ -271,9 +271,13 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     Stream<ObservedValue> rewritingBelow(ObservedValue value, Type type,
                                          List<TermPath.Step> steps, Rewrite how,
                                          Function<Type, TypeView> views) {
-        return new Standing(value, type, TermPath.of("value"), ElementsTaken.NONE)
+        return new Standing(value, type, NOT_A_PARAMETER, ElementsTaken.NONE)
                 .rewriting(steps, 0, views, how);
     }
+
+    /** Where a value stands that is read from a value and a type and not from a parameter: the
+     *  walks that start from one say nothing of where they arrived, so this is never read. */
+    private static final TermPath NOT_A_PARAMETER = TermPath.of("value");
 
     /** What a type is under these declarations, worked out once for each type asked of it. Not
      *  safe to share between threads: it is the memo of one caller. */
@@ -288,7 +292,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      */
     ObservedValue readingAt(ObservedValue value, Type type, List<String> names,
                             Function<Type, TypeView> views) {
-        Standing standing = new Standing(value, type, TermPath.of("value"), ElementsTaken.NONE);
+        Standing standing = new Standing(value, type, NOT_A_PARAMETER, ElementsTaken.NONE);
         for (String name : names) {
             List<Standing> below = new ArrayList<>();
             if (!standing.step(new TermPath.Step.Field(name), views, below)

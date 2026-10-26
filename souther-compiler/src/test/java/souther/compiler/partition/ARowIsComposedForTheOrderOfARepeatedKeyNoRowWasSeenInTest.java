@@ -125,9 +125,12 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     /**
      * A value a row does not hold is written: the order decides a statement over a {@code Bool}
      * only between a {@code true} and a {@code false}, and the rows written hold one of them.
+     *
+     * <p>Asked of the way that fails only. The way that holds needs a row composed at its rule
+     * first, and the composer has no way to one here; that is not what this is about.
      */
     @Test
-    void theOtherValueOfABoolIsWritten() {
+    void theOtherValueOfABoolIsWrittenForTheWayThatFails() {
         Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data Row = { sku: String, ok: Bool }
                 behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
@@ -238,6 +241,31 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
             List<String> skus = keysIn(snap, "sku");
             assertEquals(skus.get(0), skus.get(1), snap);
         });
+    }
+
+    /**
+     * Nothing is made up for a field kept apart: a text the row holds only one of has no other
+     * value to give the copy, and the row is not written with one invented for it.
+     */
+    @Test
+    void aFieldKeptApartIsNotGivenAValueTheRowDoesNotOffer() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { code: String, sku: String, qty: Int }
+                data Snap = { rows: List<Row> }
+                    invariant List.allDistinctBy(.code, rows)
+                behavior f : (items: List<LI>, snap: Snap) -> Int | Empty
+                let f (items, snap) = {
+                """ + GUARD.formatted(".sku", "snap.rows", "r.qty >= i.q") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { code = "c", sku = "A", qty = 9 }] }) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { code = "c", sku = "A", qty = 1 }] })
+                        -> Empty { n = 0 }
+                """);
+
+        assertTrue(found.isEmpty(), () -> "a code the row does not offer was made up: " + found);
     }
 
     /** The two copies of the element hold what a field the statement does not read held. */

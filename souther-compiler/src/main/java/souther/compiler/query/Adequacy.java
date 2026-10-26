@@ -23,6 +23,7 @@ import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.partition.RowWriting;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.CaseCandidates;
 import souther.compiler.partition.CaseOfAStatement;
@@ -3680,8 +3681,9 @@ public final class Adequacy {
                     instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
                 return null;
             }
+            RowWriting writing = building.probe().rowWriting();
             Optional<KeyOrderCandidates> rewriting =
-                    KeyOrderCandidates.of(order, building.probe().subject().inputs());
+                    KeyOrderCandidates.of(order, writing.subject().inputs());
             if (rewriting.isEmpty()) {
                 return null;
             }
@@ -3691,9 +3693,8 @@ public final class Adequacy {
                 if (!ranAtTheRule(setting, read, ruled)) {
                     return false;
                 }
-                Iterator<RowToRun> candidates = rewriting.get().refining(row,
-                        read.asRun().inputs(), building.probe().subject(),
-                        building.probe().check()).iterator();
+                Iterator<RowToRun> candidates = rewriting.get()
+                        .refining(row, read.asRun().inputs(), writing).iterator();
                 while (candidates.hasNext()) {
                     RowToRun candidate = candidates.next();
                     RowAsRead ran = setting.probe().read(candidate);
@@ -3962,13 +3963,8 @@ public final class Adequacy {
         }
 
         @Override
-        public souther.compiler.partition.MeasuredInput subject() {
-            return subject;
-        }
-
-        @Override
-        public Generator.CandidateCheck check() {
-            return checkAgainst(building, sig);
+        public souther.compiler.partition.RowWriting rowWriting() {
+            return new souther.compiler.partition.RowWriting(subject, checkAgainst(building, sig));
         }
 
         @Override

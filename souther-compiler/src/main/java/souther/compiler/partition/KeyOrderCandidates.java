@@ -46,7 +46,10 @@ public final class KeyOrderCandidates {
      *  them. */
     static final int MOST_VALUES_OF_A_KIND = 6;
 
-    /** The most rewrites of one row that are made, whatever they come to or how they are made. */
+    /** The most rewrites of one row that are looked at, whether or not the decoder admits them. */
+    static final int MOST_REWRITES_LOOKED_AT = 192;
+
+    /** The most rewrites of one row that the decoder admits and that are handed on to be run. */
     static final int MOST_CANDIDATES = 48;
 
     /** How many records down an element a field is looked for to be given another value. */
@@ -108,27 +111,32 @@ public final class KeyOrderCandidates {
      *
      * @param base the row the candidates are rewrites of
      * @param seen the values its run observed, one per parameter
-     * @param subject what the row's parameters are and how a value of each is written
-     * @param check   what the decoder says of a value written at a parameter: a rewrite it refuses
-     *                is no row, as a value a search composed is none, and is never run
+     * @param writing what the row's parameters are and how a value of each is written, and what
+     *                the decoder says of a value written at one: a rewrite it refuses is no row, as
+     *                a value a search composed is none, and is never run
      */
     public Stream<RowToRun> refining(RowToRun base, List<ObservedValue> seen,
-                                     MeasuredInput subject, Generator.CandidateCheck check) {
+                                     RowWriting writing) {
         if (plan.parameter() >= seen.size() || plan.parameter() >= base.inputs().size()) {
             return Stream.empty();
         }
+        MeasuredInput subject = writing.subject();
         Pool pool = Pool.of(seen);
         List<List<String>> apart = subject.keptApartAt(plan.container());
+        // Two bounds, because the decoder refuses some of what is looked at: counting only what
+        // it admits would let a rule that refuses nearly everything be looked at without end, and
+        // counting what is looked at would let the refused ones use up the rows that are run.
         return inputs.rewritingBelow(seen.get(plan.parameter()),
                         inputs.types().get(plan.parameter()), plan.container().steps(),
                         (here, _, _) -> heldTwice(here, pool, apart), views)
-                .limit(MOST_CANDIDATES)
+                .limit(MOST_REWRITES_LOOKED_AT)
                 .map(each -> ObservedFixtures.of(each, subject.types().get(plan.parameter()),
                         subject.ruleReading()))
                 .filter(ObservedFixtures.Writing.Written.class::isInstance)
                 .map(written -> ((ObservedFixtures.Writing.Written<FixtureTemplate>) written)
                         .value())
-                .filter(value -> check.refuse(plan.parameter(), value).isEmpty())
+                .filter(value -> writing.check().refuse(plan.parameter(), value).isEmpty())
+                .limit(MOST_CANDIDATES)
                 .map(value -> {
                     List<FixtureTemplate> values = new ArrayList<>(base.inputs());
                     values.set(plan.parameter(), value);
@@ -279,7 +287,7 @@ public final class KeyOrderCandidates {
                     .filter(later -> !later.equals(earlier))
                     .flatMap(later -> Stream.concat(
                             overwritten(elements, target, earlier, later),
-                            repeated(elements, target, earlier, later, apart))));
+                            repeated(elements, target, earlier, later, apart, pool))));
         });
     }
 
@@ -317,14 +325,14 @@ public final class KeyOrderCandidates {
      */
     private Stream<ObservedValue> repeated(List<ObservedValue> elements, Target target,
                                            ObservedValue earlier, ObservedValue later,
-                                           List<List<String>> apart) {
+                                           List<List<String>> apart, Pool pool) {
         return IntStream.range(0, elements.size()).boxed().map(at -> {
             ObservedValue one = with(elements.get(at), target.fields(), earlier);
             ObservedValue other = with(elements.get(at), target.fields(), later);
             for (List<String> run : apart) {
                 if (other != null && !startsWith(run, plan.key()) && !startsWith(plan.key(), run)) {
                     ObservedValue held = inputs.readingAt(other, plan.element(), run, views);
-                    ObservedValue another = held == null ? null : anotherThan(held);
+                    ObservedValue another = held == null ? null : anotherThan(held, run, pool);
                     other = another == null ? null : with(other, run, another);
                 }
             }
@@ -338,14 +346,16 @@ public final class KeyOrderCandidates {
         }).filter(Objects::nonNull);
     }
 
-    /** A value of the same kind as {@code value} that is not it, or null for a kind with no next. */
-    private static ObservedValue anotherThan(ObservedValue value) {
-        return switch (value) {
-            case ObservedValue.Integer(long n) -> new ObservedValue.Integer(
-                    n < Long.MAX_VALUE ? n + 1 : n - 1);
-            case ObservedValue.Text(String text) -> new ObservedValue.Text(text + "x");
-            default -> null;
-        };
+    /**
+     * A value of the field at {@code names} that is not {@code value}, taken from the ones its
+     * declared type is given ({@link #valuesFor}), or null where there is none: nothing is made up
+     * for a type the row holds only one value of.
+     */
+    private ObservedValue anotherThan(ObservedValue value, List<String> names, Pool pool) {
+        Type type = inputs.typeRead(plan.element(), fieldSteps(names), views);
+        return type == null ? null
+                : valuesFor(views.apply(type).shape(), pool).stream()
+                        .filter(each -> !each.equals(value)).findFirst().orElse(null);
     }
 
     /** {@code element} with {@code replacement} at the fields {@code names} below it, or null
