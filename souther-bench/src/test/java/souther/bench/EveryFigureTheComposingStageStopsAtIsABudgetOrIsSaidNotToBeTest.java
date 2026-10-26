@@ -100,6 +100,46 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
                     "how many element-wise readings of one row a point is tried against"),
 
+            // Which candidates a row for a case of a statement is built from. The search for such
+            // a row says the rows it found and nothing of the cases it did not: a case with no row
+            // is not found, which is not out of reach, so there is no figure it came back with.
+            Map.entry("souther.compiler.partition.CaseCandidates.MOST_LEVELS_BELOW_THE_START",
+                    "how many levels below the start of a search a node meeting it is looked for"
+                            + " at, which bounds the candidates and claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_VALUES_OF_A_KIND",
+                    "how many distinct values of one kind the two copies of an element are given"
+                            + " between them; a case with no row is not found, which claims"
+                            + " nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CASES_OF_A_SUM",
+                    "how many cases of a sum the two copies of an element are given between"
+                            + " them; a case past it is not tried, and a case with no row is not"
+                            + " found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_TURNS_OF_A_VISIT",
+                    "how many of the turns of a round one container of a row is given in a visit,"
+                            + " so that the rewrites looked at are spread over the containers; a"
+                            + " turn is taken in a later visit, and a case with no row is not"
+                            + " found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_SITES_OF_A_CONTAINER",
+                    "how many sites in one container the two copies of an element are written"
+                            + " at, the elements held again before the pairs of elements; a site"
+                            + " past it is not tried, and a case with no row is not found, which"
+                            + " claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_VALUES_OF_A_CASE",
+                    "how many values of one case of a sum are listed, the first of every case"
+                            + " before the second of any; a value past it is not tried, and a case"
+                            + " with no row is not found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_LEVELS_OF_FIELDS",
+                    "how many records down an element a field is looked for to be given another"
+                            + " value where the statement does not name one; a field past it is"
+                            + " not varied, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_REWRITES_LOOKED_AT",
+                    "how many rewrites of one row are looked at for the order of a repeated key,"
+                            + " admitted by the decoder or not; a case with no row is not found,"
+                            + " which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CANDIDATES",
+                    "how many rewrites of one row are run for the order of a repeated key; a case"
+                            + " with no row is not found, which claims nothing of the model"),
+
             // What counts are composed against the total of their container, and past which they
             // are composed as any are. No search runs to them and stops there: they say which
             // statements this takes, and a statement past them is not stopped but left to the

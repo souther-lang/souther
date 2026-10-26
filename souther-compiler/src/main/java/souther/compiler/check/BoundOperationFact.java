@@ -406,10 +406,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record EveryAnswerItCanGiveHasASourceValue(DeclaredOperation operation)
             implements OneAboutAnOperation {}
 
-    /** The ends of the numbers the operation answers are where what it is read out of stops. */
-    record EndsAreWhereTheRepresentationStops(DeclaredOperation operation)
-            implements OneAboutAnOperation {}
-
     /** Something that holds of the number the operation answers, wherever it is called. One per
      *  bound: an operation with two ends states two of these. */
     record BoundsItsResult(DeclaredOperation operation, ResultBound<DeclaredArgument> bound)

@@ -861,6 +861,10 @@ public final class Generator {
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION, TOTAL_READINGS_OF_ONE_CONDITION,
                              PARTS_A_DERIVATION_CONCLUDES,
+                             // It stops the writing out of the cases of a statement over the ways
+                             // of keeping elements, which is taken as a part nothing read, naming
+                             // it.
+                             WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER,
                              // It stops a reader taking a count of statements apart into its
                              // choices, which takes the count as a part it could not see into,
                              // naming it.
@@ -5780,6 +5784,8 @@ public final class Generator {
                         where.unrepresented());
             }
         }
+        Set<TermPath> truthsWritten = new LinkedHashSet<>(reaching.truths().at().keySet());
+        truthsWritten.addAll(elements.truthsAt());
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
@@ -5815,10 +5821,13 @@ public final class Generator {
             // A container asked for how many it holds and nothing else, whose elements the way
             // narrows to a case, is asked to hold that many and not to be one of the values standing
             // for the number: written whole, it would be elements of whatever case the number's
-            // composer wrote, and the way's case would have nowhere to be written.
+            // composer wrote, and the way's case would have nowhere to be written. The same holds
+            // for a truth the way asks of a position inside its elements.
             DeclaredBounds.CountRange holds =
                     onlyHowManyItHolds(group.getValue().keySet(), at)
-                            && narrowedStrictlyUnder(rowIs, at) ? sizesOf(edge.values()) : null;
+                            && (narrowedStrictlyUnder(rowIs, at)
+                                    || truthAskedStrictlyUnder(truthsWritten, at))
+                            ? sizesOf(edge.values()) : null;
             if ((holds != null ? decided.size(at, holds) : decided.write(at, edge.values()))
                     != LocationWrites.Written.FIRST) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
@@ -5845,8 +5854,6 @@ public final class Generator {
                         circularly(circular)), where.unrepresented());
             }
         }
-        Set<TermPath> truthsWritten = new LinkedHashSet<>(reaching.truths().at().keySet());
-        truthsWritten.addAll(elements.truthsAt());
         // Every way of writing them under the cases the row can be, one at a time, the first that
         // composes taken: a container a name every case of a sum spreads is composed under one of
         // the cases. What the rest came to is said over every one of them, the same whichever was
@@ -12203,6 +12210,16 @@ public final class Generator {
      *  case. */
     private static boolean narrowedStrictlyUnder(Requirements required, TermPath at) {
         for (TermPath each : required.refinements().keySet()) {
+            if (isStrictlyUnder(each, at)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether one of {@code truths} is a position under {@code at}, and not {@code at}. */
+    private static boolean truthAskedStrictlyUnder(Set<TermPath> truths, TermPath at) {
+        for (TermPath each : truths) {
             if (isStrictlyUnder(each, at)) {
                 return true;
             }

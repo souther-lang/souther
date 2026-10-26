@@ -41,7 +41,8 @@ import java.util.function.UnaryOperator;
  * @param states   what every condition of this body states about its input
  * @param subjects what the body's expressions name that a row can control
  */
-record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
+record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
+                        CaseCandidates candidates) {
 
     /**
      * One condition of a path: the column it is, and what it states about the input.
@@ -116,14 +117,19 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
 
     /**
      * What a row has to be to be evidence of each case the statement {@code answer} is about draws
-     * inside itself, for the cases a search draws that the reading can say what a row at the start
-     * of it has to be ({@link CaseOfAStatement.Search#askedOfTheNode}).
+     * inside itself, for the cases a search draws that the reading can say what a row has to be
+     * for ({@link CaseOfAStatement.Search#askedAtLevel}).
      *
      * <p>Only the cases the decision owes where the statement came out as it did
      * ({@link CasesTheRowsTook#owedBy}): a search that came out finding one owes the node meeting
-     * it, and one that came out empty owes the two ways of coming back empty.
+     * it and one found below it, and one that came out empty owes the two ways of coming back
+     * empty.
      */
     private List<CaseWay> casesOf(Condition condition, DecidedCondition answer) {
+        if (answer.condition() instanceof DecisionCondition.AStatement(Proposition stated)
+                && !(stated instanceof Proposition.SomeReachable)) {
+            return waysRoundTheOrdersOf(condition, stated, answer);
+        }
         if (!(answer.condition() instanceof DecisionCondition.AStatement(
                 Proposition.SomeReachable search))
                 || !(answer instanceof DecidedCondition.Held(var _, boolean held))) {
@@ -132,23 +138,71 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         List<CaseWay> out = new ArrayList<>();
         for (CaseOfAStatement.Step step : CasesTheRowsTook.owedBy(search, held == search.holds())) {
             CaseOfAStatement.Search which = new CaseOfAStatement.Search(search, step);
-            Optional<List<Proposition>> asked = which.askedOfTheNode(states::denied);
-            if (asked.isEmpty()) {
-                continue;
-            }
-            List<OnTheWay> puts = new ArrayList<>();
-            SaidOnTheWay said = SaidOnTheWay.NONE;
-            for (Proposition each : asked.get()) {
-                ReachingCuts.Stating put =
-                        ReachingCuts.whereItDecides(condition, each, states.read());
-                puts.addAll(put.entries());
-                said = said.and(put.by());
-            }
-            if (!puts.isEmpty()) {
-                out.add(new CaseWay(which, puts, said));
+            // One way for each level the step is asked at, the nearest first: a search for a row
+            // takes the first that composes one. Only the levels whose places this reading read;
+            // a reading made to stop where the type returns to itself reads fewer, and the levels
+            // past them are the ways of a reading made to read more ({@link CaseCandidates}).
+            for (int level = 1; level <= candidates.levelsAsked(which); level++) {
+                if (!readEvery(which.placesAtLevel(level))) {
+                    break;
+                }
+                wayTo(condition, which, which.askedAtLevel(level, states::denied))
+                        .ifPresent(out::add);
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * What a row has to be, beside the way to the rule, to be one the order of a repeated key can
+     * be asked of: the entry the statement looks up is there. A row that takes the rule with the
+     * container or the quantified list empty takes it without the statement looking anything up,
+     * and no order of its elements decides what it says.
+     *
+     * <p>One way for each order the statement rests on, the way it came out here: holding where
+     * the statement held, failing where it failed.
+     */
+    private List<CaseWay> waysRoundTheOrdersOf(Condition condition, Proposition stated,
+                                               DecidedCondition answer) {
+        if (!(answer instanceof DecidedCondition.Held(var _, boolean held))) {
+            return List.of();
+        }
+        List<CaseWay> out = new ArrayList<>();
+        for (Proposition.LastToHold last : stated.lastsToHold()) {
+            StandingAtAPoint.OrderOfAKey order = StandingAtAPoint.OrderOfAKey.of(last);
+            Optional<Proposition> entry = Proposition.theEntryLookedUp(stated, last);
+            if (order == null || entry.isEmpty()) {
+                continue;
+            }
+            CaseOfAStatement.KeyOrder which = new CaseOfAStatement.KeyOrder(stated, order,
+                    held ? CaseOfAStatement.Way.HOLDS_BY_THE_LAST
+                            : CaseOfAStatement.Way.FAILS_BY_THE_LAST);
+            wayTo(condition, which, Optional.of(List.of(entry.get()))).ifPresent(out::add);
+        }
+        return List.copyOf(out);
+    }
+
+    /** Whether the reading read a position at every one of {@code places}, which is what it needs
+     *  to say what a row has to be there. */
+    private boolean readEvery(List<TermPath> places) {
+        return places.stream().allMatch(each -> CaseCandidates.reads(states.read().domain(), each));
+    }
+
+    /** What {@code asked} comes to on the way at {@code condition}, as the way to {@code which}:
+     *  nothing where the step is not asked or the reading has no words for what it is. */
+    private Optional<CaseWay> wayTo(Condition condition, CaseOfAStatement which,
+                                    Optional<List<Proposition>> asked) {
+        if (asked.isEmpty()) {
+            return Optional.empty();
+        }
+        List<OnTheWay> puts = new ArrayList<>();
+        SaidOnTheWay said = SaidOnTheWay.NONE;
+        for (Proposition each : asked.get()) {
+            ReachingCuts.Stating put = ReachingCuts.whereItDecides(condition, each, states.read());
+            puts.addAll(put.entries());
+            said = said.and(put.by());
+        }
+        return puts.isEmpty() ? Optional.empty() : Optional.of(new CaseWay(which, puts, said));
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is
@@ -231,7 +285,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                  Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
-                 Proposition.SoManyHold _, Proposition.WhereItAnswers _ ->
+                 Proposition.SoManyHold _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
                     DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
         };
     }

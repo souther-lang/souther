@@ -172,6 +172,8 @@ public final class OperationFacts {
             // is what holds the four of them to it.
             about("List", "length", bounded(Rel.GE, 0)),
             about("String", "length", bounded(Rel.GE, 0)),
+            about("String", "length",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LONGEST_STRING)),
             about("Set", "size", bounded(Rel.GE, 0)),
             about("Map", "size", bounded(Rel.GE, 0)),
 
@@ -257,9 +259,10 @@ public final class OperationFacts {
             // than written down as numbers here, since what a temporal can be written as is already
             // answered — by {@code java.time} for a date, which is what the carrier's own ends are
             // read from, and by {@link souther.compiler.numeric.DateTimes} for a date-time.
-            about("Date", "year", bounded(Rel.GE, java.time.LocalDate.MIN.getYear())),
-            about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
-            about("Date", "year", new OperationFact.EndsAreWhereTheRepresentationStops()),
+            about("Date", "year",
+                    boundedByTheRepresentation(Rel.GE, ResultBound.Limit.EARLIEST_DATE_YEAR)),
+            about("Date", "year",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LATEST_DATE_YEAR)),
             about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
             about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
             // A date-time counts seconds and a minute is sixty of them. The answer drops what is
@@ -1453,6 +1456,12 @@ public final class OperationFacts {
                                          ResultBound.Provided<ArgumentRef> provided) {
         return new OperationFact.BoundsItsResult(
                 new ResultBound<>(against, java.math.BigDecimal.valueOf(offset), rel, provided));
+    }
+
+    /** The result stops at the limit the language keeps, on the side {@code rel} says. */
+    private static OperationFact boundedByTheRepresentation(Rel rel, ResultBound.Limit limit) {
+        return new OperationFact.BoundsItsResult(new ResultBound<>(null, java.math.BigDecimal.ZERO,
+                rel, always(), new ResultBound.Origin.OfTheRepresentation(limit)));
     }
 
     private static ResultBound.Provided<ArgumentRef> always() {

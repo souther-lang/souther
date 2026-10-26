@@ -40,7 +40,36 @@ final class SharedPropositions {
      */
     private static final Map<Proposition, WhichOfThemHold.Written> CHOICES = new WeakHashMap<>();
 
+    /**
+     * The cases a statement over the ways is written out as, by what they are written out from.
+     * Kept while that is held by any statement over the ways, which holds it for both the
+     * statement and its denial.
+     */
+    private static final Map<Proposition.WaysToWrite, Proposition> WRITTEN = new WeakHashMap<>();
+
     private SharedPropositions() {
+    }
+
+    /**
+     * The cases written out from {@code ways}: the ones written out the first time they were asked
+     * for while {@code ways} is held, or {@code writing}'s, kept from now on.
+     *
+     * <p>Written outside the lock, since writing them out concludes and builds every case. Two
+     * readers asking at once write two equal cases and keep the first, which is the same as the
+     * second: they follow from what is written out from.
+     */
+    static Proposition writtenOut(Proposition.WaysToWrite ways, Supplier<Proposition> writing) {
+        synchronized (WRITTEN) {
+            Proposition held = WRITTEN.get(ways);
+            if (held != null) {
+                return held;
+            }
+        }
+        Proposition made = writing.get();
+        synchronized (WRITTEN) {
+            Proposition raced = WRITTEN.putIfAbsent(ways, made);
+            return raced != null ? raced : made;
+        }
     }
 
     /** The proposition equal to {@code made} that is kept, or {@code made}, kept from now on. */

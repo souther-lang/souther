@@ -1,20 +1,28 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.TextExtents;
 
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,6 +42,21 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
                                               ConstantArguments<DeclaredArgument> arguments) {
         return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
                 arguments);
+    }
+
+    /** A length stops at nought because a count does, and at the longest string because that is
+     *  where a String stops: the second is a line of the representation, so the classes of a
+     *  position never draw to it and a reader of what a value can be does. */
+    @Test
+    void aLengthEndsAtTheLongestStringOnlyForAReaderAskingWhatAValueCanBe() {
+        ValueName length = ValueName.Stdlib.operation("String", "length");
+        NumericDomain.Bounds everything = ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(length),
+                ConstantArguments.none());
+
+        assertEquals(atLeast(0), asked(length, ConstantArguments.none()));
+        assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                Endpoint.inclusive(Count.of(TextExtents.LONGEST_STRING))), everything);
     }
 
     private static NumericDomain.Bounds asked(String module, String operation,
@@ -100,6 +123,56 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
                         Endpoint.exclusive(Count.of(4))),
                 asked("Decimal", "toInt", constantAt(1, 3)),
                 "rounding a three lands within one of it, and reaches neither end");
+    }
+
+    /** Where the representation stops is one number the language keeps: an end of it against an
+     *  argument, under a condition or as an equality is not one, and is refused where it is made. */
+    @Test
+    void anEndOfTheRepresentationIsAFixedOrderAndNothingElse() {
+        ResultBound.Origin limit =
+                new ResultBound.Origin.OfTheRepresentation(ResultBound.Limit.LONGEST_STRING);
+
+        assertThrows(IllegalArgumentException.class, () -> new ResultBound<>(
+                new ArgumentRef.At(0), BigDecimal.ZERO, Rel.LE,
+                new ResultBound.Provided.Always<>(), limit));
+        assertThrows(IllegalArgumentException.class, () -> new ResultBound<>(
+                null, BigDecimal.ZERO, Rel.EQ, new ResultBound.Provided.Always<>(), limit));
+        assertThrows(IllegalArgumentException.class, () -> new ResultBound<>(
+                null, BigDecimal.ZERO, Rel.LE,
+                new ResultBound.Provided.ConstantAboveZero<>(new ArgumentRef.At(0)), limit));
+    }
+
+    /** And its number is the language's, so a declaration that writes one is refused when it is
+     *  bound, and not read as if the language had said it. */
+    @Test
+    void aDeclarationOfALimitDoesNotWriteItsNumber() {
+        List<OperationFacts.Declared> gained = new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(ValueName.Stdlib.operation("String", "length"),
+                new OperationFact.BoundsItsResult(new ResultBound<>(null, BigDecimal.TEN,
+                        Rel.LE, new ResultBound.Provided.Always<>(),
+                        new ResultBound.Origin.OfTheRepresentation(
+                                ResultBound.Limit.LONGEST_STRING)))));
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
+
+        assertTrue(refused.getMessage().contains("LONGEST_STRING"), refused.getMessage());
+    }
+
+    /** The ends of a length come from two places and a year's from one: the operation draws the
+     *  lower end of a length, and the representation stops the upper one, while both ends of a year
+     *  are where a date stops. So the operation is not one whose ends are the representation's
+     *  unless every end is. */
+    @Test
+    void whichEndsAreTheRepresentationsIsReadFromTheEndsOneByOne() {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+
+        assertTrue(facts.endsAreWhereTheRepresentationStops(
+                ValueName.Stdlib.operation("Date", "year")));
+        assertFalse(facts.endsAreWhereTheRepresentationStops(
+                ValueName.Stdlib.operation("String", "length")));
+        assertFalse(facts.endsAreWhereTheRepresentationStops(
+                ValueName.Stdlib.operation("Date", "month")));
     }
 
     /** A reader that knows one argument's value and nothing else. The argument is the bound one,

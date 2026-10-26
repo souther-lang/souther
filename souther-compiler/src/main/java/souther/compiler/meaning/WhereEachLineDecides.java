@@ -296,6 +296,7 @@ public final class WhereEachLineDecides {
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> { }
             case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+            case Proposition.OfTheWays ways -> out.addAll(positionsOf(ways.written()));
         }
         return out;
     }
@@ -419,6 +420,7 @@ public final class WhereEachLineDecides {
                     yield first == affine ? stated : new Proposition.Compared(first, holds);
                 }
                 case Proposition.SoManyHold counted -> counted.mapped(this::of);
+                case Proposition.OfTheWays ways -> of(ways.written());
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                      Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
@@ -523,6 +525,7 @@ public final class WhereEachLineDecides {
                             : answers == where.answers() && states == where.states() ? stated
                             : Proposition.whereItAnswers(answers, states);
                 }
+                case Proposition.OfTheWays ways -> of(ways.written());
                 case Proposition.SoManyHold counted -> {
                     List<Proposition> parts = each(counted.statements());
                     yield parts == null ? null : parts == counted.statements() ? stated
@@ -591,6 +594,7 @@ public final class WhereEachLineDecides {
                     yield Proposition.all(ofTheRow);
                 }
                 case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.OfTheWays ways -> some(container, ways.written());
                 // One part, about the element or not; what holds everywhere is about none, and
                 // some element meeting it is the container holding one.
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
@@ -640,6 +644,7 @@ public final class WhereEachLineDecides {
                 case Proposition.WhereItAnswers where ->
                         placesIn(where.answers()) + placesIn(where.states());
                 case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.OfTheWays ways -> placesIn(ways.written());
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                      Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
@@ -762,6 +767,7 @@ public final class WhereEachLineDecides {
                 case Proposition.Always(boolean holds) ->
                         holds ? WhatAStatementComesTo.ALWAYS : WhatAStatementComesTo.NEVER;
                 case Proposition.SoManyHold counted -> comesToCounted(counted, asking);
+                case Proposition.OfTheWays ways -> comesTo(ways.written(), asking);
                 // A part, as it stands in the statement or as what every row meets of the parts
                 // says it: held or denied, it is the part held, asked one way round.
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
@@ -1245,6 +1251,7 @@ public final class WhereEachLineDecides {
             case Proposition.WhereItAnswers where -> statesARelation(where.states());
             case Proposition.SoManyHold counted -> counted.statements().stream()
                     .anyMatch(WhereEachLineDecides::statesARelation);
+            case Proposition.OfTheWays ways -> statesARelation(ways.written());
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1271,6 +1278,7 @@ public final class WhereEachLineDecides {
             }
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(part -> gather(part, parts, leaves));
+            case Proposition.OfTheWays ways -> gather(ways.written(), parts, leaves);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1312,6 +1320,7 @@ public final class WhereEachLineDecides {
             }
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(part -> partsBy(part, answering, where, what));
+            case Proposition.OfTheWays ways -> partsBy(ways.written(), answering, where, what);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1342,7 +1351,8 @@ public final class WhereEachLineDecides {
             case Proposition.LastToHold last -> last.holds();
             case Proposition.OnAnApplication _, Proposition.Always _ -> true;
             case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
-            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _ ->
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
                     throw new IllegalArgumentException(
                             "a part is what a conjunction or a disjunction joins: " + part);
         };
@@ -1688,6 +1698,7 @@ public final class WhereEachLineDecides {
                     assuming(some.ofTheElement(), value, atoms), some.holds());
             case Proposition.SoManyHold counted ->
                     counted.mapped(each -> assuming(each, value, atoms));
+            case Proposition.OfTheWays ways -> assuming(ways.written(), value, atoms);
             case Proposition.InCases _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
@@ -1713,6 +1724,7 @@ public final class WhereEachLineDecides {
                     with(where.answers(), part, holds), with(where.states(), part, holds));
             case Proposition.SoManyHold counted ->
                     counted.mapped(each -> with(each, part, holds));
+            case Proposition.OfTheWays ways -> with(ways.written(), part, holds);
             case Proposition leaf when standsAs(leaf, part) ->
                     new Proposition.Always(leaf.key().equals(part.key()) == holds);
             case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->

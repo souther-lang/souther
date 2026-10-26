@@ -60,6 +60,7 @@ public final class TruthTable {
             case Proposition.Any any -> any.parts().stream().allMatch(part -> partsOf(part, into));
             case Proposition.WhereItAnswers where ->
                     partsOf(where.answers(), into) && partsOf(where.states(), into);
+            case Proposition.OfTheWays ways -> partsOf(ways.written(), into);
             // A count of statements is one part: what holds whichever way it comes out holds
             // whichever way its statements do.
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
@@ -85,6 +86,7 @@ public final class TruthTable {
             // with the statement denied, and comes out that way here as any other part does.
             case Proposition.WhereItAnswers where -> valueOf(where.answers(), parts, assignment)
                     && valueOf(where.states(), parts, assignment);
+            case Proposition.OfTheWays ways -> valueOf(ways.written(), parts, assignment);
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,

@@ -35,6 +35,26 @@ public record ExactParts(BigInteger numerator, BigInteger denominator, long twos
 
     public static final ExactParts ZERO = new ExactParts(BigInteger.ZERO, BigInteger.ONE, 0, 0);
 
+    /**
+     * Written out and not left to the record: {@link ExactArithmetic#compare} asks it first of
+     * every pair, and the generated one goes through a method handle on every call. The exponents
+     * are compared before the integers, since two values that differ mostly differ there.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return this == other || (other instanceof ExactParts parts
+                && twos == parts.twos && fives == parts.fives
+                && numerator.equals(parts.numerator) && denominator.equals(parts.denominator));
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = numerator.hashCode();
+        hash = 31 * hash + denominator.hashCode();
+        hash = 31 * hash + Long.hashCode(twos);
+        return 31 * hash + Long.hashCode(fives);
+    }
+
     public boolean isZero() {
         return numerator.signum() == 0;
     }

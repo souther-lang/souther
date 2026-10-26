@@ -96,6 +96,7 @@ public final class PositionsAStatementReads {
                     .allMatch(this::reads);
             case Proposition.SoManyHold counted -> counted.statements().stream()
                     .allMatch(this::reads);
+            case Proposition.OfTheWays ways -> reads(ways.written());
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }
@@ -105,7 +106,8 @@ public final class PositionsAStatementReads {
             case DecisionAtom.OfTheInput(var term) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _ -> answersNameNothing;
-            case Quantity.OfABinding _, Quantity.HowManyCarried _ -> false;
+            case Quantity.OfABinding _, Quantity.HowManyCarried _, Quantity.TheKeptTotal _ ->
+                    false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(this::reads);
             // A piece of a string is whatever the statement it is read inside says it is, and the

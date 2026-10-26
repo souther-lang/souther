@@ -1283,6 +1283,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,
                      Quantity.IsAmongThePieces _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+                case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             }
         }
         return new TheParts.NotDrawn(stops, beyondTheForm);
@@ -1418,7 +1419,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
                  Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
+                 Proposition.SomeReachable _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         });
@@ -1442,7 +1444,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
-                 WhyUnread.MorePartsThanAreConcluded _,
+                 WhyUnread.MorePartsThanAreConcluded _, WhyUnread.MoreWaysThanAreWrittenOut _,
                  WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
@@ -1664,6 +1666,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     counted.statements().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.WhereItAnswers where ->
                     statesNoRelation(where.answers()) && statesNoRelation(where.states());
+            case Proposition.OfTheWays ways -> statesNoRelation(ways.written());
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.
@@ -2304,15 +2307,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // position takes no value none of them comes to. A side of a line is not asked it: the
         // side runs to an end of the range, and the range ends at a value the declarations leave.
         HeldValues held = of.heldIn(region);
+        // And what the language holds of it, which is no rule and so is in no region: asked of a
+        // level and a side as the run the region leaves is, and drawn into no class.
+        HeldByTheLanguage language = of.heldByTheLanguage();
         return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
-                return extent.extendTo(level);
+                return language.admits(level) && extent.extendTo(level);
             }
 
             @Override
             public boolean holdAt(Level level) {
-                if (held.refuses(level)) {
+                if (held.refuses(level) || !language.admits(level)) {
                     return false;
                 }
                 // Whether a row stands at the value is asked of a value the quantity takes. One
@@ -2343,8 +2349,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 // anything is left. A relation it cannot carry is no proof that nothing is there.
                 Rel past = side == Towards.ABOVE ? (including ? Rel.GE : Rel.GT)
                         : (including ? Rel.LE : Rel.LT);
-                return against(region, level, past)
-                        .map(there -> there.emptiness().isEmpty()).orElse(true);
+                return language.holdsOnSide(level, side, including)
+                        && against(region, level, past)
+                                .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
         };
     }

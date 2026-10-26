@@ -1293,6 +1293,7 @@ final class DemandReading {
                         Optional.of(any)), parts);
             }
             case Proposition.SoManyHold counted -> List.of(counted(counted, read, projection));
+            case Proposition.OfTheWays ways -> projected(ways.written(), read, projection);
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one
@@ -2208,6 +2209,7 @@ final class DemandReading {
                      Quantity.IsAmongThePieces _ -> answered = true;
                 case DecisionAtom.OfTheInput _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+                case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             }
         }
         if (answered) {

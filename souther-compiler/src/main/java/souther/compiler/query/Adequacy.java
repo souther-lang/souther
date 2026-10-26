@@ -23,7 +23,9 @@ import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.partition.RowWriting;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.CaseCandidates;
 import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CaseWay;
 import souther.compiler.partition.CasesTheRowsTook;
@@ -138,9 +140,12 @@ import souther.compiler.inputs.InputUses;
 import souther.compiler.core.Contract;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.types.BindingId;
+import souther.compiler.partition.DecidedCondition;
+import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.KeyOrderCandidates;
 import souther.compiler.partition.FixtureReferences;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.CompositionAccount;
@@ -177,6 +182,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -842,6 +848,20 @@ public final class Adequacy {
 
         @Override
         public Answer<InputDomain> compute(Db db) {
+            return readingWith(db, module, behavior, List.of());
+        }
+
+        /**
+         * The reading the measurement is made against, closed over {@code also} as well as over
+         * what the body and clauses name.
+         *
+         * <p>For a caller that builds a value and measures nothing: the paths a candidate has to
+         * write at, which the enumeration stopped short of. A measurement reads {@link InputsOf}
+         * itself, with no extra path, so the positions it counts do not depend on what anyone
+         * built a value for.
+         */
+        static Answer<InputDomain> readingWith(Db db, String module, String behavior,
+                                               List<TermPath> also) {
             Answer<Hir.SpecBehavior> spec = db.ask(new Bodies.Spec(module, behavior));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
@@ -872,7 +892,7 @@ public final class Adequacy {
                     RuleReadingContext.of(reading.value(), db.ask(new Front.Reading()).value(),
                             db.readings(), Front.dayOf(db)),
                     new Shapes.CountedElsewhere(db),
-                    named.value().demand(),
+                    named.value().demand().and(also),
                     dependenciesOf(spec.value())));
         }
     }
@@ -1464,14 +1484,33 @@ public final class Adequacy {
                 if (analysis == null) {
                     continue;
                 }
-                out.put(spec.name(), souther.compiler.partition.DecisionReading.of(spec.name(),
-                        analysis, readingOf(db, read, reading.value()),
-                        InputReads.ofParametersWhereCallsStand(read.parameterReads(),
-                                read.declared(reading.value()),
-                                ElementBindings.of(analysis, reading.value().newtypes()),
-                                read.dependencies())));
+                out.put(spec.name(), over(db, spec.name(), analysis, read, reading.value(),
+                        souther.compiler.partition.CaseCandidates.NEARBY));
             }
             return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * The decision {@code analysis} states, read under {@code read}, with the ways to the
+         * cases made for {@code candidates}.
+         *
+         * <p>The reading of the input is a parameter so that a search can read the same decision
+         * under a reading closed over more places than the measurement's. What a measure counts
+         * is read under {@link Inputs}, and nothing a search reads is kept in an answer. The rules
+         * come out the same under either: what a reading of more places adds is ways to cases, and
+         * {@code AWiderReadingOfADecisionKeepsItsRulesTest} holds the two to it.
+         */
+        static souther.compiler.partition.DecisionReading over(
+                Db db, String behavior, AnalysisBody analysis, InputDomain read,
+                RuleReadingSource source,
+                souther.compiler.partition.CaseCandidates candidates) {
+            return souther.compiler.partition.DecisionReading.of(behavior, analysis,
+                    readingOf(db, read, source),
+                    InputReads.ofParametersWhereCallsStand(read.parameterReads(),
+                            read.declared(source),
+                            ElementBindings.of(analysis, source.newtypes()),
+                            read.dependencies()),
+                    candidates);
         }
     }
 
@@ -2655,6 +2694,15 @@ public final class Adequacy {
 
         @Override
         public Answer<BodyDivided> compute(Db db) {
+            return over(db, name, behavior, null);
+        }
+
+        /**
+         * The same, divided over {@code builtAgainst} where there is one: the reading a value is
+         * built against, closed over more paths than the measurement's is ({@link InputsOf}).
+         */
+        static Answer<BodyDivided> over(Db db, String name, String behavior,
+                                        InputDomain builtAgainst) {
             // The assembly. What says whether there is anything to divide is the behavior's own
             // signature: a module one of whose declarations did not come out still has behaviors
             // whose boundary was built, and those are divided like any other.
@@ -2685,9 +2733,10 @@ public final class Adequacy {
             if (!(BoundaryForMeasurement.of(sigs.value(), db.ask(new Inputs(name)).value(), spec)
                     instanceof BoundaryForMeasurement.Derived(
                             Sig _, InputForMeasurement.Local(Hir.SpecBehavior _,
-                                    InputDomain domain)))) {
+                                    InputDomain measured)))) {
                 return Answer.absent();
             }
+            InputDomain domain = builtAgainst == null ? measured : builtAgainst;
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Observable(name)).value();
             souther.compiler.coverage.CoverageSites.Plan plan =
@@ -2790,6 +2839,19 @@ public final class Adequacy {
         /** The setting a search of {@code behavior} is made in, or null where nothing builds its
          *  values or nothing places its rows. */
         static SearchSetting settingOf(Db db, String name, String behavior) {
+            return settingOf(db, name, behavior, null);
+        }
+
+        /**
+         * The same, with candidates built against {@code wider}, a reading of the input closed
+         * over more places than the measurement's, where there is one.
+         *
+         * <p>Only what builds a candidate reads the wider input: the probe and the region the
+         * values are chosen from. The placement of a run and everything that judges one stay the
+         * measurement's, so a row built at a path the enumeration stopped short of is judged by
+         * the account that measured the rows already written.
+         */
+        static SearchSetting settingOf(Db db, String name, String behavior, InputDomain wider) {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
@@ -2803,8 +2865,19 @@ public final class Adequacy {
             if (spec == null || sig == null || emitted == null) {
                 return null;
             }
-            InputReading read = inputReadingOf(db, name, spec);
-            MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
+            InputReading read;
+            MeasuredInput subject;
+            if (wider == null) {
+                read = inputReadingOf(db, name, spec);
+                subject = read == null ? null : subjectOf(db, name, spec, read);
+            } else {
+                Answer<RuleReadingSource> source = Shapes.ruleReading(db, name);
+                read = source.present() ? readingOf(db, wider, source.value()) : null;
+                Answer<BodyDivided> divided = read == null ? null
+                        : Dividing.over(db, name, behavior, wider);
+                subject = divided != null && divided.present()
+                        ? MeasuredInput.of(behavior, read, divided.value().geometry()) : null;
+            }
             Coverages.Probe probe = subject == null ? null
                     : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(db, name, trialling(db, name), behavior, sig,
@@ -3500,16 +3573,75 @@ public final class Adequacy {
             }
             CasesTheRowsTook cases = CasesTheRowsTook.of(evidence.read(), setting.taken().inputs(),
                     readingOf(db, domain, source).quantities());
+            // The places the cases looked for ask a row to write at, which the enumeration of the
+            // input stops short of where the type recurses. Candidates are built against a reading
+            // closed over them; what judges a candidate is the measurement's own.
+            Set<TermPath> below = new LinkedHashSet<>();
+            for (CaseOfAStatement each : unseen) {
+                if (each instanceof CaseOfAStatement.Search search) {
+                    // Only a place the measurement's reading has no position at needs a reading of
+                    // its own; where every one is read already, the second reading would be the
+                    // first divided again.
+                    CaseCandidates.OF_THE_SEARCH.placesToBuildFor(search, domain).stream()
+                            .filter(place -> !CaseCandidates.reads(domain, place))
+                            .forEach(below::add);
+                }
+            }
+            InputDomain wider = below.isEmpty() ? null
+                    : InputsOf.readingWith(db, name, behavior, List.copyOf(below)).value();
+            DecisionSearch.SearchSetting widerSetting = wider == null ? null
+                    : DecisionSearch.settingOf(db, name, behavior, wider);
+            AnalysisBody analysis = widerSetting == null ? null
+                    : db.ask(new Bodies.Observable(name)).value().analysisBodies().get(behavior);
+            boolean widened = analysis != null;
+            DecisionSearch.SearchSetting building = widened ? widerSetting : setting;
+            // The ways to the cases are read off the decision under the reading they are built
+            // against: a reading that stops where the type returns to itself holds no place below
+            // the first level, and cannot say what a row has to be there. Where the wider reading
+            // could not be made the cases that ask for it find nothing, as a case the reading has
+            // no words for does, and the rest are searched as before.
+            DecisionReading ways = widened
+                    ? DecisionReadings.over(db, behavior, analysis, wider, source,
+                            CaseCandidates.OF_THE_SEARCH)
+                    : evidence.read();
+            // A row is judged against the rules the measurement placed the rows in, so a way is
+            // taken only to a rule the measured reading has too. The two readings state the same
+            // rules ({@code AWiderReadingOfADecisionKeepsItsRulesTest}); where one did not, the
+            // way to it is not offered rather than judged against a rule that is none of those
+            // the rows were placed at.
+            Set<DecisionRule> measuredRules = new HashSet<>(evidence.read().rules());
             Map<CaseOfAStatement, RowToRun> out = new LinkedHashMap<>();
-            for (DecisionReading.Stated stated : evidence.read().stated()) {
+            for (DecisionReading.Stated stated : ways.stated()) {
+                if (!measuredRules.contains(stated.rule())) {
+                    continue;
+                }
                 for (DecisionReading.Ruled each : stated.occurrences()) {
                     for (CaseWay way : each.caseWays()) {
                         if (!unseen.contains(way.which()) || out.containsKey(way.which())) {
                             continue;
                         }
-                        RowToRun row = whatACaseFinds(each, way, setting, cases);
+                        // The way to the rule and what the case asks of the row on top of it: for
+                        // a step of a search the row is composed to the node, and for an order
+                        // the row is composed with the entry looked up there and then written
+                        // again with its key held twice.
+                        RowToRun row = way.which() instanceof CaseOfAStatement.KeyOrder order
+                                ? whatAKeyOrderFinds(each, each.statesToACase(way), order, setting,
+                                        building, cases)
+                                : whatACaseFinds(each, way, setting, building, cases);
                         if (row != null) {
                             out.put(way.which(), row);
+                        }
+                    }
+                    // An order the reading could not say an entry of is looked for on the way to
+                    // the rule alone.
+                    for (CaseOfAStatement owed : unseen) {
+                        if (owed instanceof CaseOfAStatement.KeyOrder order
+                                && !out.containsKey(order) && consultsAsTheCaseHas(each, order)) {
+                            RowToRun row = whatAKeyOrderFinds(each, each.states(), order, setting,
+                                    building, cases);
+                            if (row != null) {
+                                out.put(order, row);
+                            }
                         }
                     }
                 }
@@ -3517,15 +3649,99 @@ public final class Adequacy {
             return Answer.of(Ordered.map(out));
         }
 
+        /** Whether the run read ran and was placed at {@code ruled}'s rule: the part of being
+         *  evidence of a case that is the same for every kind of case. */
+        private static boolean ranAtTheRule(DecisionSearch.SearchSetting setting, RowAsRead read,
+                                            DecisionReading.Ruled ruled) {
+            return read.watched() instanceof Generator.Watched.Ran
+                    && setting.taken().takenBy(read.asRun())
+                            instanceof RulesTaken.WhichRule.TookThis took
+                    && took.rule().equals(ruled.rule());
+        }
+
+        /**
+         * Whether the rule consults the statement of {@code order} and has it come out the way the
+         * case has it: holding where the last element decides it to, failing where it does.
+         */
+        private static boolean consultsAsTheCaseHas(DecisionReading.Ruled ruled,
+                                                    CaseOfAStatement.KeyOrder order) {
+            boolean holds = order.way() == CaseOfAStatement.Way.HOLDS_BY_THE_LAST;
+            return ruled.rule().consulted().entrySet().stream().anyMatch(each ->
+                    each.getKey() instanceof DecisionCondition.AStatement(var stated)
+                            && stated.equals(order.statement())
+                            && each.getValue() instanceof DecidedCondition.Held(var _, boolean held)
+                            && held == holds);
+        }
+
+        /**
+         * A row for the order of a repeated key: composed to stand at {@code ruled}, then written
+         * again with the key held twice ({@link KeyOrderCandidates}), whose run was placed at the
+         * rule and was evidence of the case; null where none was.
+         *
+         * <p>The rewrite is asked inside the walk that composes the rows, as the case of a search
+         * is: a row that stands at the rule but has nothing to hold a key twice in, or is no row
+         * whose rewrite decides the statement, is passed over for the next the walk composes.
+         */
+        private static RowToRun whatAKeyOrderFinds(DecisionReading.Ruled ruled,
+                                                   WayToTheBorder states,
+                                                   CaseOfAStatement.KeyOrder order,
+                                                   DecisionSearch.SearchSetting setting,
+                                                   DecisionSearch.SearchSetting building,
+                                                   CasesTheRowsTook cases) {
+            if (!(souther.compiler.partition.Reachability.of(states, building.declared())
+                    instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
+                return null;
+            }
+            RowWriting writing = building.probe().rowWriting();
+            Optional<KeyOrderCandidates> rewriting =
+                    KeyOrderCandidates.of(order, writing.subject().inputs());
+            if (rewriting.isEmpty()) {
+                return null;
+            }
+            RowToRun[] found = new RowToRun[1];
+            Generator.RowJudge rewrittenIntoTheCase = row -> {
+                RowAsRead read = setting.probe().read(row);
+                if (!ranAtTheRule(setting, read, ruled)) {
+                    return false;
+                }
+                Iterator<RowToRun> candidates = rewriting.get()
+                        .refining(row, read.asRun().inputs(), writing).iterator();
+                while (candidates.hasNext()) {
+                    RowToRun candidate = candidates.next();
+                    RowAsRead ran = setting.probe().read(candidate);
+                    if (ranAtTheRule(setting, ran, ruled)
+                            && cases.casesSeenBy(ran.asRun(), ruled.rule()).contains(order)) {
+                        found[0] = candidate;
+                        return true;
+                    }
+                }
+                return false;
+            };
+            for (souther.compiler.partition.Reachability.Reaching along
+                    : reaching.waysToTryForARow()) {
+                building.probe().attempt("a case of a statement of the decision", Map.of(),
+                        NumbersAskedFor.ANYTHING, along, ruled.demands(),
+                        Optional.of(rewrittenIntoTheCase));
+                if (found[0] != null) {
+                    return found[0];
+                }
+            }
+            return null;
+        }
+
         /**
          * A row composed for the way to {@code ruled} and what {@code way} asks of the node, whose
          * run was placed at the rule and was evidence of the case; null where none was.
+         *
+         * @param setting  what judges a row: the measurement's own
+         * @param building what builds one, which reads the places the cases ask a row to write at
          */
         private static RowToRun whatACaseFinds(DecisionReading.Ruled ruled, CaseWay way,
                                                DecisionSearch.SearchSetting setting,
+                                               DecisionSearch.SearchSetting building,
                                                CasesTheRowsTook cases) {
             if (!(souther.compiler.partition.Reachability.of(ruled.statesToACase(way),
-                    setting.declared())
+                    building.declared())
                     instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
                 return null;
             }
@@ -3535,14 +3751,12 @@ public final class Adequacy {
             // assignment of the values below.
             Generator.RowJudge inTheCase = row -> {
                 RowAsRead read = setting.probe().read(row);
-                return read.watched() instanceof Generator.Watched.Ran
-                        && setting.taken().takenBy(read.asRun())
-                                instanceof RulesTaken.WhichRule.TookThis took
-                        && took.rule().equals(ruled.rule())
+                return ranAtTheRule(setting, read, ruled)
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
-            for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
-                for (Generator.BoundaryAttempt made : setting.probe().attempt(
+            for (souther.compiler.partition.Reachability.Reaching along
+                    : reaching.waysToTryForARow()) {
+                for (Generator.BoundaryAttempt made : building.probe().attempt(
                         "a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
                         Optional.of(inTheCase))) {
@@ -3759,6 +3973,11 @@ public final class Adequacy {
                 // refused, and neither of them says the row cannot be written.
                 return List.of();
             }
+        }
+
+        @Override
+        public souther.compiler.partition.RowWriting rowWriting() {
+            return new souther.compiler.partition.RowWriting(subject, checkAgainst(building, sig));
         }
 
         @Override
@@ -4526,8 +4745,8 @@ public final class Adequacy {
                 // all, and is spelled there rather than here — a boolean lifted at the boundary it
                 // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), subject, observed,
-                        ItemAssessment.WritabilityProjection.ofReading(
-                                partitioning.edgeIsKnownWritable(axis.term())), put,
+                        line -> ItemAssessment.WritabilityProjection.ofReading(
+                                partitioning.edgeIsKnownWritable(axis.term(), line)), put,
                         partitioning.reaching()));
             }
             out.addAll(Coverages.assessBetween(subject, observed, put,
@@ -5599,8 +5818,15 @@ public final class Adequacy {
                     || RowReadings.readingFor(byTarget, behavior).someRowsUnseen()) {
                 return List.of();
             }
+            BehaviorInputs inputs = inputsOf(db, name, behavior);
             return evidence.took().made().orElseThrow().unseenCases().stream()
-                    .filter(CaseOfAStatement::canBeLookedFor).toList();
+                    .filter(each -> switch (each) {
+                        case CaseOfAStatement.Search search -> search.canBeLookedFor();
+                        // Asked of the plan the rewrite is made by, so that a case offered is a
+                        // case the rewrite can write a row for.
+                        case CaseOfAStatement.KeyOrder order -> inputs != null
+                                && KeyOrderCandidates.canRewrite(order, inputs);
+                    }).toList();
         }
 
         /**

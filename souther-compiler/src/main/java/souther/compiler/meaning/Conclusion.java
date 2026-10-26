@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ModelOccurrence;
 
@@ -43,6 +44,26 @@ public final class Conclusion {
      */
     private static final CompositionBudget PARTS = CompositionBudget.PARTS_A_DERIVATION_CONCLUDES;
 
+    /**
+     * How many ways of keeping elements a statement over them is written out from
+     * ({@link CompositionBudget#WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER}), read here and nowhere
+     * else.
+     */
+    private static final CompositionBudget WAYS =
+            CompositionBudget.WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER;
+
+    /**
+     * The most ways that are written out where a statement over them is concluded. A statement
+     * over more is held as what its cases are written out from, and written out where a reader
+     * asks for them.
+     */
+    private static final long WRITTEN_AT_ONCE = 64;
+
+    /** Whether the cases of a statement over {@code kept} are written out where it is concluded. */
+    static boolean writtenAtOnce(KeptWays kept) {
+        return kept.work(kept.undecided(), WRITTEN_AT_ONCE + 1, false) <= WRITTEN_AT_ONCE;
+    }
+
     /** What every concluding made from one by supposing more shares: where, the numbering, and
      *  what each step came to. */
     private static final class Shared {
@@ -56,6 +77,9 @@ public final class Conclusion {
          *  held at one past it. By identity, since a part held twice is one statement counted
          *  twice wherever it is held. */
         private final Map<Proposition, Long> parts = new IdentityHashMap<>();
+        /** Where the numbers a statement over the ways is owed start, by what it is written out
+         *  from, so that the statement met again here is owed the same ones. */
+        private final Map<String, Long> reserved = new HashMap<>();
         /** The figure parts are counted up to, and held at one past. */
         private final long mostParts;
         private int unread;
@@ -129,11 +153,7 @@ public final class Conclusion {
         } finally {
             read = shared.reading.pop();
         }
-        // Counted as each step is concluded, so the steps it is made of are each within the figure
-        // already and what is kept of it — here and by whoever asks again — is the step given up.
-        if (partsIn(out) > PARTS.maximum()) {
-            out = unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false));
-        }
+        out = withinTheParts(out);
         if (shared.reusing) {
             Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
             read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
@@ -143,6 +163,151 @@ public final class Conclusion {
         readAll(read);
         shared.last.put(step, out);
         return out;
+    }
+
+    /**
+     * {@code out}, or the step given up where it comes to more parts than a step is concluded
+     * with.
+     *
+     * <p>Counted as each step is concluded, so the steps it is made of are each within the figure
+     * already and what is kept of it — here and by whoever asks again — is the step given up.
+     */
+    private Proposition withinTheParts(Proposition out) {
+        return pastTheParts(out)
+                ? unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))
+                : out;
+    }
+
+    /** Whether {@code stated} comes to more parts than a step is concluded with. */
+    private boolean pastTheParts(Proposition stated) {
+        return partsIn(stated) > PARTS.maximum();
+    }
+
+    /**
+     * What a comparison over the ways its elements are kept states: every way written out where
+     * there are few, and otherwise held as what its cases are written out from
+     * ({@link Proposition.OfTheWays}), with the conditions and the reading concluded now.
+     *
+     * <p>How many ways there are is what writing them out costs, and not how many parts they come
+     * to, which the ways written out say: alike, they come to a few. So it is the work that is
+     * bounded here, and what the cases come to is counted as they are written out. Past the
+     * figure they are not written out, and the statement is a part nothing read.
+     */
+    Proposition overTheWays(Derivation.WaysWrittenWhenAsked ways) {
+        KeptWays kept = ways.kept();
+        long cases = kept.work(kept.undecided(), WAYS.maximum() + 1, false);
+        if (cases > WAYS.maximum()) {
+            return unread(new Derivation.Stopped(new WhyUnread.MoreWaysThanAreWrittenOut(),
+                    ways.fixed()));
+        }
+        if (writtenAtOnce(kept)) {
+            return of(ways.ways());
+        }
+        Map<Integer, Proposition> conditions = new HashMap<>();
+        ways.conditions().forEach((truth, condition) -> conditions.put(truth, of(condition)));
+        Proposition reading = of(ways.reading());
+        long owed = numbersOwed(cases);
+        String spelled = new Proposition.WaysToWrite(kept, conditions, reading, ways.forms(),
+                ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where, 0, owed)
+                .spelled();
+        Long first = shared.reserved.get(spelled);
+        if (first == null) {
+            first = (long) shared.unread;
+            shared.unread += (int) owed;
+            shared.reserved.put(spelled, first);
+        }
+        return new Proposition.OfTheWays(new Proposition.WaysToWrite(kept, conditions, reading,
+                ways.forms(), ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where,
+                first, owed), true);
+    }
+
+    /**
+     * How many numbers the cases of {@code cases} ways are written out with at the most. A part
+     * nothing read is made at a way, where a number of it cannot be held, or at a step that joins
+     * two ways, where it comes to more parts than a step is concluded with; never twice at one.
+     * The steps are a tree whose every step joins two, so there is one fewer of them than there
+     * are ways.
+     */
+    private static long numbersOwed(long cases) {
+        return 2 * cases - 1;
+    }
+
+    /**
+     * The cases of a statement over the ways, written out from what it is held as: every way,
+     * decided in turn, with the totals it makes given to the reading.
+     *
+     * <p>Each part nothing read the cases come to is numbered from where the statement was
+     * concluded to be owed them, so the cases are the same however often and by whoever they are
+     * written out, and none of them is numbered as a part that is concluded beside the statement.
+     * Counted as each step of them is, as a step of a derivation is concluded.
+     */
+    static Proposition writtenOutOver(Proposition.WaysToWrite ways) {
+        Conclusion at = new Conclusion(new Shared(ways.where(), false), Map.of());
+        at.shared.unread = (int) ways.firstNumber();
+        KeptWays kept = ways.kept();
+        Proposition written = writtenOutBy(at, ways, kept);
+        if (at.shared.unread > ways.firstNumber() + ways.numbersOwed()) {
+            throw new IllegalStateException("the cases of ways were written out with more numbers"
+                    + " than they were owed: " + (at.shared.unread - ways.firstNumber()) + " of "
+                    + ways.numbersOwed());
+        }
+        return written;
+    }
+
+    /**
+     * The cases, or the one part nothing read they are given up as where a step of them past the
+     * figure is needed to say what they come to.
+     *
+     * <p>A step past the figure stands as a part nothing read while it is joined on, so that a
+     * step above it that does not need it — one whose condition decides against it — is joined as
+     * it would have been. The cases are one step, though, and a part nothing read that stands
+     * for each step past the figure that is still needed would be told of once for each: the
+     * step above a given-up one is small again, so the cases would hold as many of them as there
+     * are such steps. Where one is still there when the cases are joined, the cases are given up
+     * as that one part.
+     */
+    private static Proposition writtenOutBy(Conclusion at, Proposition.WaysToWrite ways,
+                                            KeptWays kept) {
+        Set<Integer> givenUp = new HashSet<>();
+        Proposition[] first = new Proposition[1];
+        Proposition written = kept.made(new KeptWays.Making<Proposition>() {
+            @Override
+            public Proposition split(int truth, Proposition where, Proposition otherwise) {
+                Proposition joined = Derivation.IfThenElse.joined(
+                        ways.conditions().get(truth), where, otherwise);
+                if (!at.pastTheParts(joined)) {
+                    return joined;
+                }
+                Proposition.Unread past = (Proposition.Unread) at.unread(new Derivation.Stopped(
+                        new WhyUnread.MorePartsThanAreConcluded(), false));
+                givenUp.add(past.ordinal());
+                if (first[0] == null) {
+                    first[0] = past;
+                }
+                return past;
+            }
+
+            @Override
+            public Proposition leaf(Boolean[] decided) {
+                return Derivation.WithTheTotalsOfAWay.stated(at, ways.reading(),
+                        ways.sum(), kept.thereOf(ways.forms(), decided), ways.count(),
+                        kept.countThere(ways.forms().size(), ways.counted(), decided),
+                        ways.fixed());
+            }
+        }, kept.undecided());
+        return givenUp.isEmpty() || !stands(written, givenUp) ? written : first[0];
+    }
+
+    /** Whether a part nothing read numbered as one of {@code numbers} stands in {@code stated}. */
+    private static boolean stands(Proposition stated, Set<Integer> numbers) {
+        return stated instanceof Proposition.Unread unread
+                ? numbers.contains(unread.ordinal())
+                : stated.partsHeld().stream().anyMatch(part -> stands(part, numbers));
+    }
+
+    /** A part nothing read, for a number of a way that cannot be held. */
+    Proposition numberNotHeld(UnheldNumber why, boolean fixed) {
+        return unread(new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
     }
 
     /**
@@ -169,6 +334,12 @@ public final class Conclusion {
         if (known != null) {
             return known;
         }
+        // A statement held as how it is written out is one part until it is written out, and is
+        // counted against the figure then, as the step that writes it out concludes it.
+        if (stated instanceof Proposition.OfTheWays) {
+            shared.parts.put(stated, 1L);
+            return 1;
+        }
         // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
         // number walks as much as a part.
         long out = 1 + partsIn(stated.partsHeld()) + switch (stated) {
@@ -188,7 +359,7 @@ public final class Conclusion {
                  Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.Unread _,
                  Proposition.Carried _, Proposition.SoManyHold _,
-                 Proposition.WhereItAnswers _ -> 0;
+                 Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> 0;
         };
         long kept = Math.min(out, shared.mostParts + 1L);
         shared.parts.put(stated, kept);
@@ -223,7 +394,7 @@ public final class Conclusion {
                     partsIn(among.value()) + partsIn(among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                  DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
-                 Quantity.OfABinding _,
+                 Quantity.OfABinding _, Quantity.TheKeptTotal _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
                  Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
                  Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,

@@ -19,6 +19,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WaysSamples;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
@@ -288,6 +289,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
                 .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
                 List.of(1)));
+        out.put("the cases of the ways of keeping", WaysSamples.over(truth));
         TermPath node = TermPath.of("t");
         out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
                 List.of("below"), new Proposition.Compared(new Relation.Affine(

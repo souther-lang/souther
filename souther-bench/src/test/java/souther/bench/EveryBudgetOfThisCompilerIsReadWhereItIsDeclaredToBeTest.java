@@ -746,11 +746,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // What a step of a reading concludes, written out. Past the figure the step is
             // concluded as a part nothing read, naming it.
             Map.entry("souther.compiler.meaning.Conclusion#<clinit>()V",
-                    "how many parts a step of a reading is concluded with"),
-            Map.entry("souther.compiler.meaning.Conclusion#of("
-                            + "Lsouther/compiler/meaning/Derivation;)"
+                    "how many parts a step of a reading is concluded with, and how many ways of"
+                            + " keeping elements a statement over them is written out from"),
+            Map.entry("souther.compiler.meaning.Conclusion#pastTheParts("
+                            + "Lsouther/compiler/meaning/Proposition;)Z",
+                    "past the figure the step is concluded as a part nothing read, naming it, and"
+                            + " the cases of ways of keeping are given up whole as one"),
+            // The ways a comparison over the elements a filter keeps is made in: counted where the
+            // statement over them is concluded, and past the figure they are not written out.
+            Map.entry("souther.compiler.meaning.Conclusion#overTheWays("
+                            + "Lsouther/compiler/meaning/Derivation$WaysWrittenWhenAsked;)"
                             + "Lsouther/compiler/meaning/Proposition;",
-                    "past the figure concludes the step as a part nothing read, naming it"),
+                    "past the figure carries the statement out as a part nothing read, naming it"),
             // Where one line of a statement of several decides: the statement read, its cases
             // taken apart, and each asked whether rows stand on both sides of the line. Past any
             // of the figures the line is one where it decides was not worked out, naming the
@@ -939,7 +946,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.DecisionReading#of("
                             + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"
-                            + "Lsouther/compiler/inputs/InputReads;)"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/partition/CaseCandidates;)"
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
 

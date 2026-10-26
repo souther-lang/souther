@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
@@ -1072,6 +1073,7 @@ public sealed interface BorderQuantity
                             ? "== " + counted.admitted().getFirst()
                             : "in " + counted.admitted());
                 }
+                case Proposition.OfTheWays ways -> said(ways.written());
                 case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                      Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Carried _,
@@ -1084,6 +1086,7 @@ public sealed interface BorderQuantity
         private static String grouped(Proposition part) {
             return switch (part) {
                 case Proposition.All _, Proposition.Any _ -> "(" + said(part) + ")";
+                case Proposition.OfTheWays ways -> grouped(ways.written());
                 // A count is written as a comparison, which binds tighter than a join.
                 case Proposition.SoManyHold _, Proposition.Always _, Proposition.Some _,
                      Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
@@ -1888,6 +1891,16 @@ public sealed interface BorderQuantity
     /** What a count of elements runs between: none at the least, and no most it is told. */
     NumericDomain.Bounds NONE_OR_MORE = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
             null);
+
+    /**
+     * What the language holds of this quantity whatever the rules leave it: a form is its terms
+     * weighed, each held to what the language holds of it.
+     */
+    default HeldByTheLanguage heldByTheLanguage() {
+        return this instanceof LinearQuantity form
+                ? new HeldByTheLanguage(RepresentationBounds.ofAForm(form.direction()))
+                : HeldByTheLanguage.NOWHERE;
+    }
 
     /** What {@code region} leaves this quantity, or that it leaves it nothing. */
     default NumericDomain.FormProjection projectedIn(SearchRegion region) {
