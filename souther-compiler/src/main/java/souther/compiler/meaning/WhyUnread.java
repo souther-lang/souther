@@ -46,6 +46,10 @@ public sealed interface WhyUnread {
     /** A part whose step states more parts, written out, than a step is concluded with. */
     WhyUnread PAST_THE_PARTS = new MorePartsThanAreConcluded();
 
+    /** A part whose statement is over more ways of keeping than are written out to find what it
+     *  comes to. */
+    WhyUnread PAST_THE_WAYS = new MoreWaysThanAreWrittenOut();
+
     /** A part about a container holding more than a walk writes out. */
     WhyUnread PAST_THE_ELEMENTS = new MoreElementsThanAreWrittenOut();
 
@@ -70,6 +74,8 @@ public sealed interface WhyUnread {
                     Optional.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.figure());
             case MorePartsThanAreConcluded _ ->
                     Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
+            case MoreWaysThanAreWrittenOut _ ->
+                    Optional.of(CompositionBudget.WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER.figure());
             case MoreElementsThanAreWrittenOut _ -> Optional.of(
                     WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(ElementsWrittenOut.MOST_WALKED));
             case AtNoPosition _, NoMeasureOfItsSize _, OutsideTheLinearFragment _,
@@ -322,6 +328,17 @@ public sealed interface WhyUnread {
      * one another, however few readings it was made of.
      */
     record MorePartsThanAreConcluded() implements WhyUnread {}
+
+    /**
+     * A step of the reading whose statement is over more ways of keeping the elements of a
+     * container than are written out to find what it comes to. A figure of this compiler's work
+     * was reached, and nothing is said of the model.
+     *
+     * <p>Not {@link MorePartsThanAreConcluded}: that one says what the statement came to, and
+     * this says it was not written out to be counted. Ways that all state alike come to a few
+     * parts however many they are, so the number of ways says nothing of how many parts there are.
+     */
+    record MoreWaysThanAreWrittenOut() implements WhyUnread {}
 
     /**
      * A part about a container holding more occurrences than a walk writes out, counted at every

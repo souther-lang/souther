@@ -215,7 +215,8 @@ public final class ReportedReason {
             // line on.
             case BlockReason.WhatItStatesIsNoLine(var why) -> switch (why) {
                 case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
-                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_WAYS_THAN_ARE_WRITTEN_OUT,
+                     MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
                      A_PART_NOT_READ ->
                         UndividedPosition.Reason.RULE_MEANING_NOT_READ;
                 case A_NUMBER_NO_POSITION_HOLDS ->

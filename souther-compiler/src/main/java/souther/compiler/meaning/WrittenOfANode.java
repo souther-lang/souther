@@ -69,6 +69,7 @@ public final class WrittenOfANode {
                     applications.each().stream().allMatch(this::reads);
             case Proposition.SoManyHold counted -> counted.statements().stream()
                     .allMatch(this::reads);
+            case Proposition.OfTheWays ways -> reads(ways.written());
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }
@@ -78,7 +79,8 @@ public final class WrittenOfANode {
             case DecisionAtom.OfTheInput(NumericTerm term) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _ -> false;
+                 Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _,
+                 Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> reads(count.container())
                     && reads(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream().allMatch(this::reads);

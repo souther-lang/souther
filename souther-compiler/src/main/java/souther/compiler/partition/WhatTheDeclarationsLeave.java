@@ -142,6 +142,7 @@ public final class WhatTheDeclarationsLeave {
                     some(applications.each(), want, read);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches the declarations written out as its choices: " + stated);
+            case Proposition.OfTheWays ways -> answer(ways.written(), want, read);
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();

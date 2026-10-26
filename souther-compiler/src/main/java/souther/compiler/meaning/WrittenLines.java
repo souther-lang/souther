@@ -363,6 +363,7 @@ public final class WrittenLines {
             // them holds it.
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(one -> gather(one, into));
+            case Proposition.OfTheWays ways -> gather(ways.written(), into);
             case Proposition.SomeReachable reachable -> {
                 gather(reachable.atANode(), into);
                 reachable.noneBelow().ifPresent(none -> gather(none, into));
@@ -394,6 +395,8 @@ public final class WrittenLines {
             case Derivation.ItDeparted(var clauses, var _) -> clauses;
             case Derivation.OneOfItsArms(var arms) -> ofTheArms(arms);
             case Derivation.AComparisonOfAChoice(var cases) -> List.of(cases);
+            case Derivation.WithTheTotalsOfAWay leaf -> List.of(leaf.reading());
+            case Derivation.WaysWrittenWhenAsked ways -> ways.premises();
             case Derivation.AnOperationsCases(var _, var cases) -> ofTheArms(cases);
             case Derivation.ASizeInCases(var _, var cases) -> ofTheArms(cases);
             case Derivation.HeldAgainstAWrittenTruth(var truth, var _) -> List.of(truth);

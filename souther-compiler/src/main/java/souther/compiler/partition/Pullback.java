@@ -80,6 +80,7 @@ import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.GivenTotals;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.HowTheElementsAreAsked;
 import souther.compiler.meaning.PieceDemand;
@@ -133,6 +134,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -298,6 +300,7 @@ final class Pullback {
                 case Proposition.SoManyHold counted ->
                         counted.statements().forEach(each -> partsOf(each, into));
                 case Proposition.Some some -> partsOf(some.ofTheElement(), into);
+                case Proposition.OfTheWays ways -> partsOf(ways.written(), into);
                 case Proposition.WhereItAnswers where -> {
                     partsOf(where.answers(), into);
                     partsOf(where.states(), into);
@@ -7423,6 +7426,9 @@ final class Pullback {
      * each way the sum of the elements that way keeps. An element that composes into no form stops
      * only the ways that keep it.
      *
+     * <p>Where the comparison is read over the totals as quantities of their own and states
+     * relations of them ({@link #keptOnceFor}), it is read once and each way is given its totals.
+     *
      * @param reads where the reading being split stands, which counts the readings it is one of
      * @param at    where what is read again is a part of a larger condition, or null
      * @param fixed whether its answer is the same on every run
@@ -7430,6 +7436,13 @@ final class Pullback {
     private Derivation keepingOf(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
                                  boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
+        Derivation once = total.counted()
+                ? (keptReading == null ? null : countInTheReading(total, again))
+                : (keptReading == null && truthsDecided.isEmpty()
+                        ? keptOnceFor(total, reads, at, fixed, again) : null);
+        if (once != null) {
+            return once;
+        }
         WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
         Boolean[] decided = alreadyDecided(ways);
         // The elements the leaves of the tree read, as a total of elements kept by nothing reads
@@ -7441,6 +7454,187 @@ final class Pullback {
         }
         return new Derivation.AComparisonOfAChoice(
                 keptAs(total, ways, decided, new Derivation[ways.truthCount()], at, fixed, again));
+    }
+
+    /**
+     * The reading of a comparison over the totals of the elements a way keeps, made once for all
+     * the ways ({@link #keptOnceFor}): which count it met while it was read, and whether it met
+     * more than it can give a way.
+     */
+    private static final class KeptReading {
+        private final int number;
+        private List<ReadMeaning.Occurrence> counted;
+        private Quantity.TheKeptTotal count;
+        private boolean refused;
+
+        private KeptReading(int number) {
+            this.number = number;
+        }
+    }
+
+    /** The reading of a comparison over totals that is being made, or null. */
+    private KeptReading keptReading;
+
+    private int keptReadings;
+
+    /**
+     * {@code again} read once with the total {@code total} adds up to standing as a quantity of
+     * its own, and the count of the elements a way keeps that the reading meets standing as
+     * another, and each way of keeping given what it makes of them
+     * ({@link Derivation.WithTheTotalsOfAWay}) — or null where the comparison is not one that can
+     * be, and is read once for each way.
+     *
+     * <p>A comparison reads the same in every way but for what the totals are, so reading it for
+     * each way reads it again and again. It can be given them where every element composes into a
+     * form, so that a way's total is a sum of forms, and where what is read states relations of
+     * the totals and their joins and nothing else ({@link GivenTotals#canBeGiven}).
+     *
+     * <p>Charged as a leaf for each way and a reading for each element, which each is read once
+     * for all of them.
+     */
+    private Derivation keptOnceFor(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
+                                   boolean fixed,
+                                   Function<UnaryOperator<InputReads>, Derivation> again) {
+        List<LinearForm<Quantity>> forms = formsOfTheKept(total);
+        if (forms == null) {
+            return null;
+        }
+        KeptReading reading = new KeptReading(++keptReadings);
+        Quantity.TheKeptTotal sum = new Quantity.TheKeptTotal(reading.number, false);
+        AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
+                LinearForm.atom(sum));
+        ElementsMet metBefore = elementsMet.copied();
+        aggregatesInACase.add(standing);
+        keptReading = reading;
+        Derivation read;
+        try {
+            read = again.apply(on -> on);
+        } finally {
+            keptReading = null;
+            aggregatesInACase.remove(standing);
+            elementsMet = metBefore;
+        }
+        if (reading.refused || read == null
+                || !GivenTotals.canBeGiven(new Conclusion(Optional.empty()).of(read))) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> every = new ArrayList<>(total.occurrences());
+        if (reading.counted != null) {
+            every.addAll(reading.counted);
+        }
+        WaysOfKeeping ways = new WaysOfKeeping(every);
+        Boolean[] decided = ways.undecided();
+        // What is made here is the reading, a condition for each truth and a form for each
+        // element; the cases are made where a reader asks for them. Where the reading is one of
+        // several, one for each application of a closure, what each is asked for is its cases, and
+        // the readings are held to them.
+        Denotation splitting = new Denotation(total.call(), total.at());
+        long made = 1L + ways.truthCount() + forms.size();
+        WhyUnread past = readingsASplitIsOneOf(reads, splitting) > 1
+                ? splitInto(reads, limit -> ways.work(decided, limit, true), splitting)
+                : splitInto(reads, limit -> Math.min(limit, made), splitting);
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, fixed));
+        }
+        Derivation[] conditions = new Derivation[ways.truthCount()];
+        conditionsOf(ways, decided, conditions);
+        Map<Integer, Derivation> deciding = new HashMap<>();
+        Map<Integer, ConstructOccurrence> madeAt = new HashMap<>();
+        for (int truth = 0; truth < conditions.length; truth++) {
+            if (conditions[truth] != null) {
+                deciding.put(truth, conditions[truth]);
+                ConstructOccurrence constructed = occurrenceMadeBy(ways.truth(truth).value());
+                if (constructed != null) {
+                    madeAt.put(truth, constructed);
+                }
+            }
+        }
+        int counted = reading.counted == null ? 0 : reading.counted.size();
+        return new Derivation.WaysWrittenWhenAsked(ways.kept(), deciding, read, forms, sum,
+                Optional.ofNullable(reading.count), counted, madeAt, fixed);
+    }
+
+    /**
+     * What the elements of {@code total} come to as forms, in the order they are written, or null
+     * where one composes into none.
+     */
+    private List<LinearForm<Quantity>> formsOfTheKept(Inside.ATotalByKeeping total) {
+        ElementsMet metBefore = elementsMet.copied();
+        try {
+            List<LinearForm<Quantity>> forms = new ArrayList<>();
+            for (ReadMeaning.Occurrence occurrence : total.occurrences()) {
+                Denotation element = occurrence.value();
+                if (!(AffineForms.outcome(element.value(), element.at(), quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> form))) {
+                    return null;
+                }
+                forms.add(form);
+            }
+            return forms;
+        } finally {
+            elementsMet = metBefore;
+        }
+    }
+
+    /**
+     * The count of the elements a way keeps, met while a comparison over totals is read
+     * ({@link #keptOnceFor}): read with the count standing as a quantity of its own, or null
+     * where the reading has met another count, which is then given no ways.
+     */
+    private Derivation countInTheReading(Inside.ATotalByKeeping total,
+                                         Function<UnaryOperator<InputReads>, Derivation> again) {
+        if (keptReading.counted != null && !keptReading.counted.equals(total.occurrences())) {
+            keptReading.refused = true;
+            return null;
+        }
+        if (keptReading.counted == null) {
+            keptReading.counted = total.occurrences();
+            keptReading.count = new Quantity.TheKeptTotal(keptReading.number, true);
+        }
+        AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
+                LinearForm.atom(keptReading.count));
+        ElementsMet metBefore = elementsMet.copied();
+        aggregatesInACase.add(standing);
+        try {
+            return again.apply(on -> on);
+        } finally {
+            aggregatesInACase.remove(standing);
+            elementsMet = metBefore;
+        }
+    }
+
+    /**
+     * What each truth that decides a way states, read once, in the order the ways meet the truths:
+     * the ways are walked down to where every truth has been met, which is the reading each
+     * condition is owed under the truths decided before it.
+     */
+    private void conditionsOf(WaysOfKeeping ways, Boolean[] decided, Derivation[] conditions) {
+        if (Arrays.stream(conditions).allMatch(Objects::nonNull)) {
+            return;
+        }
+        int next = ways.nextEvaluated(decided);
+        if (next < 0) {
+            return;
+        }
+        if (conditions[next] == null) {
+            Denotation truth = ways.truth(next);
+            conditions[next] = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
+        }
+        for (int way = 0; way < 2; way++) {
+            ATruthDecided now = new ATruthDecided(ways.truth(next), way == 0);
+            decided[next] = now.holds();
+            truthsDecided.add(now);
+            try {
+                conditionsOf(ways, decided, conditions);
+            } finally {
+                truthsDecided.remove(now);
+                decided[next] = null;
+            }
+            if (Arrays.stream(conditions).allMatch(Objects::nonNull)) {
+                return;
+            }
+        }
     }
 
     /**
@@ -10838,11 +11032,17 @@ final class Pullback {
      * source wrote ({@link Derivation.AChoiceAt}); {@code choice} alone where it is not.
      */
     private static Derivation madeBy(Core node, Derivation choice) {
+        ConstructOccurrence at = occurrenceMadeBy(node);
+        return at == null ? choice : new Derivation.AChoiceAt(at, choice);
+    }
+
+    /** The construct some source wrote that {@code node} is, or null where it is none. */
+    private static ConstructOccurrence occurrenceMadeBy(Core node) {
         // A call a representation kept standing says where it stands as a call does, whatever
         // wider type it stands as; the copies of an application are asked of the node's own shape.
         ConstructOccurrence at = Core.withoutStanding(node) instanceof Core.PreservedCall kept
                 ? kept.occurrence() : ACopyOfAnApplication.occurrenceOf(node);
-        return at == null || !at.isWritten() ? choice : new Derivation.AChoiceAt(at, choice);
+        return at == null || !at.isWritten() ? null : at;
     }
 
     /**

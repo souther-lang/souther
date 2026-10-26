@@ -1283,6 +1283,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,
                      Quantity.IsAmongThePieces _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+                case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             }
         }
         return new TheParts.NotDrawn(stops, beyondTheForm);
@@ -1418,7 +1419,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
                  Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
+                 Proposition.SomeReachable _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         });
@@ -1442,7 +1444,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
-                 WhyUnread.MorePartsThanAreConcluded _,
+                 WhyUnread.MorePartsThanAreConcluded _, WhyUnread.MoreWaysThanAreWrittenOut _,
                  WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
@@ -1664,6 +1666,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     counted.statements().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.WhereItAnswers where ->
                     statesNoRelation(where.answers()) && statesNoRelation(where.states());
+            case Proposition.OfTheWays ways -> statesNoRelation(ways.written());
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.

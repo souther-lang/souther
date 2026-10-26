@@ -1073,6 +1073,7 @@ public sealed interface BorderQuantity
                             ? "== " + counted.admitted().getFirst()
                             : "in " + counted.admitted());
                 }
+                case Proposition.OfTheWays ways -> said(ways.written());
                 case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                      Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Carried _,
@@ -1085,6 +1086,7 @@ public sealed interface BorderQuantity
         private static String grouped(Proposition part) {
             return switch (part) {
                 case Proposition.All _, Proposition.Any _ -> "(" + said(part) + ")";
+                case Proposition.OfTheWays ways -> grouped(ways.written());
                 // A count is written as a comparison, which binds tighter than a join.
                 case Proposition.SoManyHold _, Proposition.Always _, Proposition.Some _,
                      Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,

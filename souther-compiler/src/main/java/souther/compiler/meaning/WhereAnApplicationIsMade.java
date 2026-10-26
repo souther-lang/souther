@@ -197,7 +197,8 @@ public final class WhereAnApplicationIsMade {
                          Proposition.Any _,
                          Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
                          Proposition.Unread _, Proposition.OnAnApplication _,
-                         Proposition.SoManyHold _, Proposition.WhereItAnswers _ -> kept.add(met);
+                         Proposition.SoManyHold _, Proposition.WhereItAnswers _,
+                         Proposition.OfTheWays _ -> kept.add(met);
                 }
             }
         }

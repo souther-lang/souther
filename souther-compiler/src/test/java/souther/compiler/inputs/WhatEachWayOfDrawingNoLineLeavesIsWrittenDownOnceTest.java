@@ -199,6 +199,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:MORE_PARTS_THAN_ARE_CONCLUDED",
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:MORE_WAYS_THAN_ARE_WRITTEN_OUT",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT",
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:A_PART_NOT_READ", "RULE_MEANING_NOT_READ/UNAFFECTED");

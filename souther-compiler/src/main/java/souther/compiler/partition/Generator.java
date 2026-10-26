@@ -861,6 +861,10 @@ public final class Generator {
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION, TOTAL_READINGS_OF_ONE_CONDITION,
                              PARTS_A_DERIVATION_CONCLUDES,
+                             // It stops the writing out of the cases of a statement over the ways
+                             // of keeping elements, which is taken as a part nothing read, naming
+                             // it.
+                             WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER,
                              // It stops a reader taking a count of statements apart into its
                              // choices, which takes the count as a part it could not see into,
                              // naming it.

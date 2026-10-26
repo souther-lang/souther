@@ -112,6 +112,9 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         missing.removeAll(met);
         missing.remove(Proposition.OnAnApplication.class);
         missing.remove(Proposition.Carried.class);
+        // Held as how it is written only where the ways of keeping are more than a statement
+        // writes out at once, which no model here keeps that many elements of.
+        missing.remove(Proposition.OfTheWays.class);
         assertEquals(Set.of(), missing, "a kind of statement no condition here states");
     }
 
@@ -151,6 +154,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(one -> kindsIn(one, into));
+            case Proposition.OfTheWays ways -> kindsIn(ways.written(), into);
             case Proposition.WhereItAnswers where -> {
                 kindsIn(where.answers(), into);
                 kindsIn(where.states(), into);

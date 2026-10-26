@@ -144,6 +144,7 @@ final class AStatementAtARow {
                     && askable(where.states(), besideItsRelations);
             case Proposition.SoManyHold counted -> counted.statements().stream()
                     .allMatch(each -> askable(each, besideItsRelations));
+            case Proposition.OfTheWays ways -> askable(ways.written(), besideItsRelations);
             case Proposition.Some some -> askable(some.ofTheElement(), besideItsRelations);
             case Proposition.Compared compared -> besideItsRelations
                     || switch (compared.relation()) {
@@ -348,6 +349,8 @@ final class AStatementAtARow {
             }
             case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.OfTheWays ways ->
+                    gather(ways.written(), behavior, quantities, into, elements, positions);
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             of(some.ofTheElement(), behavior, quantities), Optional.empty(),
@@ -391,6 +394,7 @@ final class AStatementAtARow {
             }
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(part -> gatherNumbers(part, into));
+            case Proposition.OfTheWays ways -> gatherNumbers(ways.written(), into);
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
@@ -485,6 +489,7 @@ final class AStatementAtARow {
                     .allMatch(AStatementAtARow::madeOfFormsAndPositions);
             case Proposition.WhereItAnswers where -> madeOfFormsAndPositions(where.answers())
                     && madeOfFormsAndPositions(where.states());
+            case Proposition.OfTheWays ways -> madeOfFormsAndPositions(ways.written());
             case Proposition.Compared(Relation.Affine affine, boolean _, String _) ->
                     countIn(affine) == null && productIn(affine) == null
                             && remainderByAnInputIn(affine) == null
@@ -1080,6 +1085,7 @@ final class AStatementAtARow {
                     at(where.answers(), row, answered), at(where.states(), row, answered)), true);
             case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
                     .stream().map(each -> at(each, row, answered)).toList());
+            case Proposition.OfTheWays ways -> at(ways.written(), row, answered);
             case Proposition.Some some -> {
                 OverTheElements over = elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
@@ -1164,6 +1170,7 @@ final class AStatementAtARow {
                     && readsOf(where.states(), about, read);
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.OfTheWays ways -> readsOf(ways.written(), about, read);
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared
@@ -1401,6 +1408,7 @@ final class AStatementAtARow {
                     case Proposition.WhereItAnswers where -> add(Kind.ALL, new int[] {
                             node(where.answers(), of, container, index),
                             node(where.states(), of, container, index)}, 0, EITHER, null);
+                    case Proposition.OfTheWays ways -> node(ways.written(), of, container, index);
                     case Proposition.Some some
                             when of.elements.get(keyOf(some)) instanceof OverTheElements over
                             && over.container().equals(container)

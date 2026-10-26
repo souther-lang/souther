@@ -339,6 +339,8 @@ final class MeaningAssumptions {
             case Proposition.Any any -> takingOneOf(any);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches a path written out as its choices: " + asked);
+            case Proposition.OfTheWays _ -> throw new IllegalArgumentException(
+                    "a statement over the ways reaches a path written out as its cases: " + asked);
             // Which application is no fact of a path.
             case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
@@ -503,6 +505,7 @@ final class MeaningAssumptions {
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }
             case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+            case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
         }
         return named != null ? new AtomAt.Named(named)
                 : new AtomAt.AtTheEdge(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
