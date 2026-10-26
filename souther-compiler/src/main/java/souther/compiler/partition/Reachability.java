@@ -338,6 +338,27 @@ public sealed interface Reachability {
         }
 
         /**
+         * The ways a row is composed along to witness this one, in the order they are tried: each
+         * way this is split into, looked at the same way, and this whole where the split is not
+         * every way a row may take, which includes where it is none.
+         *
+         * <p>Not {@link #along()}, which a walk that follows the split reads and which is empty
+         * for a way that is not split. A search that asks this of each way it tries would ask the
+         * way itself again; it asks it of the way it was given.
+         */
+        public List<Reaching> waysToTryForARow() {
+            return switch (ways) {
+                case Ways.One _ -> List.of(this);
+                case Ways.Each each -> each.along().stream()
+                        .flatMap(way -> way.waysToTryForARow().stream())
+                        .toList();
+                case Ways.Whole whole -> Stream.concat(
+                        whole.along().stream().flatMap(way -> way.waysToTryForARow().stream()),
+                        Stream.of(this)).toList();
+            };
+        }
+
+        /**
          * Regions that between them hold every row past this way: the region of each way it is
          * split into, where it is split into every way a row may take, and its own region
          * otherwise.
