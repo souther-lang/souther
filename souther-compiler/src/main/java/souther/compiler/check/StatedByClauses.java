@@ -682,12 +682,16 @@ sealed interface StatedByClauses {
      * @param keptApart what the builders of each container position keep its elements apart at
      *                  ({@link ElementsApart#keptAt}), which is what the reading of how elements
      *                  stand to each other is held to; a position with nothing kept is absent
+     * @param builtFor  the rules about a container and a place beside it that the builders of the
+     *                  record keep ({@link EntryHeld#writtenOn}, {@link SidesBalanced#writtenOn}),
+     *                  which is what the reading of them is held to
      */
     static Reading readingOf(Terms terms, Map<FactSubject, Type> byName,
                              Symbols symbols, Alternatives alternatives,
                              Allowance<FactSubject> allowed, StringMachineAnswers machines,
                              StatedLines lines, BoundaryReading boundaries,
-                             Map<FactSubject, List<List<String>>> keptApart) {
+                             Map<FactSubject, List<List<String>>> keptApart,
+                             BuiltFor builtFor) {
         // The positions as chains of names, made once beside the table for every reading that asks
         // which subexpression of a clause is a position.
         List<Term> held = new ArrayList<>(byName.size());
@@ -696,9 +700,35 @@ sealed interface StatedByClauses {
         }
         Term.Chains chains = new Term.Chains(held);
         return new Reading(
-                AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed),
+                AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed,
+                        builtFor),
                 OrderedReading.of(terms, byName), terms, byName, chains, alternatives,
-                machines, lines, boundaries, Map.copyOf(keptApart));
+                machines, lines, boundaries, Map.copyOf(keptApart), builtFor);
+    }
+
+    /**
+     * The rules about a container and a place beside it that the builders of a record keep.
+     *
+     * @param entryKeys     for each map, the places a key of an entry the builders hold it to
+     *                      stands at
+     * @param balancedLists the lists the builders balance the sides of
+     */
+    record BuiltFor(Map<FactSubject, Set<FactSubject>> entryKeys, Set<FactSubject> balancedLists) {
+
+        public BuiltFor {
+            entryKeys = Map.copyOf(entryKeys);
+            balancedLists = Set.copyOf(balancedLists);
+        }
+
+        /** Whether the builders hold {@code map} to an entry under the key at {@code key}. */
+        boolean keepsAnEntry(FactSubject map, FactSubject key) {
+            return entryKeys.getOrDefault(map, Set.of()).contains(key);
+        }
+
+        /** Whether the builders balance the sides of {@code list}. */
+        boolean balances(FactSubject list) {
+            return balancedLists.contains(list);
+        }
     }
 
 
@@ -726,7 +756,7 @@ sealed interface StatedByClauses {
     record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
                    Map<FactSubject, Type> byName, Term.Chains chains, Alternatives alternatives,
                    StringMachineAnswers machines, StatedLines lines, BoundaryReading boundaries,
-                   Map<FactSubject, List<List<String>>> keptApart)
+                   Map<FactSubject, List<List<String>>> keptApart, BuiltFor builtFor)
             implements ClauseReading<StatedByClauses, Denotations> {
 
         /** What a binding under a clause is entered as, for a fold over this reading. The one
@@ -848,7 +878,25 @@ sealed interface StatedByClauses {
                                                                            Denotations at) {
             AdmissibleReading.KeptApart stated = values.keptApartAt(part, at);
             if (stated == null) {
-                return Adoption.nothing();
+                // Or a map asked for an entry under a key beside it: taken in at both, since the
+                // rule is about the two together and the builders of the map are told it.
+                AdmissibleReading.EntryAt entry = values.entryHeldAt(part, at);
+                if (entry == null) {
+                    // Or the sides of a list: taken in at the list where its builders balance
+                    // them, choosing how many elements stand at each case and what each adds.
+                    FactSubject list = values.sidesBalancedAt(part, at);
+                    if (list == null) {
+                        return Adoption.nothing();
+                    }
+                    boolean built = builtFor.balances(list);
+                    return Adoption.at(Set.of(list), built ? Set.of(list) : Set.of(), !built);
+                }
+                // Taken in at both where the builders hold the map to an entry under that key,
+                // and given up on where they do not: a rule they were never told of is a rule no
+                // map keeps.
+                Set<FactSubject> both = Set.of(entry.container(), entry.key());
+                boolean built = builtFor.keepsAnEntry(entry.container(), entry.key());
+                return Adoption.at(both, built ? both : Set.of(), !built);
             }
             Set<FactSubject> container = Set.of(stated.container());
             boolean kept = ElementsApart.covers(

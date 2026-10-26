@@ -8,6 +8,7 @@ import souther.compiler.check.ClassMembers;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
@@ -44,6 +45,7 @@ import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -2060,7 +2062,7 @@ final class TermRealizations {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
             case TakenAs.HowManyItHolds _ ->
-                    holding(sourceType, keptApart, asked, orders, reading);
+                    holding(sourceType, keptApart, asked, orders, within, reading);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
@@ -2243,7 +2245,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         Realization below = holdingExactly(sourceType, keptApart,
-                Count.of(BigDecimal.valueOf(many - 1)), reading);
+                Count.of(BigDecimal.valueOf(many - 1)), ElementsHeldTo.NOTHING, reading);
         return below instanceof Realization.None
                 ? treesNotWritten("a tree of " + many + " nodes is deeper than a root and the"
                         + " nodes below it")
@@ -3299,15 +3301,76 @@ final class TermRealizations {
      * for is not a set nothing writes a value in.
      */
     private static Realization holding(Type sourceType, List<List<String>> keptApart,
-                                       AskedAt asked, TermOrders orders,
+                                       AskedAt asked, TermOrders orders, SearchRegion within,
                                        RuleReadingContext reading) {
+        ElementsHeldTo heldTo = new ElementsHeldTo(orders.term().subjectPath(), within);
         // From none upward, which is as far as a count runs and as many of them as the figure
         // allows. A count is the one account whose numbers are whole and whose window is the whole
         // of what it can be asked for, so a walk that reaches the end of it has walked the set.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlace.NONE),
-                count -> holdingExactly(sourceType, keptApart, count, reading));
+                count -> holdingExactly(sourceType, keptApart, count, heldTo, reading));
+    }
+
+    /**
+     * What the way leaves a number of each element of a container, which the elements it is
+     * composed with are held to.
+     *
+     * <p>A condition that every element meets something is a bound on the elements and not a
+     * value of one of them ({@link Generator.ElementBound}); the region carries it as what is left
+     * of the element's numbers, and a container composed by its size would otherwise write
+     * elements the region has no say in.
+     *
+     * @param container the container, which the elements are inside
+     * @param within    what the way leaves, or null where it is not asked
+     */
+    private record ElementsHeldTo(TermPath container, SearchRegion within) {
+
+        static final ElementsHeldTo NOTHING = new ElementsHeldTo(null, null);
+
+        /**
+         * The container of elements written inside what the way leaves their fields, in place of
+         * {@code seeds}: the elements {@code seeds} hold are written from the type alone, and a
+         * container holding them is no container the way asks for.
+         *
+         * <p>{@code seeds} stand where the way bounds no field of the element, the element is no
+         * record, or the elements are kept apart or are in a set. And they stand where no element
+         * could be composed inside the bounds, with what that composing met beside what building
+         * them did: the offer is then short of the way, and says so.
+         *
+         * <p>Only of a container a parameter roots. A container inside an element of another is
+         * the element's own, and the bounds the way puts on elements are on those of the container
+         * a condition names; the region has no answer for a position under an element of it.
+         */
+        Proposals over(Proposals seeds, TypeView holder, int many, List<List<String>> keptApart,
+                       RuleReadingContext reading) {
+            if (container == null || within == null || !keptApart.isEmpty()
+                    || container.insideAContainer()
+                    || !(holder.shape() instanceof Shape.Sequence carrier)
+                    || carrier.kind() != Shape.Sequence.Kind.LIST
+                    || !(carrier.element() instanceof Type.Ref ref)
+                    || !(ref.name() instanceof TypeSymbol.AtModule record)) {
+                return seeds;
+            }
+            Map<String, NumericDomain.Bounds> held =
+                    Partitions.leftTheFieldsOfAnElement(record, container, within, reading);
+            if (held.isEmpty()) {
+                return seeds;
+            }
+            Proposals element = Partitions.composedHeldTo(record,
+                    Partitions.rulesOver(carrier.element(), record, reading.source()), reading,
+                    held);
+            if (element.isEmpty()) {
+                return seeds.meeting(element.met());
+            }
+            List<FixtureTemplate> elements = new ArrayList<>();
+            for (int i = 0; i < many; i++) {
+                elements.add(element.values().getFirst());
+            }
+            return Proposals.of(List.of(FixtureTemplate.collection(elements)))
+                    .meeting(seeds.met().and(element.met()));
+        }
     }
 
     /**
@@ -4332,7 +4395,8 @@ final class TermRealizations {
 
     /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
     private static Realization holdingExactly(Type sourceType, List<List<String>> keptApart,
-                                              Place answer, RuleReadingContext reading) {
+                                              Place answer, ElementsHeldTo heldTo,
+                                              RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
             return new Realization.None(
@@ -4351,7 +4415,8 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        Proposals built = Witnesses.ofSize(holder, many, keptApart, reading, Set.of());
+        Proposals built = heldTo.over(Witnesses.ofSize(holder, many, keptApart, reading, Set.of()),
+                holder, many, keptApart, reading);
         if (built.isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
             // stopped as two halves of one answer for exactly this — what stopped it includes what

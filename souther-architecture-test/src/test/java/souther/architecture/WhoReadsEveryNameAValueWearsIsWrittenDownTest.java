@@ -118,6 +118,15 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + TYPE
                             + "Ljava/util/function/Function;" + SOURCE + ")Ljava/util/List;",
                     THE_POSITION),
+            row(CHECK + "EntryHeld", "keysStayFree",
+                    "(L" + CHECK + "RuleKey;Ljava/util/List;L" + CHECK
+                            + "RecordRules;Ljava/util/List;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
+                    THE_POSITION),
+            row(CHECK + "EntryHeld", "valueTypeAdmits",
+                    "(" + TYPE + "Ljava/math/BigDecimal;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
+                    THE_POSITION),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
                             + "Denotations;" + SYMBOLS
@@ -126,6 +135,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(CHECK + "NewtypeInners", "terminal", "(" + TYPE + ")" + TYPE, THE_SPINE),
             row(CHECK + "PlacesTheRulesRead", "of",
                     "(" + TYPE + SOURCE + ")L" + CHECK + "PlacesTheRulesRead;", THE_POSITION),
+            row(CHECK + "SidesBalanced", "elementsStandAlone",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + SOURCE
+                            + ")Z",
+                    THE_POSITION),
             row(TYPE_OPS, "newtypeChain", "(" + TYPE + INNERS + ")Ljava/util/List;", THE_SPINE),
             row(TYPE_VIEW, "asWritten",
                     "(" + TYPE + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
@@ -219,10 +232,22 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + CONTEXT + "Ljava/util/Set;)Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "admittedStrings",
                     "(" + TYPE + CONTEXT + "I)Ljava/util/List;", THE_POSITION),
+            row(PARTITION + "Partitions", "balancedSides",
+                    "(" + TYPE + "L" + CHECK + "SidesBalanced$Requirement;" + LIMITS + CONTEXT + ")"
+                            + PROPOSALS,
+                    THE_POSITION),
             row(PARTITION + "Partitions", "displacedRepresentativesOf",
                     "(" + TYPE + CONTEXT + LIMITS + ")" + PROPOSALS, THE_POSITION),
+            row(PARTITION + "Partitions", "holdingTheEntriesAskedFor",
+                    "(" + TYPE + "Ljava/util/List;Ljava/util/Map;" + LIMITS + CONTEXT + ")"
+                            + PROPOSALS,
+                    THE_POSITION),
             row(PARTITION + "Partitions", "inReserve",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/List;)Ljava/util/List;",
+                    THE_POSITION),
+            row(PARTITION + "Partitions", "leftTheFieldsOfAnElement",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + INPUTS + "TermPath;L"
+                            + INPUTS + "SearchRegion;" + CONTEXT + ")Ljava/util/Map;",
                     THE_POSITION),
             row(PARTITION + "Partitions", "measureAt",
                     "(Ljava/util/List;L" + PARTITION + "PositionMeasurements;L" + PARTITION
@@ -244,13 +269,17 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
+            row(PARTITION + "Partitions", "writtenNumberAt",
+                    "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
+                    THE_POSITION),
             row(PARTITION + "TermRealizations", "atThoseParts",
                     "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
                             + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "holdingExactly",
-                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;" + CONTEXT + ")"
-                            + REALIZATION,
+                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;L" + PARTITION
+                            + "TermRealizations$ElementsHeldTo;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "namesOf",
                     "(" + TYPE + SOURCE + ")L" + PARTITION + "WornNames;", THE_POSITION),

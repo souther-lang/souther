@@ -196,6 +196,27 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * How many rules relate {@code atom} to another position: a rule over it and at least one
+     * other. A rule over it alone, which is where it stops, is not among them.
+     *
+     * <p>What a caller asks to know that nothing ties a position to another. The ranges a domain
+     * answers are boxes, and a box says nothing of how two positions go together — {@code c == a + 1}
+     * puts no end on {@code c} and still holds {@code c} and {@code a} to one another — so a
+     * position that is related to none can be reasoned about by its range and one that is related
+     * to any cannot.
+     */
+    public int relationsOf(A atom) {
+        int related = 0;
+        for (AffineConstraint<A> each : rules()) {
+            Map<A, ExactRatio> weights = each.form().coefs();
+            if (weights.size() > 1 && weights.containsKey(atom)) {
+                related++;
+            }
+        }
+        return related;
+    }
+
+    /**
      * The rules as every reader here reads them, for a test holding what is read onto an earlier
      * reading to what reading every rule said from the start comes to.
      */

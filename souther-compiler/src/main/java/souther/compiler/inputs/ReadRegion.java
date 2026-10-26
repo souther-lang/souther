@@ -1,6 +1,8 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.HeldClass;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -12,6 +14,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A region of one input's values, read off the same rules the input's quantities are read off.
@@ -24,6 +27,11 @@ import java.util.Optional;
  * this compiler.
  */
 record ReadRegion(ReadQuantities within) implements SearchRegion {
+
+    @Override
+    public SearchRegion withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+        return parts.isEmpty() ? this : new ReadRegion(within.withoutTheRelationOf(parts));
+    }
 
     @Override
     public Assumption assuming(LinearForm<NumericTerm> form,

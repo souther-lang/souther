@@ -297,6 +297,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ElementsApart", "bindingUnder",
                 "(" + core + ")L" + c + "types/BindingId;", Reading.STRUCTURE,
                 "asks which binding a run of fields is read off, which is the base");
+        row(out, c + "check/EntryHeld", "isTheValue",
+                "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
+                "asks whether a value is a binding or the value a name wraps read off one, which"
+                        + " the base answers");
+        row(out, c + "check/SidesBalanced", "stepsFrom",
+                "(" + core + "L" + c + "types/BindingId;)Ljava/util/List;", Reading.STRUCTURE,
+                "reads the run of fields taken off one binding, which the base answers");
         row(out, c + "partition/WhatARunWorksOutBeforeACount", "offTheParameter",
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
                 "asks whether a value is a parameter or a run of fields read off one, which the"
@@ -434,6 +441,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/Type;", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "codegen/BodyGen", "walksInside", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "check/RecordRules", "readFrom",
+                "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/BlockReaches", "walk", "(" + core + "Ljava/util/Set;L" + c
                 + "core/BlockReaches$Accumulator;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/Evaluated", "inOrder", "(" + core + ")Ljava/util/List;",
@@ -570,6 +579,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
+        row(out, c + "check/Clauses$ReadsOfAClause$1", "readsThrough",
+                "(L" + CORE + "$FieldAccess;Ljava/util/Map;)Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "inputs/ElementValue$Reader$Names", "readsThrough",
                 "(L" + CORE + "$FieldAccess;Ljava/util/Map;)Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"

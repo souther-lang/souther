@@ -78,19 +78,26 @@ class APairIsChosenOnePositionAtATimeTest {
     /**
      * A search that stopped at its bound has not tried everything it had.
      *
-     * <p>Eleven positions of two values each, under a rule on a product no reading of the ends
-     * holds, so nothing rules a value out ahead of the search and every assignment is one it would
-     * compose. That is more than the bound, and the rule refuses every one of them. What the reader
-     * is owed is which of the two happened: that everything was refused is a stronger claim than
-     * that the search ran out, and it is the one a later reader would take for an impossibility.
+     * <p>Eleven positions of two values each, under a rule on the product of all of them. No reading
+     * of the ends holds it, and the product is known only once every position has a value, so
+     * nothing rules a value out ahead of the search and every assignment is one it would compose.
+     * That is more than the bound, and the rule refuses every one of them. What the reader is owed
+     * is which of the two happened: that everything was refused is a stronger claim than that the
+     * search ran out, and it is the one a later reader would take for an impossibility.
+     *
+     * <p>A product of two of the positions would not do: it is known as soon as those two have
+     * values, which rules the rest out before they are composed, and a search that finishes under
+     * its bound has tried what it had.
      */
     @Test
     void aSearchThatRanOutSaysSoRatherThanThatEverythingWasRefused() throws Exception {
         StringBuilder fields = new StringBuilder("    { a1: Int\n");
-        String rule = "a1 * a2 >= 5";
+        StringBuilder product = new StringBuilder("a1");
         for (int i = 2; i <= 11; i++) {
             fields.append("    , a").append(i).append(": Int\n");
+            product.append(" * a").append(i);
         }
+        String rule = product + " >= 5";
         String model = """
                 module example.budget
 

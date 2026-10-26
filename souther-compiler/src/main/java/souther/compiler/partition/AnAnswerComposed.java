@@ -638,7 +638,7 @@ public final class AnAnswerComposed {
                 Generator.CandidateCheck.ANY);
         List<DemandGap> unaccounted =
                 notComposedAgainst(cuts, attempt.unrepresented().onTheWay());
-        if (attempt instanceof Generator.BoundaryAttempt.Built(var row, var _)
+        if (attempt instanceof Generator.BoundaryAttempt.Built(var row, var _, var _)
                 && row.inputs().size() == 1) {
             return new Attempt(new Outcome.Composed(row.inputs().getFirst()), unaccounted);
         }

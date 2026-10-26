@@ -57,7 +57,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryFindingHasAGenerationDispositionTest {
 
-    /** Two boundary gaps a strategy composes a row for, and an arm no strategy reaches. */
+    /** Two boundary gaps a strategy composes a row for, and a rule that only a row past the
+     *  boundaries takes. */
     private static final String POLICY = """
             module example.policy
 
@@ -101,8 +102,7 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     private static List<Adequacy.Finding> findings(Compilation compilation, String module,
                                                    String behavior) {
-        List<Adequacy.Finding> found =
-                compilation.db().ask(new Adequacy.Findings(module)).value();
+        List<Adequacy.Finding> found = Adequacy.accountOf(compilation.db(), module);
         assertNotNull(found, "the model under test compiles");
         return found.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
     }
@@ -999,13 +999,13 @@ class EveryFindingHasAGenerationDispositionTest {
 
     @Test
     void anArmNoStrategyReachesIsNamedInTheBlock() {
-        Compilation compilation = compiled(POLICY);
+        Compilation compilation = compiled(IN_A_BLOCK);
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
-                                "example.policy")),
+                                "example.block")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
 
-        assertTrue(block.contains("`then`"),
+        assertTrue(block.contains("nothing offers a row for `case Off`"),
                 "the arm nothing offers a row for is named: " + block);
     }
 }

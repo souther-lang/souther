@@ -10,7 +10,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.EntryHeld;
 import souther.compiler.check.PartId;
+import souther.compiler.check.SidesBalanced;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
@@ -31,11 +33,13 @@ import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.RuleAddress;
@@ -44,6 +48,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -70,6 +75,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1968,6 +1974,63 @@ public final class Partitions {
     }
 
     /**
+     * What {@code within} leaves the number of each field of an element of {@code container}, for
+     * the fields that hold one and are left less than their type holds.
+     *
+     * <p>Asked of the fields that hold a number and of no other: the region answers for numbers,
+     * and a field of text or of a container has none to be asked of. And of the fields of the
+     * element itself — a field of a record in the element is the record's own, which the ends
+     * are not read for.
+     *
+     * @param record    the type of the element
+     * @param container the container the way bounds the elements of, which a parameter roots
+     */
+    static Map<String, NumericDomain.Bounds> leftTheFieldsOfAnElement(
+            TypeSymbol.AtModule record, TermPath container, SearchRegion within,
+            RuleReadingContext reading) {
+        RuleReadingSource ruleSource = reading.source();
+        if (!(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums())
+                instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))) {
+            return Map.of();
+        }
+        Map<String, NumericDomain.Bounds> held = new LinkedHashMap<>();
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            TypeView view = TypeView.of(field.getValue(), ruleSource.inners(),
+                    ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+            if (DeclaredBounds.of(view, reading) != null
+                    && within.projectionOf(
+                            new NumericTerm.ValueOf(container.element().then(field.getKey())))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
+                    && !bounds.saysNothing()) {
+                held.put(field.getKey(), bounds);
+            }
+        }
+        return held;
+    }
+
+    /**
+     * A record whose fields stand inside {@code held} as well as inside what its rules leave them,
+     * each chosen as {@link #composed} chooses one: in the order the record declares them, against
+     * the rules with the fields before it settled into them.
+     *
+     * <p>For a record that is an element of a container composed under what every element is to
+     * meet: the bounds are what the way leaves a number of each element. They narrow the field as
+     * the record's own rules do, so a rule relating two fields is asked of the second with the
+     * first in it — a field chosen inside its bounds alone would be chosen against {@code a + b}
+     * with {@code a} open, and would be written where the record's rules refuse it.
+     *
+     * @param held by field name, what the way leaves that field's number
+     */
+    static Proposals composedHeldTo(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                                    RuleReadingContext reading,
+                                    Map<String, NumericDomain.Bounds> held) {
+        return written(record,
+                fieldsOf(record, rulesOn, reading, Set.of(), Map.of(), RulesAround.NONE, held),
+                reading.source());
+    }
+
+    /**
      * Values of {@code record} no two of which are alike, up to {@code many} of them, or none
      * where no field of it has two values to differ at.
      *
@@ -2107,6 +2170,23 @@ public final class Partitions {
     static FieldsChosen fieldsOf(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                                  RuleReadingContext reading, Set<TypeSymbol> expanding,
                                  Map<String, FixtureTemplate> given, RulesAround around) {
+        return fieldsOf(record, rulesOn, reading, expanding, given, around, Map.of());
+    }
+
+    /**
+     * The same, with some fields held to where a search leaves them besides.
+     *
+     * <p>A field is chosen inside what its record's rules leave it, what the rules around it leave
+     * it, and {@code held}: the three are met, and the field is chosen in what they leave
+     * together.
+     *
+     * @param held by field name, the ends a search holds that field's number to, which no rule of
+     *             the declarations says
+     */
+    static FieldsChosen fieldsOf(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                                 RuleReadingContext reading, Set<TypeSymbol> expanding,
+                                 Map<String, FixtureTemplate> given, RulesAround around,
+                                 Map<String, NumericDomain.Bounds> held) {
         RuleReadingSource ruleSource = reading.source();
         // What the record is made of, read where a position's reading is made. A walk from the
         // declaration to its fields is that same reading taken a second time, and the two part
@@ -2146,15 +2226,31 @@ public final class Partitions {
         // to where they are under the field.
         PlacesTheRulesRead read = PlacesTheRulesRead.of(Type.ref(rulesOn), ruleSource);
         SequencedMap<String, FixtureTemplate> chosen = new LinkedHashMap<>();
-        if (!fields.keySet().containsAll(given.keySet())) {
+        if (!fields.keySet().containsAll(given.keySet())
+                || !fields.keySet().containsAll(held.keySet())) {
             return FieldsChosen.NONE;
         }
         CompositionShortfall met = CompositionShortfall.NONE;
-        for (Map.Entry<String, Type> field : fields.entrySet()) {
+        // What the rules ask of each map beside the other fields, and so which fields have to be
+        // chosen before the map that is asked for an entry under them.
+        Map<String, List<EntryHeld.Requirement>> asked = new LinkedHashMap<>();
+        for (String name : fields.keySet()) {
+            List<EntryHeld.Requirement> requirements = rules.entriesHeldAt(RuleKey.of(name));
+            if (!requirements.isEmpty()) {
+                asked.put(name, requirements);
+            }
+        }
+        List<String> order = new ArrayList<>(fields.keySet());
+        order.sort(Comparator.comparingInt(name -> standsAsAKeyOf(name, asked) ? 0 : 1));
+        Map<String, Set<String>> apart = keysThatMustDiffer(asked);
+        Map<String, FixtureTemplate> chosenByName = new LinkedHashMap<>();
+        for (String name : order) {
+            Map.Entry<String, Type> field = Map.entry(name, fields.get(name));
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
                 FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()))
-                        .meet(within.at(field.getKey()));
+                        .meet(within.at(field.getKey()))
+                        .meet(heldTo(held.get(field.getKey())));
                 // A field the rules leave no value at leaves the record none, which is settled
                 // here and said as itself: nothing was built and nothing was tried.
                 if (limits.leavesNothing()) {
@@ -2165,21 +2261,42 @@ public final class Partitions {
                 // under the field: the value there is built held to them as well as to its own
                 // declaration's rules, by whatever builds a value of its type.
                 RulesAround inner = within.aroundTheField(read, rules, field.getKey());
+                // A map asked for an entry under a key already chosen is built holding it.
+                Proposals holding = asked.containsKey(name)
+                        ? holdingTheEntriesAskedFor(field.getValue(), asked.get(name),
+                                chosenByName, limits, reading)
+                        : null;
+                List<SidesBalanced.Requirement> sides = rules.sidesBalancedAt(RuleKey.of(name));
+                if (holding == null && !sides.isEmpty()) {
+                    holding = balancedSides(field.getValue(), sides.getFirst(), limits, reading);
+                }
                 // The first value, with what was met in front of it: a field's later values are
-                // values nothing here takes.
-                Proposals stands = Witnesses.firstWhatThePlaceAdmits(
+                // values nothing here takes. Except past the values already chosen for the keys
+                // this one may not be: two keys asked for two numbers are two keys, and a value
+                // the first took is the next one's to pass over.
+                Set<String> taken = new LinkedHashSet<>();
+                apart.getOrDefault(name, Set.of()).forEach(other -> {
+                    if (chosenByName.containsKey(other)) {
+                        taken.add(chosenByName.get(other).text());
+                    }
+                });
+                Proposals stands = holding != null ? holding.firstOf(1)
+                        : !taken.isEmpty() ? Witnesses.distinctValuesOf(field.getValue(),
+                                taken.size() + 1, limits.held(), limits.admits(), reading, inside)
+                        : Witnesses.firstWhatThePlaceAdmits(
                         field.getValue(), limits, reading, inside, inner,
                         () -> representativesHolding(field.getValue(), reading, limits, inside,
                                 inner))
                         .firstOf(1);
                 met = met.and(stands.met());
-                if (stands.isEmpty()) {
+                at = stands.values().stream().filter(each -> !taken.contains(each.text()))
+                        .findFirst().orElse(null);
+                if (at == null) {
                     within.forgetUnder(within.here());
                     return new FieldsChosen(null, met);
                 }
-                at = stands.values().getFirst();
             }
-            chosen.put(field.getKey(), at);
+            chosenByName.put(field.getKey(), at);
             // Settled, and the rules read again with it in them. A field chosen against the rules as
             // they stand before anything is settled is chosen against `a < b` with `a` still open,
             // which leaves `b` its whole range and takes the bottom of it. Every number the value
@@ -2188,7 +2305,442 @@ public final class Partitions {
             Counts.writtenUnder(within.here().then(field.getKey()), at.value(), within::settle);
             left = rules.composing(FieldDomains.atValues(within.settledUnder(within.here())));
         }
+        // Written in the order the record declares them, whichever order they were chosen in.
+        for (String name : fields.keySet()) {
+            chosen.put(name, chosenByName.get(name));
+        }
         return new FieldsChosen(chosen, met);
+    }
+
+    /** What a search leaves a field besides the rules, as the limits a field is chosen in: none
+     *  where it holds the field to nothing. */
+    private static FieldDomains.ConstructionLimits heldTo(NumericDomain.Bounds bounds) {
+        return bounds == null ? FieldDomains.ConstructionLimits.NONE
+                : FieldDomains.ConstructionLimits.of(bounds, null, null,
+                        FieldDomains.ConstructionLimits.NONE.admits(), HeldClass.NONE);
+    }
+
+    /**
+     * For each field standing as a key, the fields standing as keys it may not be the same value
+     * as: those asked for another number under the same map.
+     */
+    private static Map<String, Set<String>> keysThatMustDiffer(
+            Map<String, List<EntryHeld.Requirement>> asked) {
+        Map<String, Set<String>> apart = new LinkedHashMap<>();
+        for (List<EntryHeld.Requirement> inOneMap : asked.values()) {
+            for (EntryHeld.Requirement one : inOneMap) {
+                for (EntryHeld.Requirement other : inOneMap) {
+                    if (one.valueIs() != null && other.valueIs() != null
+                            && one.valueIs().compareTo(other.valueIs()) != 0) {
+                        apart.computeIfAbsent(one.key().steps().getFirst(),
+                                _ -> new LinkedHashSet<>()).add(other.key().steps().getFirst());
+                    }
+                }
+            }
+        }
+        return apart;
+    }
+
+    /** Whether {@code field} is the key some map is asked for an entry under. */
+    private static boolean standsAsAKeyOf(String field,
+                                          Map<String, List<EntryHeld.Requirement>> asked) {
+        return asked.values().stream().flatMap(List::stream)
+                .anyMatch(each -> each.key().steps().equals(List.of(field)));
+    }
+
+    /**
+     * A map of {@code type} holding every entry the rules ask of it, under the keys already
+     * chosen, or nothing where no such map can be written.
+     *
+     * <p>Never a fallback to choosing the field as any other: the rules asking these entries were
+     * read as kept by this ({@link EntryHeld#writtenOn} is the one list both go by), and a map
+     * chosen without them is a map the rule refuses. Nothing is what it answers for a map the
+     * position does not declare, a key not chosen, a number the position cannot write, and two
+     * numbers asked of one key.
+     */
+    private static Proposals holdingTheEntriesAskedFor(Type type,
+                                                       List<EntryHeld.Requirement> asked,
+                                                       Map<String, FixtureTemplate> chosen,
+                                                       FieldDomains.ConstructionLimits limits,
+                                                       RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Mapping map)) {
+            return Proposals.NONE;
+        }
+        List<Witnesses.Filed> entries = new ArrayList<>();
+        for (EntryHeld.Requirement each : asked) {
+            FixtureTemplate key = chosen.get(each.key().steps().getFirst());
+            // A number the value's type admits and can be written as: a value written under a name
+            // is a value of the type only if its rules let it be.
+            FixtureTemplate value = each.valueIs() == null
+                    || !EntryHeld.valueTypeAdmits(map.value(), each.valueIs(), null, reading)
+                    ? null
+                    : writtenNumberAt(map.value(), each.valueIs(), reading);
+            if (key == null || (each.valueIs() != null && value == null)) {
+                return Proposals.NONE;
+            }
+            entries.add(new Witnesses.Filed(key, value));
+        }
+        Proposals made = Witnesses.holdingEntries(map, entries,
+                heldRange(type, reading, limits.held()), reading);
+        List<FixtureTemplate> worn = new ArrayList<>();
+        for (FixtureTemplate each : made.values()) {
+            FixtureTemplate under = WornNames.under(view.wrappers(), each, source);
+            if (under == null) {
+                return Proposals.NONE.meeting(made.met());
+            }
+            worn.add(under);
+        }
+        return Proposals.of(worn).meeting(made.met());
+    }
+
+    /**
+     * A list of {@code type} whose elements at the two cases the rule names add up to one another,
+     * or nothing where no such list can be written.
+     *
+     * <p>At least as many elements as the rules require, and at least two, split between the two
+     * cases: the fewest that the numbers balance, walked up from the least the rules ask for. The
+     * numbers they add are numbers the element's own rules admit ({@link #balancingAmounts}), so
+     * every element is one its type allows and the totals are equal because the numbers were found
+     * to make them so.
+     *
+     * <p>Never a fallback to choosing the field as any other: the rule asking the sides to balance
+     * was read as kept by this ({@link SidesBalanced#writtenOn} is the one list both go by), and a
+     * list chosen without it is a list the rule refuses. Nothing is what it answers for an element
+     * that is no record, numbers the element admits that balance no count it walks, a list also
+     * kept apart, and a count past what a proposal may hold. It is an answer about what this
+     * builds and not about the type: a list kept apart as well, or a count past the sizes walked,
+     * may exist, and the figures that ended the walk travel with the nothing.
+     */
+    private static Proposals balancedSides(Type type, SidesBalanced.Requirement rule,
+                                           FieldDomains.ConstructionLimits limits,
+                                           RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
+                || kind != Shape.Sequence.Kind.LIST) {
+            return Proposals.NONE;
+        }
+        TypeView elementView = TypeView.of(element, source.inners(), source.symbols(),
+                source.kinds(), source.sums());
+        if (!(elementView.shape() instanceof Shape.Product product)
+                || !(product.name() instanceof TypeSymbol.AtModule record)
+                || !product.fields().containsKey(rule.field())
+                || !product.fields().containsKey(rule.number().getFirst())
+                || !(source.symbols().scope().reach(rule.one())
+                        instanceof TypeReachName.Written one)
+                || !(source.symbols().scope().reach(rule.other())
+                        instanceof TypeReachName.Written other)) {
+            return Proposals.NONE;
+        }
+        // A list whose elements are also held apart is a list this does not build: the elements it
+        // makes differ in their side and their amount and nothing else, and nothing here keeps
+        // them apart in the rest. A list that is both exists wherever its amounts allow, so this is
+        // a combination left unbuilt and not a statement that there is none.
+        if (limits.held() != null && !limits.held().keptApart().isEmpty()) {
+            return Proposals.NONE;
+        }
+        DeclaredBounds.CountRange room = heldRange(type, reading, limits.held());
+        int first = Math.max(2, room.least());
+        if (first > room.most()) {
+            return Proposals.NONE;
+        }
+        Type numberType = product.fields().get(rule.number().getFirst());
+        TypeSymbol.AtModule rulesOn = rulesOver(elementView.wrappers(), record, source);
+        // The numbers the element's own rules admit there, as the position offers them, and the
+        // sides made up of them. Nothing is chosen beside the rules: a list of numbers the type
+        // does not admit is not the list the rule asks for, whatever the totals come to.
+        FieldDomains.ConstructionLimits admitted = FieldDomains.of(rulesOn, reading)
+                .composing(Map.of()).at(RuleKey.of(rule.number().getFirst()));
+        List<FixtureTemplate> numbers = admittedNumbers(numberType, admitted, reading);
+        // The count the rules ask for at least is where the walk starts and not the only count:
+        // numbers that balance four elements two against two do not balance three, and the list
+        // of four is as much a list the rules allow.
+        CompositionBudget past = Witnesses.pastTheElements(first);
+        if (past != null) {
+            return Proposals.NONE.meeting(CompositionShortfall.of(List.of(past)));
+        }
+        int walked = CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
+        int held = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
+        int last = (int) Math.min(Math.min(room.most(), held), (long) first + walked - 1);
+        Walk walk = balancedSplit(numbers, first, last);
+        Split split = walk.split();
+        if (split == null) {
+            // Nothing among the sizes walked, which says the walk ended and not that no size is
+            // left: past the last one there may be a list the figure did not reach. And a side
+            // made of a number repeated has not been searched.
+            List<CompositionBudget> met = new ArrayList<>();
+            if (walk.reduced()) {
+                met.add(CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER);
+            }
+            // Only the numbers of the type nearest its ends were balanced from, unless the type
+            // names all it admits and they are no more than that.
+            FieldDomains.ConstructionLimits.ValuesNamed named = admitted.valuesNamed();
+            if (!named.areTheValues()
+                    || named.values().size() > CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM
+                            .maximum()) {
+                met.add(CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM);
+            }
+            if (last < room.most()) {
+                met.add(last < held ? CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH
+                        : CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);
+            }
+            return met.isEmpty() ? Proposals.NONE
+                    : Proposals.NONE.meeting(CompositionShortfall.of(met));
+        }
+        int count = split.count();
+        int onOne = split.onOne();
+        List<FixtureTemplate> amounts = split.amounts();
+        List<FixtureTemplate> elements = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            boolean atOne = i < onOne;
+            FixtureTemplate amount = amounts.get(i);
+            Proposals composed = amount == null ? Proposals.NONE
+                    : composed(record, rulesOn, reading, Set.of(),
+                            Map.of(rule.field(), FixtureTemplate.unitCase(atOne ? one : other),
+                                    rule.number().getFirst(), amount),
+                            RulesAround.NONE);
+            FixtureTemplate each = composed.isEmpty() ? null
+                    : WornNames.under(elementView.wrappers(), composed.values().getFirst(), source);
+            if (each == null) {
+                return Proposals.NONE;
+            }
+            elements.add(each);
+        }
+        FixtureTemplate list = WornNames.under(view.wrappers(),
+                FixtureTemplate.collection(elements), source);
+        return Proposals.ofNullable(list);
+    }
+
+    /**
+     * Numbers a position admits, written as values of its type: those the type offers, and whole
+     * numbers from the near end of its range, each one the range holds and the set of values it is
+     * held to has.
+     *
+     * <p>Asked of both, because neither is the whole of what a position admits. The type offers few
+     * numbers — the ends of its range, and a last one of its own that its rules may refuse — and the
+     * range says where numbers are and not which of them the rules leave, where the rules leave a
+     * set.
+     */
+    private static List<FixtureTemplate> admittedNumbers(
+            Type type, FieldDomains.ConstructionLimits limits, RuleReadingContext reading) {
+        ValueSet held = limits.valuesNamed().asASet();
+        List<FixtureTemplate> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        List<FixtureTemplate> offered = new ArrayList<>(Witnesses.distinctValuesOf(type,
+                CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM.maximum(), limits.held(),
+                limits.admits(), reading, Set.of()).values());
+        for (BigInteger whole : wholeNumbersNear(limits.values(),
+                CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM.maximum())) {
+            FixtureTemplate written = writtenNumberAt(type, new BigDecimal(whole), reading);
+            if (written != null) {
+                offered.add(written);
+            }
+        }
+        // The figure bounds the numbers balanced from, which is what the two walks above add up to
+        // once the ones the position refuses and the repeats are gone, and not either walk alone:
+        // the type's own first, then the whole numbers from the end nearest nought.
+        int most = CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM.maximum();
+        for (FixtureTemplate each : offered) {
+            if (out.size() >= most) {
+                break;
+            }
+            if (Counts.writtenIn(each.value()) instanceof Count count
+                    && (limits.values() == null || limits.values().admits(count.exactly()))
+                    && held.has(Value.number(count.at())) && seen.add(count.exactly().key())) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whole numbers from the end of {@code range} nearest to nought, as many as asked for: upward
+     * from its floor, downward from its ceiling where it has no floor, and from one upward where it
+     * has neither.
+     */
+    private static List<BigInteger> wholeNumbersNear(NumericDomain.Bounds range, int many) {
+        List<BigInteger> out = new ArrayList<>();
+        if (range != null && range.min() != null) {
+            ExactRatio low = Count.number(range.min().at()).exactly();
+            if (low.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger first)) {
+                for (int i = 0; i < many; i++) {
+                    out.add(first.add(BigInteger.valueOf(i)));
+                }
+            }
+        } else if (range != null && range.max() != null) {
+            ExactRatio high = Count.number(range.max().at()).exactly();
+            if (high.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger last)) {
+                for (int i = 0; i < many; i++) {
+                    out.add(last.subtract(BigInteger.valueOf(i)));
+                }
+            }
+        } else {
+            for (int i = 1; i <= many; i++) {
+                out.add(BigInteger.valueOf(i));
+            }
+        }
+        return out;
+    }
+
+    /** A count of elements, how many of them are at the first case, and the amounts they add. */
+    private record Split(int count, int onOne, List<FixtureTemplate> amounts) {}
+
+    /**
+     * What walking the counts found: the split, or null, and whether a side was past the elements
+     * a side is searched over, which leaves what was not found as not found by that search.
+     */
+    private record Walk(Split split, boolean reduced) {}
+
+    /**
+     * The first count from {@code first} to {@code last} that {@code numbers} balance, and the
+     * split of it between the two cases that does — the sides nearest to equal in size first.
+     *
+     * <p>A side of more elements than the figure is searched over is made of one number repeated,
+     * which finds the balances that need one number to a side and no others; the walk says it was
+     * reduced to that whenever it came to such a side with more than one number to choose among.
+     */
+    private static Walk balancedSplit(List<FixtureTemplate> numbers, int first, int last) {
+        int searched = CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER.maximum();
+        boolean reduced = false;
+        for (int count = first; count <= last; count++) {
+            for (int onOne = count / 2; onOne >= 1; onOne--) {
+                reduced |= numbers.size() > 1 && count - onOne > searched;
+                List<FixtureTemplate> amounts = balancingAmounts(numbers, onOne, count - onOne);
+                if (amounts != null) {
+                    return new Walk(new Split(count, onOne, amounts), reduced);
+                }
+            }
+        }
+        return new Walk(null, reduced);
+    }
+
+    /**
+     * Numbers for the elements at the two sides, taken from {@code admitted}, whose totals are
+     * equal — or null where those numbers make none.
+     *
+     * <p>Only numbers the type admits ({@link #admittedNumbers}), whatever they are: a side of
+     * negative numbers balances as well as one of positive, and nought is a number like another. A total that is not nought is preferred, because a side of nothing
+     * balances anything and shows nothing; it is a preference and not a condition, so a type that
+     * admits nothing else still gets its list.
+     *
+     * <p>One number for every element of a side where that balances them, which any count of
+     * elements allows. Past that, for few enough elements, the numbers of each side are searched
+     * for ones that add up alike; with more elements than that, and no number that balances them
+     * one each, there is no list and none is offered.
+     */
+    private static List<FixtureTemplate> balancingAmounts(List<FixtureTemplate> admitted,
+                                                          int onOne, int onOther) {
+        List<FixtureTemplate> fixtures = new ArrayList<>();
+        List<ExactRatio> numbers = new ArrayList<>();
+        for (FixtureTemplate each : admitted) {
+            if (Counts.writtenIn(each.value()) instanceof Count count) {
+                fixtures.add(each);
+                numbers.add(count.exactly());
+            }
+        }
+        Map<String, int[]> oneSide = totals(numbers, onOne);
+        Map<String, int[]> otherSide = onOne == onOther ? oneSide : totals(numbers, onOther);
+        int[] one = null;
+        int[] other = null;
+        for (Map.Entry<String, int[]> each : oneSide.entrySet()) {
+            int[] match = otherSide.get(each.getKey());
+            if (match == null) {
+                continue;
+            }
+            if (!each.getKey().equals(ExactRatio.ZERO.key())) {
+                one = each.getValue();
+                other = match;
+                break;
+            }
+            // Nought only when nothing else balances.
+            if (one == null) {
+                one = each.getValue();
+                other = match;
+            }
+        }
+        if (one == null) {
+            return null;
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (int at : one) {
+            out.add(fixtures.get(at));
+        }
+        for (int at : other) {
+            out.add(fixtures.get(at));
+        }
+        return out;
+    }
+
+
+    /**
+     * Every total {@code count} of {@code numbers} can come to, by the total, each with numbers that
+     * come to it.
+     *
+     * <p>One number for every element where the count is past what is searched, so that a side of
+     * many elements is made of one number repeated, which is every total the count times a number
+     * comes to. The search keeps one way to each total, and stops growing at a size no list needs.
+     */
+    private static Map<String, int[]> totals(List<ExactRatio> numbers, int count) {
+        Map<String, int[]> out = new LinkedHashMap<>();
+        if (count > CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER.maximum()) {
+            for (int at = 0; at < numbers.size(); at++) {
+                ExactRatio total = numbers.get(at).times(ExactRatio.of(count)).orNull();
+                if (total != null) {
+                    int[] repeated = new int[count];
+                    Arrays.fill(repeated, at);
+                    out.putIfAbsent(total.key(), repeated);
+                }
+            }
+            return out;
+        }
+        Map<String, int[]> reached = new LinkedHashMap<>();
+        reached.put(ExactRatio.ZERO.key(), new int[0]);
+        Map<String, ExactRatio> sums = new LinkedHashMap<>();
+        sums.put(ExactRatio.ZERO.key(), ExactRatio.ZERO);
+        for (int step = 0; step < count; step++) {
+            Map<String, int[]> next = new LinkedHashMap<>();
+            Map<String, ExactRatio> nextSums = new LinkedHashMap<>();
+            for (Map.Entry<String, int[]> each : reached.entrySet()) {
+                for (int at = 0; at < numbers.size(); at++) {
+                    ExactRatio total = sums.get(each.getKey()).plus(numbers.get(at)).orNull();
+                    if (total != null && !next.containsKey(total.key())) {
+                        int[] picks = Arrays.copyOf(each.getValue(), step + 1);
+                        picks[step] = at;
+                        next.put(total.key(), picks);
+                        nextSums.put(total.key(), total);
+                    }
+                }
+            }
+            reached = next;
+            sums = nextSums;
+        }
+        return reached;
+    }
+
+    /** {@code number} written as a value of {@code type}, or null where the position holds no
+     *  number of that kind or cannot name the names it wears. */
+    private static FixtureTemplate writtenNumberAt(Type type, BigDecimal number,
+                                                   RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Scalar(Type.Prim prim))) {
+            return null;
+        }
+        FixtureTemplate written = switch (prim) {
+            case DECIMAL -> FixtureTemplate.decimal(number);
+            case INT -> ExactRatio.of(number).isWhole()
+                    && ExactRatio.of(number).truncated()
+                            instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                    && whole.bitLength() < Long.SIZE
+                    ? FixtureTemplate.integer(whole.longValue()) : null;
+            default -> null;
+        };
+        return WornNames.under(view.wrappers(), written, source);
     }
 
     /**
