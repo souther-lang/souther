@@ -9163,6 +9163,11 @@ final class Pullback {
     private boolean endsNoRun(Denotation value) {
         Denotation stood = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
+        Core written = Core.withoutStanding(value.value());
+        if (written !=Core.withoutStanding(stood.value())
+                && !whatItRunsAsWrittenEndsNone(written, value.at())) {
+            return false;
+        }
         return switch (Core.withoutStanding(stood.value())) {
             case Core.Construct made -> made.values().stream().allMatch(
                             each -> endsNoRun(new Denotation(each.value(), stood.at())))
@@ -9172,6 +9177,28 @@ final class Pullback {
             case Core other -> WhatARunMayEndFor.of(other).endsNone()
                     || endsNoRunAsACall(new Denotation(other, stood.at()));
         };
+    }
+
+    /**
+     * Whether everything {@code written} runs, as it is written, ends no run.
+     *
+     * <p>What an expression stands for is the value it comes to, and a part that is run but does not
+     * come into the value is left out of it: the initializer of a {@code let} the body does not use,
+     * the fields of a construction that an access takes one field of. Those still run, so the
+     * question is asked of the parts {@link Evaluated#inOrder} lists, and of a {@code let}'s body,
+     * which runs once its value has been worked out.
+     */
+    private boolean whatItRunsAsWrittenEndsNone(Core written, InputReads at) {
+        if (written instanceof Core.LetIn let) {
+            return endsNoRun(new Denotation(let.value(), at))
+                    && endsNoRun(new Denotation(let.body(), at));
+        }
+        for (Evaluated.Step step : Evaluated.inOrder(written)) {
+            if (!endsNoRun(new Denotation(step.expression(), at))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

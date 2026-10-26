@@ -144,6 +144,40 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         assertNotEquals(stated(plain, compared(unknown)), stated(held, compared(unknown)));
     }
 
+    /**
+     * A row a helper builds is worked out before any application as the row written out would be,
+     * but only where everything the helper runs ends no run: a {@code let} whose value is not used
+     * in the row it answers is run all the same.
+     */
+    @Test
+    void aRowBuiltByAHelperIsSkippedOverOnlyWhereTheHelperRunsNothingThatMayEndTheRun() {
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        String rows = "[ rowAt(pay), rowAt(2) ]";
+        String safe = """
+                data Row = { grade: Int, lowerBound: Int }
+                let rowAt (n: Int): Row = {
+                    let spare = n
+                    Row { grade = 1, lowerBound = 100 }
+                }""";
+        String ends = safe.replace("let spare = n", "let spare = 100 / n");
+        String held = safe.replace("data Row = { grade: Int, lowerBound: Int }",
+                "data Row = { grade: Int, lowerBound: Int }\n    invariant grade >= 0");
+        String walked = "List.fold(%s, 0, %s)".formatted(step, rows);
+        assertFalse(Proposition.leavesSomethingUnread(stated(safe, compared(walked))));
+        assertFalse(Proposition.leavesSomethingUnread(stated(held, compared(walked))));
+        // The helper that can end the run states the run it ends, which the one that cannot does not.
+        assertNotEquals(stated(safe, compared(walked)), stated(ends, compared(walked)));
+
+        // A helper hands its argument to the row, and an invariant that cannot be shown of an
+        // input is not taken as held.
+        String plainOf = "data Row = { grade: Int, lowerBound: Int }\n"
+                + "let rowOf (g: Int): Row = Row { grade = g, lowerBound = 100 }";
+        String heldOf = plainOf.replace("lowerBound: Int }",
+                "lowerBound: Int }\n    invariant grade >= 0");
+        String unproven = "List.fold(%s, 0, [ rowOf(cur), rowOf(2) ])".formatted(step);
+        assertNotEquals(stated(plainOf, compared(unproven)), stated(heldOf, compared(unproven)));
+    }
+
     private static String compared(String computed) {
         return "let computed = %s\nif computed < 2 then 1 else 0".formatted(computed);
     }
