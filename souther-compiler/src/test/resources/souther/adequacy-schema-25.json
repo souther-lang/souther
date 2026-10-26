@@ -4029,7 +4029,6 @@
                 "enum": [
                   "container_at_no_position",
                   "value_at_no_position",
-                  "string_at_no_position",
                   "scrutinee_at_no_position",
                   "subject_at_no_position",
                   "no_measure_of_its_size",
@@ -4085,7 +4084,6 @@
                   "place_the_path_does_not_read",
                   "path_knows_no_cases",
                   "path_knows_no_sameness_of_values",
-                  "path_knows_no_string_inside_another",
                   "path_knows_no_place_on_an_order",
                   "path_knows_no_count_of_elements",
                   "path_knows_no_number_over_elements",
