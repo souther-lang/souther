@@ -356,7 +356,11 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                         } else {
                             reported++;
                         }
-                        if (actedOn != finding.has("obligationId")) {
+                        // By the obligation, or by the set of choices of a group where the finding
+                        // is about several combinations at once: a set is owed a row by each of its
+                        // members and is no obligation of its own, so it is named by its group and
+                        // what it takes.
+                        if (actedOn != (finding.has("obligationId") || finding.has("pattern"))) {
                             wrong.add(finding.get("kind").asString() + ": a build "
                                     + (actedOn ? "acts on this and it names nothing"
                                             : "acts on nothing here and it names an obligation"));

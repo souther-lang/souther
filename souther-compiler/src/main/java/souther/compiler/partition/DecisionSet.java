@@ -8,25 +8,20 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The decisions a combination is made of, as a set that works out its hash once and spreads it.
+ * The decisions a combination is made of, as an ordinary immutable set that has its hash already.
  *
  * <p>A combination is looked up wherever a requirement is met, counted or reported, and each lookup
  * of an ordinary set hashes every decision in it again — and a decision is a deep value, a construct
- * with the calls it was copied through. The set is never changed after it is made, so what it hashes
- * to is worked out when it is made.
+ * with the calls it was copied through. The set is never changed after it is made, so the hash is
+ * worked out when it is made.
  *
- * <p>And spread. An ordinary set hashes to the sum of what its decisions hash to, and the decisions
- * of one comparison visited many times differ only in the visit and in which way it came out: those
- * hash linearly, so every combination with as many held as another sums to the same number and
- * the combinations of one group fall into a few buckets, each told apart by comparing deep values.
- * Each decision's hash is mixed before it is summed, so the order of the decisions still does not
- * matter and the combinations land apart.
+ * <p>In every other respect a set. The hash is the sum of the members' hashes and it equals any
+ * set that holds the same decisions, as {@link Set} says; what keeps the combinations of a group
+ * from falling into a few buckets is how the decisions hash themselves, which is theirs to do.
  *
- * <p>Held as the array the decisions were given in, which is few, and not as a hashed set: making
- * one of a group's thousands of combinations would otherwise hash every decision of it again, which
- * is the cost this set exists to avoid. Equal to another of its kind holding the same decisions,
- * and to nothing else: a set hashed any other way cannot be equal to this one and keep what a
- * set's hash promises.
+ * <p>Held as the decisions were given, which are few, and not as a hashed set: making one of a
+ * group's thousands of combinations would otherwise hash every decision of it again, which is the
+ * cost this set exists to avoid.
  *
  * <p>The decision is written out in full because this package declares a {@code Condition} of its
  * own.
@@ -49,7 +44,7 @@ public final class DecisionSet extends AbstractSet<souther.compiler.reading.Cond
                 decisions.toArray(new souther.compiler.reading.Condition[0]);
         int sum = 0;
         for (souther.compiler.reading.Condition each : held) {
-            sum += mixed(each.hashCode());
+            sum += each.hashCode();
         }
         return new DecisionSet(held, sum);
     }
@@ -84,21 +79,10 @@ public final class DecisionSet extends AbstractSet<souther.compiler.reading.Cond
                 held[count] = each;
                 hashed[count] = h;
                 count++;
-                sum += mixed(h);
+                sum += h;
             }
         }
         return new DecisionSet(Arrays.copyOf(held, count), sum);
-    }
-
-    /** The finalizer of a 32-bit murmur hash: every bit of the input moves every bit of the output. */
-    private static int mixed(int h) {
-        int x = h;
-        x ^= x >>> 16;
-        x *= 0x85ebca6b;
-        x ^= x >>> 13;
-        x *= 0xc2b2ae35;
-        x ^= x >>> 16;
-        return x;
     }
 
     @Override
@@ -127,33 +111,29 @@ public final class DecisionSet extends AbstractSet<souther.compiler.reading.Cond
     }
 
     /**
-     * Whether {@code o} holds the same decisions.
+     * Whether {@code o} is a set of the same decisions.
      *
-     * <p>Two sets made from one walk hold the very same decisions in the same order, which is told
-     * by comparing them as they stand; sets that differ in order or in decision are compared as
-     * sets are.
+     * <p>Two of these made from one walk hold the very same decisions in the same order, which is
+     * told by comparing them as they stand, and two with different hashes are different before
+     * anything is compared; any other set is compared as sets are.
      */
     @Override
     public boolean equals(Object o) {
         if (o == this) {
             return true;
         }
-        if (!(o instanceof DecisionSet that) || that.decisions.size() != decisions.size()
-                || that.hash != hash) {
-            return false;
-        }
-        boolean alike = true;
-        for (int i = 0; alike && i < decisions.size(); i++) {
-            alike = decisions.get(i) == that.decisions.get(i);
-        }
-        if (alike) {
-            return true;
-        }
-        for (souther.compiler.reading.Condition each : decisions) {
-            if (!that.contains(each)) {
+        if (o instanceof DecisionSet that) {
+            if (that.hash != hash || that.decisions.size() != decisions.size()) {
                 return false;
             }
+            boolean alike = true;
+            for (int i = 0; alike && i < decisions.size(); i++) {
+                alike = decisions.get(i) == that.decisions.get(i);
+            }
+            if (alike) {
+                return true;
+            }
         }
-        return true;
+        return super.equals(o);
     }
 }

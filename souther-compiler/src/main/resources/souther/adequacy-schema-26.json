@@ -3680,12 +3680,13 @@
                       },
                       "then": {
                         "required": [
-                          "obligationId"
+                          "pattern",
+                          "combinations"
                         ],
-                        "properties": {
-                          "obligationId": {
-                            "$ref": "#/$defs/combinationObligationId"
-                          }
+                        "not": {
+                          "required": [
+                            "obligationId"
+                          ]
                         }
                       },
                       "else": {
@@ -3906,10 +3907,28 @@
             "x-souther-contains": "#/$defs/ruleHandle",
             "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.obligations`, `axis = value` names the point of a declaration's line the way the declaration wrote it, and `ON point of comparison@billing.sou:14:22` says which of the four points a boundary finding is about and which rule drew the line — the rule as a `ruleHandle`, and a line a body drew is owed once wherever it is read and has no one quantity to be named by, so what a row there has to do is under the obligation's `readings`. A finding about a question nothing answered leads with the same handle and says what was asked after it. These words are a presentation and never a key: which obligation such a finding is about is `obligationId`. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
           },
+          "pattern": {
+            "type": "object",
+            "description": "Which set of choices the finding is about, present exactly on `interaction_uncovered`: the group, and the outcome it takes at each factor. Joins to the entry of `interaction.groups` that has the same `group`, and to the member of its `unobserved` that has the same `fixed`. Not an `obligationId`: a set of choices is not an obligation of the body, and the decisions two sets share say nothing of whether they are one set.",
+            "required": [
+              "group",
+              "fixed"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "group": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fixed": {
+                "$ref": "#/$defs/patternFixed"
+              }
+            }
+          },
           "combinations": {
             "type": "integer",
             "minimum": 1,
-            "description": "How many combinations the finding is about, present exactly on `interaction_uncovered`. The finding is about the combinations of one group of the body's decisions that share the decisions `obligationId` names and are not made by any row, in one standing: a finding about one combination has 1 and an `obligationId` that names every decision of it, and one about more names only the decisions they share and leaves the rest of their decisions either way. The count is of choices within one group, so two findings of a behavior can count one combination that two groups arrive at."
+            "description": "How many choices of the group the finding is about, present exactly on `interaction_uncovered`. A finding is about the choices of one group that no row makes and that stand alike in what the reading went without and what is open about them; a combination that two groups arrive at is counted in each."
           },
           "code": {
             "type": "string",
@@ -6475,7 +6494,7 @@
     },
     "interaction": {
       "type": "object",
-      "description": "The combinations of decisions this behavior's body settles one value by, and which of them a row was seen making. Beside `decision` and not among it: a rule is one way through the body and a combination is one meeting on it, so a row through every way can leave a combination unmade. The combinations a row was seen making are listed under `obligations`, and the ones none was seen making are the `interaction_uncovered` findings, each stating a set of them by the decisions the set shares, so that what is written grows with the decisions and not with the ways they come out. Present exactly where the body's decisions meet, which is where `partition.pairs` is absent.",
+      "description": "The combinations of decisions this behavior's body settles one value by, and which of them a row was seen making. Beside `decision` and not among it: a rule is one way through the body and a combination is one meeting on it, so a row through every way can leave a combination unmade. The combinations a row was seen making are listed under `obligations`, and the ones none was seen making are stated under `groups` as the sets of choices they come to, so that what is written grows with the decisions and not with the ways they come out. Present exactly where the body's decisions meet, which is where `partition.pairs` is absent.",
       "required": [
         "coverage",
         "obligations"
@@ -6529,18 +6548,108 @@
                 "type": "boolean",
                 "description": "Whether a row was seen making this combination. Absent where the coverage has no number: a combination nothing was read about is not one no row makes."
               },
-              "combinations": {
-                "type": "integer",
-                "minimum": 2,
-                "description": "How many combinations the entry stands for, written exactly where it stands for more than one: an entry with `made` false whose `obligationId` names the decisions that many combinations of one group share and no row makes. Absent for one combination."
-              },
               "onlyWitnessedBy": {
                 "$ref": "#/$defs/onlyWitnessedBy"
               }
             }
           },
-          "description": "One entry per combination a row was seen making, with the rows, and one per set of combinations of a group that share their decisions and that no row makes. A set of one combination names every decision of it, so it has the identity the combination has; a set of more names only the decisions they share and says how many in `combinations`. An `interaction_uncovered` finding names one of these by its `obligationId`."
+          "description": "One entry per combination a row was seen making, with the rows; where the coverage has no number, one per combination the body has, since nothing says which a row made. The combinations no row makes are under `groups`, as the sets of choices they come to, and not entries here."
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The groups of this body's decisions that have combinations no row makes, and those combinations. Absent where there are none, and where the coverage has no number: a combination nothing was read about is not one no row makes.",
+          "items": {
+            "$ref": "#/$defs/interactionGroup"
+          }
         }
+      }
+    },
+    "interactionGroup": {
+      "type": "object",
+      "description": "One group of a body's decisions: the decisions that settle one value together. A group is its way in and its factors, a factor being one decision of the body with the outcomes it can come out as, and a choice of the group is one outcome of each factor. The combinations of the group are its choices that leave every position something, so a group can hold fewer choices than the product of its factors. `unobserved` states the choices no row makes as sets, which is how what is written grows with the factors and not with the choices.",
+      "required": [
+        "group",
+        "wayIn",
+        "factors",
+        "unobserved"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Which of the body's groups this is, counted from zero in the order the measure met them. What an `interaction_uncovered` finding's `pattern` names, and the same for the same model whichever rows are written."
+        },
+        "wayIn": {
+          "type": "array",
+          "description": "The decisions every choice of the group is under: what the path to the meeting settles. Empty where the group is the first thing the body settles.",
+          "items": {
+            "$ref": "#/$defs/combinationObligationId/properties/decisions/items"
+          }
+        },
+        "factors": {
+          "type": "array",
+          "description": "The factors of the group, in the order a pattern's `fixed` is written in.",
+          "items": {
+            "type": "object",
+            "required": [
+              "outcomes"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "outcomes": {
+                "type": "array",
+                "minItems": 1,
+                "description": "The outcomes the factor can come out as, in the order a pattern's `fixed` counts them from zero; each is the decisions that outcome settles.",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/combinationObligationId/properties/decisions/items"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "unobserved": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The choices of the group no row makes, as sets that cover each of them once. Two choices are in one set only where the findings about them stand alike: what the reading went without and what is open about whether a row can be written are never mixed.",
+          "items": {
+            "type": "object",
+            "required": [
+              "fixed",
+              "combinations"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fixed": {
+                "$ref": "#/$defs/patternFixed"
+              },
+              "combinations": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "How many choices of the group are in the set."
+              },
+              "obligationId": {
+                "$ref": "#/$defs/combinationObligationId",
+                "description": "Which combination of the body it is, present exactly where the set holds one choice. A set of more is not a combination and has no identity of its own beyond its group and `fixed`."
+              }
+            }
+          }
+        }
+      }
+    },
+    "patternFixed": {
+      "type": "array",
+      "description": "The outcome a set of choices takes at each factor of its group, in the order of the group's `factors`: the position of the outcome among the factor's `outcomes`, or null where the set holds the factor either way.",
+      "items": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "minimum": 0
       }
     },
     "branch": {

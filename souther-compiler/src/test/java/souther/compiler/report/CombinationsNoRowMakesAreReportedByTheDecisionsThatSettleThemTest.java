@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
@@ -70,17 +71,24 @@ class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
         assertEquals((1 << ELEMENTS) - 1, counted.stream().mapToInt(Integer::intValue).sum());
 
         JsonNode interaction = document.findValue("interaction");
-        long made = 0;
-        long notMade = 0;
-        for (JsonNode each : interaction.get("obligations")) {
-            if (each.get("made").asBoolean()) {
-                made++;
-            } else {
-                notMade++;
-            }
-        }
-        assertEquals(1, made, () -> "the one combination a row made: " + interaction);
-        assertEquals(ELEMENTS, notMade, () -> "and a set for each decision: " + interaction);
+        assertEquals(1, interaction.get("obligations").size(),
+                () -> "the one combination a row made: " + interaction);
+        assertEquals(1, interaction.get("groups").size(), () -> "of one group: " + interaction);
+        assertEquals(ELEMENTS, interaction.get("groups").get(0).get("unobserved").size(),
+                () -> "and a set for each decision: " + interaction);
+
+        // And the combinations of the group are told apart by their hashes. The decisions of one
+        // comparison visited many times differ in the visit and in which way it came out, and a
+        // hash that is linear in those leaves the combinations with as many held as each other
+        // in one bucket — as many buckets as counts, where there are as many combinations as
+        // subsets.
+        var behavior = report.modules().getFirst().behaviors().getFirst();
+        var asked = ((CombinationCriterion.Interactions) behavior.evidence().combinations())
+                .measured().asked();
+        assertEquals(1 << ELEMENTS, asked.ways().size());
+        assertEquals(asked.ways().size(), asked.ways().keySet().stream()
+                .map(each -> each.settled().hashCode()).distinct().count(),
+                "the combinations of a group hash apart");
 
         String page = report.human(rendering);
         assertTrue(page.lines().count() < 20L * ELEMENTS,
