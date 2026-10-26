@@ -1,10 +1,9 @@
 package souther.compiler.partition;
 
 import java.util.AbstractSet;
-import java.util.Collection;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -14,7 +13,7 @@ import java.util.Set;
  * <p>A combination is looked up wherever a requirement is met, counted or reported, and each lookup
  * of an ordinary set hashes every decision in it again — and a decision is a deep value, a construct
  * with the calls it was copied through. The set is never changed after it is made, so what it hashes
- * to is worked out the first time it is asked.
+ * to is worked out when it is made.
  *
  * <p>And spread. An ordinary set hashes to the sum of what its decisions hash to, and the decisions
  * of one comparison visited many times differ only in the visit and in which way it came out: those
@@ -23,49 +22,72 @@ import java.util.Set;
  * Each decision's hash is mixed before it is summed, so the order of the decisions still does not
  * matter and the combinations land apart.
  *
- * <p>In the order the decisions were given, so that two walks of one set read it the same way round.
- * Equal to another of its kind holding the same decisions, and to nothing else: a set hashed any
- * other way cannot be equal to this one and keep what a set's hash promises.
+ * <p>Held as the array the decisions were given in, which is few, and not as a hashed set: making
+ * one of a group's thousands of combinations would otherwise hash every decision of it again, which
+ * is the cost this set exists to avoid. Equal to another of its kind holding the same decisions,
+ * and to nothing else: a set hashed any other way cannot be equal to this one and keep what a
+ * set's hash promises.
  *
  * <p>The decision is written out in full because this package declares a {@code Condition} of its
  * own.
  */
 public final class DecisionSet extends AbstractSet<souther.compiler.reading.Condition> {
 
-    private final Set<souther.compiler.reading.Condition> decisions;
-    private int hash;
-    private boolean hashed;
+    private final List<souther.compiler.reading.Condition> decisions;
+    private final int hash;
 
-    private DecisionSet(Collection<souther.compiler.reading.Condition> decisions) {
-        this.decisions = Collections.unmodifiableSet(new LinkedHashSet<>(decisions));
+    private DecisionSet(souther.compiler.reading.Condition[] decisions, int hash) {
+        this.decisions = List.of(decisions);
+        this.hash = hash;
     }
 
     public static DecisionSet of(Set<souther.compiler.reading.Condition> decisions) {
-        return decisions instanceof DecisionSet already ? already : new DecisionSet(decisions);
+        if (decisions instanceof DecisionSet already) {
+            return already;
+        }
+        souther.compiler.reading.Condition[] held =
+                decisions.toArray(new souther.compiler.reading.Condition[0]);
+        int sum = 0;
+        for (souther.compiler.reading.Condition each : held) {
+            sum += mixed(each.hashCode());
+        }
+        return new DecisionSet(held, sum);
     }
 
     /**
-     * The decisions of {@code decisions}, hashed from what {@code hashes} already holds of each.
+     * The distinct decisions of {@code ordered}, hashed from what {@code hashes} already holds of
+     * each.
      *
      * <p>The combinations of one group are made of the same few decisions, taken in turn, and a
      * decision is a deep value that costs as much to hash each time. Asked of the one decision
      * once, a group of many choices hashes as many decisions as it has outcomes and not as many as
-     * its choices have.
+     * its choices have. And a decision met twice is told from another by that hash first, so two
+     * decisions are compared deeply only where they could be one.
      *
      * @param hashes what each decision of the group hashes to, by the decision itself; filled as
      *               decisions are met
      */
-    static DecisionSet of(Set<souther.compiler.reading.Condition> decisions,
+    static DecisionSet of(List<souther.compiler.reading.Condition> ordered,
                           Map<souther.compiler.reading.Condition, Integer> hashes) {
-        DecisionSet out = new DecisionSet(decisions);
+        souther.compiler.reading.Condition[] held =
+                new souther.compiler.reading.Condition[ordered.size()];
+        int[] hashed = new int[held.length];
+        int count = 0;
         int sum = 0;
-        for (souther.compiler.reading.Condition each : out.decisions) {
-            sum += mixed(hashes.computeIfAbsent(each,
-                    souther.compiler.reading.Condition::hashCode));
+        for (souther.compiler.reading.Condition each : ordered) {
+            int h = hashes.computeIfAbsent(each, souther.compiler.reading.Condition::hashCode);
+            boolean seen = false;
+            for (int i = 0; i < count && !seen; i++) {
+                seen = held[i] == each || (hashed[i] == h && held[i].equals(each));
+            }
+            if (!seen) {
+                held[count] = each;
+                hashed[count] = h;
+                count++;
+                sum += mixed(h);
+            }
         }
-        out.hash = sum;
-        out.hashed = true;
-        return out;
+        return new DecisionSet(Arrays.copyOf(held, count), sum);
     }
 
     /** The finalizer of a 32-bit murmur hash: every bit of the input moves every bit of the output. */
@@ -91,19 +113,16 @@ public final class DecisionSet extends AbstractSet<souther.compiler.reading.Cond
 
     @Override
     public boolean contains(Object o) {
-        return decisions.contains(o);
+        for (souther.compiler.reading.Condition each : decisions) {
+            if (each == o || each.equals(o)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
     public int hashCode() {
-        if (!hashed) {
-            int sum = 0;
-            for (souther.compiler.reading.Condition each : decisions) {
-                sum += mixed(each.hashCode());
-            }
-            hash = sum;
-            hashed = true;
-        }
         return hash;
     }
 
@@ -111,24 +130,30 @@ public final class DecisionSet extends AbstractSet<souther.compiler.reading.Cond
      * Whether {@code o} holds the same decisions.
      *
      * <p>Two sets made from one walk hold the very same decisions in the same order, which is told
-     * by comparing them as they stand before anything is hashed; sets that differ in order or in
-     * decision are compared as sets are.
+     * by comparing them as they stand; sets that differ in order or in decision are compared as
+     * sets are.
      */
     @Override
     public boolean equals(Object o) {
         if (o == this) {
             return true;
         }
-        if (!(o instanceof DecisionSet that) || that.size() != size()
-                || that.hashCode() != hashCode()) {
+        if (!(o instanceof DecisionSet that) || that.decisions.size() != decisions.size()
+                || that.hash != hash) {
             return false;
         }
-        Iterator<souther.compiler.reading.Condition> mine = decisions.iterator();
-        Iterator<souther.compiler.reading.Condition> theirs = that.decisions.iterator();
         boolean alike = true;
-        while (alike && mine.hasNext()) {
-            alike = mine.next() == theirs.next();
+        for (int i = 0; alike && i < decisions.size(); i++) {
+            alike = decisions.get(i) == that.decisions.get(i);
         }
-        return alike || decisions.containsAll(that.decisions);
+        if (alike) {
+            return true;
+        }
+        for (souther.compiler.reading.Condition each : decisions) {
+            if (!that.contains(each)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

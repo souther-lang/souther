@@ -194,7 +194,7 @@ public record InteractionRequirements(
                 }
                 ObligationIdentity.OfACombinationOfDecisions item =
                         new ObligationIdentity.OfACombinationOfDecisions(
-                                behavior, DecisionSet.of(group.settledAt(index), hashes));
+                                behavior, DecisionSet.of(group.settlesAt(index), hashes));
                 at.add(item);
                 List<Way> already = ways.computeIfAbsent(item, _ -> new ArrayList<>());
                 Way way = new Way(RowRegion.of(List.of(

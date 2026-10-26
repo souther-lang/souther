@@ -231,6 +231,27 @@ public final class InteractionCells {
             return java.util.Collections.unmodifiableSet(out);
         }
 
+        /**
+         * The decisions of the {@code index}th choice as they were stated, the way in first and then
+         * the outcome taken at each factor, with none left out for being stated twice.
+         *
+         * <p>For a caller that makes a value of its own of them and tells the repeats apart there,
+         * with the hash of each decision it already holds. {@link #settledAt} hashes every decision
+         * of every choice again to make a set of them, and a group of thousands of choices pays that
+         * thousands of times over for the same few decisions.
+         *
+         * <p>Not told whether the choice is a combination: that is {@link #at}'s answer.
+         */
+        public List<souther.compiler.reading.Condition> settlesAt(int index) {
+            List<souther.compiler.reading.Condition> out = new ArrayList<>(reach.settles());
+            int left = index;
+            for (List<Placed> factor : byFactor) {
+                out.addAll(factor.get(left % factor.size()).settles());
+                left /= factor.size();
+            }
+            return out;
+        }
+
         /** How many cells the group has from {@code from} on, which is what a stopped search left. */
         public int left(int from) {
             int left = 0;

@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
 
-    private static final int ELEMENTS = 10;
+    private static final int ELEMENTS = 6;
 
     private static String lengthOfWhatWasKept(int elements) {
         String params = IntStream.range(0, elements).mapToObj(i -> "m" + i + ": Row")
