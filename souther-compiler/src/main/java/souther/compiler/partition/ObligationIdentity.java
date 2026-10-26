@@ -240,7 +240,7 @@ public sealed interface ObligationIdentity
 
         public OfACombinationOfDecisions {
             Objects.requireNonNull(behavior, "a combination of decisions is some body's");
-            settled = Set.copyOf(settled);
+            settled = DecisionSet.of(settled);
             if (settled.isEmpty()) {
                 // A combination of a body's decisions is decisions being settled. Empty, it would
                 // be a requirement every run meets by having run at all.

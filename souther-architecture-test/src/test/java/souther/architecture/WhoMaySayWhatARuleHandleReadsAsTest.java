@@ -76,9 +76,6 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
 
     private static final Told SAID_OF_A_SUBJECT = Told.takingA(REPORT, "said", 0, Subject.class);
 
-    private static final Told THE_FINDINGS_OF_THE_DOCUMENT =
-            Told.takingA(REPORT, "findings", 0, DocumentArray.class);
-
     /**
      * The block's words for a point of a body's line, which a finding about the point and a row
      * handed for it both ask. The other {@code about} of the block says a finding and hands a
@@ -89,8 +86,7 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
 
     private static final List<Told> TOLD_APART = List.of(PARTITION_IN_PROSE,
             PARTITION_IN_THE_DOCUMENT, INSIDE_THE_PARTITION_IN_PROSE,
-            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, THE_FINDINGS_OF_THE_DOCUMENT,
-            SAID_OF_A_POINT);
+            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, SAID_OF_A_POINT);
 
     /**
      * Every class that asks what a handle reads as outside a document, and why it may.
@@ -127,7 +123,7 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
             REPORT + "#causes",
-            THE_FINDINGS_OF_THE_DOCUMENT.spelt(),
+            REPORT + "#finding",
             REPORT + "#obligations",
             INSIDE_THE_PARTITION_IN_THE_DOCUMENT.spelt(),
             PARTITION_IN_THE_DOCUMENT.spelt());
