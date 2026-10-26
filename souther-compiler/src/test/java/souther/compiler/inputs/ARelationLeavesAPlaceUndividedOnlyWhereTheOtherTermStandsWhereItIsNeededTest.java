@@ -294,7 +294,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
      * quintillion: an {@code a} past the greatest {@code Int} less {@code K} has no row computed,
      * since {@code a + K} is past the type whatever {@code b} is. The answer says so, as a run
      * whose line is the type's alone, and draws no line of the model on {@code a}; on {@code b}
-     * it draws the model's line at {@code K}, below which every {@code a} holds it.
+     * it draws the model's line at {@code K}, below which every {@code a} holds it, and the
+     * values from the greatest {@code Int} on are the type's alone, since the rows that hold the
+     * relation there are the ones no row computes.
      */
     @Test
     void aValueNoRowIsComputedAtIsARunOfTheTypeAloneInTheReadingOfADifference() {
@@ -319,9 +321,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                                 String::equals, GREATEST_INT);
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.LE, ExactRatio.of(k - 1))),
                 b.linesOfTheModel());
+        // At the greatest Int itself {@code a} would have to pass the greatest less K for the
+        // relation to hold, and no row computes {@code a + K} there: the rows computed fail it.
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
-                ExactRatio.of(BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)))),
-                b.ofTheTypeAlone());
+                ExactRatio.of(Long.MAX_VALUE))), b.ofTheTypeAlone());
     }
 
     /**
@@ -476,6 +479,28 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void twoWeightsMoveTwoValuesTogetherOnlyWhereOneIsTheOthersNegation() {
         assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), -14, Rel.LE));
         assertEquals(Set.of(), apart(pair(2, -1, A_DATE), -14, Rel.LE));
+    }
+
+    /**
+     * Weighed alike the two are about their sum, and read as the difference is: a sum no two dates
+     * come to is no outcome, and one the middle date reaches either side of is. Weighed alike but
+     * not by one, or one way and another by different amounts, they are neither.
+     */
+    @Test
+    void twoValuesWeighedAlikeAreReadByTheirSum() {
+        assertEquals(Set.of("a", "b"), apart(pair(1, 1, A_DATE), -14, Rel.EQ));
+        assertEquals(Set.of("a", "b"), apart(pair(-1, -1, A_DATE), 14, Rel.GT));
+        assertEquals(Set.of(), apart(pair(1, 1, A_DATE), -10_000_000_000_000L, Rel.EQ));
+        assertEquals(Set.of(), apart(pair(2, 1, A_DATE), -14, Rel.EQ));
+    }
+
+    /** What the way holds of the sum is where it has to come out both ways, as of a difference. */
+    @Test
+    void whatTheWayHoldsOfTheSumIsWhereItHasToComeOutBothWays() {
+        assertEquals(Set.of("a", "b"),
+                apart(pair(1, 1, A_DATE), -14, Rel.EQ, held(1, -10, Rel.GE)));
+        assertEquals(Set.of(),
+                apart(pair(1, 1, A_DATE), -14, Rel.GT, held(1, -14, Rel.EQ)));
     }
 
     /**

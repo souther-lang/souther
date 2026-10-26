@@ -296,6 +296,7 @@ public sealed interface BlockReason {
                 case WhereALineDecidesNotWorkedOut _ -> 24;
                 case RelationNotShownWhereTheSearchStopped _ -> 25;
                 case RelationNotShownReachedAtEveryValue _ -> 26;
+                case OrderedExtentEndIsNoValue _ -> 27;
             };
         }
 
@@ -328,7 +329,7 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _ -> 0;
+                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
             };
         }
 
@@ -360,6 +361,10 @@ public sealed interface BlockReason {
                 // values were read. What the position admits is what the rules leave; the line
                 // through them is what nobody worked out.
                 case EndLeftOpenByAChoice _ -> false;
+                // And a run whose end is no value: the strings the rule admits were read in full
+                // and they are what the position holds, and what is missing is an end to draw a
+                // line at.
+                case OrderedExtentEndIsNoValue _ -> false;
                 // And where one line of several decides was not worked out, which is a question
                 // about the line and asks nothing of the values the rules leave.
                 case WhereALineDecidesNotWorkedOut _ -> false;
@@ -408,10 +413,11 @@ public sealed interface BlockReason {
                 // positions or between the elements of one, a pairing nothing worked out and a rule
                 // of several lines are all met again by a run allowed more of everything. So is an
                 // end a choice left open: what the reading of ends stops on is a form it does not
-                // enter, and there is no figure it stopped at.
+                // enter, and there is no figure it stopped at. So is a run whose end is no value:
+                // a longer walk finds the same end.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
-                     NonAffineArithmetic _,
+                     NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
@@ -443,7 +449,7 @@ public sealed interface BlockReason {
                 case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
-                     NonAffineArithmetic _,
+                     NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
@@ -769,6 +775,18 @@ public sealed interface BlockReason {
     /** A comparison naming the position is against values no line is drawn on here — the carrier,
      *  asked of the carrier. */
     record UnreadComparisonDomain() implements RuleReadingStopped {}
+
+    /**
+     * A rule's strings are a run whose end is not a value: {@code a} and a combining acute held as
+     * two code points is a string no {@code String} is, so there is no value to draw a line at.
+     *
+     * <p>Its own case beside {@link UnreadComparisonDomain}, which is a comparison against values
+     * with no order to draw a line on. Here the strings are read in full, they carry an order, and
+     * the rule is not a name for one value; what could not be established is that an end of the run
+     * is a value. Said as a rule that draws no line, it would be a statement about the model, and
+     * it is a statement about what a {@code String} holds.
+     */
+    record OrderedExtentEndIsNoValue() implements RuleReadingStopped {}
 
     /**
      * A comparison naming the position was read to the end, and a number its line is read through

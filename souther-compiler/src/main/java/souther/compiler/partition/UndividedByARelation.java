@@ -3450,16 +3450,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * {@code form} held against nought as {@code rel}, as a statement about the difference of the
-     * two sides — or null where it is over anything else, or weighs them other than one way and the
-     * other.
+     * two sides, or about their sum where the relation weighs them alike — or null where it is
+     * over anything else, or weighs them other than the relation does.
      */
     private WhatARelationLeavesUndivided.OnTheDifference onTheDifference(
             LinearForm<NumericTerm> form, Rel rel) {
         ExactRatio first = form.coefs().get(sides.get(0).atOnePosition());
         ExactRatio second = form.coefs().get(sides.get(1).atOnePosition());
-        if (form.coefs().size() != 2 || first == null || second == null
-                || !(first.plus(second) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))
-                || sum.signum() != 0) {
+        if (form.coefs().size() != 2 || first == null || second == null) {
+            return null;
+        }
+        // A statement is about the combination the relation is about: a sum is not a difference.
+        boolean asked = sides.get(0).weight().equals(sides.get(1).weight());
+        boolean alike = first.equals(second);
+        boolean opposed = first.plus(second) instanceof ExactAnswer.Held<ExactRatio>(
+                ExactRatio sum) && sum.signum() == 0;
+        if (asked ? !alike : !opposed) {
             return null;
         }
         return new WhatARelationLeavesUndivided.OnTheDifference(first, form.constant(), rel);

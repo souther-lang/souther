@@ -42,6 +42,16 @@ final class StableStarters {
         return within(CodePoints.EVERYTHING);
     }
 
+    /** Whether {@code over} holds such a code point, which stops at the first one. */
+    static boolean anyWithin(CodePoints over) {
+        for (CodePoints.Range range : over.ranges()) {
+            if (next(range.from(), range.to(), true) <= range.to()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The code points of {@code over} that are such code points. */
     static CodePoints within(CodePoints over) {
         List<CodePoints.Range> out = new ArrayList<>();

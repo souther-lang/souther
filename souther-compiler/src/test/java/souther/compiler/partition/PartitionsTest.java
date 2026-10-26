@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PartitionsTest {
 
-    private static Partitions.Partitioning partitioningOf(String source, String behavior) {
+    static Partitions.Partitioning partitioningOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);

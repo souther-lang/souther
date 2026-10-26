@@ -13,6 +13,7 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -302,7 +303,7 @@ final class Classing {
                 active.add(each);
                 continue;   // filled in below, once it is known whether the classes took it up
             }
-            Worked<Boolean> worked = tellsApart(term, admits,
+            Worked<Telling> worked = tellsApart(term, admits,
                     new AsASet(set.states().whenTrue(), set.states().whenFalse(),
                             set.states().statement()),
                     allowance);
@@ -315,7 +316,10 @@ final class Classing {
                 return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
                         ofTheDistinctions(worked.refused())));
             }
-            boolean divides = worked.answer();
+            if (worked.answer() == Telling.UNSETTLED) {
+                return notComposed(mine, told, new BlockReason.ClassesNotComposed());
+            }
+            boolean divides = worked.answer() == Telling.APART;
             told.add(divides
                     ? new Disposed(each, Outcome.DIVIDED, null)
                     : new Disposed(each, Outcome.TOLD_NOTHING_APART,
@@ -346,6 +350,9 @@ final class Classing {
         if (refined.refused() != null) {
             return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
                     ofTheDistinctions(refined.refused())));
+        }
+        if (refined.answer() == null) {
+            return notComposed(mine, told, new BlockReason.ClassesNotComposed());
         }
         List<Cell> cells = refined.answer();
         List<PartitionClass> out = new ArrayList<>();
@@ -416,7 +423,8 @@ final class Classing {
      * What working something out under the allowance came to: the answer, or the limit that
      * refused it and no answer.
      *
-     * @param answer  what was worked out, or null where it was refused
+     * @param answer  what was worked out, or null where it was refused or the reading could not
+     *                settle it
      * @param refused the limit that refused it, or null where it was worked out
      */
     private record Worked<T>(T answer, PatternPlan.Refused refused) {
@@ -438,7 +446,7 @@ final class Classing {
      * can name strings on both sides and have the declarations leave nothing on one of them, which
      * is the position undivided by it however the strings fall.
      */
-    private static Worked<Boolean> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
+    private static Worked<Telling> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
                                               AsASet said,
                                               Allowance<NumericTerm.FromOnePosition> allowance) {
         Allowance.Composed yes = allowance.meet(Sameness.Block.of(term), admits, said.whenTrue());
@@ -449,8 +457,20 @@ final class Classing {
         if (no.gaveUp()) {
             return Worked.refusedAt(no.refused());
         }
-        return Worked.to(!yes.set().isEmpty() && !no.set().isEmpty());
+        if (TextExtents.shownToHoldNone(yes.set()) || TextExtents.shownToHoldNone(no.set())) {
+            return Worked.to(Telling.NOTHING_APART);
+        }
+        return Worked.to(TextExtents.shownToHoldAValue(yes.set())
+                && TextExtents.shownToHoldAValue(no.set())
+                ? Telling.APART : Telling.UNSETTLED);
     }
+
+    /**
+     * What a rule did to the values of a position. A side whose strings are not shown to include a
+     * value is neither one that holds nothing nor one that holds something, so it is not a rule
+     * that tells nothing apart.
+     */
+    private enum Telling { APART, NOTHING_APART, UNSETTLED }
 
     /**
      * One class the rules about a position leave it divided into.
@@ -522,8 +542,11 @@ final class Classing {
                     if (met.gaveUp()) {
                         return Worked.refusedAt(met.refused());
                     }
-                    if (!met.set().isEmpty()) {
+                    if (TextExtents.shownToHoldAValue(met.set())) {
                         narrower.add(cell.and(met.set(), each.states(), holding));
+                    } else if (!TextExtents.shownToHoldNone(met.set())) {
+                        // Neither a class nor none: the cell stands for strings no value may be.
+                        return new Worked<>(null, null);
                     }
                 }
             }
