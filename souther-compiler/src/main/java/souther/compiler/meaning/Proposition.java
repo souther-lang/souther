@@ -1511,14 +1511,40 @@ public sealed interface Proposition {
      *
      * <p>A consequence of {@code stated} where it holds, and no rule's conclusion: it is what a
      * row has to be for the statement to look anything up at all, since a statement over an empty
-     * container or an empty list of the things it looks up says nothing of any order. Nothing where
-     * no quantifier is around {@code last}, or what is left of it would quantify its container twice.
+     * container or an empty list of the things it looks up says nothing of any order. Each
+     * quantifier around {@code last} is kept, so that every list the statement quantifies over
+     * holds an element as well.
+     *
+     * <p>One order may be read in several places of {@code stated}, under the quantifiers of
+     * different lists. The statement looks the entry up if it does so in any of them, so the
+     * places are alternatives. Nothing where some place has no quantifier around {@code last}, or
+     * what is left of it would quantify a container twice: an alternative left out would ask of a
+     * row what the statement does not.
      */
     static Optional<Proposition> theEntryLookedUp(Proposition stated, LastToHold last) {
-        Some around = innermostQuantifierAround(stated, last, null);
-        if (around == null) {
+        List<List<Some>> places = new ArrayList<>();
+        quantifiersAround(stated, last, List.of(), places);
+        if (places.isEmpty()) {
             return Optional.empty();
         }
+        List<Proposition> alternatives = new ArrayList<>();
+        for (List<Some> chain : places) {
+            Optional<Proposition> alternative = entryUnder(chain, last);
+            if (alternative.isEmpty()) {
+                return Optional.empty();
+            }
+            alternatives.add(alternative.get());
+        }
+        return Optional.of(any(alternatives));
+    }
+
+    /** {@link #theEntryLookedUp} for the place of {@code last} inside {@code chain}, which is the
+     *  quantifiers around it, outermost first. */
+    private static Optional<Proposition> entryUnder(List<Some> chain, LastToHold last) {
+        if (chain.isEmpty()) {
+            return Optional.empty();
+        }
+        Some around = chain.getLast();
         List<Proposition> parts = around.ofTheElement() instanceof All all
                 ? all.parts() : List.of(around.ofTheElement());
         List<Proposition> kept = new ArrayList<>();
@@ -1530,22 +1556,32 @@ public sealed interface Proposition {
         if (kept.isEmpty() || Some.quantifiesOver(around.container(), all(kept))) {
             return Optional.empty();
         }
-        return Optional.of(new Some(around.container(), all(kept), true));
+        Proposition built = new Some(around.container(), all(kept), true);
+        for (int outer = chain.size() - 2; outer >= 0; outer--) {
+            if (Some.quantifiesOver(chain.get(outer).container(), built)) {
+                return Optional.empty();
+            }
+            built = new Some(chain.get(outer).container(), built, true);
+        }
+        return Optional.of(built);
     }
 
-    private static Some innermostQuantifierAround(Proposition stated, LastToHold last,
-                                                  Some nearest) {
+    /** Into {@code places}, the quantifiers {@code last} is inside of at each place it stands in
+     *  {@code stated}, outermost first. */
+    private static void quantifiersAround(Proposition stated, LastToHold last,
+                                          List<Some> enclosing, List<List<Some>> places) {
         if (stated.equals(last)) {
-            return nearest;
+            places.add(enclosing);
+            return;
         }
-        Some here = stated instanceof Some some ? some : nearest;
+        List<Some> here = enclosing;
+        if (stated instanceof Some some) {
+            here = new ArrayList<>(enclosing);
+            here.add(some);
+        }
         for (Proposition part : stated.partsHeld()) {
-            Some found = innermostQuantifierAround(part, last, here);
-            if (found != null) {
-                return found;
-            }
+            quantifiersAround(part, last, here, places);
         }
-        return null;
     }
 
     /**
