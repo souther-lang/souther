@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.execute.EvaluationPolicy;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,6 +92,88 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
         broken.answerEverything();
         assertEquals(List.of("E2010 TheValueBreaksAnInvariantWhenItIsBuilt[value=table]"),
                 broken.errors().stream()
+                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                        .toList());
+    }
+
+    /**
+     * The carrier the abort leaves by is the one class for a broken invariant and for a division by
+     * zero, so a build that ended by the second is not a value that breaks an invariant — and says
+     * nothing of the constructions written in it.
+     */
+    @Test
+    void aBuildThatEndsInSomethingOtherThanABrokenInvariantIsNotAViolation() {
+        String module = """
+                module demo
+
+                data Row = { grade: Int }
+                    invariant nonNegative = grade >= 0
+                let zero = List.length([1]) - 1
+                let sample = [Row { grade = 1 }, Row { grade = Int.floorMod(1, zero) }]
+
+                behavior f : (cur: Int) -> Int
+                let f (cur) = cur
+                """;
+        Compilation compilation = Compilation.ofSource(module, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        var built = compilation.db().ask(new Output.BuiltValues("demo"));
+        assertTrue(built.present());
+        assertTrue(built.value().isEmpty(), "nothing was shown to hold: " + built.value());
+    }
+
+    /** A value is held to what a row is, so one that does not stop within it is left to the check
+     *  that runs when the program does and shows nothing. */
+    @Test
+    void aBuildThatSpendsMoreThanARunMayIsNotDecided() {
+        String module = """
+                module demo
+
+                data Counted = { n: Int }
+                    invariant nonNegative = n >= 0
+                let sample = Counted { n = List.length(List.rangeInclusive(1, 5000)) }
+
+                behavior f : (cur: Int) -> Int
+                let f (cur) = cur
+                """;
+        Compilation roomy = Compilation.ofSource(module, "Main");
+        roomy.answerEverything();
+        assertEquals(1, roomy.db().ask(new Output.BuiltValues("demo")).value().size(),
+                "within the default, the value is built and its construction recorded");
+
+        Compilation tight = Compilation.ofSource(module, "Main")
+                .withEvaluationPolicy(EvaluationPolicy.DEFAULT.withStepLimit(100));
+        tight.answerEverything();
+        assertEquals(List.of(), tight.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        assertTrue(tight.db().ask(new Output.BuiltValues("demo")).value().isEmpty());
+    }
+
+    /**
+     * A value several others read is built once and is the answer for itself: the values built
+     * from it are not told they broke an invariant because it did.
+     */
+    @Test
+    void aViolationIsReportedOnceAtTheValueThatBrokeIt() {
+        String module = """
+                module demo
+
+                data Row = { grade: Int }
+                    invariant nonNegative = grade >= 0
+                data Table = List<Row>
+                    invariant distinctGrades = List.allDistinctBy(.grade, value)
+                let base = Table([ Row { grade = 1 }, Row { grade = 1 } ])
+                let first = Row { grade = List.length(base.value) }
+                let second = Row { grade = List.length(base.value) + 1 }
+
+                behavior f : (cur: Int) -> Int
+                let f (cur) = cur
+                """;
+        Compilation compilation = Compilation.ofSource(module, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of("E2010 TheValueBreaksAnInvariantWhenItIsBuilt[value=base]"),
+                compilation.errors().stream()
                         .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
                         .toList());
     }

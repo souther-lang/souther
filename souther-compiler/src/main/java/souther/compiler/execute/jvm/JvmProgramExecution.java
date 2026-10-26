@@ -1,12 +1,15 @@
 package souther.compiler.execute.jvm;
 
 import souther.compiler.codegen.Backend;
-import souther.compiler.execute.BuiltValue;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.ProgramExecution;
+import souther.compiler.execute.ValueBuild;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.examples.Answering;
+import souther.compiler.examples.Deadline;
 import souther.compiler.examples.ExampleStatements;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.examples.ExampleVerifier;
@@ -14,6 +17,7 @@ import souther.compiler.examples.RowTrial;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.observe.ArmObservation;
@@ -23,10 +27,13 @@ import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
 import souther.runtime.ConstraintViolation;
+import souther.runtime.InvariantFailure;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -191,39 +198,81 @@ public final class JvmProgramExecution implements ProgramExecution {
     }
 
     @Override
-    public ConstantOutcome build(BuiltValue asked) {
-        ClassLoader loader = images.compileTimeLoader(asked.writtenIn());
-        if (loader == null) {
-            return new ConstantOutcome.NotEvaluatedHere();
+    public Map<String, ConstantOutcome> build(ValueBuild asked, EvaluationPolicy policy) {
+        Map<String, ConstantOutcome> outcomes = new LinkedHashMap<>();
+        // The classes a row is evaluated with: they count the steps and the depth they spend, so a
+        // value that does not stop is held to the same figures a row is.
+        JvmProgramImage image = images.evaluating(asked.writtenIn(), ArmObservation.OMIT);
+        if (image == null) {
+            asked.inOrder().forEach(each ->
+                    outcomes.put(each.name(), new ConstantOutcome.NotEvaluatedHere()));
+            return outcomes;
         }
-        try {
-            Class<?> fns = Class.forName(SoutherJvmAbi.nameOf(
-                    new GeneratedClass.Helpers(asked.writtenIn())).binaryName(), true, loader);
-            built(fns, asked);
-            return new ConstantOutcome.Holds();
-        } catch (InvocationTargetException failed) {
-            // A value breaking an invariant leaves by the abort every construction leaves by. Any
-            // other way of failing is the machine's and not the language's, and the check that runs
-            // when the program does stands.
-            return failed.getCause() != null && failed.getCause().getClass().getName()
-                    .equals(ConstraintViolation.class.getName())
-                    ? new ConstantOutcome.Violates(Optional.empty())
-                    : new ConstantOutcome.NotEvaluatedHere();
-        } catch (ReflectiveOperationException | LinkageError _) {
-            return new ConstantOutcome.NotEvaluatedHere();
+        ClassLoader loader = new MemoryClassLoader(image.program().classes(), image.around());
+        Deadline deadline = deadlines.forThisCompile(policy.compilerTimeout());
+        Map<String, Object> built = new HashMap<>();
+        for (ValueBuild.Step each : asked.inOrder()) {
+            Object[] handed = new Object[each.handed().size()];
+            boolean everyOneBuilt = true;
+            for (int i = 0; i < handed.length; i++) {
+                everyOneBuilt &= built.containsKey(each.handed().get(i));
+                handed[i] = built.get(each.handed().get(i));
+            }
+            outcomes.put(each.name(), everyOneBuilt
+                    ? building(asked.writtenIn(), each, handed, loader, deadline, policy, built)
+                    : new ConstantOutcome.NotEvaluatedHere());
         }
+        return outcomes;
     }
 
-    /** The value as its method answers it, after the values that method is handed are built. */
-    private static Object built(Class<?> fns, BuiltValue asked)
+    /**
+     * One value, built within what {@code policy} allows a run, and kept in {@code built} where it
+     * was.
+     *
+     * <p>Only a broken invariant is a violation. The carrier the abort leaves by is one class for
+     * every constraint of the language's, so what a value that ended is told apart by is the failure
+     * it carries and not its class.
+     */
+    private static ConstantOutcome building(String module, ValueBuild.Step value, Object[] handed,
+                                            ClassLoader loader, Deadline deadline,
+                                            EvaluationPolicy policy, Map<String, Object> built) {
+        Deadline.Outcome<Object> ran = deadline.given(
+                new Deadline.Work.Value(value.name(), value.pos()), () -> {
+                    EvaluationContext.begin(policy.stepLimit(), policy.recursionDepthLimit());
+                    try {
+                        return invoked(module, value.name(), handed, loader);
+                    } finally {
+                        EvaluationContext.end();
+                    }
+                });
+        return switch (ran) {
+            case Deadline.Outcome.Finished<Object>(Object made) -> {
+                built.put(value.name(), made);
+                yield new ConstantOutcome.Holds();
+            }
+            case Deadline.Outcome.Overran<Object>(Runnable abandon) -> {
+                abandon.run();
+                yield new ConstantOutcome.NotEvaluatedHere();
+            }
+            case Deadline.Outcome.Threw<Object>(Throwable cause) -> {
+                Throwable ended = cause instanceof InvocationTargetException call
+                        && call.getCause() != null ? call.getCause() : cause;
+                yield ended instanceof ConstraintViolation violation
+                        && violation.failure() instanceof InvariantFailure broken
+                        ? new ConstantOutcome.Violates(Optional.ofNullable(broken.clause()))
+                        : new ConstantOutcome.NotEvaluatedHere();
+            }
+        };
+    }
+
+    /** The value as the method the module emits for it answers it, given what it is handed. */
+    private static Object invoked(String module, String name, Object[] handed, ClassLoader loader)
             throws ReflectiveOperationException {
-        Object[] handed = new Object[asked.handedOver().size()];
+        Class<?> fns = Class.forName(SoutherJvmAbi.nameOf(
+                new GeneratedClass.Helpers(module)).binaryName(), true, loader);
         Class<?>[] taken = new Class<?>[handed.length];
-        for (int i = 0; i < handed.length; i++) {
-            handed[i] = built(fns, asked.handedOver().get(i));
-            taken[i] = Object.class;
-        }
-        Method method = fns.getDeclaredMethod(Backend.helperMethod(asked.name()), taken);
+        Arrays.fill(taken, Object.class);
+        Method method = fns.getDeclaredMethod(Backend.helperMethod(name), taken);
         method.setAccessible(true);
         return method.invoke(null, handed);
     }

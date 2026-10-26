@@ -7,7 +7,9 @@ import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -39,9 +41,13 @@ final class RecordingExecution implements ProgramExecution {
     }
 
     @Override
-    public ConstantOutcome build(BuiltValue asked) {
-        this.asked.add("value " + asked.name() + " written in " + asked.writtenIn());
-        return new ConstantOutcome.NotEvaluatedHere();
+    public Map<String, ConstantOutcome> build(ValueBuild asked, EvaluationPolicy policy) {
+        Map<String, ConstantOutcome> answered = new LinkedHashMap<>();
+        for (ValueBuild.Step each : asked.inOrder()) {
+            this.asked.add("value " + each.name() + " written in " + asked.writtenIn());
+            answered.put(each.name(), new ConstantOutcome.NotEvaluatedHere());
+        }
+        return answered;
     }
 
     @Override

@@ -6,6 +6,8 @@ import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
 
+import java.util.Map;
+
 /**
  * The questions the language can only answer by running the program.
  *
@@ -54,15 +56,21 @@ public interface ProgramExecution {
     ConstantOutcome check(ConstantConstruction written);
 
     /**
-     * Whether building the value {@code asked} breaks an invariant of something it builds.
+     * Whether building each of the values {@code asked} breaks an invariant of something it builds,
+     * for each by its name.
      *
-     * <p>Answered by building it as the program that ships does. A value is built where its module
-     * builds it and not by a run that reads it, so an invariant it breaks is one the module breaks
-     * and not one of any run. {@link ConstantOutcome.Holds} says it was built, and
-     * {@link ConstantOutcome.Violates} says which clause stopped it; where it cannot be built here
-     * the answer says so, and the check that runs when the program does stands.
+     * <p>Answered by building them as the program that ships does, each once and in the order
+     * asked. A value is built where its module builds it and not by a run that reads it, so an
+     * invariant it breaks is one the module breaks and not one of any run.
+     * {@link ConstantOutcome.Holds} says it was built, and {@link ConstantOutcome.Violates} says
+     * which clause stopped it. A value that ended some other way, or spent more than {@code policy}
+     * allows a run, or is handed one that was not built, is not decided here: the check that runs
+     * when the program does stands, and nothing is said of it. Only a broken invariant is a
+     * violation — a division by zero ends a build as well and is not one.
+     *
+     * <p>A violation is the answer for the value that broke it and for no value built from it.
      */
-    ConstantOutcome build(BuiltValue asked);
+    Map<String, ConstantOutcome> build(ValueBuild asked, EvaluationPolicy policy);
 
     /**
      * What running the rows written in {@code source} came to.

@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A constraint the model declared cannot be broken, broken while the domain ran — the abort of spec
  * §algebraic-types, §violation-destination, §jvm-abort. The model states one in two places and both
@@ -20,8 +22,28 @@ package souther.runtime;
 public final class ConstraintViolation extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
+    /** What broke, where it is a declared constraint; none for the other ends this class stands
+     *  for, which have a message and no constraint (a division by zero, a number past its range). */
+    private final transient @Nullable ConstraintFailure failure;
+
     public ConstraintViolation(String message) {
+        this(message, null);
+    }
+
+    private ConstraintViolation(String message, @Nullable ConstraintFailure failure) {
         super(message);
+        this.failure = failure;
+    }
+
+    /**
+     * The constraint that was broken, or none where this ends a run for some other reason.
+     *
+     * <p>The carrier is one class for every end that is a constraint of the language's, so the class
+     * says that a run ended and not why. A caller that has to tell a broken invariant from a
+     * division by zero asks here, and is not left to read the message.
+     */
+    public @Nullable ConstraintFailure failure() {
+        return failure;
     }
 
     /**
@@ -32,7 +54,7 @@ public final class ConstraintViolation extends RuntimeException {
      * third origin is written, an overload it forgot would be an origin that aborts some other way.
      */
     public static ConstraintViolation notHeld(ConstraintFailure failure) {
-        return new ConstraintViolation(failure.toString());
+        return new ConstraintViolation(failure.toString(), failure);
     }
 
     /**
