@@ -61,6 +61,9 @@ public interface Deadline {
         /** A {@code fake} table, built. */
         record Table(String target, SourcePos pos) implements Work {}
 
+        /** A value a module declares, built as the module builds it. {@code target} is the value. */
+        record Value(String target, SourcePos pos) implements Work {}
+
         /** A {@code with} written on a row. */
         record With(String target, SourcePos pos) implements Work {}
     }

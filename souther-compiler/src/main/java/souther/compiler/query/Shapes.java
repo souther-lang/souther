@@ -63,6 +63,7 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Region;
@@ -2155,6 +2156,12 @@ public final class Shapes {
             public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
                 return Optional.ofNullable(db.ask(new Bodies.RecursionAtACall(recursion.module(),
                         recursion.name())).value());
+            }
+
+            @Override
+            public boolean builtWhereItsModuleIsBuilt(String module, SourcePos construction) {
+                Answer<Set<SourcePos>> built = db.ask(new Output.BuiltValues(module));
+                return built.present() && built.value().contains(construction);
             }
         };
     }

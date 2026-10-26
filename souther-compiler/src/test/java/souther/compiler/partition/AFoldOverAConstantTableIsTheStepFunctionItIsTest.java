@@ -16,7 +16,9 @@ import souther.compiler.query.PartitionEvidence;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -135,11 +137,163 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
             assertFalse(Proposition.leavesSomethingUnread(stated(plain, compared(walked))),
                     walked);
         }
-        // The same rows of a type that holds an invariant are not the rows of the walk above: the
-        // comparison is no longer the choice among their grades.
+        // Rows of a type that holds an invariant are the rows of the walk above where the
+        // invariant is shown to hold of what each is handed, and are not where it cannot be shown
+        // from what is handed. A constant it refuses is no model: the compile refuses it.
         String walked = "List.fold(%s, 0, %s)".formatted(step, rows.formatted("1"));
-        assertNotEquals(stated(plain, compared(walked)), stated(held, compared(walked)));
+        assertEquals(stated(plain, compared(walked)), stated(held, compared(walked)));
+        String unknown = "List.fold(%s, 0, %s)".formatted(step, rows.formatted("cur"));
+        assertNotEquals(stated(plain, compared(unknown)), stated(held, compared(unknown)));
     }
+
+    /**
+     * A row a helper builds is worked out before any application as the row written out would be,
+     * but only where everything the helper runs ends no run: a {@code let} whose value is not used
+     * in the row it answers is run all the same.
+     */
+    @Test
+    void aRowBuiltByAHelperIsSkippedOverOnlyWhereTheHelperRunsNothingThatMayEndTheRun() {
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        String rows = "[ rowAt(pay), rowAt(2) ]";
+        String safe = """
+                data Row = { grade: Int, lowerBound: Int }
+                let rowAt (n: Int): Row = {
+                    let spare = n
+                    Row { grade = 1, lowerBound = 100 }
+                }""";
+        String ends = safe.replace("let spare = n", "let spare = 100 / n");
+        String held = safe.replace("data Row = { grade: Int, lowerBound: Int }",
+                "data Row = { grade: Int, lowerBound: Int }\n    invariant grade >= 0");
+        String walked = "List.fold(%s, 0, %s)".formatted(step, rows);
+        assertFalse(Proposition.leavesSomethingUnread(stated(safe, compared(walked))));
+        assertFalse(Proposition.leavesSomethingUnread(stated(held, compared(walked))));
+        // The helper that can end the run states the run it ends, which the one that cannot does not.
+        assertNotEquals(stated(safe, compared(walked)), stated(ends, compared(walked)));
+
+        // A helper hands its argument to the row, and an invariant that cannot be shown of an
+        // input is not taken as held.
+        String plainOf = "data Row = { grade: Int, lowerBound: Int }\n"
+                + "let rowOf (g: Int): Row = Row { grade = g, lowerBound = 100 }";
+        String heldOf = plainOf.replace("lowerBound: Int }",
+                "lowerBound: Int }\n    invariant grade >= 0");
+        // What a let binds is what its body is asked about, so a row built through one is the row
+        // built without it.
+        String through = "\nlet through (n: Int): Row = {\n    let k = n\n    rowOf(k)\n}";
+        for (String row : List.of("rowOf(1)", "through(1)")) {
+            String rowsOf = "List.fold(%s, 0, [ %s, rowOf(2) ])".formatted(step, row);
+            assertEquals(stated(plainOf + through, compared(rowsOf)),
+                    stated(heldOf + through, compared(rowsOf)), row);
+        }
+        String unproven = "List.fold(%s, 0, [ rowOf(cur), rowOf(2) ])".formatted(step);
+        assertNotEquals(stated(plainOf, compared(unproven)), stated(heldOf, compared(unproven)));
+    }
+
+    /**
+     * Whether the walk is skipped over does not turn on how its seed is spelled. A seed that is the
+     * same value is written inline, bound to a name, or answered by a helper, and each of them
+     * runs whatever the seed runs: a {@code let} whose value the seed does not use, and the fields
+     * of a construction that an access takes one of. Where that cannot end a run the walk is read
+     * as it is with a plain seed, and where it can it is not.
+     */
+    @Test
+    void aSeedIsSkippedOverOnlyWhereWhatItRunsEndsNoRunHoweverItIsSpelled() {
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        // What the walk is worked out from: the seed, the grade of a row, and the container, each
+        // a place that takes a value of its type in the place of PLACED.
+        List<Place> places = List.of(
+                new Place("seed", "List.fold(%s, PLACED, %s)".formatted(step, ASCENDING), "0",
+                        "Int"),
+                new Place("row", ("List.fold(%s, 0, [ Row { grade = PLACED, lowerBound = 100 },"
+                        + " Row { grade = 2, lowerBound = 200 } ])").formatted(step), "0", "Int"),
+                new Place("container", "List.fold(%s, 0, PLACED)".formatted(step), ASCENDING,
+                        "List<Row>"));
+        // What is run on the way to the value, whether or not the value uses it: a let, a
+        // construction an access takes one field of, and a comparison inside a branch.
+        List<String> wrappers = List.of("{\n    let spare = EFFECT\n    PAYLOAD\n}",
+                "Row { grade = PAYLOAD, lowerBound = EFFECT }.grade",
+                "if EFFECT >= 0 then PAYLOAD else PAYLOAD");
+        for (Place place : places) {
+            Proposition selected = stated(compared(
+                    place.fold().replace("PLACED", place.payload())));
+            for (String wrapper : wrappers) {
+                if (wrapper.startsWith("Row {") && !place.payload().equals("0")) {
+                    continue;
+                }
+                for (boolean ends : List.of(false, true)) {
+                    String wrapped = wrapper.replace("PAYLOAD", place.payload());
+                    String used = wrapped.replace("EFFECT", ends ? "Int.abs(cur)" : "cur");
+                    String declarations = "data Row = { grade: Int, lowerBound: Int }\n"
+                            + "let valueOf (n: Int): %s = ".formatted(place.type())
+                            + wrapped.replace("EFFECT", ends ? "Int.abs(n)" : "n");
+                    Map<String, String> spelled = new LinkedHashMap<>();
+                    spelled.put("inline", compared(place.fold().replace("PLACED", used)));
+                    spelled.put("named", "let held = %s\n%s".formatted(used,
+                            compared(place.fold().replace("PLACED", "held"))));
+                    spelled.put("helper", compared(
+                            place.fold().replace("PLACED", "valueOf(cur)")));
+                    for (Map.Entry<String, String> one : spelled.entrySet()) {
+                        Proposition stated = stated(declarations, one.getValue());
+                        String label = place.name() + " " + one.getKey() + " " + used;
+                        if (ends) {
+                            assertNotEquals(selected, stated, label);
+                        } else {
+                            assertEquals(selected, stated, label);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * A table of constants is read as the rows it holds where the value that writes it was built
+     * by the code that ships without breaking its invariant, which is about the whole list and is
+     * not worked out here. Reading no input is not that: the same table built out of an input is
+     * built on each run, and is not taken so.
+     */
+    @Test
+    void aTableIsReadAsItsRowsOnceTheValueThatWritesItIsBuilt() {
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        String declarations = """
+                data Row = { grade: Int, lowerBound: Int }
+                data Table = List<Row>
+                    invariant threeRows = List.length(value) == 3
+                    invariant distinctGrades = List.allDistinctBy(.grade, value)
+                let rowOf (g: Int, lo: Int): Row = Row { grade = g, lowerBound = lo }
+                let table = Table([ rowOf(1, 100), rowOf(2, 200), rowOf(3, 300) ])
+                """;
+        Proposition literal = stated(compared("List.fold(%s, 0, %s)".formatted(step, ASCENDING)));
+        assertEquals(literal, stated(declarations,
+                compared("List.fold(%s, 0, table.value)".formatted(step))));
+        Proposition fromAnInput = stated(
+                declarations.replace("let table = Table([ rowOf(1, 100), rowOf(2, 200), "
+                        + "rowOf(3, 300) ])\n", ""),
+                "let table = Table([ rowOf(cur, 100), rowOf(2, 200), rowOf(3, 300) ])\n"
+                        + compared("List.fold(%s, 0, table.value)".formatted(step)));
+        assertNotEquals(literal, fromAnInput);
+    }
+
+    /**
+     * What a construction an {@code if} tests for is refused by is the branch the {@code if}
+     * takes, so a seed that is such an {@code if} ends no run on a refusal.
+     */
+    @Test
+    void aRefusalOfAConstructionAnIfTestsForEndsNoRun() {
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        String declarations = """
+                data Row = { grade: Int, lowerBound: Int }
+                    invariant grade >= 0
+                """;
+        String tested = "if Row { grade = cur, lowerBound = 100 } as row then 0 else 0";
+        Proposition plain = stated(declarations, compared(
+                "List.fold(%s, 0, %s)".formatted(step, ASCENDING)));
+        assertEquals(plain, stated(declarations, compared(
+                "List.fold(%s, %s, %s)".formatted(step, tested, ASCENDING))));
+    }
+
+    /** A place a walk is worked out from: the walk with PLACED where it goes, and what stands there
+     *  when nothing is run on the way. */
+    private record Place(String name, String fold, String payload, String type) {}
 
     private static String compared(String computed) {
         return "let computed = %s\nif computed < 2 then 1 else 0".formatted(computed);
@@ -274,7 +428,9 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 }
                 """.formatted(row, body.indent(4).stripTrailing()), "Main");
         compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
+                () -> "the model compiles: " + body);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");

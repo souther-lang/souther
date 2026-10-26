@@ -17,6 +17,7 @@ import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
+import souther.compiler.execute.ValueBuild;
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
@@ -33,6 +34,8 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.ConstEval;
 import souther.compiler.check.DataChecker;
+import souther.compiler.check.Desugared;
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
@@ -66,6 +69,8 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -825,6 +830,105 @@ public final class Output {
                 case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
                 case WrittenValue.Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);
             } + ")";
+        }
+    }
+
+    /**
+     * Where a module writes a construction, inside a value it declares, that building the value
+     * showed holds: the value was built by the code that ships and broke no invariant.
+     *
+     * <p>A value takes nothing and is built where its module builds it, so what it breaks is the
+     * module's to answer for, and a value that breaks one is a compile error. One that cannot be
+     * built here is left to the check that runs when the program does, and none of its
+     * constructions are said to hold.
+     */
+    public record BuiltValues(String name) implements Key<Set<SourcePos>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<SourcePos>> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            if (!prepared.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            List<DataChecker.ValueConstructions> values;
+            try {
+                values = DataChecker.valueConstructions(prepared.value().fns(), scope.value());
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+            if (values.isEmpty()) {
+                return Answer.of(Set.of());
+            }
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            if (!checked.present()) {
+                return Answer.absent();
+            }
+            Map<String, SourcePos> declared = new HashMap<>();
+            for (Desugared.Fn fn : prepared.value().fns()) {
+                if (fn.read().params().isEmpty()) {
+                    declared.put(fn.name(), fn.read().pos());
+                }
+            }
+            Map<String, ValueBuild.Step> steps = new LinkedHashMap<>();
+            for (DataChecker.ValueConstructions value : values) {
+                Map<String, ValueBuild.Step> withItsOwn = new LinkedHashMap<>(steps);
+                if (stepsFor(checked.value().emittedDefinitions(), declared, value.value(),
+                        withItsOwn, new HashSet<>())) {
+                    steps.putAll(withItsOwn);
+                }
+            }
+            Map<String, ConstantOutcome> outcomes = db.execution().build(
+                    new ValueBuild(name, List.copyOf(steps.values())), policyOf(db));
+            Set<SourcePos> held = new LinkedHashSet<>();
+            List<Report> reports = new ArrayList<>();
+            outcomes.forEach((built, outcome) -> {
+                switch (outcome) {
+                    case ConstantOutcome.Holds _ -> values.stream()
+                            .filter(each -> each.value().equals(built))
+                            .forEach(each -> held.addAll(each.constructions()));
+                    case ConstantOutcome.Violates _ -> reports.add(Report.raised(
+                            Diagnostic.at(steps.get(built).pos()).say(
+                                    new DataMessage.TheValueBreaksAnInvariantWhenItIsBuilt(
+                                            built)).build()));
+                    case ConstantOutcome.NotEvaluatedHere _ -> { }
+                }
+            });
+            return reports.isEmpty() ? Answer.of(Set.copyOf(held)) : Answer.absent(reports);
+        }
+
+        /**
+         * The steps that build {@code value}, each after the values its method is handed, added to
+         * {@code steps} once however many values read it. False where the build cannot be stated
+         * from here: it is handed something that is not a value of this module, a parameter a value
+         * does not take, or the values read one another round.
+         */
+        private static boolean stepsFor(Map<String, EmittedDefinition> definitions,
+                                        Map<String, SourcePos> declared, String value,
+                                        Map<String, ValueBuild.Step> steps, Set<String> building) {
+            if (steps.containsKey(value)) {
+                return true;
+            }
+            EmittedDefinition definition = definitions.get(value);
+            if (definition == null || !declared.containsKey(value) || !building.add(value)) {
+                return false;
+            }
+            List<String> handed = new ArrayList<>();
+            for (EmittedDefinition.Parameter each : definition.parameters()) {
+                if (!(each instanceof EmittedDefinition.Handover carried)
+                        || !stepsFor(definitions, declared, carried.carries().name(), steps,
+                                building)) {
+                    return false;
+                }
+                handed.add(carried.carries().name());
+            }
+            building.remove(value);
+            steps.put(value, new ValueBuild.Step(value, declared.get(value), handed));
+            return true;
         }
     }
 
