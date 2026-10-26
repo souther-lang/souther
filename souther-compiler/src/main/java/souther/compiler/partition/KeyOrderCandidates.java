@@ -59,9 +59,14 @@ import java.util.stream.Stream;
  * then the later sites in the container and the later values, and no value is left out for
  * coming late among the others, nor a site for coming after many pairs. The values are listed
  * a rank at a time, the first of every case before the second of any, so that a value the decoder
- * refuses is stood in for by the next of its case after every case has had its first. The pairs
- * of values of different cases are taken before the pairs of values of one case, which are taken
- * after them in the same order.
+ * refuses is stood in for by the next of its case after every case has had its first. In each
+ * round the pairs of values of different cases are taken before the pairs of values of one case.
+ *
+ * <p>Each bound counts the work where it is done: the values listed ({@link #MOST_CASES_OF_A_SUM},
+ * {@link #MOST_VALUES_OF_A_CASE}) and the sites visited ({@link #MOST_SITES_OF_A_CONTAINER}) bound
+ * the rounds whether or not a round yields a rewrite; {@link #MOST_REWRITES_LOOKED_AT} the
+ * rewrites, counting those the decoder refuses; {@link #MOST_CANDIDATES} those it admits. A value
+ * the decoder of its own type refuses is left out of the list, so that no round holds one.
  */
 public final class KeyOrderCandidates {
 
@@ -76,6 +81,11 @@ public final class KeyOrderCandidates {
      *  apart from the values of one kind, since a sum has a value for each case and no case is
      *  another's room. */
     static final int MOST_CASES_OF_A_SUM = 12;
+
+    /** The most sites in one container that two copies are written at. The sites of a container
+     *  grow as the square of its elements, and a round is visited whether or not it yields a
+     *  rewrite, so the rounds are counted here, by the sites they visit. */
+    static final int MOST_SITES_OF_A_CONTAINER = 32;
 
     /** The most values of one case of a sum that are listed. The first of a case is the one
      *  tried; the others are there for the decoder refusing it. */
@@ -156,25 +166,27 @@ public final class KeyOrderCandidates {
         Pool pool = Pool.of(seen, prim -> composedAt(subject, prim), subject.ruleReading());
         List<List<String>> apart = subject.keptApartAt(plan.container());
         ObservedValue held = seen.get(plan.parameter());
+        Admitted admitted = new Admitted(subject, writing);
+        // A value the decoder of its own type refuses is left out where the values are listed,
+        // before anything is scheduled: every rewrite holding it is refused, and a round that
+        // holds one yields nothing and so is not counted by the bound on what is looked at.
         List<List<ObservedValue>> given = plan.targets().stream()
                 .map(target -> valuesFor(target.type(), target.fields(), pool,
-                        plan.named().getOrDefault(target.fields(), List.of())))
+                        plan.named().getOrDefault(target.fields(), List.of())).stream()
+                        .filter(value -> admitted.admits(target, value)).toList())
                 .toList();
         int most = given.stream().mapToInt(List::size).max().orElse(0);
-        boolean someOfOneCase = given.stream().anyMatch(KeyOrderCandidates::hasTwoOfOneCase);
-        Admitted admitted = new Admitted(subject, writing);
-        // Two bounds, because the decoder refuses some of what is looked at: counting only what
-        // it admits would let a rule that refuses nearly everything be looked at without end, and
-        // counting what is looked at would let the refused ones use up the rows that are run. A
-        // value the decoder refuses on its own is left out before either is counted, since every
-        // rewrite holding it is refused and would use up the bound for the values that are not.
-        int sites = mostSitesIn(held);        return Stream.of(false, true).limit(someOfOneCase ? 2 : 1).flatMap(ofOneCase ->
-                        roundsOf(most, sites).flatMap(round ->
-                                inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
-                                        plan.container().steps(),
-                                        (here, _, _) -> heldTwice(here, given, round, ofOneCase,
-                                                apart, pool, admitted),
-                                        views)))
+        // Three bounds, each counting the work where it is done. The rounds are bounded by the
+        // values and the sites ({@link #roundsOf}), whether or not a round yields; what is looked
+        // at, by the rewrites a round yields, counting those the decoder refuses; and what is run,
+        // by those it admits. Counting only the last would let a rule that refuses nearly
+        // everything be looked at without end, and counting only what is looked at would let the
+        // refused ones use up the rows that are run.
+        return roundsOf(most, mostSitesIn(held)).flatMap(round ->
+                        inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
+                                plan.container().steps(),
+                                (here, _, _) -> heldTwice(here, given, round, apart, pool),
+                                views))
                 .limit(MOST_REWRITES_LOOKED_AT)
                 .map(each -> ObservedFixtures.of(each, subject.types().get(plan.parameter()),
                         subject.ruleReading()))
@@ -488,9 +500,7 @@ public final class KeyOrderCandidates {
      * the pairs of values {@code round} names, written at the place it names in the container.
      */
     private Stream<ObservedValue> heldTwice(ObservedValue here, List<List<ObservedValue>> given,
-                                            Round round, boolean ofOneCase,
-                                            List<List<String>> apart, Pool pool,
-                                            Admitted admitted) {
+                                            Round round, List<List<String>> apart, Pool pool) {
         if (!(here instanceof ObservedValue.Sequence(List<ObservedValue> elements))
                 || elements.isEmpty()) {
             return Stream.empty();
@@ -502,9 +512,7 @@ public final class KeyOrderCandidates {
         return IntStream.range(0, plan.targets().size()).boxed().flatMap(each -> {
             Target target = plan.targets().get(each);
             List<ObservedValue> values = given.get(each);
-            return pairsWith(values, round.value(), ofOneCase).stream()
-                    .filter(pair -> admitted.admits(target, values.get(pair.earlier()))
-                            && admitted.admits(target, values.get(pair.later())))
+            return pairsOfRound(values, round.value()).stream()
                     .map(pair -> written(site, elements, target, values.get(pair.earlier()),
                             values.get(pair.later()), apart, pool))
                     .filter(Objects::nonNull);
@@ -590,11 +598,13 @@ public final class KeyOrderCandidates {
      * out costs a case.
      *
      * @param values the most values any field is given
-     * @param sites  the most sites any container has
+     * @param sites  the most sites any container has, of which the first
+     *               {@link #MOST_SITES_OF_A_CONTAINER} are visited
      */
     static Stream<Round> roundsOf(int values, int sites) {
+        int most = Math.min(sites, MOST_SITES_OF_A_CONTAINER);
         return IntStream.range(0, Math.max(0, values - 1)).boxed().flatMap(value ->
-                IntStream.range(0, sites).mapToObj(site -> new Round(value, site)));
+                IntStream.range(0, most).mapToObj(site -> new Round(value, site)));
     }
 
     /** The most sites any container in {@code held} has. */
@@ -611,9 +621,20 @@ public final class KeyOrderCandidates {
     }
 
     /**
+     * The pairs of one round: {@link #pairsWith(int, int)} of the value, the pairs of different
+     * cases of a sum first and then the pairs of one case. Both are in every round, so a bound on
+     * what is looked at cuts later rounds, and not one kind of pair for coming after the other
+     * kind in every round.
+     */
+    static List<Pair> pairsOfRound(List<ObservedValue> values, int value) {
+        List<Pair> out = new ArrayList<>(pairsWith(values, value, false));
+        out.addAll(pairsWith(values, value, true));
+        return out;
+    }
+
+    /**
      * The pairs of {@link #pairsWith(int, int)} whose two values are of one case of a sum, or of
-     * different cases, as {@code ofOneCase} says. The two between them are every pair: a pair of
-     * one case is taken after the pairs of different cases and not left out.
+     * different cases, as {@code ofOneCase} says. The two between them are every pair.
      */
     static List<Pair> pairsWith(List<ObservedValue> values, int value, boolean ofOneCase) {
         return pairsWith(values.size(), value).stream()
@@ -622,23 +643,11 @@ public final class KeyOrderCandidates {
                 .toList();
     }
 
-    /** Whether two of the values are of one case of a sum. */
-    private static boolean hasTwoOfOneCase(List<ObservedValue> values) {
-        for (int one = 0; one < values.size(); one++) {
-            for (int other = one + 1; other < values.size(); other++) {
-                if (ofOneCase(values.get(one), values.get(other))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     /**
      * Whether the values are of one case of a sum. Two copies of a key given two values of one
      * case tell the order apart where the statement reads what the case holds, and are tried
-     * after the pairs of different cases: those are the ones a sum is given its cases for, and
-     * the others are the more of them for a statement that reads the payload.
+     * after the pairs of different cases in each round: those are the ones a sum is given its
+     * cases for, and the others are the more of them for a statement that reads the payload.
      */
     private static boolean ofOneCase(ObservedValue one, ObservedValue other) {
         return one instanceof ObservedValue.Constructed first

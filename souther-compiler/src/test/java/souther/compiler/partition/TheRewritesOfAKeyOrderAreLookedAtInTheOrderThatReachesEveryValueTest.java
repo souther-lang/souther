@@ -145,6 +145,55 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
                 Map.of("n", new ObservedValue.Integer(n)));
     }
 
+    /**
+     * A round is visited whether or not it yields a rewrite, so the bound on what is looked at
+     * does not bound them: the rounds are bounded by the values and the sites, however many
+     * elements a container holds.
+     */
+    @Test
+    void theRoundsAreBoundedByTheValuesAndTheSitesWhateverTheContainerHolds() {
+        long most = (long) (MOST_VALUES - 1) * KeyOrderCandidates.MOST_SITES_OF_A_CONTAINER;
+
+        assertEquals((long) (MOST_VALUES - 1) * 3,
+                KeyOrderCandidates.roundsOf(MOST_VALUES, 3).count(),
+                "a container with fewer sites than the most has the rounds of its own");
+        assertEquals(most, KeyOrderCandidates.roundsOf(MOST_VALUES,
+                KeyOrderCandidates.sitesIn(1000)).count());
+        assertEquals(most, KeyOrderCandidates.roundsOf(MOST_VALUES, Integer.MAX_VALUE).count());
+        assertEquals(new KeyOrderCandidates.Site.Repeating(31),
+                KeyOrderCandidates.siteAt(1000, 31), "the sites visited of a long container");
+    }
+
+    /**
+     * Within the rewrites that are looked at, a round holds both the pairs of different cases and
+     * the pairs of one case, at the first site and at each site after it, so that neither kind
+     * is put out of reach by the other using the bound up.
+     */
+    @Test
+    void bothKindsOfPairAreAmongTheRewritesLookedAtAtEverySiteTheyReach() {
+        List<ObservedValue> values = List.of(card(0), cash(0), card(1), cash(1), card(2),
+                cash(2));
+        int looked = 0;
+        Set<Integer> sitesOfDifferentCases = new HashSet<>();
+        Set<Integer> sitesOfOneCase = new HashSet<>();
+        for (KeyOrderCandidates.Round round
+                : KeyOrderCandidates.roundsOf(values.size(), KeyOrderCandidates.sitesIn(5))
+                        .toList()) {
+            for (KeyOrderCandidates.Pair pair
+                    : KeyOrderCandidates.pairsOfRound(values, round.value())) {
+                if (looked++ >= KeyOrderCandidates.MOST_REWRITES_LOOKED_AT) {
+                    break;
+                }
+                boolean cards = (pair.earlier() % 2) == (pair.later() % 2);
+                (cards ? sitesOfOneCase : sitesOfDifferentCases).add(round.site());
+            }
+        }
+        assertTrue(sitesOfOneCase.contains(0) && sitesOfDifferentCases.contains(0),
+                "both at the first site");
+        assertEquals(sitesOfDifferentCases, sitesOfOneCase,
+                "and at every site the bound reaches");
+    }
+
     @Test
     void theNumberOfSitesOfALargeContainerDoesNotOverflow() {
         assertEquals(Integer.MAX_VALUE, KeyOrderCandidates.sitesIn(Integer.MAX_VALUE));
