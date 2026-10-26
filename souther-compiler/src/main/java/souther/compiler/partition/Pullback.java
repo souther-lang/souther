@@ -9197,7 +9197,7 @@ final class Pullback {
      */
     private static List<Core> whatIsRunWith(Core written) {
         List<Core> parts = new ArrayList<>();
-        if (written instanceof Core.IfConstructed tested) {
+        if (Core.withoutStanding(written) instanceof Core.IfConstructed tested) {
             tested.construct().values().forEach(field -> parts.add(field.value()));
             parts.add(tested.then());
             tested.els().forEach(arm -> parts.add(arm.body()));
@@ -9206,7 +9206,7 @@ final class Pullback {
         for (Evaluated.Step step : Evaluated.inOrder(written)) {
             parts.add(step.expression());
         }
-        switch (written) {
+        switch (Core.withoutStanding(written)) {
             case Core.If fork -> {
                 parts.add(fork.then());
                 parts.add(fork.els());
