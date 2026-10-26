@@ -1,10 +1,16 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RepresentationBounds;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
+
+import java.util.Collection;
 
 /**
  * Where the values of a quantity can lie because of what the language holds, whatever any rule
@@ -30,6 +36,27 @@ public record HeldByTheLanguage(NumericDomain.Bounds range) {
             throw new IllegalArgumentException("what the language holds of a quantity is a run,"
                     + " open where it holds nothing");
         }
+    }
+
+    /**
+     * {@code region} with what the language holds of each of {@code terms} taken in, as a
+     * condition on the way to a border is: a row for it has no string longer than the longest.
+     *
+     * <p>Taken into the region a way narrows and into no reading of the declarations, which is
+     * where the classes and ends of a position are read from: a relation between two lengths would
+     * otherwise hold the longest string as a class of its own, which only a string of that length
+     * can fill. A term the language ends nowhere, and one inside a container, which a region reads
+     * as the one element there, are left as they are.
+     */
+    static SearchRegion assumedOn(SearchRegion region, Collection<? extends NumericTerm> terms) {
+        SearchRegion held = region;
+        for (NumericTerm each : terms) {
+            Long most = RepresentationBounds.mostOf(each);
+            if (most != null && each instanceof NumericTerm.FromOnePosition one) {
+                held = held.assuming(one, Count.of(most), Rel.LE);
+            }
+        }
+        return held;
     }
 
     /** Whether a value of the quantity can stand at {@code level}. A level that is no number is

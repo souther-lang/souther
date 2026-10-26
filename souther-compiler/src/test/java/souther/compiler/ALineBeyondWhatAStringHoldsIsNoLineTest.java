@@ -90,6 +90,59 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         }
     }
 
+    /** A decision rule that needs the comparison to hold where no String does is owed no row, as
+     *  one that needs an hour of the day past the last is not. */
+    @Test
+    void aDecisionRuleNeedingAStringPastTheLongestIsOwedNoRow() {
+        String phrase = "no value can stand at a rule of the decision";
+        String past = report("s: String",
+                "if String.length(s) >= 268435456 then true else String.length(s) >= 3");
+        String within = report("s: String",
+                "if String.length(s) >= 7 then true else String.length(s) >= 3");
+
+        assertTrue(past.contains(phrase), past);
+        assertFalse(within.contains(phrase), within);
+    }
+
+    /** A guard past the longest string divides the length into nothing: the class beyond it holds
+     *  no value, and a guard a string can reach is told from it by having one. */
+    @Test
+    void aGuardPastTheLongestStringLeavesNoClassBeyondIt() {
+        String source = """
+                module m
+
+                data Yes = { v: Int }
+                data No = { why: Int }
+
+                behavior f : (s: String) -> Yes | No
+                    constructs Yes
+                    constructs No
+
+                let f (s) = {
+                    guard String.length(s) < %s else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "r" : ("x") -> Yes { v = 1 }
+                """;
+        for (String past : new String[] {"268435456", "268435457"}) {
+            Compilation compilation = Compilation.ofSource(source.formatted(past), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+            assertFalse(report.contains("String.length(s)/" + past + " <= x"), report);
+        }
+        Compilation within = Compilation.ofSource(source.formatted("7"), "Main");
+        within.measure(Adequacy.Asked.fullReport());
+        within.answerEverything();
+        assertTrue(AdequacyReport.of(within)
+                .human(SourceRendering.namedByIdentity(within.texts()))
+                .contains("String.length(s)/7 <= x"), "the control: a class a string reaches");
+    }
+
     @Test
     void theSameFromTheOtherSide() {
         List<Map<PointRole, ItemAssessment>> lines =
