@@ -148,9 +148,11 @@ public final class DataChecker {
                     collectConstructions(b.left(), symbols, out);
             case Hir.If iff -> collectConstructions(iff.cond(), symbols, out);
             case Hir.Match m -> collectConstructions(m.scrutinee(), symbols, out);
-            // The element is run for the rows the guards keep, which may be none.
-            case Hir.ListComp comp ->
-                    comp.guards().forEach(g -> collectConstructions(g, symbols, out));
+            // The guards are tried in turn and each only where the one before it held, so the first
+            // is the one that runs whenever the comprehension does; the element is run for the rows
+            // they keep, which may be none.
+            case Hir.ListComp comp -> comp.guards().stream().limit(1)
+                    .forEach(g -> collectConstructions(g, symbols, out));
             // A row's brackets are written in an example, and no value a module declares holds them.
             case Hir.RowCollection _ -> { }
             // The body of a definition this value reaches, written at that definition's positions

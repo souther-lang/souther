@@ -215,6 +215,7 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
     void aConstructionBuildingTheValueRunsIsRecorded() {
         assertEquals(1, constructionsBuildingRuns(" = Row { grade = 3 }"));
         assertEquals(1, constructionsBuildingRuns(" = [Row { grade = 3 }]"));
+        assertEquals(1, constructionsBuildingRuns(" = [1 | Row { grade = 1 }.grade > 0]"));
     }
 
     /**
@@ -231,5 +232,12 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
                 " = if 1 > 2 then Row { grade = 1 } else Row { grade = 2 }"));
         assertEquals(0, constructionsBuildingRuns(
                 " = [1 > 2 && Row { grade = 1 }.grade > 0]"));
+        assertEquals(0, constructionsBuildingRuns(
+                " = [1 > 0 || Row { grade = 1 }.grade > 0]"));
+        // The second guard is tried only where the first held.
+        assertEquals(0, constructionsBuildingRuns(
+                " = [1 | 1 > 2, Row { grade = 1 }.grade > 0]"));
+        assertEquals(0, constructionsBuildingRuns(
+                " = [1 | 1 > 0, Row { grade = 1 }.grade > 0]"));
     }
 }
