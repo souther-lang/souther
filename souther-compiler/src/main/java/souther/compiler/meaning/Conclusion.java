@@ -169,6 +169,12 @@ public final class Conclusion {
         if (known != null) {
             return known;
         }
+        // A statement held as how it is written out is one part until it is written out, and is
+        // counted against the figure then, as the step that writes it out concludes it.
+        if (stated instanceof Proposition.OfTheWays) {
+            shared.parts.put(stated, 1L);
+            return 1;
+        }
         // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
         // number walks as much as a part.
         long out = 1 + partsIn(stated.partsHeld()) + switch (stated) {
@@ -188,7 +194,7 @@ public final class Conclusion {
                  Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.Unread _,
                  Proposition.Carried _, Proposition.SoManyHold _,
-                 Proposition.WhereItAnswers _ -> 0;
+                 Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> 0;
         };
         long kept = Math.min(out, shared.mostParts + 1L);
         shared.parts.put(stated, kept);

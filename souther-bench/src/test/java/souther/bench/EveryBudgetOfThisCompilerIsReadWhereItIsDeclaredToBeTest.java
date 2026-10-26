@@ -751,6 +751,19 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation;)"
                             + "Lsouther/compiler/meaning/Proposition;",
                     "past the figure concludes the step as a part nothing read, naming it"),
+            // The ways a comparison over the elements a filter keeps is made in: counted where the
+            // reading is made, and past the figure they are not written out.
+            Map.entry("souther.compiler.partition.Pullback#keptOnceFor("
+                            + "Lsouther/compiler/partition/Pullback$Inside$ATotalByKeeping;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/inputs/Denotation;ZLjava/util/function/Function;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the ways of keeping, and past the figure makes no ways and carries the"
+                            + " statement out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.meaning.Derivation$WaysWrittenWhenAsked#conclusion("
+                            + "Lsouther/compiler/meaning/Conclusion;)"
+                            + "Lsouther/compiler/meaning/Proposition;",
+                    "past the figure writes the ways out as a part nothing read, naming it"),
             // Where one line of a statement of several decides: the statement read, its cases
             // taken apart, and each asked whether rows stand on both sides of the line. Past any
             // of the figures the line is one where it decides was not worked out, naming the

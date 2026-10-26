@@ -339,6 +339,8 @@ final class MeaningAssumptions {
             case Proposition.Any any -> takingOneOf(any);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches a path written out as its choices: " + asked);
+            case Proposition.OfTheWays _ -> throw new IllegalArgumentException(
+                    "a statement over the ways reaches a path written out as its cases: " + asked);
             // Which application is no fact of a path.
             case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(

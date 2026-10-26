@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -71,6 +72,7 @@ public sealed interface Proposition {
             case Any any -> any.parts();
             case OnAnApplication applications -> applications.each();
             case SoManyHold counted -> counted.statements();
+            case OfTheWays ways -> List.of(ways.written());
             case Some some -> List.of(some.ofTheElement());
             case WhereItAnswers where -> List.of(where.answers(), where.states());
             case SomeReachable reached -> reached.noneBelow()
@@ -112,6 +114,7 @@ public sealed interface Proposition {
             case LastToHold last -> isAnElementOf(last.position(), container);
             case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
                     somePartMayTurnOnAnElementOf(container);
+            case OfTheWays ways -> ways.written().mayTurnOnAnElementOf(container);
             case Some some -> isAnElementOf(some.container(), container)
                     || somePartMayTurnOnAnElementOf(container);
             // What it is written over is not what it is about, so it is taken to turn on an element
@@ -522,6 +525,104 @@ public sealed interface Proposition {
     }
 
     /**
+     * What a statement over the ways its elements are kept comes to, held as how it is written out
+     * and written out where a reader asks for the cases.
+     *
+     * <p>Written out, a statement over the ways is a case for each way, which grows with the ways
+     * and not with what is stated. Held as how it is written, its key is spelled from what the
+     * ways are made of, so it is held, compared and filed at the size of that.
+     *
+     * @param ways  how it is written out, shared by this and its denial
+     * @param holds whether the statement holds or its denial does
+     * @param key   spelled from the ways' own when it is made, whatever is handed in
+     */
+    record OfTheWays(WrittenWays ways, boolean holds, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof OfTheWays that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key));
+        }
+
+        public OfTheWays(WrittenWays ways, boolean holds) {
+            this(ways, holds, null);
+        }
+
+        public OfTheWays {
+            Objects.requireNonNull(ways, "a statement over the ways is written out somehow");
+            key = (holds ? "" : "!") + ways.spelled();
+        }
+
+        /** The statement written out: a case for each way. */
+        public Proposition written() {
+            Proposition out = ways.written();
+            return holds ? out : out.denied();
+        }
+
+        @Override
+        public Proposition denied() {
+            return new OfTheWays(ways, !holds);
+        }
+    }
+
+    /**
+     * How a statement over the ways is written out, which is done once, by whoever asks first.
+     */
+    final class WrittenWays {
+
+        private final String spelled;
+        private final boolean leavesNothingUnread;
+        private final long cases;
+        private final Supplier<Proposition> writing;
+        private volatile Proposition written;
+
+        /**
+         * @param leavesNothingUnread whether no part of the statement is one nothing read, which is
+         *                            known of the parts it is made of before it is written out
+         * @param cases               how many cases it is written out as, at most
+         */
+        public WrittenWays(String spelled, boolean leavesNothingUnread, long cases,
+                           Supplier<Proposition> writing) {
+            this.spelled = Objects.requireNonNull(spelled, "the ways are told apart by a spelling");
+            this.leavesNothingUnread = leavesNothingUnread;
+            this.cases = cases;
+            this.writing = Objects.requireNonNull(writing, "the ways are written out somehow");
+        }
+
+        /** How many cases it is written out as, or one past the most that are written out. */
+        long cases() {
+            return cases;
+        }
+
+        String spelled() {
+            return spelled;
+        }
+
+        boolean leavesNothingUnread() {
+            return leavesNothingUnread;
+        }
+
+        Proposition written() {
+            Proposition known = written;
+            if (known == null) {
+                synchronized (this) {
+                    known = written;
+                    if (known == null) {
+                        known = Objects.requireNonNull(writing.get(), "the ways are written out");
+                        written = known;
+                    }
+                }
+            }
+            return known;
+        }
+    }
+
+    /**
      * Every part holding. Made through {@link #all}.
      *
      * @param key spelled from the parts' own when it is made, whatever is handed in
@@ -774,6 +875,7 @@ public sealed interface Proposition {
                         .anyMatch(each -> quantifiesOverInside(container, each, rebound));
                 case SoManyHold counted -> counted.statements().stream()
                         .anyMatch(each -> quantifiesOverInside(container, each, rebound));
+                case OfTheWays ways -> quantifiesOverInside(container, ways.written(), rebound);
                 case WhereItAnswers where ->
                         quantifiesOverInside(container, where.answers(), rebound)
                                 || quantifiesOverInside(container, where.states(), rebound);
@@ -803,7 +905,7 @@ public sealed interface Proposition {
                 // One part, whatever it says: two spelled alike are one statement.
                 case Compared _, Truth _, InCases _, Present _, InTheStrings _, SameValue _,
                      LastToHold _, Any _, Some _, Carried _, SomeReachable _, Unread _,
-                     OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
+                     OnAnApplication _, SoManyHold _, WhereItAnswers _, OfTheWays _ ->
                         Set.of(ofTheElement.key());
             });
         }
@@ -1462,8 +1564,10 @@ public sealed interface Proposition {
     private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
         return switch (stated) {
             case Unread unread -> into.add(unread.why());
+            // Known of what it is made of, so it is not written out to be told it holds none.
+            case OfTheWays ways when ways.ways().leavesNothingUnread() -> false;
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
-                 WhereItAnswers _ -> stopsIn(stated.partsHeld(), into, first);
+                 WhereItAnswers _, OfTheWays _ -> stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, LastToHold _, Carried _ -> false;
         };
@@ -1555,7 +1659,8 @@ public sealed interface Proposition {
     static boolean saysASearchReachesBelow(Proposition stated) {
         return switch (stated) {
             case SomeReachable _ -> true;
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _,
+                 OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, Unread _, Carried _, LastToHold _ -> false;
@@ -1587,7 +1692,7 @@ public sealed interface Proposition {
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
-                 WhereItAnswers _ ->
+                 WhereItAnswers _, OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
@@ -1869,6 +1974,7 @@ public sealed interface Proposition {
             case Any any -> any(any.parts().stream().map(Proposition::whereItHolds).toList());
             case OnAnApplication applied -> onAnApplication(applied.each().stream()
                     .map(Proposition::whereItHolds).toList());
+            case OfTheWays ways -> whereItHolds(ways.written());
             // What one of these holds of is read on every row, by its constructor.
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
                     "a count or a quantifier is of statements answering on every row: " + stated);
@@ -1884,7 +1990,7 @@ public sealed interface Proposition {
             // What one of these holds answers on every row, which its constructor saw to, so
             // nothing under it is walked again for each one it stands inside.
             case Some _, SoManyHold _, SomeReachable _ -> false;
-            case All _, Any _, OnAnApplication _ ->
+            case All _, Any _, OnAnApplication _, OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, LastToHold _, Carried _, Unread _ -> false;
@@ -1910,6 +2016,7 @@ public sealed interface Proposition {
             case WhereItAnswers _, OnAnApplication _, Unread _ -> false;
             case All all -> all.parts().stream().allMatch(Proposition::deniedWhereverItFails);
             case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
+            case OfTheWays ways -> deniedWhereverItFails(ways.written());
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, LastToHold _, Carried _, Some _, SoManyHold _, SomeReachable _ ->
                     true;

@@ -288,6 +288,9 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
                 .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
                 List.of(1)));
+        out.put("the cases of the ways of keeping", new Proposition.OfTheWays(
+                new Proposition.WrittenWays("sample", true, 2,
+                        () -> new Proposition.Any(List.of(above, truth))), true));
         TermPath node = TermPath.of("t");
         out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
                 List.of("below"), new Proposition.Compared(new Relation.Affine(

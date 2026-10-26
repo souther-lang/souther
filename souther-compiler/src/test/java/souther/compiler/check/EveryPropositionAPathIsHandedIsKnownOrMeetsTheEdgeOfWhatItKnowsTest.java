@@ -158,6 +158,9 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         out.put("where an operation answers", new Proposition.WhereItAnswers(truth, above));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
+        out.put("the cases of the ways of keeping", new Proposition.OfTheWays(
+                new Proposition.WrittenWays("sample", true, 2,
+                        () -> new Proposition.Any(List.of(above, truth))), true));
         out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
                 .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
                 List.of(1)));

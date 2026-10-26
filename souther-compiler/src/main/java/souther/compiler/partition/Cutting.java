@@ -1419,7 +1419,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
                  Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
+                 Proposition.SomeReachable _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         });
@@ -1665,6 +1666,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     counted.statements().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.WhereItAnswers where ->
                     statesNoRelation(where.answers()) && statesNoRelation(where.states());
+            case Proposition.OfTheWays ways -> statesNoRelation(ways.written());
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.

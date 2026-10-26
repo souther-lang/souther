@@ -58,6 +58,20 @@ final class WaysOfKeeping {
                 .allMatch(kept -> kept instanceof ReadMeaning.Occurrence.Kept.ATruth);
     }
 
+    /** The occurrences and the truths that keep them, as they are told apart by. */
+    String spelled() {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < keptBy.length; i++) {
+            out.append(i).append(':');
+            for (int j = 0; j < keptBy[i].length; j++) {
+                out.append(keptBy[i][j]).append(truthOf(occurrences.get(i).keptWhere().get(j))
+                        .holds() ? '+' : '-').append(',');
+            }
+            out.append(';');
+        }
+        return out.toString();
+    }
+
     int truthCount() {
         return truths.size();
     }

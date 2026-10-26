@@ -69,6 +69,7 @@ public final class WrittenOfANode {
                     applications.each().stream().allMatch(this::reads);
             case Proposition.SoManyHold counted -> counted.statements().stream()
                     .allMatch(this::reads);
+            case Proposition.OfTheWays ways -> reads(ways.written());
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }

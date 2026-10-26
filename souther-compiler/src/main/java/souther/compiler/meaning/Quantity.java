@@ -106,7 +106,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      Proposition.Unread _ -> false;
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
-                     Proposition.WhereItAnswers _ ->
+                     Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
                         stated.partsHeld().stream().anyMatch(this::isIn);
             };
         }
@@ -1077,7 +1077,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                             case Relation.Ordered ordered -> alike(ordered.term(), apart);
                         };
                         case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                             Proposition.SoManyHold _ -> stated.partsHeld().stream()
+                             Proposition.SoManyHold _, Proposition.OfTheWays _ ->
+                                stated.partsHeld().stream()
                                 .allMatch(part -> alike(part, apart));
                         case Proposition.Truth truth -> alike(truth.of(), apart);
                         case Proposition.Present present -> alike(present.of(), apart);

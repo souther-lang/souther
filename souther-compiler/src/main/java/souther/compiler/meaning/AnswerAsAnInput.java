@@ -155,6 +155,7 @@ public final class AnswerAsAnInput {
                     positive, Proposition::onAnApplication);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches what a row is held to written out as its choices: " + stated);
+            case Proposition.OfTheWays ways -> ofTheRow(ways.written(), pinned, positive);
             // An element of a container of the input. Where no element may meet it, every element
             // still asked the rest is held at the value, which the answer was composed to fail at.
             case Proposition.Some some when !(some.container()
@@ -412,6 +413,7 @@ public final class AnswerAsAnInput {
                 List<Proposition> each = propositions(applications.each());
                 yield each == null ? null : Proposition.onAnApplication(each);
             }
+            case Proposition.OfTheWays ways -> proposition(ways.written());
             // What a count is about is what its statements are, which its choices name and no
             // more: asked only that, nothing writes them out. Remade, it reaches here written out
             // ({@link #of}).
@@ -466,7 +468,7 @@ public final class AnswerAsAnInput {
                  Proposition.LastToHold _, Proposition.SomeReachable _, Proposition.All _,
                  Proposition.Any _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
-                 Proposition.WhereItAnswers _ ->
+                 Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
                     !Proposition.aboutAnAnswer(stated)
                             && !Proposition.leavesSomethingUnread(stated);
         };

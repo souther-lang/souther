@@ -38,7 +38,8 @@ public final class GivenTotals {
             case Proposition.WhereItAnswers where -> canBeGiven(where.answers())
                     && canBeGiven(where.states());
             case Proposition.Some _, Proposition.SomeReachable _, Proposition.OnAnApplication _,
-                 Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _ -> false;
+                 Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _,
+                 Proposition.OfTheWays _ -> false;
         };
     }
 
@@ -74,7 +75,8 @@ public final class GivenTotals {
                  Proposition.Present _, Proposition.SameValue _, Proposition.InTheStrings _,
                  Proposition.LastToHold _ -> ExactAnswer.held(stated);
             case Proposition.Some _, Proposition.SomeReachable _, Proposition.OnAnApplication _,
-                 Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _ ->
+                 Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _,
+                 Proposition.OfTheWays _ ->
                     throw new IllegalArgumentException("a total is given to a statement of"
                             + " relations and their joins: " + stated);
         };

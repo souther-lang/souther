@@ -8,6 +8,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.core.WhatABodyReads;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
@@ -43,6 +44,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
 /**
@@ -723,6 +725,115 @@ public sealed interface Derivation {
         @Override
         public List<Derivation> oneOf() {
             return List.of(reading.read());
+        }
+    }
+
+    /**
+     * What a comparison over the ways its elements are kept states, concluded as how it is written
+     * out ({@link Proposition.OfTheWays}): the conditions that decide the ways and the reading
+     * every way is given its totals in are concluded now, and the cases are written out where a
+     * reader asks for them.
+     *
+     * <p>The ways themselves, decided in turn with each leaf given its totals, are made where a
+     * reader of the derivation asks for them, as the cases are where one asks for the statement.
+     *
+     * @param taken      the ways, decided in turn, each leaf given its totals
+     * @param conditions the conditions that decide the ways, each read once
+     * @param reading    the comparison, read over the totals
+     * @param spelled    what the ways are made of, which tells this from another
+     * @param cases      how many ways there are, or one past
+     *                   {@link CompositionBudget#PARTS_A_DERIVATION_CONCLUDES} where there are that
+     *                   many or more: past it the ways are not written out, and the statement is a
+     *                   part nothing read
+     */
+    record WaysWrittenWhenAsked(WaysTaken taken, List<Derivation> conditions,
+                                ReadOverTotals reading, String spelled, long cases)
+            implements Derivation {
+
+        /**
+         * The most ways that are written out where the statement is concluded. More are held as
+         * how they are written, and written out where a reader asks for the cases.
+         */
+        private static final long WRITTEN_AT_ONCE = 64;
+
+        public WaysWrittenWhenAsked {
+            Objects.requireNonNull(taken, "the ways are made somehow");
+            conditions = List.copyOf(conditions);
+            Objects.requireNonNull(reading, "the ways are given their totals in a reading");
+            Objects.requireNonNull(spelled, "the ways are told apart by a spelling");
+        }
+
+        /** The ways, made. */
+        public Derivation ways() {
+            return taken.made();
+        }
+
+        /** Alike where the conditions, the reading and what the ways are made of are: the ways
+         *  follow from them. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof WaysWrittenWhenAsked that
+                    && spelled.equals(that.spelled) && conditions.equals(that.conditions)
+                    && reading.read().equals(that.reading.read()));
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(spelled, conditions, reading.read());
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            if (cases <= WRITTEN_AT_ONCE) {
+                return numbering.of(ways());
+            }
+            boolean withinTheFigure = cases <= CompositionBudget.PARTS_A_DERIVATION_CONCLUDES
+                    .maximum();
+            StringBuilder told = new StringBuilder(spelled).append('|')
+                    .append(reading.concluded(numbering).key());
+            boolean leavesNothingUnread = Proposition.firstStopIn(reading.concluded(numbering))
+                    == null;
+            for (Derivation each : conditions) {
+                Proposition condition = numbering.of(each);
+                told.append('|').append(condition.key());
+                leavesNothingUnread &= Proposition.firstStopIn(condition) == null;
+            }
+            return new Proposition.OfTheWays(new Proposition.WrittenWays(told.toString(),
+                    leavesNothingUnread && withinTheFigure, cases,
+                    () -> withinTheFigure ? numbering.of(ways()) : numbering.unread(
+                            new Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))), true);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ways());
+        }
+    }
+
+    /**
+     * Ways of keeping decided in turn, each leaf given its totals, made once by whoever asks first.
+     */
+    final class WaysTaken {
+
+        private final Supplier<Derivation> making;
+        private volatile Derivation made;
+
+        public WaysTaken(Supplier<Derivation> making) {
+            this.making = Objects.requireNonNull(making, "the ways are made somehow");
+        }
+
+        Derivation made() {
+            Derivation known = made;
+            if (known == null) {
+                synchronized (this) {
+                    known = made;
+                    if (known == null) {
+                        known = Objects.requireNonNull(making.get(), "the ways are made");
+                        made = known;
+                    }
+                }
+            }
+            return known;
         }
     }
 
@@ -1909,7 +2020,7 @@ public sealed interface Derivation {
                      Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.SoManyHold _,
-                     Proposition.WhereItAnswers _ -> List.of(element);
+                     Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> List.of(element);
             };
             List<Proposition> decided = parts.stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container)).toList();
@@ -2572,7 +2683,8 @@ public sealed interface Derivation {
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> false;
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
+                     Proposition.OfTheWays _ -> false;
             };
         }
 
@@ -2614,7 +2726,8 @@ public sealed interface Derivation {
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
+                     Proposition.OfTheWays _ ->
                         throw new IllegalStateException(element
                                 + " is not made of the counts of one character");
             };

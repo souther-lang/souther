@@ -118,6 +118,16 @@ public final class CountsWrittenOut {
                 partsLeft -= written.parts();
                 yield writtenOut(written.choices());
             }
+            // The cases it is written out as are walked by whoever it is handed to, so they are
+            // held to what a reader is handed in all, as the choices of a count are.
+            case Proposition.OfTheWays ways -> {
+                long cases = ways.ways().cases();
+                if (cases > partsLeft) {
+                    yield stop(PARTS);
+                }
+                partsLeft -= cases;
+                yield writtenOut(ways.written());
+            }
             case Proposition.All all -> {
                 List<Proposition> parts = writtenOut(all.parts());
                 yield parts == null ? null : parts == all.parts() ? all : Proposition.all(parts);
