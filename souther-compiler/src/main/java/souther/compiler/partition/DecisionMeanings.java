@@ -41,7 +41,8 @@ import java.util.function.UnaryOperator;
  * @param states   what every condition of this body states about its input
  * @param subjects what the body's expressions name that a row can control
  */
-record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
+record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
+                        CaseCandidates candidates) {
 
     /**
      * One condition of a path: the column it is, and what it states about the input.
@@ -116,12 +117,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
 
     /**
      * What a row has to be to be evidence of each case the statement {@code answer} is about draws
-     * inside itself, for the cases a search draws that the reading can say what a row at the start
-     * of it has to be ({@link CaseOfAStatement.Search#askedOfTheNode}).
+     * inside itself, for the cases a search draws that the reading can say what a row has to be
+     * for ({@link CaseOfAStatement.Search#askedAtLevel}).
      *
      * <p>Only the cases the decision owes where the statement came out as it did
      * ({@link CasesTheRowsTook#owedBy}): a search that came out finding one owes the node meeting
-     * it, and one that came out empty owes the two ways of coming back empty.
+     * it and one found below it, and one that came out empty owes the two ways of coming back
+     * empty.
      */
     private List<CaseWay> casesOf(Condition condition, DecidedCondition answer) {
         if (!(answer.condition() instanceof DecisionCondition.AStatement(
@@ -132,23 +134,42 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         List<CaseWay> out = new ArrayList<>();
         for (CaseOfAStatement.Step step : CasesTheRowsTook.owedBy(search, held == search.holds())) {
             CaseOfAStatement.Search which = new CaseOfAStatement.Search(search, step);
-            Optional<List<Proposition>> asked = which.askedOfTheNode(states::denied);
-            if (asked.isEmpty()) {
-                continue;
-            }
-            List<OnTheWay> puts = new ArrayList<>();
-            SaidOnTheWay said = SaidOnTheWay.NONE;
-            for (Proposition each : asked.get()) {
-                ReachingCuts.Stating put =
-                        ReachingCuts.whereItDecides(condition, each, states.read());
-                puts.addAll(put.entries());
-                said = said.and(put.by());
-            }
-            if (!puts.isEmpty()) {
-                out.add(new CaseWay(which, puts, said));
+            // One way for each level the step is asked at, the nearest first: a search for a row
+            // takes the first that composes one. Only the levels whose places this reading read;
+            // a reading made to stop where the type returns to itself reads fewer, and the levels
+            // past them are the ways of a reading made to read more ({@link CaseCandidates}).
+            for (int level = 1; level <= candidates.levelsAsked(which); level++) {
+                if (!readEvery(which.placesAtLevel(level))) {
+                    break;
+                }
+                wayTo(condition, which, which.askedAtLevel(level, states::denied))
+                        .ifPresent(out::add);
             }
         }
         return List.copyOf(out);
+    }
+
+    /** Whether the reading read a position at every one of {@code places}, which is what it needs
+     *  to say what a row has to be there. */
+    private boolean readEvery(List<TermPath> places) {
+        return places.stream().allMatch(each -> CaseCandidates.reads(states.read().domain(), each));
+    }
+
+    /** What {@code asked} comes to on the way at {@code condition}, as the way to {@code which}:
+     *  nothing where the step is not asked or the reading has no words for what it is. */
+    private Optional<CaseWay> wayTo(Condition condition, CaseOfAStatement which,
+                                    Optional<List<Proposition>> asked) {
+        if (asked.isEmpty()) {
+            return Optional.empty();
+        }
+        List<OnTheWay> puts = new ArrayList<>();
+        SaidOnTheWay said = SaidOnTheWay.NONE;
+        for (Proposition each : asked.get()) {
+            ReachingCuts.Stating put = ReachingCuts.whereItDecides(condition, each, states.read());
+            puts.addAll(put.entries());
+            said = said.and(put.by());
+        }
+        return puts.isEmpty() ? Optional.empty() : Optional.of(new CaseWay(which, puts, said));
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is

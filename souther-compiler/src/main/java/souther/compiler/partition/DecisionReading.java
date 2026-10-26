@@ -277,6 +277,15 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
      */
     public static DecisionReading of(String behavior, AnalysisBody analysis, InputReading read,
                                      InputReads reads) {
+        return of(behavior, analysis, read, reads, CaseCandidates.NEARBY);
+    }
+
+    /**
+     * The same, with the ways to the cases a search draws made for the candidates {@code
+     * candidates} says, over the places {@code read} has read.
+     */
+    public static DecisionReading of(String behavior, AnalysisBody analysis, InputReading read,
+                                     InputReads reads, CaseCandidates candidates) {
         Core body = analysis.core();
         // The conditions of this body take their names here, and one register serves every scope: a
         // condition met under a binding and the same condition met outside it are one condition.
@@ -286,7 +295,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         // leaves nothing after its build reached. What is inside the template is not counted as a
         // way of this body — a value takes no input, so it is no rule a row can be written for.
         WaysNoInputTakes proved = new WaysNoInputTakes();
-        DecisionNaming naming = new DecisionNaming(meanings(read), reads, numbering,
+        DecisionNaming naming = new DecisionNaming(meanings(read, candidates), reads, numbering,
                 PATHS_READ.maximum(), proved);
         ValueArrivals<DecisionPath> arrivals = ValueArrivals.ofBodyWhereTheOperationsStand(body,
                 naming, new AnOperationsTruthComesOutAsItCan(reads, read),
@@ -313,8 +322,8 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
     }
 
     /** What this body's conditions decide, made once for the whole reading of it. */
-    private static DecisionMeanings meanings(InputReading read) {
+    private static DecisionMeanings meanings(InputReading read, CaseCandidates candidates) {
         return new DecisionMeanings(new ConditionMeanings(read),
-                WhatAnAnswerTakesUp.of(read).subjects());
+                WhatAnAnswerTakesUp.of(read).subjects(), candidates);
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
 import java.util.List;
@@ -28,7 +29,8 @@ public sealed interface CaseOfAStatement {
     String spelled();
 
     /**
-     * Whether a row can be looked for by what the case says of the node a search starts at.
+     * Whether a row can be looked for by what the case says of the node a search starts at and of
+     * the places inside it that the case names.
      *
      * <p>The criterion for work: a case none of the searches that compose rows can look for is a
      * case the measure still reports as unmeasured, and is no work a person is offered rows for.
@@ -81,21 +83,35 @@ public sealed interface CaseOfAStatement {
          * What the step says of the node the search starts at, as statements about that node, or
          * none where a row cannot be asked for the step by what it writes at the node.
          *
-         * <p>Finding one below is no statement about the node: it is about what is under it at
-         * any depth, which a row is composed for by the nodes it writes and not by a distinction at
-         * the start. The other three are the node meeting what the search asks, and the node not
-         * meeting it with and without anything below.
+         * <p>Finding one below is asked as the start not meeting what the search asks and a node
+         * some levels down doing so ({@link #askedAtLevel}); the first level here.
          *
          * @param denying what holds exactly where a statement does not, which is the reading's own
          */
         public Optional<List<Proposition>> askedOfTheNode(UnaryOperator<Proposition> denying) {
+            return askedAtLevel(1, denying);
+        }
+
+        /**
+         * What the step says of the node the search starts at, with finding one below asked of the
+         * node {@code levels} down ({@link Proposition.SomeReachable#someNodeBelowMeetingIt});
+         * none where the search is not of that form, because a row then has nothing that steers
+         * it to a node below. The other three steps are asked the same at every level.
+         *
+         * <p>Finding one below is a node at some depth, which no one statement says. Each level is
+         * a candidate for it, and the rules of the decision may leave room at one and none at
+         * another; which levels are tried is the search's ({@link CaseCandidates}).
+         */
+        public Optional<List<Proposition>> askedAtLevel(int levels,
+                                                        UnaryOperator<Proposition> denying) {
             if (!statement.at().equals(statement.writtenAt())) {
                 return Optional.empty();
             }
             Proposition notAtTheNode = denying.apply(statement.atANode());
             return switch (step) {
                 case AT_THE_NODE -> Optional.of(List.of(statement.atANode()));
-                case BELOW_IT -> Optional.empty();
+                case BELOW_IT -> statement.someNodeBelowMeetingIt(levels)
+                        .map(below -> List.of(notAtTheNode, below.meets()));
                 case NOWHERE_AT_A_LEAF -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, none));
                 // What every node below comes to is no statement about the start node: a row is in
@@ -104,6 +120,16 @@ public sealed interface CaseOfAStatement {
                 case NOWHERE_BELOW -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, denying.apply(none)));
             };
+        }
+
+        /** The places the step is asked at {@code levels} below the start, which are the ones a
+         *  reading has to have read to say what a row has to be there. None for a step that asks
+         *  nothing inside the nodes below. */
+        public List<TermPath> placesAtLevel(int levels) {
+            return step != Step.BELOW_IT ? List.of()
+                    : statement.someNodeBelowMeetingIt(levels)
+                            .map(Proposition.SomeReachable.NodeBelowMeeting::places)
+                            .orElse(List.of());
         }
     }
 
