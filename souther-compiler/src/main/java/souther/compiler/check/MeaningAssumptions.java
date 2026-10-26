@@ -26,6 +26,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
@@ -521,7 +522,7 @@ final class MeaningAssumptions {
                 yield type == null ? null : terms.atomAt(placeOf(at), type);
             }
             case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
-                    && isASize(taken) -> {
+                    && ofTheValueAsItStands(taken) && isASize(taken) -> {
                 FactSubject size = terms.sizeAtPlace(taken.operation(), placeOf(taken.position()));
                 if (size != null) {
                     carrying(size, taken.operation());
@@ -532,6 +533,7 @@ final class MeaningAssumptions {
             // the hours of a day, the months of a year and the years a date is written in whether
             // or not the condition holds.
             case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
+                    && ofTheValueAsItStands(taken)
                     && (taken.takenAs() instanceof TakenAs.PartOfTime
                     || taken.takenAs() instanceof TakenAs.PartOfDate) -> {
                 FactSubject part = terms.partAtPlace(taken.operation(), placeOf(taken.position()));
@@ -544,7 +546,8 @@ final class MeaningAssumptions {
             // a guard on the remainder here and one on the value a body bound the call to are about
             // one number. It carries both ends its operation bounds it to by this divisor.
             case NumericTerm.TakenOf taken
-                    when taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                    when ofTheValueAsItStands(taken)
+                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
                     && remainder.read(taken.arguments()) instanceof BigDecimal divisor
                     && isAWholeNumberOfALong(divisor) -> {
                 FactSubject left = terms.remainderAtPlace(taken.operation(),
@@ -958,6 +961,24 @@ final class MeaningAssumptions {
                 terms.spacesOf(LinearForm.atom(count)));
         taken = true;
         return true;
+    }
+
+    /**
+     * Whether {@code taken} is a number of the value standing at its place as it stands, and not
+     * of one derived from it.
+     *
+     * <p>A place names one number only when the value is the place's own. The year of {@code d}
+     * and the year of {@code Date.addDays(1, d)} are two numbers that differ on the last day of a
+     * year, so the atom keyed by the operation and the place would hold both to one answer and
+     * make a guard that is reachable contradict itself. A number of a derived value is named by
+     * no atom here, which says nothing of it, and a kind of derivation added is one more arm that
+     * this says how to name.
+     */
+    private static boolean ofTheValueAsItStands(NumericTerm.TakenOf taken) {
+        return switch (taken.transformation()) {
+            case ValueTransformation.Identity _ -> true;
+            case ValueTransformation.DateShift _ -> false;
+        };
     }
 
     /** Whether {@code taken} is the count of what its position holds. */
