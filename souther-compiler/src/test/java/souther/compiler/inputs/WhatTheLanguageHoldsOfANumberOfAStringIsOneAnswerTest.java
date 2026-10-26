@@ -19,6 +19,7 @@ import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtents;
 import souther.runtime.Strings;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -128,18 +129,37 @@ class WhatTheLanguageHoldsOfANumberOfAStringIsOneAnswerTest {
                 form(lengthAt("a"), ExactRatio.ONE, valueAt("x"), ExactRatio.ONE)));
     }
 
-    /** A weight is any ratio: the ends are worked out exactly and rounded outward, so the run
-     *  holds every value the form could. */
+    /** A weight is any ratio: an end a count writes is kept as it is. */
     @Test
-    void aWeightThatIsNotWholeIsWorkedOutExactlyAndRoundedOutward() {
+    void anEndACountWritesIsKeptExactly() {
         ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
 
-        assertEquals(between(0, 402653183),
+        assertEquals(exactly("0", "402653182.5"),
                 RepresentationBounds.ofAForm(form(lengthAt("a"), half, lengthAt("b"),
                         ExactRatio.ONE)),
-                "half the longest and the longest are one and a half of it: 402653182.5, up");
-        assertEquals(between(-134217728, 0),
-                RepresentationBounds.ofAForm(form(lengthAt("a"), half.negated())),
-                "minus half the longest is -134217727.5, down");
+                "half the longest and the longest are one and a half of it");
+        assertEquals(exactly("-134217727.5", "0"),
+                RepresentationBounds.ofAForm(form(lengthAt("a"), half.negated())));
+    }
+
+    /** And one no count writes is rounded outward, so the run holds every value the form could. */
+    @Test
+    void anEndNoCountWritesIsRoundedOutward() {
+        ExactRatio third = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
+
+        assertEquals(between(0, 89478485),
+                RepresentationBounds.ofAForm(form(lengthAt("a"), third)),
+                "a third of the longest is 89478485 exactly");
+        assertEquals(between(-89478485, 0),
+                RepresentationBounds.ofAForm(form(lengthAt("a"), third.negated())));
+        ExactRatio sevenths = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(7));
+        assertEquals(between(0, 38347923),
+                RepresentationBounds.ofAForm(form(lengthAt("a"), sevenths)),
+                "a seventh of 268435455 is 38347922.14…, up");
+    }
+
+    private static NumericDomain.Bounds exactly(String least, String most) {
+        return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(new BigDecimal(least))),
+                Endpoint.inclusive(Count.of(new BigDecimal(most))));
     }
 }

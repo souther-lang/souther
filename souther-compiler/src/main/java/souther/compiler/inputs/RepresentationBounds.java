@@ -11,6 +11,7 @@ import souther.compiler.values.TextExtents;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The most a number can be because of what the language can hold, whatever any rule says.
@@ -82,9 +83,10 @@ public final class RepresentationBounds {
      *
      * <p>Open where no term of the form is ended by the language, so a form of numbers nothing ends
      * says nothing here; and open on a side where some term that decides that side has no end
-     * there. A weight may be any ratio: the ends are worked out exactly and written as the whole
-     * numbers they lie within, the lower one rounded down and the upper one up, so the run holds
-     * every value the form could and never fewer.
+     * there. A weight may be any ratio: the ends are worked out exactly and kept as they are where
+     * a count writes them, and otherwise written as the whole numbers they lie within, the lower
+     * one rounded down and the upper one up, so the run holds every value the form could and
+     * never fewer.
      *
      * <p>This is what the language holds, to be asked whether a value can stand and never what a
      * position is divided into. The run the rules leave a term, with the language's ends met in, is
@@ -116,11 +118,22 @@ public final class RepresentationBounds {
         if (!ended || !(lowHeld || highHeld)) {
             return NumericDomain.Bounds.OPEN;
         }
-        BigInteger down = low.floor().orNull();
-        BigInteger up = high.ceiling().orNull();
-        return new NumericDomain.Bounds(
-                lowHeld && down != null ? Endpoint.inclusive(Count.of(new BigDecimal(down))) : null,
-                highHeld && up != null ? Endpoint.inclusive(Count.of(new BigDecimal(up))) : null);
+        return new NumericDomain.Bounds(lowHeld ? endpoint(low, false) : null,
+                highHeld ? endpoint(high, true) : null);
+    }
+
+    /**
+     * {@code at} as an end: the count that writes it exactly where there is one, and otherwise the
+     * whole number just outside it, so the run never holds fewer values than the form could.
+     * Null where neither can be written, which leaves that side open.
+     */
+    private static Endpoint endpoint(ExactRatio at, boolean upper) {
+        Optional<Count> exact = Count.written(at).orNull();
+        if (exact != null && exact.isPresent()) {
+            return Endpoint.inclusive(exact.get());
+        }
+        BigInteger outside = (upper ? at.ceiling() : at.floor()).orNull();
+        return outside == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(outside)));
     }
 
     /** {@code so far} and {@code weight} times {@code by}, or null where the exact arithmetic
