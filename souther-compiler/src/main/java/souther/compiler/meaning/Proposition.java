@@ -453,7 +453,9 @@ public sealed interface Proposition {
      * <p>Both strings are values of the input or what an operation answers of them, so a string
      * made of another by {@code String.lowercase} is held as that answer and keeps what it was
      * made from; read down to the position, it would be a statement about a string nobody wrote.
-     * It relates the two and divides neither, as {@link SameValue} does.
+     * It relates the two, as {@link SameValue} does. Whether either position is divided by it is
+     * not said here: that follows from the values each position admits and from how the two
+     * depend on each other, and is read where the relation is projected onto the positions.
      *
      * @param inner the string looked for
      * @param outer the string looked in

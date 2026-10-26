@@ -2756,9 +2756,10 @@ public sealed interface Derivation {
      * that it is none of them. It is not what was read of the one piece: that piece is bound by the
      * statement and stands for whichever one the value is, so held outside it, "the piece is the
      * value" and "the piece is another value" would be each other's denial, where a string of two
-     * pieces has one of each. It relates that value to the string and divides neither, since the
-     * string has a piece for every value to be or not to be, and says nothing of which code points
-     * the string holds ({@link SomePieceMeeting}).
+     * pieces has one of each. It relates that value to the string, and says nothing of which code
+     * points the string holds ({@link SomePieceMeeting}). Whether it divides either position is
+     * not said here: a string has a piece for the value to be or not to be only where the window
+     * of the pieces holds one, and a window of none, or a string that is empty, has none.
      *
      * @param ofThePiece what was read of the piece, inside the statement
      * @param among      the value being one of the pieces, which is what leaves the statement

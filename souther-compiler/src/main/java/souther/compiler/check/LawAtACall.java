@@ -259,9 +259,9 @@ public final class LawAtACall {
                                                          boolean holds) -> {
                 ElementsWrittenOut.Stood<E> within = valueOf(inner, container, element, reading);
                 ElementsWrittenOut.Stood<E> around = valueOf(outer, container, element, reading);
-                yield within != null && around != null
+                yield (within != null && around != null
                         && reading.elements().folded(within).orElse(null) instanceof String looked
-                        && reading.elements().folded(around).orElse(null) instanceof String in
+                        && reading.elements().folded(around).orElse(null) instanceof String in)
                         ? where.holds(looked, in) == holds : null;
             }
             case LawProposition.Compared<DeclaredArgument>(var form, var states) -> {

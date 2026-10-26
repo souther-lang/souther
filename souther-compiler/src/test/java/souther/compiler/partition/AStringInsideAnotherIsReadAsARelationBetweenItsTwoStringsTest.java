@@ -7,6 +7,8 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -18,6 +20,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
 import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.ValueName;
 
@@ -25,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -198,6 +202,64 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
         String split = "String.split(\"@\", i.b)";
         assertEquals(null, among("List.take(0, " + split + ")"));
         assertEquals(null, among("List.drop(100000, List.take(1, " + split + "))"));
+    }
+
+    /** A window no int says is not followed, so that no reader is handed ends narrowed to others. */
+    @Test
+    void aWindowPastWhatAnIntSaysIsNotReadAndNothingIsThrown() {
+        String split = "String.split(\"@\", i.b)";
+        assertEquals(null, among("List.take(1, List.drop(2147483647, " + split + "))"));
+        assertEquals(null, among("List.drop(2147483647, List.drop(2147483647, " + split + "))"));
+        assertEquals(null, among("List.take(2147483647, List.drop(1, " + split + "))"));
+        assertEquals(2147483646, among("List.drop(2147483646, " + split + ")").from());
+    }
+
+    private static final String REPORTED = """
+            module demo
+
+            data Point = { value: String }
+            data Case = { businessCase: String, points: List<Point> }
+
+            let lowered (s: String): String = String.lowercase(s)
+
+            let hits (c: Case, p: Point): Bool =
+                String.contains(lowered(p.value), lowered(c.businessCase))
+
+            behavior f : (i: Case) -> Bool
+            let f (i) = BODY
+            """;
+
+    private static String reported(String body) {
+        Compilation compilation = Compilation.ofSource(REPORTED.replace("BODY", body), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), () -> "compiles: " + body);
+        return AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+    }
+
+    /**
+     * The statement stops no longer being a form nobody reads, whichever way it is written: the
+     * report says the relation is not shown to reach every value, and nothing else of it.
+     */
+    @Test
+    void theReportOfARelationBetweenStringsSaysOnlyThatItIsNotShownToReach() {
+        for (String body : List.of(
+                "List.any(p -> String.contains(String.lowercase(i.businessCase),"
+                        + " String.lowercase(p.value)), i.points)",
+                "List.any(p -> hits(i, p), i.points)",
+                "List.length(List.filter(p -> hits(i, p), i.points)) >= 1",
+                "{\n    let lowerCase = String.lowercase(i.businessCase)\n"
+                        + "    List.any(p -> String.contains(lowerCase, String.lowercase(p.value)),"
+                        + " i.points)\n}")) {
+            String json = reported(body);
+            assertFalse(json.contains("unsupported_syntax"), () -> "read to the end: " + body);
+            assertFalse(json.contains("rule_about_a_derived_value"),
+                    () -> "not about a derived value: " + body);
+            assertTrue(json.contains("relation_not_shown_to_reach_every_value"),
+                    () -> "said not shown to reach: " + body);
+        }
     }
 
     /** Two spellings of one relation are one statement, and two different relations are not. */

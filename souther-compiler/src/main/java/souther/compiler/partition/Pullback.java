@@ -2137,13 +2137,12 @@ final class Pullback {
          * where it holds them all — of a window that starts at the first.
          */
         int first() {
-            return window.until().isEmpty() ? 0
-                    : (int) Math.min(window.until().getAsLong(), Integer.MAX_VALUE);
+            return window.until().isEmpty() ? 0 : Math.toIntExact(window.until().getAsLong());
         }
 
         /** The index of the first piece the container holds. */
         int from() {
-            return (int) Math.min(window.from(), Integer.MAX_VALUE);
+            return Math.toIntExact(window.from());
         }
     }
 
@@ -2223,9 +2222,11 @@ final class Pullback {
             return null;
         }
         // The operation keeps the elements whose index is below the count, or at or above it, as
-        // it is declared to; those are what taking and dropping are.
-        return inner.through(kept.kept() == Rel.LT ? inner.window().taking(number.value())
-                : inner.window().dropping(number.value()));
+        // it is declared to; those are what taking and dropping are. A window no int says is not
+        // followed, so that every reader of one is handed ends it can state as they are.
+        PieceWindow left = kept.kept() == Rel.LT ? inner.window().taking(number.value())
+                : inner.window().dropping(number.value());
+        return left.isSaidInInts() ? inner.through(left) : null;
     }
 
     /**
@@ -3917,13 +3918,7 @@ final class Pullback {
                 throw new IllegalStateException(
                         "a piece in a language was read by a leaf of this reading: " + element);
             }
-            // The language counts pieces in the numbers of a repetition, which a window past them
-            // cannot be said in: such a window is not read, and is not read as another.
             PieceWindow window = pieces.window();
-            if (window.from() > Integer.MAX_VALUE || (window.until().isPresent()
-                    && window.until().getAsLong() > Integer.MAX_VALUE)) {
-                return null;
-            }
             int separator = pieces.separator().getAsInt();
             int from = (int) window.from();
             int until = window.until().isEmpty() ? StringsByTheirPieces.TO_THE_LAST
