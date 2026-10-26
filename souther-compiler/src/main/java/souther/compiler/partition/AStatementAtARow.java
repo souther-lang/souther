@@ -160,8 +160,9 @@ final class AStatementAtARow {
                 case Relation.Ordered _ -> false;
             };
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
+                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -368,7 +369,7 @@ final class AStatementAtARow {
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.StringInside _, Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> { }
             case Proposition.Carried carried -> throw carried.handedToAReader();
         }
@@ -426,8 +427,8 @@ final class AStatementAtARow {
             }
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
-                 Proposition.Unread _,
+                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> { }
         }
     }
@@ -500,8 +501,9 @@ final class AStatementAtARow {
             case Proposition.LastToHold _ -> false;
             case Proposition.Some _, Proposition.SoManyHold _ -> false;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
+                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -1113,7 +1115,7 @@ final class AStatementAtARow {
                     });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.StringInside _, Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _, Proposition.LastToHold _ -> notAsked(part);
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
@@ -1203,8 +1205,9 @@ final class AStatementAtARow {
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
+                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -1426,7 +1429,8 @@ final class AStatementAtARow {
                     // A count of statements comes to either here: that claims nothing of it.
                     case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
                          Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                         Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                         Proposition.SameValue _, Proposition.StringInside _,
+                         Proposition.LastToHold _, Proposition.Carried _,
                          Proposition.SomeReachable _, Proposition.Unread _,
                          Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
                             add(Kind.SETTLED, null, 0, EITHER, null);

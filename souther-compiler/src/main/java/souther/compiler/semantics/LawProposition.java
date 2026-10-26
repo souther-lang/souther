@@ -118,6 +118,25 @@ public sealed interface LawProposition<A> {
         }
     }
 
+    /**
+     * The string {@code inner} standing inside the string {@code outer} where {@code where} says —
+     * or, where {@code holds} is false, not.
+     */
+    record Inside<A>(LawSubject<A> inner, LawSubject<A> outer, StringContainment where,
+                     boolean holds) implements LawProposition<A> {
+
+        public Inside {
+            Objects.requireNonNull(inner, "a string inside another is one string");
+            Objects.requireNonNull(outer, "inside another string");
+            Objects.requireNonNull(where, "somewhere in it");
+        }
+
+        @Override
+        public LawProposition<A> denied() {
+            return new Inside<>(inner, outer, where, !holds);
+        }
+    }
+
     /** {@code one} and {@code other} being the same value — or, where {@code holds} is false, not. */
     record Same<A>(LawSubject<A> one, LawSubject<A> other, boolean holds)
             implements LawProposition<A> {

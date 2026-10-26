@@ -282,7 +282,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                             decisionForm(form), proposition), holds == held);
             case Proposition.Compared _, Proposition.Always _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _,
+                 Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SoManyHold _, Proposition.WhereItAnswers _,

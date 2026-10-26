@@ -245,7 +245,7 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
 
                 behavior route : (code: Code, p: String) -> Where
                 let route (code, p) = {
-                    guard String.startsWith(p, code.value) else Abroad
+                    guard String.startsWith(String.append(p, "x"), code.value) else Abroad
                     Home
                 }
                 """);

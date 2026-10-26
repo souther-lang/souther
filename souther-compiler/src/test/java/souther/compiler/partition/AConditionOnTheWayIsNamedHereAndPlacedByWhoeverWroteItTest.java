@@ -44,11 +44,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
 
-    /** Why a fork on {@code String.startsWith} is declined: what it answers is one string standing
-     *  inside another, which nothing here has words for. */
-    private static final WhyNotTaken STARTS_WITH_HAS_NO_WORDS = new WhyNotTaken.MeaningUnread(
-            new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "startsWith"),
-                    OperationLaw.Observed.TRUTH, Unsayable.A_STRING_INSIDE_ANOTHER));
+    /** Why a fork on {@code String.matches} is declined: what it answers is a string matching a
+     *  pattern, which nothing here has words for. */
+    private static final WhyNotTaken MATCHES_HAS_NO_WORDS = new WhyNotTaken.MeaningUnread(
+            new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "matches"),
+                    OperationLaw.Observed.TRUTH, Unsayable.A_STRING_MATCHING_A_PATTERN));
 
     /**
      * Two forks on a truth this reading has no words for, one inside the other.
@@ -68,8 +68,8 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
                 + beforeTheBody
                 + """
                 let twoUnread (a, b, n) =
-                    if String.startsWith("w-", a) then
-                        if String.startsWith("w-", b) then
+                    if String.matches("w-.*", a) then
+                        if String.matches("w-.*", b) then
                             if n > 3 then n > 0 else n < 0
                         else
                             n < 0
@@ -94,7 +94,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
             }
         }
         assertEquals(2, declined.size(), () -> "both forks are on the way: " + declined);
-        assertEquals(List.of(List.of(STARTS_WITH_HAS_NO_WORDS), List.of(STARTS_WITH_HAS_NO_WORDS)),
+        assertEquals(List.of(List.of(MATCHES_HAS_NO_WORDS), List.of(MATCHES_HAS_NO_WORDS)),
                 declined.stream().map(OnTheWay.Declined::whys).toList(),
                 "and for the one reason, which is what leaves the name doing the telling apart");
         assertNotEquals(declined.get(0), declined.get(1),
@@ -168,14 +168,14 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
 
                 behavior oneCondition : (a: String, n: Int) -> Bool
                 let oneCondition (a, n) =
-                    if String.startsWith("w-", a) && n > 3 then n > 0 else n < 0
+                    if String.matches("w-.*", a) && n > 3 then n > 0 else n < 0
                 """;
         Compilation compilation = compiledFrom(source);
         List<OnTheWay.Declined> named = new ArrayList<>();
         for (List<OnTheWay> way : waysIn(compilation, "oneCondition")) {
             for (OnTheWay each : way) {
                 if (each instanceof OnTheWay.Declined left
-                        && left.whys().equals(List.of(STARTS_WITH_HAS_NO_WORDS))) {
+                        && left.whys().equals(List.of(MATCHES_HAS_NO_WORDS))) {
                     named.add(left);
                 }
             }

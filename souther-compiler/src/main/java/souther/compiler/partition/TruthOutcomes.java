@@ -153,7 +153,7 @@ final class TruthOutcomes {
             case Proposition.Always(boolean holds) -> Outcomes.only(holds);
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _ -> Outcomes.EITHER;
+                 Proposition.StringInside _, Proposition.LastToHold _ -> Outcomes.EITHER;
             case Proposition.Unread unread ->
                     unread.fixed() ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
             case Proposition.Carried carried -> throw carried.handedToAReader();

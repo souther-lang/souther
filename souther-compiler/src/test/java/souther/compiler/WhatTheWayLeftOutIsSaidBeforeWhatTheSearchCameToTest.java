@@ -160,8 +160,8 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                                 + " written for one"),
                 () -> only(NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR));
         assertTrue(only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR).contains(
-                        "a condition on what String.startsWith answers, which comes to one string"
-                                + " standing inside another — no condition here says that"),
+                        "a condition on one string standing inside another, where one of them is"
+                                + " neither a value of the input nor made of one"),
                 () -> only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR));
     }
 

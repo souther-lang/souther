@@ -290,7 +290,7 @@ public final class WhereEachLineDecides {
             case Proposition.Present(DecisionSubject.AnInput(TermPath of), var _, var _) ->
                     out.add(of);
             case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.InTheStrings _, Proposition.Always _, Proposition.SameValue _,
+                 Proposition.InTheStrings _, Proposition.Always _, Proposition.SameValue _, Proposition.StringInside _,
                  Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
@@ -423,7 +423,7 @@ public final class WhereEachLineDecides {
                 case Proposition.OfTheWays ways -> of(ways.written());
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
                      Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
             };
         }
@@ -534,7 +534,7 @@ public final class WhereEachLineDecides {
                 }
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
                      Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
             };
         }
@@ -599,7 +599,7 @@ public final class WhereEachLineDecides {
                 // some element meeting it is the container holding one.
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
                         element.mayTurnOnAnElementOf(container)
@@ -647,7 +647,7 @@ public final class WhereEachLineDecides {
                 case Proposition.OfTheWays ways -> placesIn(ways.written());
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
                      Proposition.Unread _, Proposition.OnAnApplication _ -> 1;
             };
         }
@@ -771,7 +771,7 @@ public final class WhereEachLineDecides {
                 // A part, as it stands in the statement or as what every row meets of the parts
                 // says it: held or denied, it is the part held, asked one way round.
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _ -> {
@@ -1253,7 +1253,7 @@ public final class WhereEachLineDecides {
                     .anyMatch(WhereEachLineDecides::statesARelation);
             case Proposition.OfTheWays ways -> statesARelation(ways.written());
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
                  Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> false;
@@ -1281,7 +1281,7 @@ public final class WhereEachLineDecides {
             case Proposition.OfTheWays ways -> gather(ways.written(), parts, leaves);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> {
                 Proposition held = held(stated);
@@ -1323,7 +1323,7 @@ public final class WhereEachLineDecides {
             case Proposition.OfTheWays ways -> partsBy(ways.written(), answering, where, what);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> {
                 Proposition held = held(stated);
@@ -1344,6 +1344,7 @@ public final class WhereEachLineDecides {
             case Proposition.Present present -> present.holds();
             case Proposition.InTheStrings strings -> strings.holds();
             case Proposition.SameValue same -> same.holds();
+            case Proposition.StringInside inside -> inside.holds();
             case Proposition.Unread unread -> unread.holds();
             case Proposition.Some some -> some.holds();
             case Proposition.SomeReachable reached -> reached.holds();
@@ -1701,7 +1702,7 @@ public final class WhereEachLineDecides {
             case Proposition.OfTheWays ways -> assuming(ways.written(), value, atoms);
             case Proposition.InCases _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> stated;
         };
@@ -1732,7 +1733,7 @@ public final class WhereEachLineDecides {
                             some.holds());
             case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> stated;
         };

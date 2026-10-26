@@ -24,6 +24,7 @@ import souther.compiler.meaning.WaysSamples;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -120,6 +121,15 @@ class WhatAnElementAnswersIsTheSameHoweverTheElementsAreSharedOutTest {
         decided.put(Proposition.SameValue.class, new Boolean[] {
             sameWhereverTheyAreWritten(new Proposition.SameValue(at(CURRENCY), at(AMOUNT), true)),
             sameWhereverTheyAreWritten(new Proposition.SameValue(at(CURRENCY), at(FLOOR), true))});
+        decided.put(Proposition.StringInside.class, new Boolean[] {
+            sameWhereverTheyAreWritten(new Proposition.StringInside(
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(CURRENCY)),
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(AMOUNT)),
+                    StringContainment.ANYWHERE, true)),
+            sameWhereverTheyAreWritten(new Proposition.StringInside(
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(CURRENCY)),
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(FLOOR)),
+                    StringContainment.ANYWHERE, true))});
         decided.put(Proposition.LastToHold.class, new Boolean[] {
             null,
             sameWhereverTheyAreWritten(new Proposition.LastToHold(at(FORECASTS), at(CURRENCY),

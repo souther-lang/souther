@@ -16,6 +16,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.StringsLanguage;
 
 import souther.compiler.types.ApplicationOrigin;
@@ -267,13 +268,28 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                 StringPredicates.statedBy(call, symbols,
                         at -> reads.writtenStringOf(at, symbols, read.newtypes()));
         if (stated != null) {
-            read(call, written.application(), behavior, stated, reads, out, reaches);
+            // A rule states something exactly where its text was worked out. Without it there is
+            // no set of strings to tell this position's strings by; where the call is a relation
+            // between two strings of the input, that is what the reading of the applications of
+            // the body states of it ({@link ComparisonReadings}), and a rule read there is not
+            // also a rule nobody read here.
+            if (stated.statement() != null || !relatesTwoStrings(call, reads, read)) {
+                read(call, written.application(), behavior, stated, reads, out, reaches);
+            }
         } else if (call.operation() instanceof ValueName.Stdlib.Operation operation
                 && DefaultBoundOperationFacts.get().quantifiesOverTheElementsItIsHanded(operation)) {
             // Asked of what the operation is proved to come to, and not of the shape of what it is
             // handed: a quantifier is one whether its closure is written at it or named.
             piecesRead(call, written.application(), behavior, read, reads, out, reaches);
         }
+    }
+
+    /** Whether {@code call} is read as one string of the input standing inside another, or an
+     *  answer made of one. */
+    private static boolean relatesTwoStrings(Core.PreservedCall call, InputReads reads,
+                                             InputReading read) {
+        return WhatConditionsState.of(read).truth(call, reads, read).proposition()
+                instanceof Proposition.StringInside;
     }
 
     /**

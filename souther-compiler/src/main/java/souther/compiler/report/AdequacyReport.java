@@ -5511,6 +5511,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
                                     case A_STRING_IN_A_LANGUAGE ->
                                             "a string being one of the strings of a language";
+                                    case A_STRING_INSIDE_ANOTHER ->
+                                            "one string standing inside another";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"
                                                     + " position";
@@ -5616,6 +5618,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " which a path knows only as the cases it may still be";
                 case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "two values being one, which no fact a"
                         + " path knows says";
+                case A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER -> "one string standing inside"
+                        + " another, which no fact a path knows says";
                 case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "a place on an order no range says,"
                         + " which no fact a path knows says";
                 case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "how many elements of a container meet"
@@ -5659,6 +5663,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " stands at no position";
                 case VALUE -> "a condition about whether a container holds a value, where the value"
                         + " stands at no position";
+                case STRING -> "a condition on one string standing inside another, where one of"
+                        + " them is neither a value of the input nor made of one";
                 case SCRUTINEE ->
                         "an arm of a fork this reading could not read as a narrowing of a position";
                 case SUBJECT -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
@@ -6425,6 +6431,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             switch (place) {
                                 case CONTAINER -> "container_at_no_position";
                                 case VALUE -> "value_at_no_position";
+                                case STRING -> "string_at_no_position";
                                 case SCRUTINEE -> "scrutinee_at_no_position";
                                 case SUBJECT -> "subject_at_no_position";
                             };
@@ -6482,6 +6489,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
                     case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "path_knows_no_case_a_value_is_not";
                     case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
+                    case A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER ->
+                            "path_knows_no_string_inside_another";
                     case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
                     case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
                     case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS ->

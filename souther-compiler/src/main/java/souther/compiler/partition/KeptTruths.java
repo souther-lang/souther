@@ -43,7 +43,8 @@ final class KeptTruths {
                 case Proposition.Always _ -> { }
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                     Proposition.StringInside _, Proposition.LastToHold _, Proposition.All _,
+                     Proposition.Any _,
                      Proposition.Some _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.SoManyHold _,

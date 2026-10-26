@@ -300,7 +300,8 @@ final class OperationFactBinder {
             }
             case LawProposition.Always<ArgumentRef> _, LawProposition.Observed<ArgumentRef> _,
                  LawProposition.Compared<ArgumentRef> _, LawProposition.SomeElement<ArgumentRef> _,
-                 LawProposition.Same<ArgumentRef> _ -> where;
+                 LawProposition.Same<ArgumentRef> _, LawProposition.Inside<ArgumentRef> _ ->
+                    where;
         };
     }
 
@@ -1281,6 +1282,10 @@ final class OperationFactBinder {
                 answersNamedIn(stdlib, one);
                 answersNamedIn(stdlib, other);
             }
+            case LawProposition.Inside<ArgumentRef>(var inner, var outer, var _, var _) -> {
+                answersNamedIn(stdlib, inner);
+                answersNamedIn(stdlib, outer);
+            }
         }
     }
 
@@ -1722,6 +1727,16 @@ final class OperationFactBinder {
                             + Type.show(typeOf(other)) + " are one value");
                 }
                 yield new LawProposition.Same<>(one, other, same.holds());
+            }
+            case LawProposition.Inside<ArgumentRef> inside -> {
+                LawSubject<DeclaredArgument> inner = lawSubject(declaration, inside.inner(), over);
+                LawSubject<DeclaredArgument> outer = lawSubject(declaration, inside.outer(), over);
+                if (!Type.STRING.equals(typeOf(inner)) || !Type.STRING.equals(typeOf(outer))) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " asks whether " + Type.show(typeOf(inner)) + " stands inside "
+                            + Type.show(typeOf(outer)) + ", which are not both strings");
+                }
+                yield new LawProposition.Inside<>(inner, outer, inside.where(), inside.holds());
             }
         };
     }

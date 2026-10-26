@@ -265,6 +265,10 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
                     + OWNER + "$Stated;",
             A_BODYS_RULES + "$Stated",
+            // Whether the table worked the rule's text out, which is whether it states anything:
+            // a rule it states nothing of is a relation between two strings where the call is
+            // read as one, and is read there. Asked of the table and never worked out here.
+            A_BODYS_RULES + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
             A_BODYS_RULES + "$WrittenText",
             A_BODYS_RULE,
             A_BODYS_RULE + IN_A_DESCRIPTOR,

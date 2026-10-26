@@ -57,6 +57,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -1416,8 +1417,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.All _,
-                 Proposition.Any _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.All _, Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _, Proposition.WhereItAnswers _,
                  Proposition.OfTheWays _ ->
@@ -1580,6 +1581,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return related == null ? null : against(related, stated);
     }
 
+    /** The numbers of the input the string {@code quantity} is made of: itself where it is one,
+     *  or those the operation that answered it was handed — or null where it is neither. */
+    private static List<NumericTerm> stringsOf(Quantity quantity) {
+        return switch (quantity) {
+            case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+            case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+            default -> null;
+        };
+    }
+
     /**
      * A relation {@code stated} that relates the input at {@code over}, as the relations it is
      * made of.
@@ -1671,8 +1682,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
-                 Proposition.Unread _, Proposition.LastToHold _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _, Proposition.InTheStrings _ -> false;
+                 Proposition.StringInside _, Proposition.Unread _, Proposition.LastToHold _,
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _,
+                 Proposition.InTheStrings _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -1697,6 +1709,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 for (TermPath each : List.of(one, other)) {
                     if (!out.contains(FilingCoordinate.at(each))) {
                         out.add(FilingCoordinate.at(each));
+                    }
+                }
+                yield true;
+            }
+            // A string inside another relates the strings, and each is a value of the input or
+            // what an operation answers of one: the places it is made of are the places related.
+            case Proposition.StringInside inside -> {
+                List<NumericTerm> inner = stringsOf(inside.inner());
+                List<NumericTerm> outer = stringsOf(inside.outer());
+                if (inner == null || outer == null) {
+                    yield false;
+                }
+                for (NumericTerm each : Stream.concat(inner.stream(), outer.stream()).toList()) {
+                    if (!out.contains(FilingCoordinate.at(each.subjectPath()))) {
+                        out.add(FilingCoordinate.at(each.subjectPath()));
                     }
                 }
                 yield true;

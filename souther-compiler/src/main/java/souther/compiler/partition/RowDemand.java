@@ -1015,6 +1015,10 @@ public sealed interface RowDemand {
          *  position are composed for and no demand of the row writes toward. */
         A_STRING_IN_A_LANGUAGE,
 
+        /** One string standing inside another, which no composer writes a pair of strings
+         *  toward. */
+        A_STRING_INSIDE_ANOTHER,
+
         /** A place on an order, of a term that is no one position. */
         AN_ORDER_OF_NO_ONE_POSITION
     }
