@@ -194,10 +194,12 @@ sealed interface ComparisonAssessment {
                             Map.of()), List.of(), authored);
         }
 
-        /** The places a line on one of them parts the values that settle the relation at. */
+        /** The places a line on one of them parts the values that settle the relation at, and the
+         *  places the strings their partner can hold part. */
         Set<FilingCoordinate> dividedBySettling() {
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             settling.forEach(line -> out.addAll(line.cutting().over()));
+            left.partnered().keySet().forEach(term -> out.add(FilingCoordinate.of(term)));
             return out;
         }
     }

@@ -233,8 +233,8 @@ final class Coverages {
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
-                        both(clauses.evidence(), guards.evidence()), sets.statements(),
-                        sets.blocked(),
+                        both(clauses.evidence(), guards.evidence()),
+                        both(sets.statements(), guards.partnered()), sets.blocked(),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), filed.blocked(), distinctions, ruleReading,

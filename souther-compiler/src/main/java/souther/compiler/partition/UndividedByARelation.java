@@ -52,6 +52,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.Language;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.StringsHeldAsWritten;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
@@ -60,6 +61,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.ValueSet;
 
 import net.unit8.notation199x.pattern.CodePoints;
 
@@ -246,21 +248,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   the relation, on what nothing here says: what the relation leaves them is
      *                   shown, and that every value there gets to it is not, which a reader
      *                   claiming the place undivided over every value needs as well
+     * @param partnered  each string position the relation is shown to part by the strings its
+     *                   partner can hold, and those strings: the values there some value of the
+     *                   partner equals, and the rest, which no value of it does
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive, Set<Figure> stoppedAt,
-                        Set<FilingCoordinate> mayStopBefore) {
+                        Set<FilingCoordinate> mayStopBefore,
+                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
 
         WhatItLeaves {
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
             mayStopBefore = Set.copyOf(mayStopBefore);
+            partnered = Map.copyOf(partnered);
             if (!undivided.containsAll(mayStopBefore)) {
                 throw new IllegalArgumentException("a run stopping before the relation is said of"
                         + " a place the relation is shown to leave undivided");
             }
+        }
+
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                     boolean rowsArrive, Set<Figure> stoppedAt,
+                     Set<FilingCoordinate> mayStopBefore) {
+            this(undivided, settled, rowsArrive, stoppedAt, mayStopBefore, Map.of());
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
@@ -272,6 +286,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                      Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                      boolean rowsArrive, Set<Figure> stoppedAt) {
             this(undivided, settled, rowsArrive, stoppedAt, Set.of());
+        }
+
+        /** This, with the strings each position's partner can hold. */
+        WhatItLeaves partnered(
+                Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings) {
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, mayStopBefore,
+                    strings);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -290,7 +311,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             places.stream().filter(undivided::contains).forEach(stops::add);
-            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops);
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -317,7 +338,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.addAll(other.mayStopBefore);
             stops.retainAll(both);
-            return new WhatItLeaves(both, alike, true, stopped, stops);
+            // Strings a partner can hold are the classes of the position, and a position parted
+            // one way along one way and another along the other is parted by neither.
+            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> alikeStrings =
+                    new LinkedHashMap<>();
+            partnered.forEach((term, strings) -> {
+                if (strings.equals(other.partnered.get(term))) {
+                    alikeStrings.put(term, strings);
+                }
+            });
+            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings);
+        }
+    }
+
+    /**
+     * The strings the other side of an equality can hold, which are the only ones of this side that
+     * some row can have the equality come out true at.
+     *
+     * @param canBe   the strings some value of the partner is
+     * @param cannotBe the strings no value of the partner is
+     * @param partner what the model calls the partner
+     */
+    record StringsAPartnerCanHold(ValueSet canBe, ValueSet cannotBe, String partner) {
+
+        StringsAPartnerCanHold {
+            if (canBe == null || cannotBe == null || partner == null) {
+                throw new IllegalArgumentException("strings a partner can hold are some strings");
+            }
         }
     }
 
@@ -1257,8 +1304,74 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        return reachedAlong(new WhatItLeaves(out, settled, true, stopped), past, read, along,
-                written, declined);
+        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
+        if (sides.size() == 2 && heldWhole && written.isEmpty()
+                && past.equals(DemandReading.Answered.NOTHING) && independent.between(0, 1)) {
+            shown = shown.partnered(stringsAPartnerCanHold(carriers, out, read));
+        }
+        return reachedAlong(shown, past, read, along, written, declined);
+    }
+
+    /**
+     * The strings each side of an equality between the strings at two positions is parted by, for
+     * the sides not already shown undivided: the strings some value of the other side is, and the
+     * strings no value of it is.
+     *
+     * <p>Where the two sides are free of one another, a value of this side can be the other's
+     * exactly when the other can hold it, so the other's declarations are the whole of what parts
+     * this side — and the equality is true at none of the strings the other cannot hold, whatever
+     * is written at the other. Nothing is said where the other's strings are not worked out
+     * exactly, since a value it cannot hold would then be counted among those it can.
+     *
+     * @param shown the places already shown undivided, which need no other word
+     */
+    private Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> stringsAPartnerCanHold(
+            List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read) {
+        if (kind != Kind.AFFINE || remainder != null || sides.size() != 2
+                || (relation != Rel.EQ && relation != Rel.NE)
+                || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
+                        sides.stream().map(Side::weight).toList(), constant)) {
+            return Map.of();
+        }
+        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> out = new LinkedHashMap<>();
+        for (int at = 0; at < 2; at++) {
+            Side here = sides.get(at);
+            Side there = sides.get(1 - at);
+            if (!(here.number() instanceof NumericTerm.ValueOf mine)
+                    || !(there.number() instanceof NumericTerm.ValueOf theirs)
+                    || !(carriers.get(at) instanceof Carrier.Text)
+                    || !(carriers.get(1 - at) instanceof Carrier.Text)
+                    || shown.contains(FilingCoordinate.of(mine))) {
+                continue;
+            }
+            Position partner = read.domain().at(theirs.subjectPath());
+            if (partner == null || !(partner.admitted().completeness()
+                    instanceof AdmissibleSet.Completeness.Complete)) {
+                continue;
+            }
+            ValueSet canBe = partner.admitted().approximation();
+            ValueSet cannotBe = complementOf(canBe);
+            if (cannotBe == null || canBe.isEmpty() || cannotBe.isEmpty()) {
+                continue;
+            }
+            out.put(mine, new StringsAPartnerCanHold(canBe, cannotBe,
+                    theirs.subjectPath().toString()));
+        }
+        return out;
+    }
+
+    /** The strings {@code set} does not hold, or null where making them ran past the allowance. */
+    private static ValueSet complementOf(ValueSet set) {
+        return switch (set) {
+            case ValueSet.Finite finite -> new ValueSet.Cofinite(finite.values());
+            case ValueSet.Cofinite cofinite -> new ValueSet.Finite(cofinite.excluded());
+            case ValueSet.Matching matching -> {
+                Language not = matching.language()
+                        .not(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS.meter());
+                yield not == null ? null : ValueSet.matching(not);
+            }
+            case ValueSet.WholeRuns _ -> null;
+        };
     }
 
     /**
