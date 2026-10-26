@@ -1344,9 +1344,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 findingOf.putIfAbsent(combination, each);
             }
         }
-        if (findingOf.isEmpty()) {
-            return List.of();
-        }
         Set<ObligationIdentity.OfACombinationOfDecisions> made =
                 meetings.made().made().orElseThrow().met();
         DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
@@ -1358,12 +1355,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             Map<Standing, ReportedFinding> standingOf = new LinkedHashMap<>();
             List<Object> states = new ArrayList<>();
             for (ObligationIdentity.OfACombinationOfDecisions each : offered.at()) {
-                ReportedFinding finding = each == null ? null : findingOf.get(each);
-                if (each != null && made.contains(each)) {
-                    states.add(madeState);
-                } else if (finding == null) {
+                if (each == null) {
+                    // A choice whose factors leave a position nothing: no combination of the
+                    // body, and nothing to say of it.
                     states.add(null);
+                } else if (made.contains(each)) {
+                    states.add(madeState);
                 } else {
+                    // A combination of the body no row made has the finding that says so: the
+                    // measure raises one for every combination it states that the rows did not
+                    // make. One without is this report and the measure disagreeing, and left out
+                    // it would be a combination the build refuses over and no page names.
+                    ReportedFinding finding = findingOf.get(each);
+                    if (finding == null) {
+                        throw new IllegalStateException("`" + behavior + "` states a combination"
+                                + " no row made and raised no finding about it: " + each);
+                    }
                     Standing standing = new Standing(finding.finding().weakenedBy(),
                             finding.finding().open());
                     standingOf.putIfAbsent(standing, finding);

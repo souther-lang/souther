@@ -3,8 +3,13 @@ package souther.compiler.partition;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -44,7 +49,9 @@ public record ChoicePattern(List<Integer> fixed, int count) {
      * <p>Read off the factors in their order, as a tree: the first factor is the first branching. A
      * node is one pattern when every choice below it is a choice of the group in one state, and
      * is otherwise split on the next factor — so what two groups of decisions have in common is
-     * said once, and what sets a choice apart is said where it is.
+     * said once, and what sets a choice apart is said where it is. Then the patterns that differ
+     * at one factor only, and between them take all of it, are joined ({@link #merged}), so that
+     * the order of the factors does not decide how many there are.
      *
      * @param stateAt the state of the {@code index}th choice of the group, or null where it is no
      *                choice. Two choices are in one state where the states are equal.
@@ -78,7 +85,80 @@ public record ChoicePattern(List<Integer> fixed, int count) {
         }
         List<Found<S>> out = new ArrayList<>();
         walk(widths, stateAt, reported, stride, below, 0, new Integer[factors], 0, out);
-        return List.copyOf(out);
+        return merged(widths, out);
+    }
+
+    /**
+     * The patterns with every set of siblings joined that says one thing: the patterns of one state
+     * that take the same outcomes at every factor but one, and between them take every outcome of
+     * that one, are the pattern that holds that factor either way.
+     *
+     * <p>Without this the patterns depend on the order the factors are walked in, which is the order
+     * the measure met them and not a property of what is missing. Choices missing wherever the first
+     * factor came out one way are one pattern, and choices missing wherever the last did are as many
+     * patterns as the factors before it have choices, since the walk fixes them before it reaches
+     * the one that tells. Joined, they are one pattern either way.
+     *
+     * <p>Exact, as the walk is: the patterns joined are disjoint and between them hold every
+     * choice the joined one holds, so the choices covered are the same. Repeated until nothing
+     * joins, since a join can make two others alike at the factor that now differs. That is not the
+     * fewest patterns that could cover the choices, which is a search this does not make: it is
+     * the patterns that no one factor tells apart, whatever order the factors are in.
+     *
+     * <p>A factor of one outcome is left alone. Its only outcome is every outcome, so joining says
+     * nothing, and a pattern of one choice is told by naming every factor.
+     */
+    private static <S> List<Found<S>> merged(List<Integer> widths, List<Found<S>> walked) {
+        List<Found<S>> current = new ArrayList<>(walked);
+        boolean joined = true;
+        while (joined) {
+            joined = false;
+            for (int factor = 0; factor < widths.size(); factor++) {
+                int width = widths.get(factor);
+                if (width < 2) {
+                    continue;
+                }
+                Map<List<Object>, List<Integer>> alike = new LinkedHashMap<>();
+                for (int i = 0; i < current.size(); i++) {
+                    List<Integer> fixed = current.get(i).pattern().fixed();
+                    if (fixed.get(factor) == null) {
+                        continue;
+                    }
+                    List<Object> key = new ArrayList<>(fixed);
+                    key.set(factor, -1);
+                    key.add(current.get(i).state());
+                    alike.computeIfAbsent(key, _ -> new ArrayList<>()).add(i);
+                }
+                Map<Integer, Found<S>> instead = new HashMap<>();
+                Set<Integer> gone = new HashSet<>();
+                for (List<Integer> siblings : alike.values()) {
+                    if (siblings.size() != width) {
+                        continue;
+                    }
+                    List<Integer> fixed =
+                            new ArrayList<>(current.get(siblings.getFirst()).pattern().fixed());
+                    fixed.set(factor, null);
+                    int count = 0;
+                    for (int at : siblings) {
+                        count += current.get(at).pattern().count();
+                    }
+                    instead.put(siblings.getFirst(), new Found<>(new ChoicePattern(fixed, count),
+                            current.get(siblings.getFirst()).state()));
+                    gone.addAll(siblings.subList(1, siblings.size()));
+                    joined = true;
+                }
+                if (!instead.isEmpty()) {
+                    List<Found<S>> next = new ArrayList<>();
+                    for (int i = 0; i < current.size(); i++) {
+                        if (!gone.contains(i)) {
+                            next.add(instead.getOrDefault(i, current.get(i)));
+                        }
+                    }
+                    current = next;
+                }
+            }
+        }
+        return List.copyOf(current);
     }
 
     private static <S> void walk(List<Integer> widths, List<S> stateAt,

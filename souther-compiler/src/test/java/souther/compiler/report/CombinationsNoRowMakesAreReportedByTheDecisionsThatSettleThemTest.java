@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
 
-    private static final int ELEMENTS = 6;
+    /** The size the report first came out wrong at: one thousand and twenty-four combinations. */
+    private static final int ELEMENTS = 10;
 
     private static String lengthOfWhatWasKept(int elements) {
         String params = IntStream.range(0, elements).mapToObj(i -> "m" + i + ": Row")
@@ -58,7 +59,13 @@ class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
         List<Integer> counted = new ArrayList<>();
-        JsonNode document = JsonMapper.builder().build().readTree(report.json(rendering));
+        String written = report.json(rendering);
+        // The document grows with the decisions: an entry for each combination, each naming every
+        // decision in it, came to tens of millions of characters at this size.
+        assertTrue(written.length() < 1_000_000L,
+                () -> "a document about " + ELEMENTS + " decisions of " + written.length()
+                        + " characters");
+        JsonNode document = JsonMapper.builder().build().readTree(written);
         for (JsonNode each : document.findValue("findings")) {
             if (each.get("kind").asString().equals("interaction_uncovered")) {
                 counted.add(each.get("combinations").asInt());
