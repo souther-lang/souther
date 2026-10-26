@@ -15,7 +15,6 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -59,6 +58,12 @@ public final class KeyOrderCandidates {
 
     /** The most rewrites of one row that are looked at, whether or not the decoder admits them. */
     static final int MOST_REWRITES_LOOKED_AT = 192;
+
+    /** The most cases of a sum that two copies of an element are given between them. Counted
+     *  apart from the values of one kind, since a sum has a value for each case and no case is
+     *  another's room; and few enough that every ordered pair of them is among the rewrites looked
+     *  at ({@link #MOST_REWRITES_LOOKED_AT}) for one container. */
+    static final int MOST_CASES_OF_A_SUM = 12;
 
     /** The most rewrites of one row that the decoder admits and that are handed on to be run. */
     static final int MOST_CANDIDATES = 48;
@@ -314,9 +319,15 @@ public final class KeyOrderCandidates {
 
     /**
      * One value of each case of the sum {@code type}, in the order the declarations write the
-     * cases. The case is the unit and not the value: a case with many values is given one, so that
-     * the first case does not use up the room the others are listed in. A case nothing here writes
-     * a value of is left out, which is a case this did not find and not one that cannot be.
+     * cases, up to {@link #MOST_CASES_OF_A_SUM} of them. The case is the unit and not the value: a
+     * case with many values is given one, so that the first case does not use up the room the
+     * others are listed in. A case nothing here writes a value of is left out, which is a case
+     * this did not find and not one that cannot be; so is a case past the most, which is not
+     * tried.
+     *
+     * <p>Each value is the case itself, without the names the field wears. The walk that puts the
+     * rewritten value back puts those on ({@link BehaviorInputs.Rewrite}), as it does for the
+     * values of {@link #scalarValues}.
      */
     private List<ObservedValue> casesOf(Type type, List<String> fields, Pool pool) {
         return pool.casesAt(List.of(type, fields), () -> writeCasesOf(type, fields, pool));
@@ -331,16 +342,14 @@ public final class KeyOrderCandidates {
         for (String each : fields) {
             at = at.then(each);
         }
-        List<ObservedValue> out = new ArrayList<>();
-        for (TypeSymbol leaf : sum.reaches().cases()) {
-            ValuesOfAnElement.Listed listed = ValuesOfAnElement.of(Type.ref(leaf), at,
-                    pool.reading(), 1, (_, held) -> held.shape() instanceof Shape.Scalar scalar
-                            ? scalarValues(scalar, pool, List.of()) : null);
-            if (listed != null && !listed.values().isEmpty()) {
-                out.add(ObservedValue.wrapped(view.wrappers(), listed.values().getFirst()));
-            }
-        }
-        return out.stream().limit(MOST_VALUES_OF_A_KIND).toList();
+        TermPath inCase = at;
+        return sum.reaches().cases().stream()
+                .map(leaf -> ValuesOfAnElement.of(Type.ref(leaf), inCase, pool.reading(), 1,
+                        (_, held) -> held.shape() instanceof Shape.Scalar scalar
+                                ? scalarValues(scalar, pool, List.of()) : null))
+                .filter(listed -> listed != null && !listed.values().isEmpty())
+                .map(listed -> listed.values().getFirst())
+                .limit(MOST_CASES_OF_A_SUM).toList();
     }
 
     /**
@@ -438,12 +447,39 @@ public final class KeyOrderCandidates {
         return plan.targets().stream().flatMap(target -> {
             List<ObservedValue> values = valuesFor(target.type(), target.fields(), pool,
                     plan.named().getOrDefault(target.fields(), List.of()));
-            return values.stream().flatMap(earlier -> values.stream()
-                    .filter(later -> !later.equals(earlier))
-                    .flatMap(later -> Stream.concat(
-                            overwritten(elements, target, earlier, later),
-                            repeated(elements, target, earlier, later, apart, pool))));
+            return betweenThem(values).flatMap(pair -> Stream.concat(
+                    overwritten(elements, target, pair.earlier(), pair.later()),
+                    repeated(elements, target, pair.earlier(), pair.later(), apart, pool)));
         });
+    }
+
+    /** The two values two copies are given, the earlier and the later of them. */
+    private record Between(ObservedValue earlier, ObservedValue later) {}
+
+    /**
+     * Every ordered pair of different values of {@code values}, the first value paired with each
+     * of the others in both orders before any other pair.
+     *
+     * <p>What tells the two ways round the order apart is a value on which the statement comes
+     * out one way and another on which it comes out the other, and the first value is on one side
+     * of any such line unless the statement is the same at all of them. So the pairs that reach
+     * every line come first, however many values there are, and the pairs among the others, which
+     * only repeat them for a statement that tells nothing but those, come after: a bound on how
+     * many rewrites are looked at or run then cuts those and not a value for coming late in the
+     * list.
+     */
+    private static Stream<Between> betweenThem(List<ObservedValue> values) {
+        if (values.size() < 2) {
+            return Stream.empty();
+        }
+        ObservedValue first = values.getFirst();
+        List<ObservedValue> others = values.subList(1, values.size());
+        return Stream.concat(
+                others.stream().flatMap(other -> Stream.of(new Between(first, other),
+                        new Between(other, first))),
+                others.stream().flatMap(earlier -> others.stream()
+                        .filter(later -> !later.equals(earlier))
+                        .map(later -> new Between(earlier, later))));
     }
 
     /**

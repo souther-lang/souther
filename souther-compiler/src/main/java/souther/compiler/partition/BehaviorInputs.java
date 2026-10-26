@@ -243,7 +243,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *
      * <p>Handed the value as the position wears it with the names it wears taken off, and the type
      * and view of the position; answers values of the same kind, which the walk puts the names back
-     * on.
+     * on. A value that is already written under the names, such as one listed at the position's own
+     * type ({@link ValuesOfAnElement}), is not one to answer: the names would be on it twice.
      */
     @FunctionalInterface
     interface Rewrite {

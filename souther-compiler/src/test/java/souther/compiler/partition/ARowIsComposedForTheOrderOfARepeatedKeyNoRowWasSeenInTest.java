@@ -363,6 +363,95 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
+     * The names a sum wears are put on once by the walk that rebuilds the row: the value written
+     * for a case is the case, and a field of a sum declared under one name or under a name of
+     * that name is written under each of them exactly once.
+     */
+    @Test
+    void aSumDeclaredUnderANameIsWrittenUnderEachNameOnce() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Card = { n: Int }
+                data Cash = { n: Int }
+                data Pay = Card | Cash
+                data PayN = Pay
+                data PayNN = PayN
+                data Row = { sku: String, pay: PayNN }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay.value.value with
+                            | Card as c -> true
+                            | Cash as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = PayNN(PayN(Card { n = 1 })) }]) -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = PayNN(PayN(Cash { n = 1 })) }])
+                        -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            String rows = row.inputs().get(1).text();
+            assertEquals(2, rows.split("PayNN\\(PayN\\(", -1).length - 1,
+                    () -> "each copy under both names once: " + rows);
+            assertTrue(!rows.contains("PayN(PayN(") && !rows.contains("PayNN(PayNN("),
+                    () -> "no name twice: " + rows);
+        });
+    }
+
+    /**
+     * A case is not left out for coming after many: the statement tells the eighth case from the
+     * rest, and the copies are given it.
+     */
+    @Test
+    void aCaseAfterMoreThanAKindOfValuesHoldsIsStillWritten() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data C1 = { n: Int }
+                data C2 = { n: Int }
+                data C3 = { n: Int }
+                data C4 = { n: Int }
+                data C5 = { n: Int }
+                data C6 = { n: Int }
+                data C7 = { n: Int }
+                data C8 = { n: Int }
+                data Pay = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | C1 as c -> true
+                            | C2 as c -> true
+                            | C3 as c -> true
+                            | C4 as c -> true
+                            | C5 as c -> true
+                            | C6 as c -> true
+                            | C7 as c -> true
+                            | C8 as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C1 { n = 1 } }]) -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C8 { n = 1 } }]) -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(row.inputs().get(1).text().contains("C8 {"),
+                () -> "the eighth case is written: " + row.inputs().get(1).text()));
+    }
+
+    /**
      * The room is counted by case: a first case with more values than a listing holds does not
      * use it up, and the other case is still written.
      */
