@@ -1,10 +1,14 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.ResultBound;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtents;
 
@@ -12,12 +16,15 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The most a number can be because of what the language can hold, whatever any rule says.
  *
  * <p>A {@code String} holds no more than {@link TextExtents#LONGEST_STRING} code points, so no
- * length, class count or code point sum of one passes what that comes to.
+ * length, class count or code point sum of one passes what that comes to. The number is not kept
+ * here: {@code String.length} declares where it stops ({@code OperationFacts}), and this reads that
+ * declaration, as it does for any operation that declares an end of the representation.
  *
  * <p>Two readers ask it, and neither is the run the rules leave a term. Whether a value can stand
  * at a level or on a side of it, and which points of a line can be written, ask the quantity a
@@ -36,11 +43,9 @@ public final class RepresentationBounds {
 
     private static final ValueName.Stdlib LENGTH = ValueName.Stdlib.operation("String", "length");
 
-    /** Asked of every term of every form, so built once. */
-    private static final NumericDomain.Bounds UP_TO_THE_LONGEST = atMost(TextExtents.LONGEST_STRING);
-
-    private static final NumericDomain.Bounds UP_TO_THE_GREATEST_SUM =
-            atMost(TextExtents.LONGEST_STRING * Character.MAX_CODE_POINT);
+    /** The run up to each end declared. Asked of every term of every form, and there are only as
+     *  many as there are ends declared, so each is built once. */
+    private static final Map<Long, NumericDomain.Bounds> UP_TO = new ConcurrentHashMap<>();
 
     private RepresentationBounds() {
     }
@@ -57,24 +62,50 @@ public final class RepresentationBounds {
      */
     public static Long mostOf(NumericTerm term) {
         return switch (term) {
-            case NumericTerm.CodePointValueSum _ ->
-                    TextExtents.LONGEST_STRING * Character.MAX_CODE_POINT;
-            case NumericTerm.CodePointClassCount _ -> TextExtents.LONGEST_STRING;
-            case NumericTerm.TakenOf taken when isALength(taken) -> TextExtents.LONGEST_STRING;
-            case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
+            case NumericTerm.CodePointValueSum _ -> times(longestString(), Character.MAX_CODE_POINT);
+            case NumericTerm.CodePointClassCount _ -> longestString();
+            case NumericTerm.TakenOf taken -> whereItsOperationStops(taken.operation());
+            case NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
                  NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
         };
     }
 
+    /** The most code points a string holds, as {@code String.length} declares where it stops, or
+     *  null where it declares none. The code points and the classes of a string are counted from
+     *  the same string, so they stop where its length does. */
+    private static Long longestString() {
+        return whereItsOperationStops(LENGTH);
+    }
+
+    /** {@code number} times {@code by}, or null where {@code number} is. */
+    private static Long times(Long number, long by) {
+        return number == null ? null : number * by;
+    }
+
+    /** Where {@code operation} says its answers stop, as it declares it, or null where it declares
+     *  no such end. An end the classes of a position are drawn to is not one: that is already in
+     *  {@link NumericTerm#intrinsicBounds}, and this is what the language holds beyond it. */
+    private static Long whereItsOperationStops(ValueName operation) {
+        Long stops = null;
+        for (ResultBound<DeclaredArgument> row
+                : DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation)) {
+            if (row.isWhereTheRepresentationStops() && !row.isDrawnTo() && row.against() == null
+                    && row.rel() == Rel.LE && row.offset().scale() == 0
+                    && row.offset().unscaledValue().bitLength() < Long.SIZE) {
+                long at = row.offset().longValue();
+                stops = stops == null ? at : Math.min(stops, at);
+            }
+        }
+        return stops;
+    }
+
     /** The run {@link #mostOf} leaves {@code term}: open below, and ended above where it is. */
     public static NumericDomain.Bounds of(NumericTerm term) {
         Long most = mostOf(term);
-        if (most == null) {
-            return NumericDomain.Bounds.OPEN;
-        }
-        return most == TextExtents.LONGEST_STRING ? UP_TO_THE_LONGEST : UP_TO_THE_GREATEST_SUM;
+        return most == null ? NumericDomain.Bounds.OPEN : UP_TO.computeIfAbsent(most,
+                RepresentationBounds::atMost);
     }
 
     /**

@@ -64,6 +64,25 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     public static final ExactRatio ZERO = new ExactRatio(BigInteger.ZERO, BigInteger.ONE, 0, 0);
     public static final ExactRatio ONE = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 0, 0);
 
+    /** Written out and not left to the record, which goes through a method handle on every call
+     *  and is asked of every number a form holds. The exponents are compared before the integers,
+     *  since two values that differ mostly differ there. */
+    @Override
+    public boolean equals(Object other) {
+        return this == other || (other instanceof ExactRatio ratio
+                && twos == ratio.twos && fives == ratio.fives
+                && numeratorWithoutUnits.equals(ratio.numeratorWithoutUnits)
+                && denominatorWithoutUnits.equals(ratio.denominatorWithoutUnits));
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = numeratorWithoutUnits.hashCode();
+        hash = 31 * hash + denominatorWithoutUnits.hashCode();
+        hash = 31 * hash + Long.hashCode(twos);
+        return 31 * hash + Long.hashCode(fives);
+    }
+
     public ExactRatio {
         ExactParts canonical = ExactArithmetic.canonical(
                 numeratorWithoutUnits, denominatorWithoutUnits, twos, fives);

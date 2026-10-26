@@ -94,13 +94,15 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
      *  one that needs an hour of the day past the last is not. */
     @Test
     void aDecisionRuleNeedingAStringPastTheLongestIsOwedNoRow() {
-        String phrase = "no value can stand at a rule of the decision";
+        String phrase = "no row is owed at 1 decision rule";
         String past = report("s: String",
                 "if String.length(s) >= 268435456 then true else String.length(s) >= 3");
         String within = report("s: String",
                 "if String.length(s) >= 7 then true else String.length(s) >= 3");
 
         assertTrue(past.contains(phrase), past);
+        assertTrue(past.contains("no value can reach it coming out so"),
+                "the reason is that no value reaches the comparison coming out that way: " + past);
         assertFalse(within.contains(phrase), within);
     }
 
@@ -141,6 +143,180 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         assertTrue(AdequacyReport.of(within)
                 .human(SourceRendering.namedByIdentity(within.texts()))
                 .contains("String.length(s)/7 <= x"), "the control: a class a string reaches");
+    }
+
+    /** The arm a guard past the longest string opens is reached by no String, so it and the outcome
+     *  it answers are owed no row; the same guard at a length a String has is owed both. */
+    @Test
+    void anArmAndAnOutcomeNoStringReachesAreOwedNoRow() {
+        String source = """
+                module m
+
+                data Yes = { v: Int }
+                data No = { why: Int }
+
+                behavior f : (s: String) -> Yes | No
+                    constructs Yes
+                    constructs No
+
+                let f (s) = {
+                    guard String.length(s) < %s else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "r" : ("x") -> Yes { v = 1 }
+                """;
+        String owedBoth = "no row expects `No`";
+        String owedTheArm = "no row goes through `else`";
+        for (String past : new String[] {"268435456", "268435457"}) {
+            Compilation compilation = Compilation.ofSource(source.formatted(past), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+            assertFalse(report.contains(owedBoth), report);
+            assertFalse(report.contains(owedTheArm), report);
+        }
+        for (String within : new String[] {"268435455", "7"}) {
+            Compilation compilation = Compilation.ofSource(source.formatted(within), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String report = AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+            assertTrue(report.contains(owedBoth), within + " " + report);
+            assertTrue(report.contains(owedTheArm), within + " " + report);
+        }
+    }
+
+    /** However the length reaches the guard, a string never makes it fail where the guard holds of
+     *  every length, and the one that is within the longest still does. */
+    @Test
+    void theArmIsOwedNoRowHoweverTheLengthReachesTheGuard() {
+        String source = """
+                module m
+
+                data Yes = { v: Int }
+                data No = { why: Int }
+
+                behavior f : (%s) -> Yes | No
+                    constructs Yes
+                    constructs No
+
+                let f (%s) = {
+                    %s
+                    guard %s else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "r" : (%s) -> Yes { v = 1 }
+                """;
+        String owedTheArm = "no row goes through `else`";
+        // The guard, with the one string and the two, and a let that names the length first.
+        String[][] never = {
+                {"s: String", "s", "let n = String.length(s)", "n < 268435456", "\"x\""},
+                {"s: String", "s", "", "String.length(s) + 1 < 268435457", "\"x\""},
+                {"a: String, b: String", "a, b", "",
+                        "String.length(a) + String.length(b) < 536870911", "\"x\", \"y\""}};
+        String[][] can = {
+                {"s: String", "s", "let n = String.length(s)", "n < 268435455", "\"x\""},
+                {"s: String", "s", "", "String.length(s) + 1 < 268435456", "\"x\""},
+                {"a: String, b: String", "a, b", "",
+                        "String.length(a) + String.length(b) < 536870910", "\"x\", \"y\""}};
+        for (String[] each : never) {
+            assertFalse(armReport(source, each).contains(owedTheArm), String.join(" | ", each));
+        }
+        for (String[] each : can) {
+            assertTrue(armReport(source, each).contains(owedTheArm), String.join(" | ", each));
+        }
+    }
+
+    /** What stops a year is the calendar, and the arm past it is owed no row for the same reason
+     *  as the arm past the longest string: the end is declared once, and the reader of what a
+     *  value can be takes it. */
+    @Test
+    void theArmPastTheLastYearOfADateIsOwedNoRow() {
+        String source = """
+                module m
+
+                data Yes = { v: Int }
+                data No = { why: Int }
+
+                behavior f : (d: Date) -> Yes | No
+                    constructs Yes
+                    constructs No
+
+                let f (d) = {
+                    guard %s else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "r" : (Date("2026-01-31")) -> Yes { v = 1 }
+                """;
+        String owedTheArm = "no row goes through `else`";
+        for (String guard : new String[] {"Date.month(d) < 13", "Date.day(d) < 32",
+                "Date.year(d) < 1000000000", "Date.year(d) < 1000000001"}) {
+            Compilation compilation = Compilation.ofSource(source.formatted(guard), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertFalse(AdequacyReport.of(compilation)
+                    .human(SourceRendering.namedByIdentity(compilation.texts()))
+                    .contains(owedTheArm), guard);
+        }
+        Compilation within = Compilation.ofSource(source.formatted("Date.year(d) < 2030"), "Main");
+        within.measure(Adequacy.Asked.fullReport());
+        within.answerEverything();
+        assertTrue(AdequacyReport.of(within)
+                .human(SourceRendering.namedByIdentity(within.texts()))
+                .contains(owedTheArm), "the control: a year a date has");
+    }
+
+    /** And the hours of a day, which a part of a time is bounded to as a year is to the calendar's. */
+    @Test
+    void theArmPastTheLastHourOfADayIsOwedNoRow() {
+        String source = """
+                module m
+
+                data Yes = { v: Int }
+                data No = { why: Int }
+
+                behavior f : (t: Time) -> Yes | No
+                    constructs Yes
+                    constructs No
+
+                let f (t) = {
+                    guard %s else No { why = 1 }
+                    Yes { v = 1 }
+                }
+
+                example f
+                    | "r" : (Time("10:00:00")) -> Yes { v = 1 }
+                """;
+        String owedTheArm = "no row goes through `else`";
+        assertFalse(armReport(source, "Time.hour(t) < 24").contains(owedTheArm));
+        assertTrue(armReport(source, "Time.hour(t) < 23").contains(owedTheArm),
+                "the control: the last hour of a day is one a time has");
+    }
+
+    private static String armReport(String source, String guard) {
+        Compilation compilation = Compilation.ofSource(source.formatted(guard), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static String armReport(String source, String[] parts) {
+        Compilation compilation = Compilation.ofSource(
+                source.formatted(parts[0], parts[1], parts[2], parts[3], parts[4]), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     @Test

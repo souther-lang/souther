@@ -2180,6 +2180,16 @@ final class Terms {
         return place == null ? null : sizeKeyOf(size, place.identity());
     }
 
+    /**
+     * The part {@code part} takes of the time or date at {@code place}, named as the whole number
+     * it is: the call that takes it and nothing besides, as a size is, so a guard on the hour of a
+     * time and a body that bound the call to a name are about one number.
+     */
+    FactSubject partAtPlace(ValueName part, FactSubject place) {
+        return place == null ? null : named(interned.called(part, List.of(place.identity())),
+                Carrier.WHOLE);
+    }
+
     /** The size {@code size} takes of {@code container}, named as the whole number it is. A size
      * counts elements, so there is nothing to decide about how its values are spaced. It is the call
      * that takes it and nothing besides, which is the term a clause reading one builds and the term a
