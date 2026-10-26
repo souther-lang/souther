@@ -9130,7 +9130,9 @@ final class Pullback {
                 read.rules().newtypes());
         // The seed and the container are worked out before any application, and a candidate takes
         // the whole walk as a value: a run one of them ends is a run with no answer to compare.
-        if (!endsNoRun(new Denotation(walk.seed(), call.at())) || !endsNoRun(container)
+        if (!endsNoRunOnTheWayTo(value, call.value())
+                || !endsNoRun(new Denotation(walk.seed(), call.at()))
+                || !endsNoRun(new Denotation(walk.container(), call.at()))
                 || !(WrittenOutElements.of(container, read.rules().symbols(),
                         read.rules().newtypes()) instanceof WrittenOutElements.Walked.Each each)) {
             return null;
@@ -9161,39 +9163,20 @@ final class Pullback {
      * it is the declaration's ({@link #endsNoRun(Denotation)}).
      */
     private boolean endsNoRun(Denotation value) {
-        Denotation stood = value.at().standing(value.value(), read.rules().symbols(),
-                read.rules().newtypes());
         Core written = Core.withoutStanding(value.value());
-        if (written !=Core.withoutStanding(stood.value())
-                && !whatItRunsAsWrittenEndsNone(written, value.at())) {
-            return false;
-        }
-        return switch (Core.withoutStanding(stood.value())) {
-            case Core.Construct made -> made.values().stream().allMatch(
-                            each -> endsNoRun(new Denotation(each.value(), stood.at())))
-                    && (holdsNoInvariant(made.typeName()) || holdsWhatItIsHanded(made, stood.at()));
-            case Core.ListLit list -> list.elements().stream().allMatch(
-                    each -> endsNoRun(new Denotation(each, stood.at())));
-            case Core other -> WhatARunMayEndFor.of(other).endsNone()
-                    || endsNoRunAsACall(new Denotation(other, stood.at()));
-        };
-    }
-
-    /**
-     * Whether everything {@code written} runs, as it is written, ends no run.
-     *
-     * <p>What an expression stands for is the value it comes to, and a part that is run but does not
-     * come into the value is left out of it: the initializer of a {@code let} the body does not use,
-     * the fields of a construction that an access takes one field of. Those still run, so the
-     * question is asked of the parts {@link Evaluated#inOrder} lists, of a {@code let}'s body,
-     * which runs once its value has been worked out, and of what a name was bound to, which was
-     * run to bind it whatever the name goes on to stand as. So an expression runs the same
-     * whether it is written where it is used, bound to a name, or answered by a helper.
-     */
-    private boolean whatItRunsAsWrittenEndsNone(Core written, InputReads at) {
-        if (Core.withoutStanding(written) instanceof Core.LetIn let) {
+        InputReads at = value.at();
+        if (written instanceof Core.LetIn let) {
             return endsNoRun(new Denotation(let.value(), at))
                     && endsNoRun(new Denotation(let.body(), at.and(let.binder(), let.value())));
+        }
+        if (!endsNoRunItself(value)) {
+            return false;
+        }
+        boolean[] parts = {true};
+        Core.forEachChild(written, child -> parts[0] = parts[0]
+                && endsNoRun(new Denotation(child, at)));
+        if (!parts[0]) {
+            return false;
         }
         for (Denotation bound : at.boundTo(written, read.rules().symbols(),
                 read.rules().newtypes())) {
@@ -9201,12 +9184,52 @@ final class Pullback {
                 return false;
             }
         }
-        for (Evaluated.Step step : Evaluated.inOrder(written)) {
-            if (!endsNoRun(new Denotation(step.expression(), at))) {
-                return false;
-            }
-        }
         return true;
+    }
+
+    /**
+     * Whether what is run to reach {@code walk} from {@code value}, a name or a {@code let}
+     * around it, ends no run: the initializer of each {@code let} on the way, and nothing but a
+     * name bound to one value or a {@code let} stands between them. Where something else does, the
+     * way is not one this knows the runs of.
+     */
+    private boolean endsNoRunOnTheWayTo(Denotation value, Core walk) {
+        Core written = Core.withoutStanding(value.value());
+        if (written == Core.withoutStanding(walk)) {
+            return true;
+        }
+        return switch (written) {
+            case Core.LetIn let -> endsNoRun(new Denotation(let.value(), value.at()))
+                    && endsNoRunOnTheWayTo(new Denotation(let.body(),
+                            value.at().and(let.binder(), let.value())), walk);
+            case Core.Read name -> value.at().boundTo(name, read.rules().symbols(),
+                    read.rules().newtypes()) instanceof List<Denotation> bound
+                    && bound.size() == 1 && endsNoRunOnTheWayTo(bound.getFirst(), walk);
+            case Core.Widen widen -> endsNoRunOnTheWayTo(
+                    new Denotation(widen.value(), value.at()), walk);
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether {@code value}, apart from the parts it is made of and the value a name in it was
+     * bound to, is known to end no run: what {@link WhatARunMayEndFor} says of the node, except
+     * for a construction, which it leaves unknown because the invariant that may end it is the
+     * declaration's, and a call of a behavior, whose body is read with its parameters standing
+     * for what it was handed.
+     *
+     * <p>Asked of the expression as it is written, and never of the value it stands as: standing
+     * leaves out a part that is run without coming into the value (the initializer of a
+     * {@code let}, the other fields of a construction an access takes one of), and a name leads
+     * to a value whose binding ran. The parts and the bound values are {@link #endsNoRun}'s,
+     * each asked once.
+     */
+    private boolean endsNoRunItself(Denotation value) {
+        Core written = Core.withoutStanding(value.value());
+        if (written instanceof Core.Construct made) {
+            return holdsNoInvariant(made.typeName()) || holdsWhatItIsHanded(made, value.at());
+        }
+        return WhatARunMayEndFor.itself(written).endsNone() || endsNoRunInTheBodyOfACall(value);
     }
 
     /**
@@ -9233,18 +9256,13 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code value} is a call of a behavior whose arguments end no run and whose body, read
-     * with its parameters standing for them, ends none — which {@link WhatARunMayEndFor} leaves
-     * unknown of a helper, because it is not the helper's to say.
+     * Whether {@code value} is a call of a behavior whose body, read with its parameters standing
+     * for what the call handed, ends no run — which {@link WhatARunMayEndFor} leaves unknown of a
+     * helper, because it is not the helper's to say. What the call is handed is a part of it.
      */
-    private boolean endsNoRunAsACall(Denotation value) {
+    private boolean endsNoRunInTheBodyOfACall(Denotation value) {
         Inside.ACall called = intoACall(value);
-        return called != null
-                && AnOperationApplied.of(Core.withoutStanding(value.value()))
-                        instanceof AnOperationApplied applied
-                && applied.args().stream().allMatch(
-                        arg -> endsNoRun(new Denotation(arg, value.at())))
-                && endsNoRun(called.body());
+        return called != null && endsNoRun(called.body());
     }
 
     /**

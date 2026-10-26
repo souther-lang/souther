@@ -198,30 +198,42 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
     @Test
     void aSeedIsSkippedOverOnlyWhereWhatItRunsEndsNoRunHoweverItIsSpelled() {
         String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
-        // The seed, and the grade of a row of the container: each is worked out before any
-        // application, and each takes the value in the place of %s.
-        Map<String, String> places = new LinkedHashMap<>();
-        places.put("seed", "List.fold(%s, %%s, %s)".formatted(step, ASCENDING));
-        places.put("row", "List.fold(%s, 0, [ Row { grade = %%s, lowerBound = 100 },"
-                .formatted(step) + " Row { grade = 2, lowerBound = 200 } ])");
-        for (Map.Entry<String, String> place : places.entrySet()) {
-            Proposition selected = stated(compared(place.getValue().formatted("0")));
-            for (String wrapper : List.of("{\n    let spare = %s\n    0\n}",
-                    "Row { grade = 0, lowerBound = %s }.grade")) {
+        // What the walk is worked out from: the seed, the grade of a row, and the container, each
+        // a place that takes a value of its type in the place of PLACED.
+        List<Place> places = List.of(
+                new Place("seed", "List.fold(%s, PLACED, %s)".formatted(step, ASCENDING), "0",
+                        "Int"),
+                new Place("row", ("List.fold(%s, 0, [ Row { grade = PLACED, lowerBound = 100 },"
+                        + " Row { grade = 2, lowerBound = 200 } ])").formatted(step), "0", "Int"),
+                new Place("container", "List.fold(%s, 0, PLACED)".formatted(step), ASCENDING,
+                        "List<Row>"));
+        // What is run on the way to the value, whether or not the value uses it: a let, a
+        // construction an access takes one field of, and a comparison inside a branch.
+        List<String> wrappers = List.of("{\n    let spare = EFFECT\n    PAYLOAD\n}",
+                "Row { grade = PAYLOAD, lowerBound = EFFECT }.grade",
+                "if EFFECT >= 0 then PAYLOAD else PAYLOAD");
+        for (Place place : places) {
+            Proposition selected = stated(compared(
+                    place.fold().replace("PLACED", place.payload())));
+            for (String wrapper : wrappers) {
+                if (wrapper.startsWith("Row {") && !place.payload().equals("0")) {
+                    continue;
+                }
                 for (boolean ends : List.of(false, true)) {
-                    String used = wrapper.formatted(ends ? "Int.abs(cur)" : "cur");
+                    String wrapped = wrapper.replace("PAYLOAD", place.payload());
+                    String used = wrapped.replace("EFFECT", ends ? "Int.abs(cur)" : "cur");
                     String declarations = "data Row = { grade: Int, lowerBound: Int }\n"
-                            + "let valueOf (n: Int): Int = "
-                            + wrapper.formatted(ends ? "Int.abs(n)" : "n");
+                            + "let valueOf (n: Int): %s = ".formatted(place.type())
+                            + wrapped.replace("EFFECT", ends ? "Int.abs(n)" : "n");
                     Map<String, String> spelled = new LinkedHashMap<>();
-                    spelled.put("inline", compared(place.getValue().formatted(used)));
+                    spelled.put("inline", compared(place.fold().replace("PLACED", used)));
                     spelled.put("named", "let held = %s\n%s".formatted(used,
-                            compared(place.getValue().formatted("held"))));
-                    spelled.put("helper",
-                            compared(place.getValue().formatted("valueOf(cur)")));
+                            compared(place.fold().replace("PLACED", "held"))));
+                    spelled.put("helper", compared(
+                            place.fold().replace("PLACED", "valueOf(cur)")));
                     for (Map.Entry<String, String> one : spelled.entrySet()) {
                         Proposition stated = stated(declarations, one.getValue());
-                        String label = place.getKey() + " " + one.getKey() + " " + used;
+                        String label = place.name() + " " + one.getKey() + " " + used;
                         if (ends) {
                             assertNotEquals(selected, stated, label);
                         } else {
@@ -232,6 +244,10 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
             }
         }
     }
+
+    /** A place a walk is worked out from: the walk with PLACED where it goes, and what stands there
+     *  when nothing is run on the way. */
+    private record Place(String name, String fold, String payload, String type) {}
 
     private static String compared(String computed) {
         return "let computed = %s\nif computed < 2 then 1 else 0".formatted(computed);
