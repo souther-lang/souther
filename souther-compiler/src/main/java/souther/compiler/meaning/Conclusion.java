@@ -255,24 +255,36 @@ public final class Conclusion {
     }
 
     /**
-     * The cases, or the one part nothing read they are given up as where any step of them comes to
-     * more parts than a step is concluded with.
+     * The cases, or the one part nothing read they are given up as where a step of them past the
+     * figure is needed to say what they come to.
      *
-     * <p>The cases are one step, and a step past the figure is given up whole. Given up where it
-     * is past and joined on, the step above it is small again and the cases are held with a part
-     * nothing read where each such step stood, as many of them as there are such steps, and a
-     * reader that is told of every one of them is told as many times.
+     * <p>A step past the figure stands as a part nothing read while it is joined on, so that a
+     * step above it that does not need it — one whose condition decides against it — is joined as
+     * it would have been. The cases are one step, though, and a part nothing read that stands
+     * for each step past the figure that is still needed would be told of once for each: the
+     * step above a given-up one is small again, so the cases would hold as many of them as there
+     * are such steps. Where one is still there when the cases are joined, the cases are given up
+     * as that one part.
      */
     private static Proposition writtenOutBy(Conclusion at, Proposition.WaysToWrite ways,
                                             KeptWays kept) {
-        boolean[] past = new boolean[1];
+        Set<Integer> givenUp = new HashSet<>();
+        Proposition[] first = new Proposition[1];
         Proposition written = kept.made(new KeptWays.Making<Proposition>() {
             @Override
             public Proposition split(int truth, Proposition where, Proposition otherwise) {
                 Proposition joined = Derivation.IfThenElse.joined(
                         ways.conditions().get(truth), where, otherwise);
-                past[0] = at.pastTheParts(joined);
-                return joined;
+                if (!at.pastTheParts(joined)) {
+                    return joined;
+                }
+                Proposition.Unread past = (Proposition.Unread) at.unread(new Derivation.Stopped(
+                        new WhyUnread.MorePartsThanAreConcluded(), false));
+                givenUp.add(past.ordinal());
+                if (first[0] == null) {
+                    first[0] = past;
+                }
+                return past;
             }
 
             @Override
@@ -282,15 +294,15 @@ public final class Conclusion {
                         kept.countThere(ways.forms().size(), ways.counted(), decided),
                         ways.fixed());
             }
-
-            @Override
-            public boolean finished() {
-                return past[0];
-            }
         }, kept.undecided());
-        return past[0]
-                ? at.unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))
-                : written;
+        return givenUp.isEmpty() || !stands(written, givenUp) ? written : first[0];
+    }
+
+    /** Whether a part nothing read numbered as one of {@code numbers} stands in {@code stated}. */
+    private static boolean stands(Proposition stated, Set<Integer> numbers) {
+        return stated instanceof Proposition.Unread unread
+                ? numbers.contains(unread.ordinal())
+                : stated.partsHeld().stream().anyMatch(part -> stands(part, numbers));
     }
 
     /** A part nothing read, for a number of a way that cannot be held. */

@@ -152,11 +152,6 @@ public record KeptWays(List<List<Keep>> keptBy, int truths) {
 
         /** A way that is a leaf, every truth that decides an element decided. */
         R leaf(Boolean[] decided);
-
-        /** Whether what is made is given up, so that no way is made after this answers it. */
-        default boolean finished() {
-            return false;
-        }
     }
 
     /**
@@ -170,16 +165,14 @@ public record KeptWays(List<List<Keep>> keptBy, int truths) {
         }
         decided[next] = true;
         R where;
-        R otherwise = null;
+        R otherwise;
         try {
             where = made(making, decided);
-            if (!making.finished()) {
-                decided[next] = false;
-                otherwise = made(making, decided);
-            }
+            decided[next] = false;
+            otherwise = made(making, decided);
         } finally {
             decided[next] = null;
         }
-        return making.finished() ? null : making.split(next, where, otherwise);
+        return making.split(next, where, otherwise);
     }
 }
