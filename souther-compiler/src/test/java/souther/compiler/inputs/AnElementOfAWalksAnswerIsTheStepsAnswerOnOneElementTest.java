@@ -86,6 +86,39 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """));
     }
 
+    /** A {@code flatMap} whose step writes the one element is the walk's step on the element
+     *  where it answers anything, so it reads as a {@code map} does. */
+    @Test
+    void anElementOfAFlatMapWritingOneElementIsTheStepOnOneElement() {
+        assertEquals(List.of("cs[*] = atLeast - 1"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast, List.flatMap(x -> [ x + 1 ], cs))
+                """));
+    }
+
+    @Test
+    void anElementOfAFlatMapKeepingSomeElementsIsTheStepOnTheOnesKept() {
+        assertEquals(List.of("cs[*] = 0", "cs[*] = atLeast - 1"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast,
+                        List.flatMap(x -> if x > 0 then [ x + 1 ] else [], cs))
+                """));
+    }
+
+    /** Two different elements written by the arms are two values the step may answer, and no one
+     *  expression is the element: the line is the step's own condition and none on the element. */
+    @Test
+    void anElementOfAFlatMapWritingDifferentElementsIsNotOneStep() {
+        assertEquals(List.of("cs[*] = 0"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast,
+                        List.flatMap(x -> if x > 0 then [ x + 1 ] else [ x + 2 ], cs))
+                """));
+    }
+
     @Test
     void aValueOfAMapsMappedValuesIsTheStepOnTheValueFiledThere() {
         assertEquals(List.of("m[*] = atLeast - 1"), linesOf("""

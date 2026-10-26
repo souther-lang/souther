@@ -562,6 +562,51 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
+     * The one element every list {@code body} may answer is written with, or null where the lists
+     * it answers are written with none or with more than one.
+     *
+     * <p>Read through the choices of the body: {@code if keep(x) then [x] else []} answers {@code x}
+     * where it answers anything, and so does a {@code match} whose arms answer {@code [x]} or
+     * {@code []}. Two arms writing the same expression are one element; two writing different ones
+     * are two, and a list written with a second element or answered by a call is a list this does
+     * not see inside.
+     */
+    public static Core theOneElementWritten(Core body) {
+        Core written = Core.withoutStanding(body);
+        return switch (written) {
+            case Core.ListLit list when list.elements().size() == 1 ->
+                    list.elements().getFirst();
+            case Core.If fork -> sharedElement(List.of(fork.then(), fork.els()));
+            case Core.IfConstructed fork -> {
+                List<Core> arms = new ArrayList<>();
+                arms.add(fork.then());
+                fork.els().forEach(arm -> arms.add(arm.body()));
+                yield sharedElement(arms);
+            }
+            case Core.Match match -> sharedElement(match.cases().stream()
+                    .map(Core.Case::body).toList());
+            default -> null;
+        };
+    }
+
+    /** The element the arms agree on, ignoring those that answer no list written with one. */
+    private static Core sharedElement(List<Core> arms) {
+        Core agreed = null;
+        for (Core arm : arms) {
+            if (Core.withoutStanding(arm) instanceof Core.ListLit list
+                    && list.elements().isEmpty()) {
+                continue;
+            }
+            Core element = theOneElementWritten(arm);
+            if (element == null || (agreed != null && agreed != element)) {
+                return null;
+            }
+            agreed = element;
+        }
+        return agreed;
+    }
+
+    /**
      * The step whose answer on every element of what the application hands it is one of the
      * elements {@code container} holds, or null where it holds no such run.
      *
