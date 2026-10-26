@@ -47,9 +47,12 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     private static final String DECLARATIONS = """
             module demo
 
-            data In = { a: String, b: String, c: String, bs: List<String> }
+            data P = { value: String }
+            data In = { a: String, b: String, c: String, bs: List<String>, ps: List<P> }
 
             let lowered (s: String): String = String.lowercase(s)
+
+            let hits (c: In, p: P): Bool = String.contains(lowered(c.a), lowered(p.value))
             """;
 
     private static DecisionAtom.OfTheInput value(String field) {
@@ -214,6 +217,32 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
         assertEquals(2147483646, among("List.drop(2147483646, " + split + ")").from());
     }
 
+    /**
+     * One relation written straight, through a helper and through a name bound before it is
+     * asked is one relation: the string looked for and the string looked in are the same in all
+     * three, so that a report that is the same word for each is not the same word for two
+     * different relations.
+     */
+    @Test
+    void theStringLookedForAndTheStringLookedInAreTheSameHoweverTheRelationIsWritten() {
+        TermPath element = TermPath.of("i").then("ps").element().then("value");
+        Quantity lowercasedElement = new Quantity.WhatAnOperationAnswers(
+                ValueName.Stdlib.operation("String", "lowercase"),
+                List.of(new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(element))));
+        Proposition expected = new Proposition.StringInside(lowercased("a"), lowercasedElement,
+                StringContainment.ANYWHERE, true);
+        for (String condition : List.of(
+                "List.any(p -> String.contains(String.lowercase(i.a), String.lowercase(p.value)),"
+                        + " i.ps)",
+                "List.any(p -> hits(i, p), i.ps)",
+                "{ let l = String.lowercase(i.a)\n"
+                        + " List.any(p -> String.contains(l, String.lowercase(p.value)), i.ps) }")) {
+            Proposition.Some some = assertInstanceOf(Proposition.Some.class, stated(condition),
+                    condition);
+            assertEquals(expected, some.ofTheElement(), condition);
+        }
+    }
+
     private static final String REPORTED = """
             module demo
 
@@ -223,7 +252,7 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
             let lowered (s: String): String = String.lowercase(s)
 
             let hits (c: Case, p: Point): Bool =
-                String.contains(lowered(p.value), lowered(c.businessCase))
+                String.contains(lowered(c.businessCase), lowered(p.value))
 
             behavior f : (i: Case) -> Bool
             let f (i) = BODY
