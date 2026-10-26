@@ -36,6 +36,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtents;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -585,11 +586,6 @@ final class OperationFactBinder {
                         "what every answer of it has a value for");
                 yield new BoundOperationFact.EveryAnswerItCanGiveHasASourceValue(operation);
             }
-            case OperationFact.EndsAreWhereTheRepresentationStops _ -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
-                        "what the ends of its answers are");
-                yield new BoundOperationFact.EndsAreWhereTheRepresentationStops(operation);
-            }
             case OperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                     holdTakenOf(declaration, taken.how());
             case OperationFact.AccumulatesItsContainer accumulates ->
@@ -892,7 +888,14 @@ final class OperationFactBinder {
         };
         BigDecimal offset = switch (bound.origin()) {
             case ResultBound.Origin.OfTheOperation _ -> bound.offset();
-            case ResultBound.Origin.OfTheRepresentation(var limit) -> valueOf(limit);
+            case ResultBound.Origin.OfTheRepresentation(var limit) -> {
+                if (bound.offset().signum() != 0) {
+                    throw new IllegalArgumentException("a limit the language keeps has its number"
+                            + " from the language, and a declaration of " + limit
+                            + " wrote " + bound.offset());
+                }
+                yield valueOf(limit);
+            }
         };
         return new ResultBound<>(against, offset, bound.rel(), provided, bound.origin());
     }
@@ -901,6 +904,8 @@ final class OperationFactBinder {
     private static BigDecimal valueOf(ResultBound.Limit limit) {
         return switch (limit) {
             case LONGEST_STRING -> BigDecimal.valueOf(TextExtents.LONGEST_STRING);
+            case EARLIEST_DATE_YEAR -> BigDecimal.valueOf(LocalDate.MIN.getYear());
+            case LATEST_DATE_YEAR -> BigDecimal.valueOf(LocalDate.MAX.getYear());
         };
     }
 

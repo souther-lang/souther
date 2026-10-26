@@ -48,12 +48,32 @@ public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> 
                     "a bound says where a result stops, and `NE` says where it does not stand: "
                             + against + " " + rel + " " + offset);
         }
+        if (origin instanceof Origin.OfTheRepresentation && !statesAFixedEnd(against, rel, provided)) {
+            throw new IllegalArgumentException("where the representation stops is one number the"
+                    + " language keeps, so an end of it is not against an argument, not under a"
+                    + " condition, and an order and not an equality: " + against + " " + rel
+                    + " " + provided);
+        }
     }
 
-    /** Whether the end is a line a model can draw: the operation's own, and not the place the
-     *  representation stops. */
-    public boolean isALineOfTheOperation() {
-        return origin instanceof Origin.OfTheOperation;
+    private static boolean statesAFixedEnd(Object against, Rel rel, Provided<?> provided) {
+        return against == null && provided instanceof Provided.Always<?>
+                && (rel == Rel.LE || rel == Rel.GE);
+    }
+
+    /** Whether what a position is divided into is drawn to this end: a line of the operation, or a
+     *  place the representation stops that is also an end of the type
+     *  ({@link Limit#endsTheClasses}). */
+    public boolean isDrawnTo() {
+        return switch (origin) {
+            case Origin.OfTheOperation _ -> true;
+            case Origin.OfTheRepresentation(var limit) -> limit.endsTheClasses();
+        };
+    }
+
+    /** Whether the end is where the representation stops, drawn to or not. */
+    public boolean isWhereTheRepresentationStops() {
+        return origin instanceof Origin.OfTheRepresentation;
     }
 
     /**
@@ -62,7 +82,7 @@ public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> 
      * <p>A length ends at nought because a count does, a line of the operation that a model writes
      * as the empty string. It ends above where a {@code String} stops, which is where a value cannot
      * stand and no distinction a model made. A reader asking whether a value can stand takes every
-     * end; one asking what a position is divided into takes the operation's.
+     * end; one asking what a position is divided into takes those that are drawn to.
      */
     public sealed interface Origin {
 
@@ -82,10 +102,33 @@ public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> 
         }
     }
 
-    /** A limit the language keeps. */
+    /**
+     * A limit the language keeps, named where a fact is declared and given its number where the
+     * fact is held to the library ({@code OperationFactBinder}). A declaration states no number
+     * for one: a bound that is a limit carries zero until then, and the binder refuses a
+     * declaration that wrote another.
+     */
     public enum Limit {
-        /** The most code points a {@code String} holds. */
-        LONGEST_STRING
+        /** The most code points a {@code String} holds. Not an end of the classes of a length: the
+         *  longest string is no distinction a model made, and a relation between two lengths would
+         *  hold it as a class only a string of that length can fill. */
+        LONGEST_STRING(false),
+        /** The earliest year a date is written at. The first date is an end of the type, which
+         *  every position of it is already divided at, so the year of a date runs to it. */
+        EARLIEST_DATE_YEAR(true),
+        /** The latest year a date is written at, an end of the type for the same reason. */
+        LATEST_DATE_YEAR(true);
+
+        private final boolean endsTheClasses;
+
+        Limit(boolean endsTheClasses) {
+            this.endsTheClasses = endsTheClasses;
+        }
+
+        /** Whether what a position is divided into is drawn to it. */
+        public boolean endsTheClasses() {
+            return endsTheClasses;
+        }
     }
 
     /**

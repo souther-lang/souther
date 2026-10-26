@@ -195,14 +195,14 @@ public final class BoundOperationFacts {
         return Collections.unmodifiableMap(out);
     }
 
-    /** {@code all} less the ends that are where the representation stops, and less an operation
-     *  left with none. */
+    /** {@code all} less the ends a position is not divided at, and less an operation left with
+     *  none. */
     private static Map<ValueName, List<ResultBound<DeclaredArgument>>> ofTheOperation(
             Map<ValueName, List<ResultBound<DeclaredArgument>>> all) {
         Map<ValueName, List<ResultBound<DeclaredArgument>>> out = new LinkedHashMap<>();
         all.forEach((operation, rows) -> {
             List<ResultBound<DeclaredArgument>> lines = rows.stream()
-                    .filter(ResultBound::isALineOfTheOperation).toList();
+                    .filter(ResultBound::isDrawnTo).toList();
             if (!lines.isEmpty()) {
                 out.put(operation, lines);
             }
@@ -347,8 +347,8 @@ public final class BoundOperationFacts {
         return rounds == null ? null : ARounding.of(applied, rounds);
     }
 
-    /** What the operation holds of the number {@code operation} answers, wherever it is called, in
-     *  the order declared: the lines a model can draw, and not where the representation stops
+    /** What holds of the number {@code operation} answers, wherever it is called, in the order
+     *  declared, less the places the representation stops that a position is not divided at
      *  ({@link #everyBoundOnTheResult}). What a position is divided into reads these. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
         return operation == null ? List.of() : linesOfTheOperation.getOrDefault(operation, List.of());
@@ -1058,9 +1058,29 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.EveryAnswerItCanGiveHasASourceValue.class, operation) != null;
     }
 
-    /** Whether the least and the greatest number {@code operation} answers are where what it is
-     *  read out of stops, and not lines of the operation. */
+    /**
+     * Whether the least and the greatest number {@code operation} answers are both where what it
+     * is read out of stops, and neither a line of the operation.
+     *
+     * <p>The year of a date ends where a date can be written, so a comparison that a year at one
+     * of its ends settles is a comparison the representation settles and not one the model draws.
+     * A month ends at twelve whatever the date is and a length at nought: those are lines of the
+     * operation, and a value at one settles a comparison for a reason of its own. A length stops
+     * above at the longest string and below at nought, so it is not an operation whose ends are
+     * both the representation's: it has one of each, which is why this is read from the ends one
+     * at a time and not declared of the operation.
+     */
     public boolean endsAreWhereTheRepresentationStops(ValueName operation) {
-        return one(BoundOperationFact.EndsAreWhereTheRepresentationStops.class, operation) != null;
+        List<ResultBound<DeclaredArgument>> every = everyBoundOnTheResult(operation);
+        boolean least = false;
+        boolean greatest = false;
+        for (ResultBound<DeclaredArgument> each : every) {
+            if (!each.isWhereTheRepresentationStops()) {
+                return false;
+            }
+            least |= each.rel() == Rel.GE;
+            greatest |= each.rel() == Rel.LE;
+        }
+        return least && greatest;
     }
 }

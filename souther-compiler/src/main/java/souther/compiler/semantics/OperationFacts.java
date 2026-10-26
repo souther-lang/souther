@@ -259,9 +259,10 @@ public final class OperationFacts {
             // than written down as numbers here, since what a temporal can be written as is already
             // answered — by {@code java.time} for a date, which is what the carrier's own ends are
             // read from, and by {@link souther.compiler.numeric.DateTimes} for a date-time.
-            about("Date", "year", bounded(Rel.GE, java.time.LocalDate.MIN.getYear())),
-            about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
-            about("Date", "year", new OperationFact.EndsAreWhereTheRepresentationStops()),
+            about("Date", "year",
+                    boundedByTheRepresentation(Rel.GE, ResultBound.Limit.EARLIEST_DATE_YEAR)),
+            about("Date", "year",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LATEST_DATE_YEAR)),
             about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
             about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
             // A date-time counts seconds and a minute is sixty of them. The answer drops what is

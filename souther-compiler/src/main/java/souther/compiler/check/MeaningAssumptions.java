@@ -528,6 +528,18 @@ final class MeaningAssumptions {
                 }
                 yield size;
             }
+            // An hour, a month, a year: a part of a time or a date, which its operation bounds to
+            // the hours of a day, the months of a year and the years a date is written in whether
+            // or not the condition holds.
+            case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
+                    && (taken.takenAs() instanceof TakenAs.PartOfTime
+                    || taken.takenAs() instanceof TakenAs.PartOfDate) -> {
+                FactSubject part = terms.partAtPlace(taken.operation(), placeOf(taken.position()));
+                if (part != null) {
+                    carrying(part, taken.operation());
+                }
+                yield part;
+            }
             // What a division leaves of the value at a place, named as the call that takes it is, so
             // a guard on the remainder here and one on the value a body bound the call to are about
             // one number. It carries both ends its operation bounds it to by this divisor.
