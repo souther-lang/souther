@@ -4278,6 +4278,29 @@ public final class InputReads {
     }
 
     /**
+     * What the name {@code e} was bound to here, followed no further: the one value it stands for,
+     * or each of the values it is one of; none where {@code e} is not a name, or is one standing
+     * for something of its own.
+     *
+     * <p>Beside {@link #standing}, which follows the name on to where it ends. What was run to
+     * work the bound value out is run whatever the name goes on to stand as, and a reader asking
+     * what a use of the name runs is asking about this value and not about where it ends.
+     */
+    public List<Denotation> boundTo(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        if (!(Core.withoutStanding(e) instanceof Core.Read read)) {
+            return List.of();
+        }
+        return switch (ValueStanding.named(read, this,
+                new Followed(symbols, newtypes, new HashSet<>()))) {
+            case null -> List.of();
+            case ValueStanding.Named.One<InputReads, Followed>(var one) ->
+                    List.of(new Denotation(one.value(), one.at()));
+            case ValueStanding.Named.OneOf<InputReads, Followed>(var members) ->
+                    members.stream().map(one -> new Denotation(one.value(), one.at())).toList();
+        };
+    }
+
+    /**
      * What {@code e} stands as here, as a value a reader may take apart: each part it finds is
      * followed where {@code e} was written ({@link ValueStanding.Standing#part}).
      */

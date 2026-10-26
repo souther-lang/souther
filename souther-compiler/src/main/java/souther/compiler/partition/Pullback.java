@@ -9185,13 +9185,21 @@ final class Pullback {
      * <p>What an expression stands for is the value it comes to, and a part that is run but does not
      * come into the value is left out of it: the initializer of a {@code let} the body does not use,
      * the fields of a construction that an access takes one field of. Those still run, so the
-     * question is asked of the parts {@link Evaluated#inOrder} lists, and of a {@code let}'s body,
-     * which runs once its value has been worked out.
+     * question is asked of the parts {@link Evaluated#inOrder} lists, of a {@code let}'s body,
+     * which runs once its value has been worked out, and of what a name was bound to, which was
+     * run to bind it whatever the name goes on to stand as. So an expression runs the same
+     * whether it is written where it is used, bound to a name, or answered by a helper.
      */
     private boolean whatItRunsAsWrittenEndsNone(Core written, InputReads at) {
         if (Core.withoutStanding(written) instanceof Core.LetIn let) {
             return endsNoRun(new Denotation(let.value(), at))
                     && endsNoRun(new Denotation(let.body(), at.and(let.binder(), let.value())));
+        }
+        for (Denotation bound : at.boundTo(written, read.rules().symbols(),
+                read.rules().newtypes())) {
+            if (!endsNoRun(bound)) {
+                return false;
+            }
         }
         for (Evaluated.Step step : Evaluated.inOrder(written)) {
             if (!endsNoRun(new Denotation(step.expression(), at))) {

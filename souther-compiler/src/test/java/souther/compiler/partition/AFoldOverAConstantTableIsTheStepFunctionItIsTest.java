@@ -16,7 +16,9 @@ import souther.compiler.query.PartitionEvidence;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -186,6 +188,51 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         assertNotEquals(stated(plainOf, compared(unproven)), stated(heldOf, compared(unproven)));
     }
 
+    /**
+     * Whether the walk is skipped over does not turn on how its seed is spelled. A seed that is the
+     * same value is written inline, bound to a name, or answered by a helper, and each of them
+     * runs whatever the seed runs: a {@code let} whose value the seed does not use, and the fields
+     * of a construction that an access takes one of. Where that cannot end a run the walk is read
+     * as it is with a plain seed, and where it can it is not.
+     */
+    @Test
+    void aSeedIsSkippedOverOnlyWhereWhatItRunsEndsNoRunHoweverItIsSpelled() {
+        String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
+        // The seed, and the grade of a row of the container: each is worked out before any
+        // application, and each takes the value in the place of %s.
+        Map<String, String> places = new LinkedHashMap<>();
+        places.put("seed", "List.fold(%s, %%s, %s)".formatted(step, ASCENDING));
+        places.put("row", "List.fold(%s, 0, [ Row { grade = %%s, lowerBound = 100 },"
+                .formatted(step) + " Row { grade = 2, lowerBound = 200 } ])");
+        for (Map.Entry<String, String> place : places.entrySet()) {
+            Proposition selected = stated(compared(place.getValue().formatted("0")));
+            for (String wrapper : List.of("{\n    let spare = %s\n    0\n}",
+                    "Row { grade = 0, lowerBound = %s }.grade")) {
+                for (boolean ends : List.of(false, true)) {
+                    String used = wrapper.formatted(ends ? "Int.abs(cur)" : "cur");
+                    String declarations = "data Row = { grade: Int, lowerBound: Int }\n"
+                            + "let valueOf (n: Int): Int = "
+                            + wrapper.formatted(ends ? "Int.abs(n)" : "n");
+                    Map<String, String> spelled = new LinkedHashMap<>();
+                    spelled.put("inline", compared(place.getValue().formatted(used)));
+                    spelled.put("named", "let held = %s\n%s".formatted(used,
+                            compared(place.getValue().formatted("held"))));
+                    spelled.put("helper",
+                            compared(place.getValue().formatted("valueOf(cur)")));
+                    for (Map.Entry<String, String> one : spelled.entrySet()) {
+                        Proposition stated = stated(declarations, one.getValue());
+                        String label = place.getKey() + " " + one.getKey() + " " + used;
+                        if (ends) {
+                            assertNotEquals(selected, stated, label);
+                        } else {
+                            assertEquals(selected, stated, label);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private static String compared(String computed) {
         return "let computed = %s\nif computed < 2 then 1 else 0".formatted(computed);
     }
@@ -319,7 +366,9 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 }
                 """.formatted(row, body.indent(4).stripTrailing()), "Main");
         compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
+                () -> "the model compiles: " + body);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
