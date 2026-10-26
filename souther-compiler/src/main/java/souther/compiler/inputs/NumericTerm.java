@@ -1863,6 +1863,14 @@ public sealed interface NumericTerm
         };
     }
 
+    /**
+     * What this term's values can be: {@link #intrinsicBounds} and what the language can hold
+     * ({@link RepresentationBounds}).
+     */
+    default NumericDomain.Bounds reachBounds() {
+        return intrinsicBounds().meet(RepresentationBounds.of(this));
+    }
+
     /** Whether {@code place} is reached from an element of {@code container} by fields alone, and
      *  so is one value of each element. */
     private static boolean fieldsBelowAnElement(TermPath container, TermPath place) {

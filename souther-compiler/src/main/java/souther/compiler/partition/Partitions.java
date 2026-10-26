@@ -297,24 +297,8 @@ public final class Partitions {
             return along.getOrDefault(axis.id(), List.of());
         }
 
-        /** Where the lines drawn on {@code term} fall, as numbers. A line at a level that is no
-         *  number is not among them. */
-        private List<ExactRatio> linesOn(NumericTerm term) {
-            List<ExactRatio> out = new ArrayList<>();
-            for (Axis axis : axes()) {
-                if (axis.term().equals(term)) {
-                    for (Border each : along(axis)) {
-                        ExactRatio at = each.cut().cut().at().asANumber();
-                        if (at != null) {
-                            out.add(at);
-                        }
-                    }
-                }
-            }
-            return out;
-        }
-
-        /** Whether an edge of this term is a value some row could carry.
+        /** Whether an edge of {@code line}, a line drawn on this term, is a value some row could
+         *  carry. A line at a level that is no number is asked nothing of its place.
          *
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
          * edge here is then where the rules this could read stop, and a rule it could not read can
@@ -337,8 +321,8 @@ public final class Partitions {
          * in the corpus over collections that have no values. And false at a number of a string
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
-        public boolean edgeIsKnownWritable(NumericTerm term) {
-            return strings.allowsAnEdgeAt(term, linesOn(term))
+        public boolean edgeIsKnownWritable(NumericTerm term, Border line) {
+            return strings.allowsAnEdgeAt(term, line.cut().cut().at().asANumber())
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.

@@ -1891,13 +1891,13 @@ public sealed interface BorderQuantity
             null);
 
     /**
-     * What the language can hold of this quantity whatever the rules leave it: open where nothing
-     * it holds ends it. Asked of what a line can be reached at and a point written at, and never
-     * taken into the run the rules leave, which the classes are drawn to.
+     * What the language holds of this quantity whatever the rules leave it: a form is its terms
+     * weighed, each held to what the language holds of it.
      */
-    default NumericDomain.Bounds heldByTheLanguage() {
-        return this instanceof OfACoordinate coordinate
-                ? RepresentationBounds.of(coordinate.term()) : NumericDomain.Bounds.OPEN;
+    default HeldByTheLanguage heldByTheLanguage() {
+        return this instanceof LinearQuantity form
+                ? new HeldByTheLanguage(RepresentationBounds.ofAForm(form.direction()))
+                : HeldByTheLanguage.NOWHERE;
     }
 
     /** What {@code region} leaves this quantity, or that it leaves it nothing. */

@@ -81,11 +81,11 @@ public final class DomainEnd {
     }
 
     /**
-     * The last value the quantity takes of those {@code held} lets it, where the language ends it
-     * there; null where it does not.
+     * The first or last value the quantity takes of those {@code held} lets it, at one side; null
+     * where it ends nowhere that way. Its place only: no declaration took it in.
      */
-    static DomainEnd lastHeldBy(LevelSpace space, Level like, NumericDomain.Bounds held) {
-        return at(EndSide.UPPER, valueAt(space, like, EndSide.UPPER.at(held), EndSide.UPPER));
+    static DomainEnd heldBy(LevelSpace space, Level like, NumericDomain.Bounds held, EndSide side) {
+        return at(side, valueAt(space, like, side.at(held), side));
     }
 
     /** Which of the quantity's two ends this is. */

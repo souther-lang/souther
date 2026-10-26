@@ -9,12 +9,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 
-import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,23 +70,30 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      * Whether an edge at {@code term} is one a row could be written at, as far as the strings of
      * the input say: the input has a whole value, which is every position every value has holding
      * one, and the number is one its strings reach. Two claims, and neither stands for the other.
+     *
+     * @param lineAt where the line the edge is of falls, or null where it is at no number
      */
-    public boolean allowsAnEdgeAt(NumericTerm term, Collection<ExactRatio> linesOnIt) {
-        return mandatoryPositionsHoldAValue && reaches(term) && linesFitAString(term, linesOnIt);
+    public boolean allowsAnEdgeAt(NumericTerm term, ExactRatio lineAt) {
+        return mandatoryPositionsHoldAValue && reaches(term) && lineFitsAString(term, lineAt);
     }
 
     /**
-     * Whether every line drawn on {@code term} is below the most a {@code String} has of it, so
-     * that the value beside the line on its far side is one a string can have. Reaching every
-     * number the rules leave is not reaching a number past what a string holds: the rules leave
-     * every number from nought up, and a string holds no more than {@link
+     * Whether a line drawn at {@code at} on {@code term} is below the most a {@code String} has of
+     * it, so that the value beside the line on its far side is one a string can have. Reaching
+     * every number the rules leave is not reaching a number past what a string holds: the rules
+     * leave every number from nought up, and a string holds no more than {@link
      * TextExtents#LONGEST_STRING} code points.
      *
-     * @param linesOnIt where the lines drawn on {@code term} fall
+     * <p>Asked of the line and not of the position's lines together. What a row at a line needs is
+     * the values beside that line, and a run between it and another line stops at the most a string
+     * has ({@link RepresentationBounds}), so a line past that takes nothing from the ones before
+     * it.
+     *
+     * @param at where the line falls, or null where it is at no number
      */
-    private static boolean linesFitAString(NumericTerm term, Collection<ExactRatio> linesOnIt) {
+    private static boolean lineFitsAString(NumericTerm term, ExactRatio at) {
         ExactRatio most = mostAStringHas(term);
-        return most == null || linesOnIt.stream().allMatch(at -> at.compareTo(most) < 0);
+        return most == null || at == null || at.compareTo(most) < 0;
     }
 
     /** The most of {@code term} a string has, or null where it is no number of a string. */
@@ -208,7 +213,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
 
     private static boolean isLength(NumericTerm term) {
         return term instanceof NumericTerm.TakenOf taken
-                && taken.operation().equals(ValueName.Stdlib.operation(STRING, "length"));
+                && RepresentationBounds.isALength(taken);
     }
 
     /** Whether the number is what an operation of {@code String} answers. */

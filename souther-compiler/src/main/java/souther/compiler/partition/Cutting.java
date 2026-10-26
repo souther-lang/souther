@@ -2295,29 +2295,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
             return null;
         }
-        NumericDomain.Bounds ran =
+        Border.Values extent = Border.Values.within(
                 runs instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds range)
-                        ? range : null;
-        // What the language can hold ends a number of a string whatever the rules leave it. It is
-        // asked here and only here: met into the run the region holds, it would be an end every
-        // class of the position is drawn up to.
-        ran = (ran == null ? NumericDomain.Bounds.OPEN : ran).meet(of.heldByTheLanguage());
-        Border.Values extent = Border.Values.within(ran);
+                        ? range : null);
         // What the declarations hold a position's value to inside where it runs, which a value is
         // refused by before the region is asked anything: a position held to "a" or "b" takes no
         // value at "a0", whatever the region says of the strings — and a form over that one
         // position takes no value none of them comes to. A side of a line is not asked it: the
         // side runs to an end of the range, and the range ends at a value the declarations leave.
         HeldValues held = of.heldIn(region);
+        // And what the language holds of it, which is no rule and so is in no region: asked of a
+        // level and a side as the run the region leaves is, and drawn into no class.
+        HeldByTheLanguage language = of.heldByTheLanguage();
         return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
-                return extent.extendTo(level);
+                return language.admits(level) && extent.extendTo(level);
             }
 
             @Override
             public boolean holdAt(Level level) {
-                if (held.refuses(level)) {
+                if (held.refuses(level) || !language.admits(level)) {
                     return false;
                 }
                 // Whether a row stands at the value is asked of a value the quantity takes. One
@@ -2348,8 +2346,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 // anything is left. A relation it cannot carry is no proof that nothing is there.
                 Rel past = side == Towards.ABOVE ? (including ? Rel.GE : Rel.GT)
                         : (including ? Rel.LE : Rel.LT);
-                return against(region, level, past)
-                        .map(there -> there.emptiness().isEmpty()).orElse(true);
+                return language.holdsOnSide(level, side, including)
+                        && against(region, level, past)
+                                .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
         };
     }

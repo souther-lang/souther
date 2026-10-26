@@ -911,11 +911,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                      HeldValues heldTo, ExactAnswer<List<Parting>> parted,
                      NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        // What a point can be written at is held to what the language can hold as well. The ends
-        // the classes are drawn to are not: they are what the rules leave.
-        DomainEnd lastHeld =
-                DomainEnd.lastHeldBy(target.levels(), target.at(), target.of().heldByTheLanguage());
-        Admissible admissible = new Admissible(reach, heldTo, DomainEnd.boundOf(lastHeld));
+        HeldByTheLanguage language = target.of().heldByTheLanguage();
+        Admissible admissible = new Admissible(reach, heldTo, language);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -972,7 +969,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             });
         }
         return new Border(target, origin, demands,
-                leftNothing(space, cut, origin, ends, target.of()));
+                leftNothing(space, cut, origin, ends, language.ends(space, cut)));
     }
 
     /** The arrangement of every place the rules part a quantity, and the places this line's own
@@ -1620,14 +1617,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * @param bounds the range the value runs in
      * @param held   what the declarations hold the value to besides where it runs
-     * @param ceiling the last value the language can hold of it, or null where it ends it nowhere.
-     *               Not an end of the range: the classes are drawn to where the rules leave off
+     * @param language what the language holds of it, which no rule wrote and no class is drawn to
      */
-    private record Admissible(NumericDomain.Bounds bounds, HeldValues held, Bound ceiling) {
+    private record Admissible(NumericDomain.Bounds bounds, HeldValues held,
+                              HeldByTheLanguage language) {
 
         /** Whether a row may be written at {@code level} as far as these say. */
         boolean admits(Level level) {
-            if (held.refuses(level) || (ceiling != null && !ceiling.admitsFromAbove(level))) {
+            if (held.refuses(level) || !language.admits(level)) {
                 return false;
             }
             ExactRatio number = level.asANumber();
@@ -1637,14 +1634,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         /** Whether the rules leave nothing in {@code part}: of the range, what the declarations hold
          *  the value to ({@link HeldValues}). */
         boolean admitsNothingIn(LevelInterval part) {
-            return (ceiling != null && part.low() != null && startsPast(part.low()))
-                    || held.leaveNothingIn(part, bounds);
-        }
-
-        /** Whether a run starting at {@code from} lies wholly above the ceiling. */
-        private boolean startsPast(Bound from) {
-            int order = from.at().compareTo(ceiling.at());
-            return order > 0 || (order == 0 && !from.inclusive());
+            return language.admitsNothingIn(part) || held.leaveNothingIn(part, bounds);
         }
     }
 
@@ -1851,26 +1841,16 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * either: no side is known to be the one it looks like.
      */
     private static Sides leftNothing(LevelSpace space, Level cut, LineOrigin origin,
-                                     DomainEnds ends, BorderQuantity of) {
+                                     DomainEnds ends, DomainEnds language) {
         if (!(origin.lineFacts().claim() instanceof ComparisonClaim.Cut)
                 || !(seamOf(space, cut, origin) instanceof ExactAnswer.Held<Seam>(Seam seam))) {
             return Sides.NEITHER;
         }
-        return new Sides(QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, ends),
+        return new Sides(
+                QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, ends)
+                        || QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, language),
                 QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE, ends)
-                        || nothingLeftPastWhatTheLanguageHolds(space, cut, seam, of));
-    }
-
-    /**
-     * Whether the first value {@code seam} leaves above is past the most the language can hold of
-     * this quantity. That is not an end of the classes the position is divided into, which the
-     * rules draw: it says only that no value stands on that side, as an end the rules leave does.
-     */
-    private static boolean nothingLeftPastWhatTheLanguageHolds(LevelSpace space, Level cut,
-                                                               Seam seam, BorderQuantity of) {
-        DomainEnd last = DomainEnd.lastHeldBy(space, cut, of.heldByTheLanguage());
-        return last != null && QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE,
-                DomainEnds.of(side -> side == EndSide.UPPER ? last : null));
+                        || QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE, language));
     }
 
     /**
