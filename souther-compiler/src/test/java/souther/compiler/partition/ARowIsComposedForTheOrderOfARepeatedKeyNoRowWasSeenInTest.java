@@ -270,6 +270,35 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         });
     }
 
+    /**
+     * The field the rules keep apart is the one the statement reads: the two copies already differ
+     * there once they are given the values the order is told by, and a copy is not given a third
+     * that makes them equal again.
+     */
+    @Test
+    void aFieldKeptApartThatIsTheOneTheOrderIsToldByIsLeftAsItIsOnceItDiffers() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, ok: Bool }
+                data Snap = { rows: List<Row> }
+                    invariant List.allDistinctBy(.ok, rows)
+                behavior f : (items: List<LI>, snap: Snap) -> Int | Empty
+                let f (items, snap) = {
+                """ + GUARD.formatted(".sku", "snap.rows", "r.ok") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { sku = "A", ok = true }] }) -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { sku = "A", ok = false }] }) -> Empty { n = 0 }
+                """);
+
+        assertTrue(!found.isEmpty(), "a row is written for the order");
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            assertTrue(snap.contains("ok = true") && snap.contains("ok = false"), snap);
+        });
+    }
+
     /** A text the row holds one of is given another the composer writes at the type. */
     @Test
     void aTextTheRowHoldsOneOfIsGivenAnother() {

@@ -446,9 +446,12 @@ public final class KeyOrderCandidates {
 
     /**
      * One element repeated, the two copies given the values between them, beside everything else
-     * the container held. The copy is given another value at each field the rules keep the
-     * elements apart at, other than the key: a repeated key is what is asked for, and a second
-     * element equal to the first at what is kept apart is a container the rules refuse.
+     * the container held.
+     *
+     * <p>What the rules keep apart is a condition on the container that comes out, and is asked of
+     * it: the copy is given another value at a field kept apart only where the container has it
+     * equal to another element's there, and then one that no element of the container holds. A
+     * field the two copies already differ at, because the order is told by it, is left as it is.
      */
     private Stream<ObservedValue> repeated(List<ObservedValue> elements, Target target,
                                            ObservedValue earlier, ObservedValue later,
@@ -456,34 +459,51 @@ public final class KeyOrderCandidates {
         return IntStream.range(0, elements.size()).boxed().map(at -> {
             ObservedValue one = with(elements.get(at), target.fields(), earlier);
             ObservedValue other = with(elements.get(at), target.fields(), later);
-            for (List<String> run : apart) {
-                if (other != null && !startsWith(run, plan.key()) && !startsWith(plan.key(), run)) {
-                    ObservedValue held = inputs.readingAt(other, plan.element(), run, views);
-                    ObservedValue another = held == null ? null : anotherThan(held, run, pool);
-                    other = another == null ? null : with(other, run, another);
-                }
-            }
             if (one == null || other == null) {
                 return null;
             }
             List<ObservedValue> held = new ArrayList<>(elements);
             held.set(at, one);
             held.add(at + 1, other);
-            return (ObservedValue) new ObservedValue.Sequence(held);
+            for (List<String> run : apart) {
+                if (other != null && !startsWith(run, plan.key()) && !startsWith(plan.key(), run)) {
+                    other = keptApartAt(held, at + 1, run, pool);
+                    held.set(at + 1, other);
+                }
+            }
+            return other == null ? null : (ObservedValue) new ObservedValue.Sequence(held);
         }).filter(Objects::nonNull);
     }
 
     /**
-     * A value of the field at {@code names} that is not {@code value}, taken from the ones its
-     * declared type is given ({@link #valuesFor}), or null where there is none: nothing is made up
-     * for a type that neither the row, the statement nor the composer offers a second value of.
+     * The element {@code at} of {@code held}, with a value at the fields {@code run} that no
+     * other element holds there: itself where it already is so, and null where the field has no
+     * such value to give. Taken from the ones its declared type is given ({@link #valuesFor}); not
+     * made up for a type that neither the row, the statement nor the composer offers one of.
      */
-    private ObservedValue anotherThan(ObservedValue value, List<String> names, Pool pool) {
-        Type type = inputs.typeRead(plan.element(), fieldSteps(names), views);
-        return type == null ? null
-                : valuesFor(views.apply(type).shape(), pool,
-                        plan.named().getOrDefault(names, List.of())).stream()
-                        .filter(each -> !each.equals(value)).findFirst().orElse(null);
+    private ObservedValue keptApartAt(List<ObservedValue> held, int at, List<String> run,
+                                      Pool pool) {
+        ObservedValue element = held.get(at);
+        ObservedValue mine = inputs.readingAt(element, plan.element(), run, views);
+        Type type = inputs.typeRead(plan.element(), fieldSteps(run), views);
+        if (mine == null || type == null) {
+            return null;
+        }
+        Set<ObservedValue> elsewhere = new LinkedHashSet<>();
+        for (int each = 0; each < held.size(); each++) {
+            ObservedValue theirs = each == at ? null
+                    : inputs.readingAt(held.get(each), plan.element(), run, views);
+            if (theirs != null) {
+                elsewhere.add(theirs);
+            }
+        }
+        if (!elsewhere.contains(mine)) {
+            return element;
+        }
+        ObservedValue another = valuesFor(views.apply(type).shape(), pool,
+                plan.named().getOrDefault(run, List.of())).stream()
+                .filter(each -> !elsewhere.contains(each)).findFirst().orElse(null);
+        return another == null ? null : with(element, run, another);
     }
 
     /** {@code element} with {@code replacement} at the fields {@code names} below it, or null
