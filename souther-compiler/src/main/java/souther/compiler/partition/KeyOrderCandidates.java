@@ -159,13 +159,17 @@ public final class KeyOrderCandidates {
                         plan.named().getOrDefault(target.fields(), List.of())))
                 .toList();
         int most = given.stream().mapToInt(List::size).max().orElse(0);
+        Admitted admitted = new Admitted(held, subject, writing);
         // Two bounds, because the decoder refuses some of what is looked at: counting only what
         // it admits would let a rule that refuses nearly everything be looked at without end, and
-        // counting what is looked at would let the refused ones use up the rows that are run.
+        // counting what is looked at would let the refused ones use up the rows that are run. A
+        // value the decoder refuses on its own is left out before either is counted, since every
+        // rewrite holding it is refused and would use up the bound for the values that are not.
         return roundsOf(most, mostSitesIn(held)).flatMap(round ->
                         inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
                                 plan.container().steps(),
-                                (here, _, _) -> heldTwice(here, given, round, apart, pool),
+                                (here, _, _) -> heldTwice(here, given, round, apart, pool,
+                                        admitted),
                                 views))
                 .limit(MOST_REWRITES_LOOKED_AT)
                 .map(each -> ObservedFixtures.of(each, subject.types().get(plan.parameter()),
@@ -345,7 +349,9 @@ public final class KeyOrderCandidates {
      * the first of every case before the second of any. The case is the unit and not the value: a
      * case with many values does not use up the room the others are listed in. A case nothing here
      * writes a value of is left out, which is a case this did not find and not one that cannot be;
-     * so is a case past the most, which is not tried.
+     * so is a case past the most, which is not tried. The most is of the cases looked at, in the
+     * order the declarations write them, whether or not a value is written of each: a case that
+     * has none uses its place.
      *
      * <p>Each value is the case itself, without the names the field wears. The walk that puts the
      * rewritten value back puts those on ({@link BehaviorInputs.Rewrite}), as it does for the
@@ -478,22 +484,24 @@ public final class KeyOrderCandidates {
      * the pairs of values {@code round} names, written at the place it names in the container.
      */
     private Stream<ObservedValue> heldTwice(ObservedValue here, List<List<ObservedValue>> given,
-                                            Round round, List<List<String>> apart, Pool pool) {
+                                            Round round, List<List<String>> apart, Pool pool,
+                                            Admitted admitted) {
         if (!(here instanceof ObservedValue.Sequence(List<ObservedValue> elements))
                 || elements.isEmpty()) {
             return Stream.empty();
         }
-        List<Site> sites = sitesIn(elements.size());
-        if (round.site() >= sites.size()) {
+        Site site = siteAt(elements.size(), round.site());
+        if (site == null) {
             return Stream.empty();
         }
-        Site site = sites.get(round.site());
         return IntStream.range(0, plan.targets().size()).boxed().flatMap(each -> {
             Target target = plan.targets().get(each);
             List<ObservedValue> values = given.get(each);
             return pairsWith(values.size(), round.value()).stream()
                     .filter(pair -> !ofOneCase(values.get(pair.earlier()),
                             values.get(pair.later())))
+                    .filter(pair -> admitted.admits(target, values.get(pair.earlier()))
+                            && admitted.admits(target, values.get(pair.later())))
                     .map(pair -> written(site, elements, target, values.get(pair.earlier()),
                             values.get(pair.later()), apart, pool))
                     .filter(Objects::nonNull);
@@ -521,20 +529,35 @@ public final class KeyOrderCandidates {
     record Round(int value, int site) {}
 
     /**
-     * The sites two copies are written at in a container of {@code size} elements, the elements
-     * repeated first and then the pairs of elements.
+     * How many sites two copies are written at in a container of {@code size} elements: each
+     * element held again, and each pair of elements.
      */
-    static List<Site> sitesIn(int size) {
-        List<Site> out = new ArrayList<>();
-        for (int at = 0; at < size; at++) {
-            out.add(new Site.Repeating(at));
+    static int sitesIn(int size) {
+        long elements = size;
+        return (int) Math.min(elements + elements * (elements - 1) / 2, Integer.MAX_VALUE);
+    }
+
+    /**
+     * The site of rank {@code rank} in a container of {@code size} elements, the elements held
+     * again first and then the pairs of elements, or null past the last. Worked out from the rank
+     * and not listed, since a container is asked for the site of every round.
+     */
+    static Site siteAt(int size, int rank) {
+        if (rank < 0 || rank >= sitesIn(size)) {
+            return null;
         }
-        for (int first = 0; first < size; first++) {
-            for (int second = first + 1; second < size; second++) {
-                out.add(new Site.Overwriting(first, second));
+        if (rank < size) {
+            return new Site.Repeating(rank);
+        }
+        int left = rank - size;
+        for (int first = 0; first < size - 1; first++) {
+            int pairs = size - 1 - first;
+            if (left < pairs) {
+                return new Site.Overwriting(first, first + 1 + left);
             }
+            left -= pairs;
         }
-        return out;
+        return null;
     }
 
     /**
@@ -577,7 +600,7 @@ public final class KeyOrderCandidates {
         inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
                 plan.container().steps(), (here, _, _) -> {
                     if (here instanceof ObservedValue.Sequence(List<ObservedValue> elements)) {
-                        most[0] = Math.max(most[0], sitesIn(elements.size()).size());
+                        most[0] = Math.max(most[0], sitesIn(elements.size()));
                     }
                     return Stream.empty();
                 }, views).forEach(_ -> { });
@@ -684,6 +707,66 @@ public final class KeyOrderCandidates {
                 plan.named().getOrDefault(run, List.of())).stream()
                 .filter(each -> !elsewhere.contains(each)).findFirst().orElse(null);
         return another == null ? null : with(element, run, another);
+    }
+
+    /**
+     * Whether the decoder admits a value given to a field, asked of the row as it was written with
+     * only that value changed: at the field of the first element of the container. A value it
+     * refuses so is refused in every rewrite that holds it, and a rewrite refused is counted
+     * against the bound on those looked at ({@link #MOST_REWRITES_LOOKED_AT}) before the decoder
+     * says so, so the value is left out before that.
+     *
+     * <p>Asked once of each value of each field, so at most as many times as values are listed.
+     * Where the row cannot be written with the value alone, nothing is known and the value is
+     * kept; so it is where a rule couples the field to others in a way the first element does not
+     * show, which the rewrites themselves are then refused for.
+     */
+    private final class Admitted {
+
+        private final ObservedValue parameter;
+        private final MeasuredInput subject;
+        private final RowWriting writing;
+        private final Map<List<Object>, Boolean> known = new HashMap<>();
+
+        Admitted(ObservedValue parameter, MeasuredInput subject, RowWriting writing) {
+            this.parameter = parameter;
+            this.subject = subject;
+            this.writing = writing;
+        }
+
+        boolean admits(Target target, ObservedValue value) {
+            return known.computeIfAbsent(List.of(target.fields(), value),
+                    _ -> asked(target, value));
+        }
+
+        private boolean asked(Target target, ObservedValue value) {
+            ObservedValue alone = inputs.rewritingBelow(parameter,
+                            inputs.types().get(plan.parameter()),
+                            plan.container().steps(), (here, _, _) -> {
+                                if (!(here instanceof ObservedValue.Sequence(
+                                        List<ObservedValue> elements)) || elements.isEmpty()) {
+                                    return Stream.empty();
+                                }
+                                ObservedValue one = with(elements.getFirst(), target.fields(),
+                                        value);
+                                if (one == null) {
+                                    return Stream.empty();
+                                }
+                                List<ObservedValue> changed = new ArrayList<>(elements);
+                                changed.set(0, one);
+                                return Stream.of(new ObservedValue.Sequence(changed));
+                            }, views)
+                    .findFirst().orElse(null);
+            if (alone == null) {
+                return true;
+            }
+            return switch (ObservedFixtures.of(alone, subject.types().get(plan.parameter()),
+                    subject.ruleReading())) {
+                case ObservedFixtures.Writing.Written<FixtureTemplate>(var written) ->
+                        writing.check().refuse(plan.parameter(), written).isEmpty();
+                case ObservedFixtures.Writing.NotWritable<FixtureTemplate> _ -> false;
+            };
+        }
     }
 
     /** {@code element} with {@code replacement} at the fields {@code names} below it, or null

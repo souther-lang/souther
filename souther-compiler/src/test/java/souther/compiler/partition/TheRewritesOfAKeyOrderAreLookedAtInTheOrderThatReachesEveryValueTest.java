@@ -39,13 +39,33 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
                 "one value has nothing to be taken against");
     }
 
+    /** The sites by rank are the elements held again and then the pairs of elements, as listed
+     *  by two plain loops. */
     @Test
     void theSitesAreTheElementsHeldAgainAndThenThePairsOfElements() {
-        assertEquals(List.of(new KeyOrderCandidates.Site.Repeating(0),
-                        new KeyOrderCandidates.Site.Repeating(1),
-                        new KeyOrderCandidates.Site.Overwriting(0, 1)),
-                KeyOrderCandidates.sitesIn(2));
-        assertEquals(List.of(), KeyOrderCandidates.sitesIn(0));
+        for (int size = 0; size <= 12; size++) {
+            List<KeyOrderCandidates.Site> listed = new ArrayList<>();
+            for (int at = 0; at < size; at++) {
+                listed.add(new KeyOrderCandidates.Site.Repeating(at));
+            }
+            for (int first = 0; first < size; first++) {
+                for (int second = first + 1; second < size; second++) {
+                    listed.add(new KeyOrderCandidates.Site.Overwriting(first, second));
+                }
+            }
+            List<KeyOrderCandidates.Site> byRank = new ArrayList<>();
+            for (int rank = 0; rank < KeyOrderCandidates.sitesIn(size); rank++) {
+                byRank.add(KeyOrderCandidates.siteAt(size, rank));
+            }
+            assertEquals(listed, byRank, "a container of " + size + " elements");
+            assertEquals(null, KeyOrderCandidates.siteAt(size, listed.size()));
+        }
+        assertEquals(null, KeyOrderCandidates.siteAt(3, -1));
+    }
+
+    @Test
+    void theNumberOfSitesOfALargeContainerDoesNotOverflow() {
+        assertEquals(Integer.MAX_VALUE, KeyOrderCandidates.sitesIn(Integer.MAX_VALUE));
     }
 
     /**
@@ -58,7 +78,7 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         assertTrue(2 * (MOST_VALUES - 1) <= KeyOrderCandidates.MOST_REWRITES_LOOKED_AT,
                 "the pairs of one value at one site are among the rewrites looked at");
         for (int elements : new int[] {1, 2, 4, 8, 16}) {
-            int sites = KeyOrderCandidates.sitesIn(elements).size();
+            int sites = KeyOrderCandidates.sitesIn(elements);
             List<KeyOrderCandidates.Pair> looked = new ArrayList<>();
             KeyOrderCandidates.roundsOf(MOST_VALUES, sites)
                     .takeWhile(round -> looked.size() < KeyOrderCandidates.MOST_REWRITES_LOOKED_AT)
@@ -82,7 +102,7 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
      */
     @Test
     void aBoundCutsLaterSitesBeforeItCutsAValue() {
-        int sites = KeyOrderCandidates.sitesIn(4).size();
+        int sites = KeyOrderCandidates.sitesIn(4);
         Set<Integer> valuesAtTheFirstSite = new HashSet<>();
         int looked = 0;
         for (KeyOrderCandidates.Round round

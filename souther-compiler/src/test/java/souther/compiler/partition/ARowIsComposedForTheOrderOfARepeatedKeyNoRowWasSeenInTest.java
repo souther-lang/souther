@@ -502,6 +502,71 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
+     * One value the decoder refuses does not use up the rewrites that are looked at: the first
+     * value of the first case is refused, every pair holding it is refused with it, and the
+     * pairs of the other values are still reached, though the container holds several elements
+     * and so many sites, and a sum has the most cases.
+     */
+    @Test
+    void aValueTheDecoderRefusesDoesNotUseUpTheRewritesLookedAt() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data C1 = { n: Int }
+                    invariant positive = n >= 1
+                data C2 = { n: Int }
+                data C3 = { n: Int }
+                data C4 = { n: Int }
+                data C5 = { n: Int }
+                data C6 = { n: Int }
+                data C7 = { n: Int }
+                data C8 = { n: Int }
+                data C9 = { n: Int }
+                data C10 = { n: Int }
+                data C11 = { n: Int }
+                data C12 = { n: Int }
+                data Pay = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 | C10 | C11 | C12
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    guard List.length(rows) >= 4 else Empty { n = 2 }
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | C1 as c -> true
+                            | C2 as c -> true
+                            | C3 as c -> true
+                            | C4 as c -> true
+                            | C5 as c -> true
+                            | C6 as c -> true
+                            | C7 as c -> true
+                            | C8 as c -> true
+                            | C9 as c -> true
+                            | C10 as c -> true
+                            | C11 as c -> true
+                            | C12 as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 1 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C2 { n = 1 } }, Row { sku = "B", pay = C2 { n = 1 } },
+                         Row { sku = "C", pay = C2 { n = 1 } }, Row { sku = "D", pay = C2 { n = 1 } }])
+                        -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C12 { n = 1 } }, Row { sku = "B", pay = C2 { n = 1 } },
+                         Row { sku = "C", pay = C2 { n = 1 } }, Row { sku = "D", pay = C2 { n = 1 } }])
+                        -> Empty { n = 1 }
+                    | "few" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C2 { n = 1 } }]) -> Empty { n = 2 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(
+                !row.inputs().get(1).text().contains("C1 { n = 0 }"),
+                () -> "no row holds the value the decoder refuses: " + row.inputs().get(1).text()));
+    }
+
+    /**
      * A case whose first value the decoder refuses is not left unwritten: the next value of the
      * case stands in for it, once every case has been given its first.
      */
