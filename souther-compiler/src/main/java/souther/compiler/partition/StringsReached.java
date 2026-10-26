@@ -4,6 +4,7 @@ import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
@@ -92,17 +93,8 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
 
     /** The most of {@code term} a string has, or null where it is no number of a string. */
     private static ExactRatio mostAStringHas(NumericTerm term) {
-        return switch (term) {
-            case NumericTerm.CodePointValueSum _ -> ExactRatio.of(
-                    TextExtents.LONGEST_STRING * Character.MAX_CODE_POINT);
-            case NumericTerm.CodePointClassCount _ -> ExactRatio.of(TextExtents.LONGEST_STRING);
-            case NumericTerm.TakenOf taken when isOfAString(taken) ->
-                    ExactRatio.of(TextExtents.LONGEST_STRING);
-            case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
-                 NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
-        };
+        Long most = RepresentationBounds.mostOf(term);
+        return most == null ? null : ExactRatio.of(most);
     }
 
     /** What the strings at {@code positions} reach. */

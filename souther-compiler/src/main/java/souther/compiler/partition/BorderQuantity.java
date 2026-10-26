@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
@@ -1888,6 +1889,16 @@ public sealed interface BorderQuantity
     /** What a count of elements runs between: none at the least, and no most it is told. */
     NumericDomain.Bounds NONE_OR_MORE = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
             null);
+
+    /**
+     * What the language can hold of this quantity whatever the rules leave it: open where nothing
+     * it holds ends it. Asked of what a line can be reached at and a point written at, and never
+     * taken into the run the rules leave, which the classes are drawn to.
+     */
+    default NumericDomain.Bounds heldByTheLanguage() {
+        return this instanceof OfACoordinate coordinate
+                ? RepresentationBounds.of(coordinate.term()) : NumericDomain.Bounds.OPEN;
+    }
 
     /** What {@code region} leaves this quantity, or that it leaves it nothing. */
     default NumericDomain.FormProjection projectedIn(SearchRegion region) {

@@ -2295,9 +2295,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
             return null;
         }
-        Border.Values extent = Border.Values.within(
+        NumericDomain.Bounds ran =
                 runs instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds range)
-                        ? range : null);
+                        ? range : null;
+        // What the language can hold ends a number of a string whatever the rules leave it. It is
+        // asked here and only here: met into the run the region holds, it would be an end every
+        // class of the position is drawn up to.
+        ran = (ran == null ? NumericDomain.Bounds.OPEN : ran).meet(of.heldByTheLanguage());
+        Border.Values extent = Border.Values.within(ran);
         // What the declarations hold a position's value to inside where it runs, which a value is
         // refused by before the region is asked anything: a position held to "a" or "b" takes no
         // value at "a0", whatever the region says of the strings — and a form over that one

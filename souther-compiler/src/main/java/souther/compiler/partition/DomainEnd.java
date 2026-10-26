@@ -80,6 +80,14 @@ public final class DomainEnd {
         return bound == null ? null : new DomainEnd(side, bound, null);
     }
 
+    /**
+     * The last value the quantity takes of those {@code held} lets it, where the language ends it
+     * there; null where it does not.
+     */
+    static DomainEnd lastHeldBy(LevelSpace space, Level like, NumericDomain.Bounds held) {
+        return at(EndSide.UPPER, valueAt(space, like, EndSide.UPPER.at(held), EndSide.UPPER));
+    }
+
     /** Which of the quantity's two ends this is. */
     public EndSide side() {
         return side;
