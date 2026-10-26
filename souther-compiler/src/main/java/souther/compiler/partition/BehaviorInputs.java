@@ -309,15 +309,16 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
     /**
      * What a value at the end of {@code steps} below a value of {@code type} is declared as, or
-     * null where the reading does not expose a step.
+     * null where the reading does not expose a step or a rewrite does not go through it.
      *
-     * <p>What a walk over a row would arrive at, asked without a row: the types the steps of
-     * {@link Standing#step} land on.
+     * <p>What {@link #rewritingBelow} would arrive at, asked without a value: the types the steps
+     * of {@link Standing#step} land on, less the containers a rewrite does not rebuild. A caller
+     * that offers a rewrite asks this, so that what it offers is what the rewrite does.
      */
     Type typeRead(Type type, List<TermPath.Step> steps, Function<Type, TypeView> views) {
         Type standing = type;
         for (TermPath.Step step : steps) {
-            standing = Standing.typeAfter(step, standing, views);
+            standing = Standing.rewritableTypeAfter(step, standing, views);
             if (standing == null) {
                 return null;
             }
@@ -480,8 +481,23 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
         /**
          * What a value is declared as after {@code step} from a value of {@code type}, or null
+         * where a rewrite cannot go through the step: the steps of {@link #typeAfter} less the
+         * ones {@link #rewriting} does not rebuild.
+         */
+        static Type rewritableTypeAfter(TermPath.Step step, Type type,
+                                        Function<Type, TypeView> viewOf) {
+            // The one place that says which containers a rewrite goes through, and the rewrite
+            // below asks the same of the shape: a map's values are read by a walk over a row and
+            // are not rebuilt by this.
+            return step instanceof TermPath.Step.Element
+                    && !(viewOf.apply(type).shape() instanceof Shape.Sequence)
+                    ? null : typeAfter(step, type, viewOf);
+        }
+
+        /**
+         * What a value is declared as after {@code step} from a value of {@code type}, or null
          * where the reading exposes no such step: the type {@link #step} lands on, without a
-         * value. Only the steps a rewrite goes through are answered.
+         * value.
          */
         static Type typeAfter(TermPath.Step step, Type type, Function<Type, TypeView> viewOf) {
             TypeView view = viewOf.apply(type);
@@ -500,7 +516,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
          * <p>Each step is taken by {@link #step}, so a name a position wears, a field a type
          * exposes and an element a container holds are met as a read of the same row meets them;
          * what is added here is putting the parent back together around what came back. Lazy, and
-         * empty where {@code step} cannot take a step or the step is not one a rewrite goes
+         * empty where {@link #step} cannot take a step or the step is not one a rewrite goes
          * through.
          */
         Stream<ObservedValue> rewriting(List<TermPath.Step> steps, int from,
@@ -535,7 +551,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     });
                 }
                 case TermPath.Step.Element _ -> {
-                    if (!(here instanceof ObservedValue.Sequence written)
+                    // Only where the type is a container this rebuilds, as the types are asked.
+                    if (rewritableTypeAfter(taken, type, viewOf) == null
+                            || !(here instanceof ObservedValue.Sequence written)
                             || below.size() != written.elements().size()) {
                         yield Stream.empty();
                     }

@@ -3620,15 +3620,25 @@ public final class Adequacy {
                         if (!unseen.contains(way.which()) || out.containsKey(way.which())) {
                             continue;
                         }
-                        RowToRun row = whatACaseFinds(each, way, setting, building, cases);
+                        // The way to the rule and what the case asks of the row on top of it: for
+                        // a step of a search the row is composed to the node, and for an order
+                        // the row is composed with the entry looked up there and then written
+                        // again with its key held twice.
+                        RowToRun row = way.which() instanceof CaseOfAStatement.KeyOrder order
+                                ? whatAKeyOrderFinds(each, each.statesToACase(way), order, setting,
+                                        building, cases)
+                                : whatACaseFinds(each, way, setting, building, cases);
                         if (row != null) {
                             out.put(way.which(), row);
                         }
                     }
+                    // An order the reading could not say an entry of is looked for on the way to
+                    // the rule alone.
                     for (CaseOfAStatement owed : unseen) {
                         if (owed instanceof CaseOfAStatement.KeyOrder order
                                 && !out.containsKey(order) && consultsAsTheCaseHas(each, order)) {
-                            RowToRun row = whatAKeyOrderFinds(each, order, setting, building, cases);
+                            RowToRun row = whatAKeyOrderFinds(each, each.states(), order, setting,
+                                    building, cases);
                             if (row != null) {
                                 out.put(order, row);
                             }
@@ -3673,11 +3683,12 @@ public final class Adequacy {
          * whose rewrite decides the statement, is passed over for the next the walk composes.
          */
         private static RowToRun whatAKeyOrderFinds(DecisionReading.Ruled ruled,
+                                                   WayToTheBorder states,
                                                    CaseOfAStatement.KeyOrder order,
                                                    DecisionSearch.SearchSetting setting,
                                                    DecisionSearch.SearchSetting building,
                                                    CasesTheRowsTook cases) {
-            if (!(souther.compiler.partition.Reachability.of(ruled.states(), building.declared())
+            if (!(souther.compiler.partition.Reachability.of(states, building.declared())
                     instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
                 return null;
             }

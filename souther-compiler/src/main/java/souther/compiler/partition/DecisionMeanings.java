@@ -126,6 +126,10 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * empty.
      */
     private List<CaseWay> casesOf(Condition condition, DecidedCondition answer) {
+        if (answer.condition() instanceof DecisionCondition.AStatement(Proposition stated)
+                && !(stated instanceof Proposition.SomeReachable)) {
+            return waysRoundTheOrdersOf(condition, stated, answer);
+        }
         if (!(answer.condition() instanceof DecisionCondition.AStatement(
                 Proposition.SomeReachable search))
                 || !(answer instanceof DecidedCondition.Held(var _, boolean held))) {
@@ -145,6 +149,35 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                 wayTo(condition, which, which.askedAtLevel(level, states::denied))
                         .ifPresent(out::add);
             }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What a row has to be, beside the way to the rule, to be one the order of a repeated key can
+     * be asked of: the entry the statement looks up is there. A row that takes the rule with the
+     * container or the quantified list empty takes it without the statement looking anything up,
+     * and no order of its elements decides what it says.
+     *
+     * <p>One way for each order the statement rests on, the way it came out here: holding where
+     * the statement held, failing where it failed.
+     */
+    private List<CaseWay> waysRoundTheOrdersOf(Condition condition, Proposition stated,
+                                               DecidedCondition answer) {
+        if (!(answer instanceof DecidedCondition.Held(var _, boolean held))) {
+            return List.of();
+        }
+        List<CaseWay> out = new ArrayList<>();
+        for (Proposition.LastToHold last : stated.lastsToHold()) {
+            StandingAtAPoint.OrderOfAKey order = StandingAtAPoint.OrderOfAKey.of(last);
+            Optional<Proposition> entry = Proposition.theEntryLookedUp(stated, last);
+            if (order == null || entry.isEmpty()) {
+                continue;
+            }
+            CaseOfAStatement.KeyOrder which = new CaseOfAStatement.KeyOrder(stated, order,
+                    held ? CaseOfAStatement.Way.HOLDS_BY_THE_LAST
+                            : CaseOfAStatement.Way.FAILS_BY_THE_LAST);
+            wayTo(condition, which, Optional.of(List.of(entry.get()))).ifPresent(out::add);
         }
         return List.copyOf(out);
     }

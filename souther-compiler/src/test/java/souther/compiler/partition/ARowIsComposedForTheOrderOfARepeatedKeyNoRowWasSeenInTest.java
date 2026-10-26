@@ -243,6 +243,140 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         });
     }
 
+    /** A field the rules keep apart that is a {@code Bool} is given its other value. */
+    @Test
+    void aBoolKeptApartIsGivenItsOtherValue() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { slot: Bool, sku: String, qty: Int }
+                data Snap = { rows: List<Row> }
+                    invariant List.allDistinctBy(.slot, rows)
+                behavior f : (items: List<LI>, snap: Snap) -> Int | Empty
+                let f (items, snap) = {
+                """ + GUARD.formatted(".sku", "snap.rows", "r.qty >= i.q") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { slot = true, sku = "A", qty = 9 }] }) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { slot = true, sku = "A", qty = 1 }] })
+                        -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            assertTrue(snap.contains("slot = true") && snap.contains("slot = false"), snap);
+        });
+    }
+
+    /** A text the row holds one of is given another the composer writes at the type. */
+    @Test
+    void aTextTheRowHoldsOneOfIsGivenAnother() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, status: String }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                """ + GUARD.formatted(".sku", "rows", "r.status == \"active\"") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", status = "active" }]) -> 1
+                    | "absent" : ([LI { sku = "B", q = 5 }],
+                        [Row { sku = "A", status = "active" }]) -> Empty { n = 0 }
+                """);
+
+        assertTrue(!found.isEmpty(), "a row is written for some way");
+        found.values().forEach(row -> {
+            List<String> statuses = keysIn(row.inputs().get(1).text(), "status");
+            assertEquals(2, statuses.size(), () -> row.inputs().get(1).text());
+            assertTrue(!statuses.get(0).equals(statuses.get(1)), () -> row.inputs().get(1).text());
+        });
+    }
+
+    /**
+     * A case is offered only where a row can be written for it: a field whose type offers no other
+     * value is no field to change, and so there is nothing to offer.
+     */
+    @Test
+    void aCaseIsNotOfferedWhereTheFieldTheStatementReadsHasNoOtherValue() {
+        Compilation compilation = Compilation.ofSource(HEAD + """
+                data Card = { n: Int }
+                data Cash = { n: Int }
+                data Pay = Card | Cash
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | Card as c -> true
+                            | Cash as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Card { n = 1 } }]) -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        String module = compilation.modules().getFirst();
+        assertTrue(compilation.db().ask(new Adequacy.Decides(module)).value().get("f").took()
+                        .made().orElseThrow().unseenCases().stream()
+                        .anyMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
+                "the order is unmeasured, so that not being offered is the plan's answer");
+        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().cases()
+                        .stream().noneMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
+                "no order is offered for a field with no other value to give");
+    }
+
+    /**
+     * A list reached through the values of a map is a container the rewrite does not rebuild, so
+     * the order of a key in it is reported unmeasured and no row is offered for it: what is
+     * offered is what the rewrite does.
+     */
+    @Test
+    void anOrderInAListBelowAMapIsNotOffered() {
+        Compilation compilation = Compilation.ofSource(HEAD + """
+                data Row = { sku: String, qty: Int }
+                data Snap = { byDay: Map<String, List<Row>> }
+                behavior f : (item: LI, snap: Snap) -> Int | Empty
+                let f (item, snap) = {
+                    guard match Map.get("d", snap.byDay) with
+                        | Some rows -> match Map.get(item.sku, List.indexBy(.sku, rows)) with
+                            | Some r -> r.qty >= item.q
+                            | None -> false
+                        | None -> false else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : (LI { sku = "A", q = 5 },
+                        Snap { byDay = [("d", [Row { sku = "A", qty = 9 }])] }) -> 1
+                    | "short" : (LI { sku = "A", q = 5 },
+                        Snap { byDay = [("d", [Row { sku = "A", qty = 1 }])] })
+                        -> Empty { n = 0 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        String module = compilation.modules().getFirst();
+        assertTrue(compilation.db().ask(new Adequacy.Decides(module)).value().get("f").took()
+                        .made().orElseThrow().unseenCases().stream()
+                        .anyMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
+                "the order is unmeasured, so that not being offered is the plan's answer");
+        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().cases()
+                        .stream().noneMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
+                "no order is offered for a list the rewrite does not go through");
+    }
+
     /**
      * Nothing is made up for a field kept apart: a text the row holds only one of has no other
      * value to give the copy, and the row is not written with one invented for it.

@@ -1,14 +1,22 @@
 package souther.compiler.partition;
 
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Carrier;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -82,7 +90,7 @@ public final class KeyOrderCandidates {
      *                  statement first
      */
     private record Plan(int parameter, TermPath container, List<String> key, Type element,
-                        List<Target> targets) {}
+                        List<Target> targets, Map<List<String>, List<Place>> named) {}
 
     /**
      * Whether a row can be written for {@code target}: the container is a list reached through
@@ -121,7 +129,7 @@ public final class KeyOrderCandidates {
             return Stream.empty();
         }
         MeasuredInput subject = writing.subject();
-        Pool pool = Pool.of(seen);
+        Pool pool = Pool.of(seen, prim -> composedAt(subject, prim));
         List<List<String>> apart = subject.keptApartAt(plan.container());
         // Two bounds, because the decoder refuses some of what is looked at: counting only what
         // it admits would let a rule that refuses nearly everything be looked at without end, and
@@ -163,7 +171,8 @@ public final class KeyOrderCandidates {
         List<Target> targets = targetsOf(inputs, views, list.element(), key,
                 readBy(target.statement(), container));
         return targets.isEmpty() ? null
-                : new Plan(parameter, container, key, list.element(), targets);
+                : new Plan(parameter, container, key, list.element(), targets,
+                        namedBy(target.statement(), container));
     }
 
     /** The fields from an element of {@code container} to {@code position}, or null where it is
@@ -218,7 +227,7 @@ public final class KeyOrderCandidates {
         for (List<String> each : fields) {
             Type type = inputs.typeRead(element, fieldSteps(each), views);
             if (type != null && !startsWith(each, key) && !startsWith(key, each)
-                    && variesAsAValue(views.apply(type).shape())) {
+                    && variesAsAValue(views.apply(type).shape(), views)) {
                 out.add(new Target(each, type));
             }
         }
@@ -234,7 +243,7 @@ public final class KeyOrderCandidates {
     private static List<List<String>> leavesBelow(Function<Type, TypeView> views, Type type,
                                                   List<String> reached, int levels) {
         Shape shape = views.apply(type).shape();
-        if (!reached.isEmpty() && variesAsAValue(shape)) {
+        if (!reached.isEmpty() && variesAsAValue(shape, views)) {
             return List.of(reached);
         }
         if (!(shape instanceof Shape.Product product) || levels >= MOST_LEVELS_OF_FIELDS) {
@@ -249,28 +258,145 @@ public final class KeyOrderCandidates {
         return out;
     }
 
-    private static boolean variesAsAValue(Shape shape) {
-        return shape instanceof Shape.Sum
-                || (shape instanceof Shape.Scalar scalar && scalar.prim() != Type.Prim.RATIONAL);
+    /**
+     * Whether a field of this shape can be given another value. Asked of the shape and nothing
+     * else, and answered by {@link #valuesOfTheType}: what is offered as a field to change is what
+     * the values are made of, so that a field offered is a field with another value to give.
+     */
+    private static boolean variesAsAValue(Shape shape, Function<Type, TypeView> views) {
+        return switch (shape) {
+            case Shape.Scalar scalar -> scalar.prim() != Type.Prim.RATIONAL;
+            case Shape.Sum _ -> valuesOfTheType(shape, views).size() >= 2;
+            default -> false;
+        };
     }
 
-    /** The values a field of this shape is given: both of a {@code Bool}, the unit cases of a sum
-     *  the declarations name, and of the rest the ones a row holds. */
-    private List<ObservedValue> valuesFor(Shape shape, Pool pool) {
+    /**
+     * The values the declaration of a type offers, with no row: both of a {@code Bool}, and the
+     * cases of a sum that carry nothing. A number, a text or a date is offered none here, since
+     * which of them stands for it is a matter of the rules and of the row.
+     */
+    private static List<ObservedValue> valuesOfTheType(Shape shape,
+                                                       Function<Type, TypeView> views) {
         return switch (shape) {
-            case Shape.Scalar scalar -> switch (scalar.prim()) {
-                case BOOL -> List.of(new ObservedValue.Bool(false), new ObservedValue.Bool(true));
-                case INT -> pool.of(ObservedValue.Integer.class);
-                case DECIMAL -> pool.of(ObservedValue.Decimal.class);
-                case STRING -> pool.of(ObservedValue.Text.class);
-                case DATE, TIME, DATETIME, INSTANT -> pool.of(ObservedValue.Temporal.class);
-                case RATIONAL -> List.of();
-            };
+            case Shape.Scalar scalar when scalar.prim() == Type.Prim.BOOL ->
+                    List.of(new ObservedValue.Bool(false), new ObservedValue.Bool(true));
             case Shape.Sum sum -> sum.reaches().cases().stream()
                     .filter(each -> views.apply(Type.ref(each)).shape() instanceof Shape.Unit)
                     .<ObservedValue>map(ObservedValue.Unit::new)
                     .limit(MOST_VALUES_OF_A_KIND).toList();
             default -> List.of();
+        };
+    }
+
+    /**
+     * The values a field of this shape is given: what the declaration offers
+     * ({@link #valuesOfTheType}), and for a number, a text or a date the ones the statement
+     * compares the field with, the ones the row holds and the ones a row is composed with at the
+     * type, in that order: what the statement names is where its answer turns.
+     *
+     * @param named what the statement compares this field with ({@link #namedBy})
+     */
+    private List<ObservedValue> valuesFor(Shape shape, Pool pool, List<Place> named) {
+        if (!(shape instanceof Shape.Scalar scalar)) {
+            return valuesOfTheType(shape, views);
+        }
+        List<ObservedValue> held = switch (scalar.prim()) {
+            case BOOL -> valuesOfTheType(shape, views);
+            case INT -> pool.of(ObservedValue.Integer.class, scalar.prim());
+            case DECIMAL -> pool.of(ObservedValue.Decimal.class, scalar.prim());
+            case STRING -> pool.of(ObservedValue.Text.class, scalar.prim());
+            case DATE, TIME, DATETIME, INSTANT ->
+                    pool.of(ObservedValue.Temporal.class, scalar.prim());
+            case RATIONAL -> List.of();
+        };
+        return scalar.prim() == Type.Prim.BOOL ? held
+                : Stream.concat(namedAs(scalar.prim(), named).stream(), held.stream()).distinct()
+                        .limit(MOST_VALUES_OF_A_KIND).toList();
+    }
+
+    /**
+     * The values {@code stated} compares each field below an element of {@code container} with,
+     * by the fields: a text or a number a field is set against. A whole number is named together
+     * with the ones beside it, which are the two sides of where the comparison turns.
+     *
+     * <p>Only a comparison of a field with a written value is read; a comparison of a form of
+     * several quantities names none, and the row's own values and the composer's stand for it.
+     */
+    private static Map<List<String>, List<Place>> namedBy(Proposition stated,
+                                                          TermPath container) {
+        Map<List<String>, List<Place>> out = new TreeMap<>(
+                Comparator.comparing(Object::toString));
+        collectNamed(stated, container, out);
+        return out;
+    }
+
+    private static void collectNamed(Proposition stated, TermPath container,
+                                     Map<List<String>, List<Place>> out) {
+        if (stated instanceof Proposition.Compared(
+                Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.ValueOf field), Place at, var _),
+                var _, var _)) {
+            List<String> below = fieldsBelowAnElement(container, field.position());
+            if (below != null) {
+                List<Place> places = out.computeIfAbsent(below, _ -> new ArrayList<>());
+                if (!places.contains(at)) {
+                    places.add(at);
+                }
+            }
+        }
+        stated.partsHeld().forEach(part -> collectNamed(part, container, out));
+    }
+
+    /**
+     * The places a statement names at a field, as the values of a field declared as {@code prim}:
+     * the carrier of the type says which places are its and what value each is, and a whole number
+     * comes with the ones beside it. A place the carrier does not hold is not a value of the field.
+     */
+    private static List<ObservedValue> namedAs(Type.Prim prim, List<Place> places) {
+        Carrier carrier = Carrier.ofPrimitive(prim);
+        List<ObservedValue> out = new ArrayList<>();
+        for (Place each : places) {
+            if (carrier == null || carrier.onTheGrid(each) == null) {
+                continue;
+            }
+            ObservedValue value = carrier.valueOf(each);
+            out.add(value);
+            if (value instanceof ObservedValue.Integer(long whole)) {
+                if (whole > Long.MIN_VALUE) {
+                    out.add(new ObservedValue.Integer(whole - 1));
+                }
+                if (whole < Long.MAX_VALUE) {
+                    out.add(new ObservedValue.Integer(whole + 1));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** What a composer would write at a scalar type, as the values an observation holds: the
+     *  literals of the values it offers, and none that is not a literal. */
+    private static List<ObservedValue> composedAt(MeasuredInput subject, Type.Prim prim) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (FixtureTemplate each : subject.representativesHolding(prim,
+                FieldDomains.ConstructionLimits.NONE).values()) {
+            ObservedValue value = literalOf(each.value());
+            if (value != null && !out.contains(value)) {
+                out.add(value);
+            }
+        }
+        return out;
+    }
+
+    private static ObservedValue literalOf(Hir.Expr written) {
+        return switch (written) {
+            case Hir.IntLit lit -> new ObservedValue.Integer(lit.value());
+            case Hir.StringLit lit -> new ObservedValue.Text(lit.value());
+            case Hir.DecimalLit lit -> new ObservedValue.Decimal(lit.value());
+            case Hir.Neg(Hir.IntLit lit, var _, var _) ->
+                    new ObservedValue.Integer(-lit.value());
+            case Hir.Neg(Hir.DecimalLit lit, var _, var _) ->
+                    new ObservedValue.Decimal(lit.value().negate());
+            default -> null;
         };
     }
 
@@ -282,7 +408,8 @@ public final class KeyOrderCandidates {
             return Stream.empty();
         }
         return plan.targets().stream().flatMap(target -> {
-            List<ObservedValue> values = valuesFor(views.apply(target.type()).shape(), pool);
+            List<ObservedValue> values = valuesFor(views.apply(target.type()).shape(), pool,
+                    plan.named().getOrDefault(target.fields(), List.of()));
             return values.stream().flatMap(earlier -> values.stream()
                     .filter(later -> !later.equals(earlier))
                     .flatMap(later -> Stream.concat(
@@ -349,12 +476,13 @@ public final class KeyOrderCandidates {
     /**
      * A value of the field at {@code names} that is not {@code value}, taken from the ones its
      * declared type is given ({@link #valuesFor}), or null where there is none: nothing is made up
-     * for a type the row holds only one value of.
+     * for a type that neither the row, the statement nor the composer offers a second value of.
      */
     private ObservedValue anotherThan(ObservedValue value, List<String> names, Pool pool) {
         Type type = inputs.typeRead(plan.element(), fieldSteps(names), views);
         return type == null ? null
-                : valuesFor(views.apply(type).shape(), pool).stream()
+                : valuesFor(views.apply(type).shape(), pool,
+                        plan.named().getOrDefault(names, List.of())).stream()
                         .filter(each -> !each.equals(value)).findFirst().orElse(null);
     }
 
@@ -366,20 +494,31 @@ public final class KeyOrderCandidates {
                 (_, _, _) -> Stream.of(replacement), views).findFirst().orElse(null);
     }
 
-    /** The values a row holds, by kind, in the order of a walk that does not depend on hashing. */
+    /**
+     * The values a row holds, by kind, in the order of a walk that does not depend on hashing,
+     * and the ones a composer writes at the type: a field the row holds one value of is still
+     * given another.
+     */
     private static final class Pool {
 
         private final Map<Class<?>, Set<ObservedValue>> byKind = new HashMap<>();
 
-        static Pool of(List<ObservedValue> seen) {
-            Pool pool = new Pool();
+        private final Function<Type.Prim, List<ObservedValue>> composed;
+
+        private Pool(Function<Type.Prim, List<ObservedValue>> composed) {
+            this.composed = composed;
+        }
+
+        static Pool of(List<ObservedValue> seen, Function<Type.Prim, List<ObservedValue>> composed) {
+            Pool pool = new Pool(composed);
             seen.forEach(pool::gather);
             return pool;
         }
 
-        List<ObservedValue> of(Class<?> kind) {
-            return byKind.getOrDefault(kind, Set.of()).stream().limit(MOST_VALUES_OF_A_KIND)
-                    .toList();
+        List<ObservedValue> of(Class<?> kind, Type.Prim prim) {
+            return Stream.concat(byKind.getOrDefault(kind, Set.of()).stream(),
+                            composed.apply(prim).stream())
+                    .distinct().limit(MOST_VALUES_OF_A_KIND).toList();
         }
 
         /** A whole number brings its neighbours, which are the values a comparison against it is
