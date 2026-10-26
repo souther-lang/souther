@@ -945,6 +945,10 @@ final class Coverages {
          * the candidate was composed.
          */
         RowAsRead read(souther.compiler.partition.RowToRun row);
+
+        /** What the parameters of the rows built and run here are, and how a value of each is
+         *  written. */
+        souther.compiler.partition.MeasuredInput subject();
     }
 
     /**

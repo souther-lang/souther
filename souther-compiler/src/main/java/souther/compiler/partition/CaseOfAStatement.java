@@ -149,11 +149,12 @@ public sealed interface CaseOfAStatement {
                     + statement.key();
         }
 
-        /** Which element of a key held twice is the entry is no statement about one node, and no
-         *  search composes a list that holds a key twice toward it. */
+        /** Which element of a key held twice is the entry is no statement about one node. A row is
+         *  looked for by rewriting a row that stands at the rule, where the container and the key
+         *  are positions a rewrite reaches ({@link KeyOrderCandidates}). */
         @Override
         public boolean canBeLookedFor() {
-            return false;
+            return KeyOrderCandidates.canBuildFor(this);
         }
     }
 }

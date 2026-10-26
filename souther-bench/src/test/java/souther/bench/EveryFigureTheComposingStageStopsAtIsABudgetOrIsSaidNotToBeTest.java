@@ -106,6 +106,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.CaseCandidates.MOST_LEVELS_BELOW_THE_START",
                     "how many levels below the start of a search a node meeting it is looked for"
                             + " at, which bounds the candidates and claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_VALUES_OF_A_KIND",
+                    "how many distinct values of one kind the two copies of an element are given"
+                            + " between them; a case with no row is not found, which claims"
+                            + " nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CANDIDATES",
+                    "how many rewrites of one row are run for the order of a repeated key; a case"
+                            + " with no row is not found, which claims nothing of the model"),
 
             // What counts are composed against the total of their container, and past which they
             // are composed as any are. No search runs to them and stops there: they say which
