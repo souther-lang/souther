@@ -41,8 +41,13 @@ class AStatementOverTheWaysIsWrittenOutWhereItIsAskedTest {
 
     /** {@code total >= 1}. */
     private static Proposition totalAtLeastOne() {
+        return totalAtLeast(1);
+    }
+
+    /** {@code total >= threshold}. */
+    private static Proposition totalAtLeast(long threshold) {
         LinearForm<Quantity> form = LinearForm.<Quantity>atom(SUM)
-                .plus(LinearForm.<Quantity>constant(ExactRatio.of(-1))).orNull();
+                .plus(LinearForm.<Quantity>constant(ExactRatio.of(-threshold))).orNull();
         Relation.OneWay<Quantity> oneWay = Relation.OneWay.of(form, Rel.GE);
         return Proposition.compared(
                 new Relation.Affine(oneWay.form(), oneWay.proposition()), oneWay.holds());
@@ -153,6 +158,23 @@ class AStatementOverTheWaysIsWrittenOutWhereItIsAskedTest {
         assertEquals((1 << 14) - 1, ((Proposition.Unread) beside).ordinal(),
                 "a part concluded beside the statement is numbered after all it is owed");
         assertEquals((1 << 14) - 1, ways.ways().numbersOwed());
+    }
+
+    @Test
+    void casesPastTheFigureAreOnePartNothingReadAndNotOneWhereverAStepWasPast() {
+        for (int elements = 8; elements <= 13; elements++) {
+            for (int threshold = 1; threshold <= elements; threshold += 2) {
+                List<LinearForm<Quantity>> forms = ones(elements);
+                Proposition.WaysToWrite ways = waysOf(forms, totalAtLeast(threshold));
+                Proposition written = new Proposition.OfTheWays(ways, true).written();
+                Set<Integer> numbers = new TreeSet<>();
+                numbersIn(written, numbers);
+                int shape = elements * 100 + threshold;
+                assertTrue(numbers.isEmpty() || written instanceof Proposition.Unread,
+                        () -> "a part nothing read stands inside the cases of " + shape + ": "
+                                + numbers.size());
+            }
+        }
     }
 
     @Test

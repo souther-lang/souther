@@ -748,10 +748,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.meaning.Conclusion#<clinit>()V",
                     "how many parts a step of a reading is concluded with, and how many ways of"
                             + " keeping elements a statement over them is written out from"),
-            Map.entry("souther.compiler.meaning.Conclusion#withinTheParts("
-                            + "Lsouther/compiler/meaning/Proposition;)"
-                            + "Lsouther/compiler/meaning/Proposition;",
-                    "past the figure concludes the step as a part nothing read, naming it"),
+            Map.entry("souther.compiler.meaning.Conclusion#pastTheParts("
+                            + "Lsouther/compiler/meaning/Proposition;)Z",
+                    "past the figure the step is concluded as a part nothing read, naming it, and"
+                            + " the cases of ways of keeping are given up whole as one"),
             // The ways a comparison over the elements a filter keeps is made in: counted where the
             // statement over them is concluded, and past the figure they are not written out.
             Map.entry("souther.compiler.meaning.Conclusion#overTheWays("

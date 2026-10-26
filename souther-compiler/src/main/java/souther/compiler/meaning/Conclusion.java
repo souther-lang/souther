@@ -173,9 +173,14 @@ public final class Conclusion {
      * already and what is kept of it — here and by whoever asks again — is the step given up.
      */
     private Proposition withinTheParts(Proposition out) {
-        return partsIn(out) > PARTS.maximum()
+        return pastTheParts(out)
                 ? unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))
                 : out;
+    }
+
+    /** Whether {@code stated} comes to more parts than a step is concluded with. */
+    private boolean pastTheParts(Proposition stated) {
+        return partsIn(stated) > PARTS.maximum();
     }
 
     /**
@@ -249,23 +254,43 @@ public final class Conclusion {
         return written;
     }
 
+    /**
+     * The cases, or the one part nothing read they are given up as where any step of them comes to
+     * more parts than a step is concluded with.
+     *
+     * <p>The cases are one step, and a step past the figure is given up whole. Given up where it
+     * is past and joined on, the step above it is small again and the cases are held with a part
+     * nothing read where each such step stood, as many of them as there are such steps, and a
+     * reader that is told of every one of them is told as many times.
+     */
     private static Proposition writtenOutBy(Conclusion at, Proposition.WaysToWrite ways,
                                             KeptWays kept) {
-        return kept.made(new KeptWays.Making<Proposition>() {
+        boolean[] past = new boolean[1];
+        Proposition written = kept.made(new KeptWays.Making<Proposition>() {
             @Override
             public Proposition split(int truth, Proposition where, Proposition otherwise) {
-                return at.withinTheParts(Derivation.IfThenElse.joined(
-                        ways.conditions().get(truth), where, otherwise));
+                Proposition joined = Derivation.IfThenElse.joined(
+                        ways.conditions().get(truth), where, otherwise);
+                past[0] = at.pastTheParts(joined);
+                return joined;
             }
 
             @Override
             public Proposition leaf(Boolean[] decided) {
-                return at.withinTheParts(Derivation.WithTheTotalsOfAWay.stated(at, ways.reading(),
+                return Derivation.WithTheTotalsOfAWay.stated(at, ways.reading(),
                         ways.sum(), kept.thereOf(ways.forms(), decided), ways.count(),
                         kept.countThere(ways.forms().size(), ways.counted(), decided),
-                        ways.fixed()));
+                        ways.fixed());
+            }
+
+            @Override
+            public boolean finished() {
+                return past[0];
             }
         }, kept.undecided());
+        return past[0]
+                ? at.unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))
+                : written;
     }
 
     /** A part nothing read, for a number of a way that cannot be held. */
