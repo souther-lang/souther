@@ -338,18 +338,24 @@ public sealed interface Reachability {
         }
 
         /**
-         * What a search that takes one way after another looks along: the ways this is split into
-         * where it is split into every way a row takes, and otherwise those it was split into
-         * (none where it was not) and then this whole — a row past an unsplit way is on the way
-         * whole, and a search that looked along nothing would find no row for it.
+         * The ways a row is composed along to witness this one, in the order they are tried: each
+         * way this is split into, looked at the same way, and this whole where the split is not
+         * every way a row may take, which includes where it is none.
+         *
+         * <p>Not {@link #along()}, which a walk that follows the split reads and which is empty
+         * for a way that is not split. A search that asks this of each way it tries would ask the
+         * way itself again; it asks it of the way it was given.
          */
-        public List<Reaching> toLookAlong() {
-            if (ways instanceof Ways.Each each) {
-                return each.along();
-            }
-            List<Reaching> out = new ArrayList<>(ways.along());
-            out.add(this);
-            return out;
+        public List<Reaching> waysToTryForARow() {
+            return switch (ways) {
+                case Ways.One _ -> List.of(this);
+                case Ways.Each each -> each.along().stream()
+                        .flatMap(way -> way.waysToTryForARow().stream())
+                        .toList();
+                case Ways.Whole whole -> Stream.concat(
+                        whole.along().stream().flatMap(way -> way.waysToTryForARow().stream()),
+                        Stream.of(this)).toList();
+            };
         }
 
         /**

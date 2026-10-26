@@ -155,6 +155,40 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         assertTrue(rows.contains("ok = true") && rows.contains("ok = false"), rows);
     }
 
+    /**
+     * The way that holds is composed over a {@code Bool} as it is over a text: the rows written
+     * for it hold the key twice, with the last of them {@code true}.
+     */
+    @Test
+    void theValueOfABoolTheLastOneHoldsIsWrittenForTheWayThatHolds() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, ok: Bool }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.ok
+                        | None -> false, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", ok = true }]) -> 1
+                    | "absent" : ([LI { sku = "B", q = 5 }], [Row { sku = "A", ok = true }])
+                        -> Empty { n = 0 }
+                """);
+
+        RowToRun row = found.entrySet().stream().filter(each -> each.getKey()
+                        instanceof CaseOfAStatement.KeyOrder order
+                        && order.way() == CaseOfAStatement.Way.HOLDS_BY_THE_LAST)
+                .findFirst().orElseThrow(() -> new AssertionError(found.toString())).getValue();
+        String rows = row.inputs().get(1).text();
+        List<String> keys = keysIn(rows, "sku");
+        assertEquals(2, keys.size(), rows);
+        assertEquals(keys.get(0), keys.get(1), rows);
+        assertTrue(rows.indexOf("ok = false") >= 0 && rows.indexOf("ok = false")
+                < rows.indexOf("ok = true"), rows);
+    }
+
     /** A key below a record is held twice by the records, and what is given another value is the
      *  field below it that the statement reads. */
     @Test

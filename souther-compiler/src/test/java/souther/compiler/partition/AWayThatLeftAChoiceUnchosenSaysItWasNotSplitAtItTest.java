@@ -62,6 +62,40 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
         }
     }
 
+    @Test
+    void aRowIsTriedAlongEachWayPastTheFigureAndThenAlongTheWayWhole() {
+        List<OnTheWay> onTheWay = new ArrayList<>();
+        for (int each = 1; each <= ASKED_OF_Q; each++) {
+            onTheWay.add(oneOf(each, List.of(truth("q" + each, true)), List.of(truth("p", true))));
+        }
+        onTheWay.add(oneOf(ASKED_OF_Q + 1, List.of(truth("p", false)),
+                List.of(truth("p", false), truth("q1", true))));
+        onTheWay.add(oneOf(ASKED_OF_Q + 2, List.of(truth("b", true)), List.of(truth("b", false))));
+
+        Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
+                Reachability.of(new WayToTheBorder(onTheWay), reading().quantities().region()));
+
+        List<Reachability.Reaching> tried = reaching.waysToTryForARow();
+        List<Reachability.Reaching> expected = new ArrayList<>();
+        for (Reachability.Reaching along : reaching.along()) {
+            expected.addAll(along.waysToTryForARow());
+        }
+        expected.add(reaching);
+        assertEquals(expected, tried);
+        assertFalse(reaching.along().contains(tried.getLast()),
+                "the way whole is tried past the ways it is split into");
+    }
+
+    @Test
+    void aWayThatIsNotSplitIsTriedWhole() {
+        Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
+                Reachability.of(new WayToTheBorder(List.of()), reading().quantities().region()));
+
+        assertInstanceOf(Reachability.Ways.One.class, reaching.ways());
+        assertEquals(List.of(), reaching.along());
+        assertEquals(List.of(reaching), reaching.waysToTryForARow());
+    }
+
     private static OnTheWay.OneOf oneOf(int occurrence, List<OnTheWay> one,
                                         List<OnTheWay> other) {
         return new OnTheWay.OneOf(
