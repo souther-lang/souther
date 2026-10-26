@@ -147,6 +147,18 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 if String.length(s) >= 268435455 then 1 else 0
             """;
 
+    /** Two lines on one length, one a string can have and one it cannot. */
+    private static final String TWO_LINES = """
+            module example.twolines
+
+            behavior f : (s: String) -> Int
+
+            let f (s) =
+                if String.length(s) >= 268435456 then 2
+                else if String.length(s) >= 3 then 1
+                else 0
+            """;
+
     /** No value of the element exists, and the empty list is a value of the input all the same. */
     private static final String NO_ELEMENT_EXISTS = """
             module example.noelement
@@ -200,6 +212,20 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
         List<BorderAssessment.Point> points = owedPoints(TOO_LONG, "example.toolong");
         assertFalse(points.isEmpty(), "the body draws a line on the length");
         assertFalse(provedAny(points), "no String has that many code points: " + labels(points));
+    }
+
+    /**
+     * What is proved is a whole measure and not a point: the proof is asked of the length as the
+     * lines on it stand, so one line past the longest string takes the proof from the line a
+     * string can reach as well. Lost precision and no false proof; a proof per point would keep
+     * the line at three.
+     */
+    @Test
+    void aLineBeyondTheLongestTakesTheProofFromTheLinesBesideItOnTheSameLength() {
+        List<BorderAssessment.Point> points = owedPoints(TWO_LINES, "example.twolines");
+        assertTrue(onNumberNamed(points, "268435456").findAny().isPresent(),
+                "the body draws a line past the longest: " + labels(points));
+        assertFalse(provedAny(points), labels(points).toString());
     }
 
     @Test

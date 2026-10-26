@@ -120,7 +120,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
             // altogether: a row is a value of every parameter, so what is shown is shown of the
             // strings of all of them, and a position that is not shown holds back every edge.
             if (isMandatory(each.path())) {
-                holds &= TextExtents.shownToHoldAValue(admitted) && !each.nothingExists()
+                holds &=TextExtents.shownToHoldAValue(admitted) && !each.nothingExists()
                         && (!isString || isReadWhole(each));
             }
             // What the strings reach is read off a set that is a bound, so it is claimed only of a

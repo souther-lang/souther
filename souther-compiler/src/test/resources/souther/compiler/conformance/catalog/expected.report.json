@@ -10866,7 +10866,7 @@
         "axis" : "value",
         "against" : "0 < value",
         "knownWritable" : true,
-        "writableBecause" : [ "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -11336,7 +11336,7 @@
             "relation" : "in",
             "against" : "0 < rates.rates[*]",
             "knownWritable" : true,
-            "writableBecause" : [ "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
