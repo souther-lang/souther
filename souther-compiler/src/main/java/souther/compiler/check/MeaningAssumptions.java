@@ -26,6 +26,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
@@ -522,18 +523,32 @@ final class MeaningAssumptions {
                 yield type == null ? null : terms.atomAt(placeOf(at), type);
             }
             case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
-                    && isASize(taken) -> {
+                    && ofTheValueAsItStands(taken) && isASize(taken) -> {
                 FactSubject size = terms.sizeAtPlace(taken.operation(), placeOf(taken.position()));
                 if (size != null) {
                     carrying(size, taken.operation());
                 }
                 yield size;
             }
+            // An hour, a month, a year: a part of a time or a date, which its operation bounds to
+            // the hours of a day, the months of a year and the years a date is written in whether
+            // or not the condition holds.
+            case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
+                    && ofTheValueAsItStands(taken)
+                    && (taken.takenAs() instanceof TakenAs.PartOfTime
+                    || taken.takenAs() instanceof TakenAs.PartOfDate) -> {
+                FactSubject part = terms.partAtPlace(taken.operation(), placeOf(taken.position()));
+                if (part != null) {
+                    carrying(part, taken.operation());
+                }
+                yield part;
+            }
             // What a division leaves of the value at a place, named as the call that takes it is, so
             // a guard on the remainder here and one on the value a body bound the call to are about
             // one number. It carries both ends its operation bounds it to by this divisor.
             case NumericTerm.TakenOf taken
-                    when taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                    when ofTheValueAsItStands(taken)
+                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
                     && remainder.read(taken.arguments()) instanceof BigDecimal divisor
                     && isAWholeNumberOfALong(divisor) -> {
                 FactSubject left = terms.remainderAtPlace(taken.operation(),
@@ -590,9 +605,14 @@ final class MeaningAssumptions {
     /** {@code atom} held between the ends {@code operation} bounds what it answers to, for the
      *  arguments it was given beside the value. */
     private void carryingBothEnds(FactSubject atom, ValueName operation, TakenArguments given) {
-        NumericDomain.Bounds range = ResultRange.of(
-                DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
-                argument -> Optional.ofNullable(given.at(argument.position())));
+        carrying(atom, ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation),
+                argument -> Optional.ofNullable(given.at(argument.position()))));
+    }
+
+    /** {@code atom} held between the ends of {@code range}, where the representation stops
+     *  included: whether the arm a condition opens can be reached asks what a value can be. */
+    private void carrying(FactSubject atom, NumericDomain.Bounds range) {
         if (range.min() != null) {
             ExactRatio at = Count.number(range.min().at()).exactly();
             known = known.taking(LinearForm.atomMinusConstant(atom, at),
@@ -944,6 +964,24 @@ final class MeaningAssumptions {
         return true;
     }
 
+    /**
+     * Whether {@code taken} is a number of the value standing at its place as it stands, and not
+     * of one derived from it.
+     *
+     * <p>A place names one number only when the value is the place's own. The year of {@code d}
+     * and the year of {@code Date.addDays(1, d)} are two numbers that differ on the last day of a
+     * year, so the atom keyed by the operation and the place would hold both to one answer and
+     * make a guard that is reachable contradict itself. A number of a derived value is named by
+     * no atom here, which says nothing of it, and a kind of derivation added is one more arm that
+     * this says how to name.
+     */
+    private static boolean ofTheValueAsItStands(NumericTerm.TakenOf taken) {
+        return switch (taken.transformation()) {
+            case ValueTransformation.Identity _ -> true;
+            case ValueTransformation.DateShift _ -> false;
+        };
+    }
+
     /** Whether {@code taken} is the count of what its position holds. */
     private boolean isASize(NumericTerm.TakenOf taken) {
         Type at = places.typeAt().apply(taken.position());
@@ -953,15 +991,9 @@ final class MeaningAssumptions {
 
     /** {@code atom} holding where {@code operation} bounds what it answers. */
     private void carrying(FactSubject atom, ValueName operation) {
-        Endpoint least = ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
-                ConstantArguments.none()).min();
-        if (least == null) {
-            return;
-        }
-        ExactRatio at = Count.number(least.at()).exactly();
-        known = known.taking(LinearForm.atomMinusConstant(atom, at),
-                least.inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
-                terms.spacesOf(LinearForm.atom(atom)));
+        carrying(atom, ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation),
+                ConstantArguments.none()));
     }
 
     /**

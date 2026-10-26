@@ -911,7 +911,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                      HeldValues heldTo, ExactAnswer<List<Parting>> parted,
                      NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        Admissible admissible = new Admissible(reach, heldTo);
+        HeldByTheLanguage language = target.of().heldByTheLanguage();
+        Admissible admissible = new Admissible(reach, heldTo, language);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -1615,12 +1616,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * @param bounds the range the value runs in
      * @param held   what the declarations hold the value to besides where it runs
+     * @param language what the language holds of it, which no rule wrote and no class is drawn to
      */
-    private record Admissible(NumericDomain.Bounds bounds, HeldValues held) {
+    private record Admissible(NumericDomain.Bounds bounds, HeldValues held,
+                              HeldByTheLanguage language) {
 
-        /** Whether a row may be written at {@code level} as far as these two say. */
+        /** Whether a row may be written at {@code level} as far as these say. */
         boolean admits(Level level) {
-            if (held.refuses(level)) {
+            if (held.refuses(level) || !language.admits(level)) {
                 return false;
             }
             ExactRatio number = level.asANumber();
@@ -1630,7 +1633,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         /** Whether the rules leave nothing in {@code part}: of the range, what the declarations hold
          *  the value to ({@link HeldValues}). */
         boolean admitsNothingIn(LevelInterval part) {
-            return held.leaveNothingIn(part, bounds);
+            return language.admitsNothingIn(part) || held.leaveNothingIn(part, bounds);
         }
     }
 

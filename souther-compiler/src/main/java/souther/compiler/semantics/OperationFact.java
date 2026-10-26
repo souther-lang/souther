@@ -771,17 +771,4 @@ public sealed interface OperationFact {
      * building.
      */
     record EveryAnswerItCanGiveHasASourceValue() implements OperationFact {}
-
-    /**
-     * The least and the greatest number the operation answers are where what it is read out of
-     * stops, not where a part of it does.
-     *
-     * <p>The year of a date ends where a date can be written, so a comparison that a year at one
-     * of its ends settles is a comparison the representation settles and not one the model draws.
-     * A month ends at twelve whatever the date is, and a length at nought: those ends are lines
-     * of the operation, and a value at one settles a comparison for a reason of its own. So only
-     * an operation whose ends are the first kind declares this, and a reading that passes over
-     * the ends of the values it compares asks for it.
-     */
-    record EndsAreWhereTheRepresentationStops() implements OperationFact {}
 }

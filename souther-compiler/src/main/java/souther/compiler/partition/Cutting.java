@@ -2305,15 +2305,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // position takes no value none of them comes to. A side of a line is not asked it: the
         // side runs to an end of the range, and the range ends at a value the declarations leave.
         HeldValues held = of.heldIn(region);
+        // And what the language holds of it, which is no rule and so is in no region: asked of a
+        // level and a side as the run the region leaves is, and drawn into no class.
+        HeldByTheLanguage language = of.heldByTheLanguage();
         return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
-                return extent.extendTo(level);
+                return language.admits(level) && extent.extendTo(level);
             }
 
             @Override
             public boolean holdAt(Level level) {
-                if (held.refuses(level)) {
+                if (held.refuses(level) || !language.admits(level)) {
                     return false;
                 }
                 // Whether a row stands at the value is asked of a value the quantity takes. One
@@ -2344,8 +2347,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 // anything is left. A relation it cannot carry is no proof that nothing is there.
                 Rel past = side == Towards.ABOVE ? (including ? Rel.GE : Rel.GT)
                         : (including ? Rel.LE : Rel.LT);
-                return against(region, level, past)
-                        .map(there -> there.emptiness().isEmpty()).orElse(true);
+                return language.holdsOnSide(level, side, including)
+                        && against(region, level, past)
+                                .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
         };
     }

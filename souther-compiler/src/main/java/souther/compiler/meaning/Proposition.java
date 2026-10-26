@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -951,6 +953,75 @@ public sealed interface Proposition {
         }
 
         /**
+         * What the search asks of a node, said of a node some levels below the one it starts at,
+         * and the places a row writes at for it.
+         *
+         * @param meets  some node that deep meeting the statement moved to it: some element of the
+         *               field, of some element of which there is some element, and so on down
+         * @param places  the containers and elements on the way down and each place of the node
+         *                reached that the statement reads
+         * @param reached the node it is said of, which a place of the start node is moved to
+         */
+        public record NodeBelowMeeting(Proposition meets, List<TermPath> places,
+                                       TermPath reached) {}
+
+        /**
+         * The statement the search asks of a node, moved to a node {@code levels} below the one it
+         * starts at, by way of some node at each level between — or none where the search goes
+         * down several fields, asks something other than a comparison of numbers at the node's own
+         * places, or asks of a number that is no such number at the node moved to.
+         *
+         * <p>One depth of the nodes below and not what finding one below means: that is a node at
+         * some depth, and a row composed for a depth is a candidate for the case which a run then
+         * settles. The depth is the caller's to walk, and to stop walking at.
+         */
+        public Optional<NodeBelowMeeting> someNodeBelowMeetingIt(int levels) {
+            if (levels < 1 || through.size() != 1
+                    || !(atANode instanceof Compared(Relation.Affine affine, boolean asked, var _))) {
+                return Optional.empty();
+            }
+            List<TermPath> containers = new ArrayList<>();
+            TermPath node = at;
+            for (int level = 0; level < levels; level++) {
+                TermPath container = node.then(through.getFirst());
+                containers.add(container);
+                node = container.element();
+            }
+            TermPath reached = node;
+            List<TermPath> places = new ArrayList<>(containers);
+            places.add(reached);
+            boolean[] strays = {false};
+            PlacesMoved moved = PlacesMoved.by(place -> {
+                TermPath to = place.movedFrom(at, reached);
+                strays[0] |= to == null;
+                return to == null ? place : to;
+            });
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                    return Optional.empty();
+                }
+                // A number may be none where the places are put, which is the term's to say.
+                NumericTerm there = term.movedTo(moved);
+                if (there == null) {
+                    return Optional.empty();
+                }
+                coefs.put(new DecisionAtom.OfTheInput(there), each.getValue());
+                places.addAll(there.placesReadOff());
+            }
+            if (strays[0]) {
+                return Optional.empty();
+            }
+            Proposition meets = new Compared(new Relation.Affine(
+                    new LinearForm<>(affine.form().constant(), coefs), affine.proposition()),
+                    asked);
+            for (TermPath container : containers.reversed()) {
+                meets = new Some(new DecisionSubject.AnInput(container), meets, true);
+            }
+            return Optional.of(new NodeBelowMeeting(meets, List.copyOf(places), reached));
+        }
+
+        /**
          * What holds of a row only where this comes out as {@code outcome} whatever lies below the
          * node — the node meeting the statement for a search that some node does, the node meeting
          * it not and having nothing below for one that none does — and never holds where that is not
@@ -1431,6 +1502,50 @@ public sealed interface Proposition {
             return List.of(last);
         }
         return partsHeld().stream().flatMap(part -> part.lastsToHold().stream()).toList();
+    }
+
+    /**
+     * What it is for the entry {@code last} picks to be there: some element of the container, being
+     * the last of its key and the one the key is looked up by. The quantifier nearest {@code last}
+     * in {@code stated}, with what it says of an element cut down to those two parts.
+     *
+     * <p>A consequence of {@code stated} where it holds, and no rule's conclusion: it is what a
+     * row has to be for the statement to look anything up at all, since a statement over an empty
+     * container or an empty list of the things it looks up says nothing of any order. Nothing where
+     * no quantifier is around {@code last}, or what is left of it would quantify its container twice.
+     */
+    static Optional<Proposition> theEntryLookedUp(Proposition stated, LastToHold last) {
+        Some around = innermostQuantifierAround(stated, last, null);
+        if (around == null) {
+            return Optional.empty();
+        }
+        List<Proposition> parts = around.ofTheElement() instanceof All all
+                ? all.parts() : List.of(around.ofTheElement());
+        List<Proposition> kept = new ArrayList<>();
+        for (Proposition part : parts) {
+            if (part.equals(last) || (part instanceof SameValue same && same.holds())) {
+                kept.add(part);
+            }
+        }
+        if (kept.isEmpty() || Some.quantifiesOver(around.container(), all(kept))) {
+            return Optional.empty();
+        }
+        return Optional.of(new Some(around.container(), all(kept), true));
+    }
+
+    private static Some innermostQuantifierAround(Proposition stated, LastToHold last,
+                                                  Some nearest) {
+        if (stated.equals(last)) {
+            return nearest;
+        }
+        Some here = stated instanceof Some some ? some : nearest;
+        for (Proposition part : stated.partsHeld()) {
+            Some found = innermostQuantifierAround(part, last, here);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     /**
