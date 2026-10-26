@@ -224,6 +224,34 @@ public final class WhatARelationLeavesUndivided {
             }
 
             /**
+             * The lines the model draws on {@code number} that a row can be written to stand at:
+             * none where no single place answers the number ({@link NumericTerm#atOnePosition}).
+             *
+             * @param number the term these runs are of, or null where the side is no number
+             */
+            public List<Line> linesOnAPlaceOf(NumericTerm number) {
+                return number != null && number.atOnePosition() == null
+                        ? List.of() : linesOfTheModel();
+            }
+
+            /**
+             * Whether the term has lines and none of them parts the values of a place: the
+             * orders' ends alone draw them, or they are lines on a number that parts no place
+             * by a line ({@link NumericTerm#partsNoPlaceByALine}). The places the number is read
+             * from are then left undivided by it, though the values that settle the relation are
+             * kept as they are. A line on a number no single place answers that does part the
+             * values of places is none of this: it is a class of the model's that cannot be
+             * drawn ({@link #linesOnAPlaceOf}), and the places are not shown undivided.
+             *
+             * @param number the term these runs are of, or null where the side is no number
+             */
+            public boolean leavesItsPlacesUndivided(NumericTerm number) {
+                return !lines().isEmpty()
+                        && (linesOfTheModel().isEmpty()
+                                || (number != null && number.partsNoPlaceByALine()));
+            }
+
+            /**
              * The lines on the term that part its values where the relation is settled from where
              * it is not, or settled one way from settled the other: one where a run ends inside
              * what the term holds, and one value singled out where a run of one value has values

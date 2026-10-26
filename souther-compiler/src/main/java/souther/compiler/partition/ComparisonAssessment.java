@@ -240,11 +240,7 @@ sealed interface ComparisonAssessment {
         for (NumericTerm term : NumericTerms.inOrder(terms)) {
             // A line is drawn on a number a row can be written to stand at, and only where the
             // model draws it: one the orders' ends alone draw parts no class of the model's.
-            if (term.atOnePosition() == null) {
-                continue;
-            }
-            List<WhatARelationLeavesUndivided.Line> lines =
-                    settled.get(term).linesOfTheModel();
+            List<WhatARelationLeavesUndivided.Line> lines = settled.get(term).linesOnAPlaceOf(term);
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
