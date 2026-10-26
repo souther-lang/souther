@@ -235,9 +235,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param undivided  the places shown undivided
      * @param settled    each term shown to be settled by some of its values, and those values —
      *                   kept whether or not the term is the number at one position, and whether
-     *                   or not the lines parting them are the model's. A term whose every line
-     *                   the orders' ends alone draw is also among the places shown undivided, as
-     *                   the model draws no line on it
+     *                   or not the lines parting them are the model's. The places of a term none
+     *                   of whose lines parts a place — the orders' ends alone draw them, or they
+     *                   are lines on a total of a run — are also among the places shown
+     *                   undivided, as the model draws no line on them
      * @param rowsArrive whether any row comes along the way this is of; where none does it says
      *                   nothing of any row, and a way put beside it is what the two come to
      * @param stoppedAt  the figures a search for what would have shown more stopped at: a place
@@ -2417,8 +2418,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * What {@code leaves} says of the side at {@code at}, put where it goes. Values settling it
-     * are kept against the side's number, whatever number it is; where only the orders' ends
-     * draw the lines between them, the model draws none on the side and it is undivided too.
+     * are kept against the side's number, whatever number it is; where the lines between them part
+     * no place — the orders' ends alone draw them, or they are lines on a total of a run — the
+     * model draws none on the places the side is made of and they are undivided too.
      */
     private void putDown(int at, WhatARelationLeavesUndivided.Leaves leaves,
                         Set<FilingCoordinate> undivided,
@@ -2431,7 +2433,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (sides.get(at).number() != null) {
                     settled.put(sides.get(at).number(), runs);
                 }
-                if (!runs.ofTheTypeAlone().isEmpty() && runs.linesOfTheModel().isEmpty()) {
+                if (runs.leavesItsPlacesUndivided(sides.get(at).number())) {
                     undivided.addAll(sides.get(at).madeOf());
                 }
             }
