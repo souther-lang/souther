@@ -363,6 +363,43 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
+     * The room is counted by case: a first case with more values than a listing holds does not
+     * use it up, and the other case is still written.
+     */
+    @Test
+    void aCaseWithManyValuesDoesNotCrowdOutTheNext() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Card = { a: Bool, b: Bool, c: Bool, d: Bool }
+                data Cash = { n: Int }
+                data Pay = Card | Cash
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | Card as c -> true
+                            | Cash as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Card { a = true, b = true, c = true, d = true } }])
+                        -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
+                """);
+
+        assertTrue(!found.isEmpty(), "a row is written for some way");
+        found.values().forEach(row -> {
+            String rows = row.inputs().get(1).text();
+            assertTrue(rows.contains("Card {") && rows.contains("Cash {"),
+                    () -> "the two copies hold the two cases: " + rows);
+        });
+    }
+
+    /**
      * A list reached through the values of a map is rebuilt around the map's own keys, so the
      * order of a key in it is composed for, with the entry's key and the other entries kept.
      */
@@ -371,20 +408,20 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data Row = { sku: String, qty: Int }
                 data Snap = { byDay: Map<String, List<Row>> }
-                behavior f : (items: List<LI>, snap: Snap) -> Int | Empty
-                let f (items, snap) = {
-                    guard List.all(i -> match Map.get(i.sku, snap.byDay) with
-                        | Some rows -> match Map.get(i.sku, List.indexBy(.sku, rows)) with
-                            | Some r -> r.qty >= i.q
+                behavior f : (item: LI, snap: Snap) -> Int | Empty
+                let f (item, snap) = {
+                    guard match Map.get(item.sku, snap.byDay) with
+                        | Some rows -> match Map.get(item.sku, List.indexBy(.sku, rows)) with
+                            | Some r -> r.qty >= item.q
                             | None -> false
-                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                        | None -> false else Empty { n = 0 }
                     1
                 }
                 example f
-                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                    | "stocked" : (LI { sku = "A", q = 5 },
                         Snap { byDay = [("A", [Row { sku = "A", qty = 9 }]),
                             ("e", [Row { sku = "Z", qty = 0 }])] }) -> 1
-                    | "short" : ([LI { sku = "A", q = 5 }],
+                    | "short" : (LI { sku = "A", q = 5 },
                         Snap { byDay = [("A", [Row { sku = "A", qty = 1 }]),
                             ("e", [Row { sku = "Z", qty = 0 }])] })
                         -> Empty { n = 0 }
@@ -400,6 +437,49 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
             assertEquals(keys.get(0), keys.get(1), () -> "holding one key: " + snap);
             assertTrue(snap.contains("byDay = [(" + keys.get(0) + ", ["),
                     () -> "the entry keeps its key: " + snap);
+        });
+    }
+
+    /**
+     * Where the map holds more than one entry, one entry's list is the one written again: the
+     * others keep their keys and their elements.
+     */
+    @Test
+    void theOtherEntriesOfTheMapAreKept() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, qty: Int }
+                data Snap = { byDay: Map<String, List<Row>> }
+                    invariant Map.size(byDay) >= 2
+                behavior f : (item: LI, snap: Snap) -> Int | Empty
+                let f (item, snap) = {
+                    guard match Map.get(item.sku, snap.byDay) with
+                        | Some rows -> match Map.get(item.sku, List.indexBy(.sku, rows)) with
+                            | Some r -> r.qty >= item.q
+                            | None -> false
+                        | None -> false else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : (LI { sku = "A", q = 5 },
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 9 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] }) -> 1
+                    | "short" : (LI { sku = "A", q = 5 },
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 1 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] })
+                        -> Empty { n = 0 }
+                """);
+
+        assertTrue(!found.isEmpty(), "a row is written for some way");
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            Matcher entries = Pattern.compile("\\(\"[^\"]*\", \\[").matcher(snap);
+            int keys = 0;
+            while (entries.find()) {
+                keys++;
+            }
+            assertEquals(2, keys, () -> "both entries kept: " + snap);
+            assertEquals(3, keysIn(snap, "sku").size(),
+                    () -> "one element added to one list, the other list as it was: " + snap);
         });
     }
 

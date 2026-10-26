@@ -3717,7 +3717,8 @@ public final class Adequacy {
                 }
                 return false;
             };
-            for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
+            for (souther.compiler.partition.Reachability.Reaching along
+                    : reaching.toLookAlong()) {
                 building.probe().attempt("a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
                         Optional.of(rewrittenIntoTheCase));
@@ -3753,7 +3754,8 @@ public final class Adequacy {
                 return ranAtTheRule(setting, read, ruled)
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
-            for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
+            for (souther.compiler.partition.Reachability.Reaching along
+                    : reaching.toLookAlong()) {
                 for (Generator.BoundaryAttempt made : building.probe().attempt(
                         "a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),

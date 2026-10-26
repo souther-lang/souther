@@ -338,6 +338,21 @@ public sealed interface Reachability {
         }
 
         /**
+         * What a search that takes one way after another looks along: the ways this is split into
+         * where it is split into every way a row takes, and otherwise those it was split into
+         * (none where it was not) and then this whole — a row past an unsplit way is on the way
+         * whole, and a search that looked along nothing would find no row for it.
+         */
+        public List<Reaching> toLookAlong() {
+            if (ways instanceof Ways.Each each) {
+                return each.along();
+            }
+            List<Reaching> out = new ArrayList<>(ways.along());
+            out.add(this);
+            return out;
+        }
+
+        /**
          * Regions that between them hold every row past this way: the region of each way it is
          * split into, where it is split into every way a row may take, and its own region
          * otherwise.
