@@ -128,10 +128,18 @@ class WhatTheLanguageHoldsOfANumberOfAStringIsOneAnswerTest {
                 form(lengthAt("a"), ExactRatio.ONE, valueAt("x"), ExactRatio.ONE)));
     }
 
-    /** A weight that is not whole says nothing, which holds every value the form could. */
+    /** A weight is any ratio: the ends are worked out exactly and rounded outward, so the run
+     *  holds every value the form could. */
     @Test
-    void aWeightThatIsNotWholeSaysNothing() {
-        assertEquals(NumericDomain.Bounds.OPEN, RepresentationBounds.ofAForm(
-                form(lengthAt("a"), ExactRatio.of(BigInteger.ONE, BigInteger.TWO))));
+    void aWeightThatIsNotWholeIsWorkedOutExactlyAndRoundedOutward() {
+        ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
+
+        assertEquals(between(0, 402653183),
+                RepresentationBounds.ofAForm(form(lengthAt("a"), half, lengthAt("b"),
+                        ExactRatio.ONE)),
+                "half the longest and the longest are one and a half of it: 402653182.5, up");
+        assertEquals(between(-134217728, 0),
+                RepresentationBounds.ofAForm(form(lengthAt("a"), half.negated())),
+                "minus half the longest is -134217727.5, down");
     }
 }

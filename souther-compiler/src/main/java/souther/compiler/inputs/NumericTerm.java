@@ -1866,6 +1866,10 @@ public sealed interface NumericTerm
     /**
      * What this term's values can be: {@link #intrinsicBounds} and what the language can hold
      * ({@link RepresentationBounds}).
+     *
+     * <p>For asking whether a value can stand, and by {@link RepresentationBounds#ofAForm} to weigh
+     * several terms. Not for what a position is divided into: its classes and the ends of its runs
+     * are {@link #intrinsicBounds}, since the longest string is no distinction a model made.
      */
     default NumericDomain.Bounds reachBounds() {
         return intrinsicBounds().meet(RepresentationBounds.of(this));

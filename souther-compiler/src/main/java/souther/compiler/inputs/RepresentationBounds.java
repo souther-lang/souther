@@ -16,10 +16,20 @@ import java.util.Map;
  * The most a number can be because of what the language can hold, whatever any rule says.
  *
  * <p>A {@code String} holds no more than {@link TextExtents#LONGEST_STRING} code points, so no
- * length, class count or code point sum of one passes what that comes to. The numeric reading of a
- * term meets this into the term's own run ({@link NumericTerm#intrinsicBounds}), so a form over
- * several of them, a region and a line on any of these read one run; and the proof that a string
- * of a length can be written reads the same ceiling ({@link #mostOf}).
+ * length, class count or code point sum of one passes what that comes to.
+ *
+ * <p>Two readers ask it, and neither is the run the rules leave a term. Whether a value can stand
+ * at a level or on a side of it, and which points of a line can be written, ask the quantity a
+ * line is on ({@code BorderQuantity#heldByTheLanguage}, which weighs {@link #ofAForm} of its
+ * terms). The proof that a string of a length can be written reads the same ceiling
+ * ({@link #mostOf}).
+ *
+ * <p>It is not met into {@link NumericTerm#intrinsicBounds}, which is where the classes of a
+ * position and the ends of its runs are drawn from. The longest string is where strings stop and
+ * no distinction a model made: met in there, a relation between two lengths holds it as a class of
+ * its own, which only a string of that length can fill. A new reader of a term's values chooses
+ * between the two by what it answers, whether a value can stand or what a position is divided
+ * into.
  */
 public final class RepresentationBounds {
 
@@ -72,43 +82,57 @@ public final class RepresentationBounds {
      *
      * <p>Open where no term of the form is ended by the language, so a form of numbers nothing ends
      * says nothing here; and open on a side where some term that decides that side has no end
-     * there. A weight that is not whole leaves the form open, which holds every value it could.
+     * there. A weight may be any ratio: the ends are worked out exactly and written as the whole
+     * numbers they lie within, the lower one rounded down and the upper one up, so the run holds
+     * every value the form could and never fewer.
+     *
+     * <p>This is what the language holds, to be asked whether a value can stand and never what a
+     * position is divided into. The run the rules leave a term, with the language's ends met in, is
+     * {@link NumericTerm#reachBounds}; it is not the term's {@link NumericTerm#intrinsicBounds},
+     * and a reader that wants where the classes of a position run to wants the second.
      */
     public static NumericDomain.Bounds ofAForm(LinearForm<NumericTerm> form) {
         boolean ended = false;
-        BigInteger low = BigInteger.ZERO;
-        BigInteger high = BigInteger.ZERO;
+        ExactRatio low = ExactRatio.ZERO;
+        ExactRatio high = ExactRatio.ZERO;
         boolean lowHeld = true;
         boolean highHeld = true;
         for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            if (!each.getValue().isWhole()) {
-                return NumericDomain.Bounds.OPEN;
-            }
-            BigInteger weight = each.getValue().floor().orNull();
+            ExactRatio weight = each.getValue();
             ended |= mostOf(each.getKey()) != null;
             NumericDomain.Bounds reach = each.getKey().reachBounds();
-            BigInteger least = wholeAt(reach.min());
-            BigInteger most = wholeAt(reach.max());
-            BigInteger lowest = weight.signum() >= 0 ? least : most;
-            BigInteger highest = weight.signum() >= 0 ? most : least;
+            ExactRatio least = numberAt(reach.min());
+            ExactRatio most = numberAt(reach.max());
+            ExactRatio lowest = weight.signum() >= 0 ? least : most;
+            ExactRatio highest = weight.signum() >= 0 ? most : least;
             lowHeld &= lowest != null;
             highHeld &= highest != null;
-            low = lowest == null ? low : low.add(weight.multiply(lowest));
-            high = highest == null ? high : high.add(weight.multiply(highest));
+            low = lowest == null ? low : sum(low, weight, lowest);
+            high = highest == null ? high : sum(high, weight, highest);
+            if (low == null || high == null) {
+                return NumericDomain.Bounds.OPEN;
+            }
         }
         if (!ended || !(lowHeld || highHeld)) {
             return NumericDomain.Bounds.OPEN;
         }
+        BigInteger down = low.floor().orNull();
+        BigInteger up = high.ceiling().orNull();
         return new NumericDomain.Bounds(
-                lowHeld ? Endpoint.inclusive(Count.of(new BigDecimal(low))) : null,
-                highHeld ? Endpoint.inclusive(Count.of(new BigDecimal(high))) : null);
+                lowHeld && down != null ? Endpoint.inclusive(Count.of(new BigDecimal(down))) : null,
+                highHeld && up != null ? Endpoint.inclusive(Count.of(new BigDecimal(up))) : null);
     }
 
-    /** The whole number {@code end} stands at, or null where there is no end or it is no whole
-     *  count. */
-    private static BigInteger wholeAt(Endpoint end) {
-        return end != null && end.at() instanceof Count count && count.whole()
-                ? count.exactly().floor().orNull() : null;
+    /** {@code so far} and {@code weight} times {@code by}, or null where the exact arithmetic
+     *  holds no such number. */
+    private static ExactRatio sum(ExactRatio soFar, ExactRatio weight, ExactRatio by) {
+        ExactRatio product = weight.times(by).orNull();
+        return product == null ? null : soFar.plus(product).orNull();
+    }
+
+    /** The number {@code end} stands at, or null where there is no end or it is at no count. */
+    private static ExactRatio numberAt(Endpoint end) {
+        return end != null && end.at() instanceof Count count ? count.exactly() : null;
     }
 
     private static NumericDomain.Bounds atMost(long most) {
