@@ -1513,12 +1513,35 @@ public sealed interface Proposition {
      * row has to be for the statement to look anything up at all, since a statement over an empty
      * container or an empty list of the things it looks up says nothing of any order. Each
      * quantifier around {@code last} is kept, so that every list the statement quantifies over
-     * holds an element as well. Nothing where no quantifier is around {@code last}, or what is
-     * left of it would quantify a container twice.
+     * holds an element as well.
+     *
+     * <p>One order may be read in several places of {@code stated}, under the quantifiers of
+     * different lists. The statement looks the entry up if it does so in any of them, so the
+     * places are alternatives. Nothing where some place has no quantifier around {@code last}, or
+     * what is left of it would quantify a container twice: an alternative left out would ask of a
+     * row what the statement does not.
      */
     static Optional<Proposition> theEntryLookedUp(Proposition stated, LastToHold last) {
-        List<Some> chain = quantifiersAround(stated, last, List.of());
-        if (chain == null || chain.isEmpty()) {
+        List<List<Some>> places = new ArrayList<>();
+        quantifiersAround(stated, last, List.of(), places);
+        if (places.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Proposition> alternatives = new ArrayList<>();
+        for (List<Some> chain : places) {
+            Optional<Proposition> alternative = entryUnder(chain, last);
+            if (alternative.isEmpty()) {
+                return Optional.empty();
+            }
+            alternatives.add(alternative.get());
+        }
+        return Optional.of(any(alternatives));
+    }
+
+    /** {@link #theEntryLookedUp} for the place of {@code last} inside {@code chain}, which is the
+     *  quantifiers around it, outermost first. */
+    private static Optional<Proposition> entryUnder(List<Some> chain, LastToHold last) {
+        if (chain.isEmpty()) {
             return Optional.empty();
         }
         Some around = chain.getLast();
@@ -1543,12 +1566,13 @@ public sealed interface Proposition {
         return Optional.of(built);
     }
 
-    /** The quantifiers {@code last} is inside of in {@code stated}, outermost first; null where
-     *  {@code last} is not inside it. */
-    private static List<Some> quantifiersAround(Proposition stated, LastToHold last,
-                                                List<Some> enclosing) {
+    /** Into {@code places}, the quantifiers {@code last} is inside of at each place it stands in
+     *  {@code stated}, outermost first. */
+    private static void quantifiersAround(Proposition stated, LastToHold last,
+                                          List<Some> enclosing, List<List<Some>> places) {
         if (stated.equals(last)) {
-            return enclosing;
+            places.add(enclosing);
+            return;
         }
         List<Some> here = enclosing;
         if (stated instanceof Some some) {
@@ -1556,12 +1580,8 @@ public sealed interface Proposition {
             here.add(some);
         }
         for (Proposition part : stated.partsHeld()) {
-            List<Some> found = quantifiersAround(part, last, here);
-            if (found != null) {
-                return found;
-            }
+            quantifiersAround(part, last, here, places);
         }
-        return null;
     }
 
     /**

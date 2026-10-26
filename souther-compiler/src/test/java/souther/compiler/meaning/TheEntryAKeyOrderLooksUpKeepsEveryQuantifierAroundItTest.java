@@ -42,6 +42,28 @@ class TheEntryAKeyOrderLooksUpKeepsEveryQuantifierAroundItTest {
         assertEquals(Optional.of(new Proposition.Some(ITEMS, entry, true)), looked);
     }
 
+    /**
+     * One order read under the quantifiers of two lists is looked up under either: a row that
+     * leaves one of the lists empty still has the statement look the entry up through the other,
+     * so neither list is held to an element.
+     */
+    @Test
+    void anOrderReadUnderTwoListsIsLookedUpUnderEitherOfThem() {
+        DecisionSubject others = new DecisionSubject.AnInput(TermPath.of("others"));
+        DecisionSubject otherSku =
+                new DecisionSubject.AnInput(TermPath.of("others").element().then("sku"));
+        Proposition viaItems = new Proposition.Some(ITEMS, new Proposition.Some(ROWS,
+                Proposition.all(List.of(LAST, SAME)), true), true);
+        Proposition viaOthers = new Proposition.Some(others, new Proposition.Some(ROWS,
+                Proposition.all(List.of(LAST, new Proposition.SameValue(ROW_SKU, otherSku, true))),
+                true), true);
+        Proposition stated = Proposition.any(List.of(viaItems, viaOthers));
+
+        Optional<Proposition> looked = Proposition.theEntryLookedUp(stated, LAST);
+
+        assertEquals(Optional.of(stated), looked);
+    }
+
     /** With nothing around the quantifier nearest the lookup, that quantifier is all there is. */
     @Test
     void aQuantifierWithNoneAroundItIsTheWholeOfIt() {
