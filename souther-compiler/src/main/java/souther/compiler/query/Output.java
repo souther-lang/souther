@@ -34,6 +34,7 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.ConstEval;
 import souther.compiler.check.DataChecker;
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
@@ -67,6 +68,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -860,11 +862,20 @@ public final class Output {
             if (values.isEmpty()) {
                 return Answer.of(Set.of());
             }
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            if (!checked.present()) {
+                return Answer.absent();
+            }
             ProgramExecution execution = db.execution();
             Set<SourcePos> held = new LinkedHashSet<>();
             List<Report> reports = new ArrayList<>();
             for (DataChecker.ValueConstructions value : values) {
-                switch (execution.build(new BuiltValue(name, value.value()))) {
+                BuiltValue asked = builtValue(checked.value().emittedDefinitions(), value.value(),
+                        new HashSet<>());
+                if (asked == null) {
+                    continue;
+                }
+                switch (execution.build(asked)) {
                     case ConstantOutcome.Holds _ -> held.addAll(value.constructions());
                     case ConstantOutcome.Violates _ -> reports.add(Report.raised(
                             Diagnostic.at(value.pos()).say(
@@ -874,6 +885,33 @@ public final class Output {
                 }
             }
             return reports.isEmpty() ? Answer.of(Set.copyOf(held)) : Answer.absent(reports);
+        }
+
+        /**
+         * {@code value} asked together with the values its method is handed, which the region that
+         * builds it has built already. Null where it is handed something that is not a value of this
+         * module, or where the values read one another round, and there is then nothing to build it
+         * from here.
+         */
+        private BuiltValue builtValue(Map<String, EmittedDefinition> definitions, String value,
+                                      Set<String> building) {
+            EmittedDefinition definition = definitions.get(value);
+            if (definition == null || !building.add(value)) {
+                return null;
+            }
+            List<BuiltValue> handedOver = new ArrayList<>();
+            for (EmittedDefinition.Parameter each : definition.parameters()) {
+                if (!(each instanceof EmittedDefinition.Handover handed)) {
+                    return null;
+                }
+                BuiltValue carried = builtValue(definitions, handed.carries().name(), building);
+                if (carried == null) {
+                    return null;
+                }
+                handedOver.add(carried);
+            }
+            building.remove(value);
+            return new BuiltValue(name, value, handedOver);
         }
     }
 

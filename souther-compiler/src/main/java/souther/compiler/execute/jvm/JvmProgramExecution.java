@@ -199,9 +199,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         try {
             Class<?> fns = Class.forName(SoutherJvmAbi.nameOf(
                     new GeneratedClass.Helpers(asked.writtenIn())).binaryName(), true, loader);
-            Method built = fns.getDeclaredMethod(Backend.helperMethod(asked.name()));
-            built.setAccessible(true);
-            built.invoke(null);
+            built(fns, asked);
             return new ConstantOutcome.Holds();
         } catch (InvocationTargetException failed) {
             // A value breaking an invariant leaves by the abort every construction leaves by. Any
@@ -214,6 +212,20 @@ public final class JvmProgramExecution implements ProgramExecution {
         } catch (ReflectiveOperationException | LinkageError _) {
             return new ConstantOutcome.NotEvaluatedHere();
         }
+    }
+
+    /** The value as its method answers it, after the values that method is handed are built. */
+    private static Object built(Class<?> fns, BuiltValue asked)
+            throws ReflectiveOperationException {
+        Object[] handed = new Object[asked.handedOver().size()];
+        Class<?>[] taken = new Class<?>[handed.length];
+        for (int i = 0; i < handed.length; i++) {
+            handed[i] = built(fns, asked.handedOver().get(i));
+            taken[i] = Object.class;
+        }
+        Method method = fns.getDeclaredMethod(Backend.helperMethod(asked.name()), taken);
+        method.setAccessible(true);
+        return method.invoke(null, handed);
     }
 
     /**

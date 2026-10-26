@@ -101,13 +101,61 @@ public final class DataChecker {
         return out;
     }
 
+    /**
+     * The constructions of an invariant-bearing type that building {@code e} runs, whichever way
+     * it goes.
+     *
+     * <p>Not every construction written in a value is run by building it: the body of a function
+     * value runs when a call applies it, one branch of an {@code if} and one arm of a {@code match}
+     * run and the others do not, and the right operand of a short-circuiting operator runs where the
+     * left does not settle it. A position gathered from one of those would be recorded as held by a
+     * build that never ran it, so what is walked is what {@code Evaluated.inOrder} gives for the
+     * same node kinds — the parts that run whenever the node does — and a kind added to
+     * {@link Hir.Expr} is decided here, in the switch, rather than reached by a walk of its slots.
+     *
+     * <p>The construction an {@code if ... as} tests is not one of them: its refusal is caught and
+     * answered by an arm, so building the value succeeds whether or not it holds. What it is built
+     * from does run.
+     */
     private static void collectConstructions(Hir.Expr e, Symbols symbols, List<SourcePos> out) {
-        if (e instanceof Hir.NewData nd
-                && nd.typeName() instanceof Hir.Name.Denoting built
-                && built.type() instanceof TypeSymbol.AtModule constructed
-                && isInvariantBearing(constructed, symbols)) {
-            out.add(nd.pos());
+        switch (e) {
+            case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _, Hir.Var _,
+                 Hir.Unreachable _, Hir.ValueBuild _, Hir.ValueInvocation _ -> { }
+            // A function value is made here and run by whoever applies it, on arguments not given
+            // here.
+            case Hir.Block _ -> { }
+            case Hir.NewData nd -> {
+                if (nd.typeName() instanceof Hir.Name.Denoting built
+                        && built.type() instanceof TypeSymbol.AtModule constructed
+                        && isInvariantBearing(constructed, symbols)) {
+                    out.add(nd.pos());
+                }
+                collectWhatIsRunWith(nd, symbols, out);
+            }
+            case Hir.IfConstructed tested -> {
+                if (tested.construct() instanceof Hir.NewData made) {
+                    collectWhatIsRunWith(made, symbols, out);
+                }
+            }
+            case Hir.Binary b when b.op().stopsWhenItsAnswerIsSettled() ->
+                    collectConstructions(b.left(), symbols, out);
+            case Hir.If iff -> collectConstructions(iff.cond(), symbols, out);
+            case Hir.Match m -> collectConstructions(m.scrutinee(), symbols, out);
+            // The element is run for the rows the guards keep, which may be none.
+            case Hir.ListComp comp ->
+                    comp.guards().forEach(g -> collectConstructions(g, symbols, out));
+            // A row's brackets are written in an example, and no value a module declares holds them.
+            case Hir.RowCollection _ -> { }
+            // The body of a definition this value reaches, written at that definition's positions
+            // and run there with whatever it is handed elsewhere: a position found in it says
+            // nothing of this build.
+            case Hir.Expansion _, Hir.Materialised _ -> { }
+            case Hir.Neg _, Hir.FieldAccess _, Hir.Binary _, Hir.Apply _, Hir.LetIn _,
+                 Hir.ListLit _, Hir.Tuple _, Hir.TupleGet _ -> collectWhatIsRunWith(e, symbols, out);
         }
+    }
+
+    private static void collectWhatIsRunWith(Hir.Expr e, Symbols symbols, List<SourcePos> out) {
         TypeChecker.forEachChild(e, c -> collectConstructions(c, symbols, out));
     }
 
