@@ -65,6 +65,181 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         });
     }
 
+    private static final String HEAD = """
+            module p
+            data LI = { sku: String, q: Int }
+            data Empty = { n: Int }
+            """;
+
+    private static final String GUARD = """
+                let stock = List.indexBy(%s, %s)
+                guard List.all(i -> match Map.get(i.sku, stock) with
+                    | Some r -> %s
+                    | None -> i.q <= 0, items) else Empty { n = 0 }
+                1
+            """;
+
+    private static List<String> keysIn(String rows, String field) {
+        Matcher keys = Pattern.compile(field + " = (\"[^\"]*\")").matcher(rows);
+        List<String> held = new ArrayList<>();
+        while (keys.find()) {
+            held.add(keys.group(1));
+        }
+        return held;
+    }
+
+    /**
+     * What the container held is kept: a rule that asks for three elements is still met by the row
+     * written for the order of a key, which is not rewritten into a list of two.
+     */
+    @Test
+    void theElementsTheContainerHeldAreKept() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, qty: Int }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    guard List.length(rows) >= 3 else Empty { n = 2 }
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.qty >= i.q
+                        | None -> i.q <= 0, items) else Empty { n = 1 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 9 },
+                        Row { sku = "B", qty = 9 }, Row { sku = "C", qty = 9 }]) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 1 },
+                        Row { sku = "B", qty = 9 }, Row { sku = "C", qty = 9 }])
+                        -> Empty { n = 1 }
+                    | "few" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 9 }])
+                        -> Empty { n = 2 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(
+                keysIn(row.inputs().get(1).text(), "sku").size() >= 3,
+                () -> "three elements at least: " + row.inputs().get(1).text()));
+    }
+
+    /**
+     * A value a row does not hold is written: the order decides a statement over a {@code Bool}
+     * only between a {@code true} and a {@code false}, and the rows written hold one of them.
+     */
+    @Test
+    void theOtherValueOfABoolIsWritten() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, ok: Bool }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> r.ok
+                        | None -> false, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", ok = true }]) -> 1
+                    | "absent" : ([LI { sku = "B", q = 5 }], [Row { sku = "A", ok = true }])
+                        -> Empty { n = 0 }
+                """);
+
+        RowToRun row = found.entrySet().stream().filter(each -> each.getKey()
+                        instanceof CaseOfAStatement.KeyOrder order
+                        && order.way() == CaseOfAStatement.Way.FAILS_BY_THE_LAST)
+                .findFirst().orElseThrow(() -> new AssertionError(found.toString())).getValue();
+        String rows = row.inputs().get(1).text();
+        assertTrue(rows.contains("ok = true") && rows.contains("ok = false"), rows);
+    }
+
+    /** A key below a record is held twice by the records, and what is given another value is the
+     *  field below it that the statement reads. */
+    @Test
+    void aKeyBelowARecordIsHeldTwice() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Detail = { sku: String, qty: Int }
+                data Row = { detail: Detail }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                """ + GUARD.formatted("r -> r.detail.sku", "rows", "r.detail.qty >= i.q") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { detail = Detail { sku = "A", qty = 9 } }]) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }],
+                        [Row { detail = Detail { sku = "A", qty = 1 } }]) -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            List<String> held = keysIn(row.inputs().get(1).text(), "sku");
+            assertEquals(2, held.size(), () -> row.inputs().get(1).text());
+            assertEquals(held.get(0), held.get(1), () -> row.inputs().get(1).text());
+        });
+    }
+
+    /** A field declared as a name over a number is given another number under the same name. */
+    @Test
+    void aFieldDeclaredAsANewtypeIsGivenAnotherValueUnderTheName() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Qty = Int
+                data Row = { sku: String, qty: Qty }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                """ + GUARD.formatted(".sku", "rows", "r.qty.value >= i.q") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", qty = Qty(9) }]) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", qty = Qty(1) }]) -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(
+                row.inputs().get(1).text().split("Qty\\(", -1).length - 1 == 2,
+                () -> row.inputs().get(1).text()));
+    }
+
+    /**
+     * A field the rules keep the elements apart at differs between the two, so the container is one
+     * the rules admit, and the row is not refused by the decoder it goes through.
+     */
+    @Test
+    void aFieldTheRulesKeepApartDiffersBetweenTheTwo() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { id: Int, sku: String, qty: Int }
+                data Snap = { rows: List<Row> }
+                    invariant List.allDistinctBy(.id, rows)
+                behavior f : (items: List<LI>, snap: Snap) -> Int | Empty
+                let f (items, snap) = {
+                """ + GUARD.formatted(".sku", "snap.rows", "r.qty >= i.q") + """
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { id = 1, sku = "A", qty = 9 }] }) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }],
+                        Snap { rows = [Row { id = 1, sku = "A", qty = 1 }] }) -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            Matcher ids = Pattern.compile("id = (-?\\d+)").matcher(snap);
+            List<String> held = new ArrayList<>();
+            while (ids.find()) {
+                held.add(ids.group(1));
+            }
+            assertEquals(2, held.size(), snap);
+            assertTrue(!held.get(0).equals(held.get(1)), () -> "ids differ: " + snap);
+            List<String> skus = keysIn(snap, "sku");
+            assertEquals(skus.get(0), skus.get(1), snap);
+        });
+    }
+
     /** The two copies of the element hold what a field the statement does not read held. */
     @Test
     void aFieldTheStatementDoesNotReadIsLeftAsItWas() {

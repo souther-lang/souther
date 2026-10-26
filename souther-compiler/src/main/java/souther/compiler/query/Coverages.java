@@ -949,6 +949,10 @@ final class Coverages {
         /** What the parameters of the rows built and run here are, and how a value of each is
          *  written. */
         souther.compiler.partition.MeasuredInput subject();
+
+        /** What says whether a value is one the decoder builds at a parameter of the rows built
+         *  here, which every value put in a row besides the ones a search composed is held to. */
+        souther.compiler.partition.Generator.CandidateCheck check();
     }
 
     /**

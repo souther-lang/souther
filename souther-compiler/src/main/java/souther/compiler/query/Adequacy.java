@@ -3638,6 +3638,16 @@ public final class Adequacy {
             return Answer.of(Ordered.map(out));
         }
 
+        /** Whether the run read ran and was placed at {@code ruled}'s rule: the part of being
+         *  evidence of a case that is the same for every kind of case. */
+        private static boolean ranAtTheRule(DecisionSearch.SearchSetting setting, RowAsRead read,
+                                            DecisionReading.Ruled ruled) {
+            return read.watched() instanceof Generator.Watched.Ran
+                    && setting.taken().takenBy(read.asRun())
+                            instanceof RulesTaken.WhichRule.TookThis took
+                    && took.rule().equals(ruled.rule());
+        }
+
         /**
          * Whether the rule consults the statement of {@code order} and has it come out the way the
          * case has it: holding where the last element decides it to, failing where it does.
@@ -3670,24 +3680,24 @@ public final class Adequacy {
                     instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
                 return null;
             }
+            Optional<KeyOrderCandidates> rewriting =
+                    KeyOrderCandidates.of(order, building.probe().subject().inputs());
+            if (rewriting.isEmpty()) {
+                return null;
+            }
             RowToRun[] found = new RowToRun[1];
             Generator.RowJudge rewrittenIntoTheCase = row -> {
                 RowAsRead read = setting.probe().read(row);
-                if (!(read.watched() instanceof Generator.Watched.Ran)
-                        || !(setting.taken().takenBy(read.asRun())
-                                instanceof RulesTaken.WhichRule.TookThis took)
-                        || !took.rule().equals(ruled.rule())) {
+                if (!ranAtTheRule(setting, read, ruled)) {
                     return false;
                 }
-                Iterator<RowToRun> candidates = KeyOrderCandidates.refining(order, row,
-                        read.asRun().inputs(), building.probe().subject()).iterator();
+                Iterator<RowToRun> candidates = rewriting.get().refining(row,
+                        read.asRun().inputs(), building.probe().subject(),
+                        building.probe().check()).iterator();
                 while (candidates.hasNext()) {
                     RowToRun candidate = candidates.next();
                     RowAsRead ran = setting.probe().read(candidate);
-                    if (ran.watched() instanceof Generator.Watched.Ran
-                            && setting.taken().takenBy(ran.asRun())
-                                    instanceof RulesTaken.WhichRule.TookThis there
-                            && there.rule().equals(ruled.rule())
+                    if (ranAtTheRule(setting, ran, ruled)
                             && cases.casesSeenBy(ran.asRun(), ruled.rule()).contains(order)) {
                         found[0] = candidate;
                         return true;
@@ -3728,10 +3738,7 @@ public final class Adequacy {
             // assignment of the values below.
             Generator.RowJudge inTheCase = row -> {
                 RowAsRead read = setting.probe().read(row);
-                return read.watched() instanceof Generator.Watched.Ran
-                        && setting.taken().takenBy(read.asRun())
-                                instanceof RulesTaken.WhichRule.TookThis took
-                        && took.rule().equals(ruled.rule())
+                return ranAtTheRule(setting, read, ruled)
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
             for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
@@ -3957,6 +3964,11 @@ public final class Adequacy {
         @Override
         public souther.compiler.partition.MeasuredInput subject() {
             return subject;
+        }
+
+        @Override
+        public Generator.CandidateCheck check() {
+            return checkAgainst(building, sig);
         }
 
         @Override
@@ -5797,8 +5809,15 @@ public final class Adequacy {
                     || RowReadings.readingFor(byTarget, behavior).someRowsUnseen()) {
                 return List.of();
             }
+            BehaviorInputs inputs = inputsOf(db, name, behavior);
             return evidence.took().made().orElseThrow().unseenCases().stream()
-                    .filter(CaseOfAStatement::canBeLookedFor).toList();
+                    .filter(each -> switch (each) {
+                        case CaseOfAStatement.Search search -> search.canBeLookedFor();
+                        // Asked of the plan the rewrite is made by, so that a case offered is a
+                        // case the rewrite can write a row for.
+                        case CaseOfAStatement.KeyOrder order -> inputs != null
+                                && KeyOrderCandidates.canRewrite(order, inputs);
+                    }).toList();
         }
 
         /**

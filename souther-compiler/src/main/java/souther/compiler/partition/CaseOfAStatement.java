@@ -29,15 +29,6 @@ public sealed interface CaseOfAStatement {
     String spelled();
 
     /**
-     * Whether a row can be looked for by what the case says of the node a search starts at and of
-     * the places inside it that the case names.
-     *
-     * <p>The criterion for work: a case none of the searches that compose rows can look for is a
-     * case the measure still reports as unmeasured, and is no work a person is offered rows for.
-     */
-    boolean canBeLookedFor();
-
-    /**
      * The steps of a search from a node, which are the steps of the recursion it is and not depths.
      */
     enum Step {
@@ -74,7 +65,14 @@ public sealed interface CaseOfAStatement {
             return step + " of " + statement.key();
         }
 
-        @Override
+        /**
+         * Whether a row can be looked for by what the step says of the node the search starts at
+         * and of the places inside it that the step names.
+         *
+         * <p>The criterion for work: a case none of the searches that compose rows can look for is
+         * a case the measure still reports as unmeasured, and is no work a person is offered rows
+         * for.
+         */
         public boolean canBeLookedFor() {
             return askedOfTheNode(UnaryOperator.identity()).isPresent();
         }
@@ -147,14 +145,6 @@ public sealed interface CaseOfAStatement {
         public String spelled() {
             return way + " of " + order.position() + " in " + order.container() + " in "
                     + statement.key();
-        }
-
-        /** Which element of a key held twice is the entry is no statement about one node. A row is
-         *  looked for by rewriting a row that stands at the rule, where the container and the key
-         *  are positions a rewrite reaches ({@link KeyOrderCandidates}). */
-        @Override
-        public boolean canBeLookedFor() {
-            return KeyOrderCandidates.canBuildFor(this);
         }
     }
 }
