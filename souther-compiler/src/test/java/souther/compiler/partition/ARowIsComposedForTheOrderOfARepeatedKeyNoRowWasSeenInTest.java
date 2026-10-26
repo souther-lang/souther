@@ -65,6 +65,29 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         });
     }
 
+    /** The two copies of the element hold what a field the statement does not read held. */
+    @Test
+    void aFieldTheStatementDoesNotReadIsLeftAsItWas() {
+        Map<CaseOfAStatement, RowToRun> found = search(MODEL
+                .replace("data Row = { sku: String, qty: Int }",
+                        "data Row = { sku: String, qty: Int, note: Int }")
+                .replace("qty = 9 }", "qty = 9, note = 7 }")
+                .replace("qty = 1 }", "qty = 1, note = 7 }"));
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            Matcher notes = Pattern.compile("note = (-?\\d+)").matcher(row.inputs().get(1).text());
+            List<String> held = new ArrayList<>();
+            while (notes.find()) {
+                held.add(notes.group(1));
+            }
+            assertEquals(2, held.size(), row.inputs().get(1)::text);
+            assertEquals(held.get(0), held.get(1), () -> "an unread field is not moved: "
+                    + row.inputs().get(1).text());
+        });
+    }
+
     private static Set<CaseOfAStatement.Way> waysOf(Map<CaseOfAStatement, RowToRun> found) {
         return found.keySet().stream()
                 .filter(each -> each instanceof CaseOfAStatement.KeyOrder)

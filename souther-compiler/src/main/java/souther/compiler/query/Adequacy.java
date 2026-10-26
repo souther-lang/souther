@@ -181,6 +181,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -3678,8 +3679,10 @@ public final class Adequacy {
                         || !took.rule().equals(ruled.rule())) {
                     return false;
                 }
-                for (RowToRun candidate : KeyOrderCandidates.refining(order, row,
-                        read.asRun().inputs(), building.probe().subject())) {
+                Iterator<RowToRun> candidates = KeyOrderCandidates.refining(order, row,
+                        read.asRun().inputs(), building.probe().subject()).iterator();
+                while (candidates.hasNext()) {
+                    RowToRun candidate = candidates.next();
                     RowAsRead ran = setting.probe().read(candidate);
                     if (ran.watched() instanceof Generator.Watched.Ran
                             && setting.taken().takenBy(ran.asRun())

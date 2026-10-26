@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
@@ -10,6 +11,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Stream;
 
 /**
  * Rows built for the two ways round the order of a repeated key, from a row that already stands at
@@ -54,33 +57,55 @@ public final class KeyOrderCandidates {
      * @param seen the values its run observed, one per parameter
      * @param subject what the row's parameters are and how a value of each is written
      */
-    public static List<RowToRun> refining(CaseOfAStatement.KeyOrder target, RowToRun base,
-                                          List<ObservedValue> seen, MeasuredInput subject) {
+    public static Stream<RowToRun> refining(CaseOfAStatement.KeyOrder target, RowToRun base,
+                                            List<ObservedValue> seen, MeasuredInput subject) {
         List<String> key = keyWithinAnElement(target.order());
         TermPath container = target.order().container();
         int parameter = subject.parameters().indexOf(container.head());
         if (key == null || !onlyFieldsAndElements(container) || parameter < 0
                 || parameter >= seen.size() || parameter >= base.inputs().size()) {
-            return List.of();
+            return Stream.empty();
         }
         Map<Class<?>, Set<ObservedValue>> pool = new HashMap<>();
         seen.forEach(each -> gather(each, pool));
         List<ObservedValue> rewritten = new ArrayList<>();
-        rewrite(seen.get(parameter), container.steps(), 0, key.getFirst(), pool, rewritten);
-        List<RowToRun> out = new ArrayList<>();
-        for (ObservedValue each : rewritten) {
-            if (out.size() >= MOST_CANDIDATES) {
-                break;
+        rewrite(seen.get(parameter), container.steps(), 0, key.getFirst(),
+                fieldsTheStatementReads(target, container), pool, rewritten);
+        // Written one at a time as the caller asks for them: the first to be evidence of the case
+        // ends the search, and the rest are never spelled.
+        return rewritten.stream()
+                .map(each -> ObservedFixtures.of(each, subject.types().get(parameter),
+                        subject.ruleReading()))
+                .filter(ObservedFixtures.Writing.Written.class::isInstance)
+                .map(written -> {
+                    List<FixtureTemplate> inputs = new ArrayList<>(base.inputs());
+                    inputs.set(parameter,
+                            ((ObservedFixtures.Writing.Written<FixtureTemplate>) written).value());
+                    return new RowToRun(inputs, base.answers());
+                });
+    }
+
+    /**
+     * The fields of an element that the statement reads, or null where it is not known which: a
+     * field it does not read cannot change what it comes to, so only these are given other values.
+     */
+    private static Set<String> fieldsTheStatementReads(CaseOfAStatement.KeyOrder target,
+                                                       TermPath container) {
+        Set<String> fields = new LinkedHashSet<>();
+        PositionsAStatementReads.everyPlaceOf(target.statement()).ifPresent(places -> {
+            List<TermPath.Step> within = container.steps();
+            for (TermPath place : places) {
+                List<TermPath.Step> steps = place.steps();
+                if (place.head().equals(container.head()) && steps.size() > within.size() + 1
+                        && steps.subList(0, within.size()).equals(within)
+                        && steps.get(within.size()) instanceof TermPath.Step.Element
+                        && steps.get(within.size() + 1) instanceof TermPath.Step.Field(
+                                String name)) {
+                    fields.add(name);
+                }
             }
-            if (ObservedFixtures.of(each, subject.types().get(parameter), subject.ruleReading())
-                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                            FixtureTemplate written)) {
-                List<FixtureTemplate> inputs = new ArrayList<>(base.inputs());
-                inputs.set(parameter, written);
-                out.add(new RowToRun(inputs, base.answers()));
-            }
-        }
-        return out;
+        });
+        return fields.isEmpty() ? null : fields;
     }
 
     /** The fields from an element of the container to the key, or null where the key is not so. */
@@ -126,7 +151,9 @@ public final class KeyOrderCandidates {
             case ObservedValue.Decimal _, ObservedValue.Text _, ObservedValue.Bool _,
                  ObservedValue.Temporal _ -> pool.computeIfAbsent(value.getClass(),
                     _ -> new LinkedHashSet<>()).add(value);
-            case ObservedValue.Constructed made -> made.fields().values()
+            // In the order of the names: a record's fields are held unordered, and the values a
+            // copy is given, and so the row found, must not depend on which way a run hashed them.
+            case ObservedValue.Constructed made -> new TreeMap<>(made.fields()).values()
                     .forEach(each -> gather(each, pool));
             case ObservedValue.Sequence sequence -> sequence.elements()
                     .forEach(each -> gather(each, pool));
@@ -144,8 +171,8 @@ public final class KeyOrderCandidates {
      * key twice, added to {@code out}.
      */
     private static void rewrite(ObservedValue value, List<TermPath.Step> steps, int at,
-                                String keyField, Map<Class<?>, Set<ObservedValue>> pool,
-                                List<ObservedValue> out) {
+                                String keyField, Set<String> reads,
+                                Map<Class<?>, Set<ObservedValue>> pool, List<ObservedValue> out) {
         if (out.size() >= MOST_CANDIDATES) {
             return;
         }
@@ -153,7 +180,7 @@ public final class KeyOrderCandidates {
             if (value instanceof ObservedValue.Sequence(List<ObservedValue> elements)
                     && !elements.isEmpty()
                     && elements.getFirst() instanceof ObservedValue.Constructed first) {
-                for (List<ObservedValue> held : pairsOf(first, keyField, pool)) {
+                for (List<ObservedValue> held : pairsOf(first, keyField, reads, pool)) {
                     out.add(new ObservedValue.Sequence(held));
                 }
             }
@@ -163,7 +190,7 @@ public final class KeyOrderCandidates {
             case TermPath.Step.Field(String name) -> {
                 if (value instanceof ObservedValue.Constructed made && made.field(name) != null) {
                     List<ObservedValue> inside = new ArrayList<>();
-                    rewrite(made.field(name), steps, at + 1, keyField, pool, inside);
+                    rewrite(made.field(name), steps, at + 1, keyField, reads, pool, inside);
                     for (ObservedValue each : inside) {
                         Map<String, ObservedValue> fields = new LinkedHashMap<>(made.fields());
                         fields.put(name, each);
@@ -175,7 +202,7 @@ public final class KeyOrderCandidates {
                 if (value instanceof ObservedValue.Sequence(List<ObservedValue> elements)) {
                     for (int one = 0; one < elements.size(); one++) {
                         List<ObservedValue> inside = new ArrayList<>();
-                        rewrite(elements.get(one), steps, at + 1, keyField, pool, inside);
+                        rewrite(elements.get(one), steps, at + 1, keyField, reads, pool, inside);
                         for (ObservedValue each : inside) {
                             List<ObservedValue> held = new ArrayList<>(elements);
                             held.set(one, each);
@@ -193,12 +220,13 @@ public final class KeyOrderCandidates {
      * ordered pair of the values a row holds of its kind.
      */
     private static List<List<ObservedValue>> pairsOf(ObservedValue.Constructed first,
-                                                     String keyField,
+                                                     String keyField, Set<String> reads,
                                                      Map<Class<?>, Set<ObservedValue>> pool) {
         List<List<ObservedValue>> out = new ArrayList<>();
-        for (Map.Entry<String, ObservedValue> field : first.fields().entrySet()) {
+        for (Map.Entry<String, ObservedValue> field : new TreeMap<>(first.fields()).entrySet()) {
             Set<ObservedValue> kind = pool.get(field.getValue().getClass());
-            if (field.getKey().equals(keyField) || kind == null) {
+            if (field.getKey().equals(keyField) || kind == null
+                    || (reads != null && !reads.contains(field.getKey()))) {
                 continue;
             }
             List<ObservedValue> values = kind.stream().limit(MOST_VALUES_OF_A_KIND).toList();
