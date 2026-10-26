@@ -324,12 +324,13 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
-     * A case is offered only where a row can be written for it: a field whose type offers no other
-     * value is no field to change, and so there is nothing to offer.
+     * A field of a sum whose cases all carry something is given another value like any other:
+     * one value of each case, written as the record the case is, so that the two copies of the
+     * key hold different cases.
      */
     @Test
-    void aCaseIsNotOfferedWhereTheFieldTheStatementReadsHasNoOtherValue() {
-        Compilation compilation = Compilation.ofSource(HEAD + """
+    void aSumWhoseCasesAllCarrySomethingIsGivenItsOtherCase() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data Card = { n: Int }
                 data Cash = { n: Int }
                 data Pay = Card | Cash
@@ -349,61 +350,57 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                         [Row { sku = "A", pay = Card { n = 1 } }]) -> 1
                     | "refused" : ([LI { sku = "A", q = 5 }],
                         [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """);
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
-        String module = compilation.modules().getFirst();
-        assertTrue(compilation.db().ask(new Adequacy.Decides(module)).value().get("f").took()
-                        .made().orElseThrow().unseenCases().stream()
-                        .anyMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "the order is unmeasured, so that not being offered is the plan's answer");
-        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().cases()
-                        .stream().noneMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "no order is offered for a field with no other value to give");
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found),
+                () -> "a row for each way: " + found.keySet());
+        found.values().forEach(row -> {
+            String rows = row.inputs().get(1).text();
+            assertTrue(rows.contains("Card {") && rows.contains("Cash {"),
+                    () -> "the two copies hold the two cases: " + rows);
+        });
     }
 
     /**
-     * A list reached through the values of a map is a container the rewrite does not rebuild, so
-     * the order of a key in it is reported unmeasured and no row is offered for it: what is
-     * offered is what the rewrite does.
+     * A list reached through the values of a map is rebuilt around the map's own keys, so the
+     * order of a key in it is composed for, with the entry's key and the other entries kept.
      */
     @Test
-    void anOrderInAListBelowAMapIsNotOffered() {
-        Compilation compilation = Compilation.ofSource(HEAD + """
+    void anOrderInAListBelowAMapIsComposedForWithTheKeysKept() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data Row = { sku: String, qty: Int }
                 data Snap = { byDay: Map<String, List<Row>> }
-                behavior f : (item: LI, snap: Snap) -> Int | Empty
-                let f (item, snap) = {
-                    guard match Map.get("d", snap.byDay) with
-                        | Some rows -> match Map.get(item.sku, List.indexBy(.sku, rows)) with
-                            | Some r -> r.qty >= item.q
+                behavior f : (items: List<LI>, snap: Snap) -> Int | Empty
+                let f (items, snap) = {
+                    guard List.all(i -> match Map.get(i.sku, snap.byDay) with
+                        | Some rows -> match Map.get(i.sku, List.indexBy(.sku, rows)) with
+                            | Some r -> r.qty >= i.q
                             | None -> false
-                        | None -> false else Empty { n = 0 }
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
                     1
                 }
                 example f
-                    | "stocked" : (LI { sku = "A", q = 5 },
-                        Snap { byDay = [("d", [Row { sku = "A", qty = 9 }])] }) -> 1
-                    | "short" : (LI { sku = "A", q = 5 },
-                        Snap { byDay = [("d", [Row { sku = "A", qty = 1 }])] })
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 9 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] }) -> 1
+                    | "short" : ([LI { sku = "A", q = 5 }],
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 1 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] })
                         -> Empty { n = 0 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """);
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
-        String module = compilation.modules().getFirst();
-        assertTrue(compilation.db().ask(new Adequacy.Decides(module)).value().get("f").took()
-                        .made().orElseThrow().unseenCases().stream()
-                        .anyMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "the order is unmeasured, so that not being offered is the plan's answer");
-        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().cases()
-                        .stream().noneMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "no order is offered for a list the rewrite does not go through");
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found),
+                () -> "a row for each way: " + found.keySet());
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            List<String> keys = keysIn(snap, "sku");
+            assertEquals(2, keys.size(), () -> "two elements: " + snap);
+            assertEquals(keys.get(0), keys.get(1), () -> "holding one key: " + snap);
+            assertTrue(snap.contains("byDay = [(" + keys.get(0) + ", ["),
+                    () -> "the entry keeps its key: " + snap);
+        });
     }
 
     /**

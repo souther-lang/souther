@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
@@ -14,6 +15,7 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -129,7 +131,7 @@ public final class KeyOrderCandidates {
             return Stream.empty();
         }
         MeasuredInput subject = writing.subject();
-        Pool pool = Pool.of(seen, prim -> composedAt(subject, prim));
+        Pool pool = Pool.of(seen, prim -> composedAt(subject, prim), subject.ruleReading());
         List<List<String>> apart = subject.keptApartAt(plan.container());
         // Two bounds, because the decoder refuses some of what is looked at: counting only what
         // it admits would let a rule that refuses nearly everything be looked at without end, and
@@ -227,7 +229,7 @@ public final class KeyOrderCandidates {
         for (List<String> each : fields) {
             Type type = inputs.typeRead(element, fieldSteps(each), views);
             if (type != null && !startsWith(each, key) && !startsWith(key, each)
-                    && variesAsAValue(views.apply(type).shape(), views)) {
+                    && variesAsAValue(views.apply(type).shape())) {
                 out.add(new Target(each, type));
             }
         }
@@ -243,7 +245,7 @@ public final class KeyOrderCandidates {
     private static List<List<String>> leavesBelow(Function<Type, TypeView> views, Type type,
                                                   List<String> reached, int levels) {
         Shape shape = views.apply(type).shape();
-        if (!reached.isEmpty() && variesAsAValue(shape, views)) {
+        if (!reached.isEmpty() && variesAsAValue(shape)) {
             return List.of(reached);
         }
         if (!(shape instanceof Shape.Product product) || levels >= MOST_LEVELS_OF_FIELDS) {
@@ -260,49 +262,43 @@ public final class KeyOrderCandidates {
 
     /**
      * Whether a field of this shape can be given another value. Asked of the shape and nothing
-     * else, and answered by {@link #valuesOfTheType}: what is offered as a field to change is what
-     * the values are made of, so that a field offered is a field with another value to give.
+     * else: a sum has another value wherever it has another case, and what is written for each
+     * case is {@link #valuesFor}'s to find.
      */
-    private static boolean variesAsAValue(Shape shape, Function<Type, TypeView> views) {
+    private static boolean variesAsAValue(Shape shape) {
         return switch (shape) {
             case Shape.Scalar scalar -> scalar.prim() != Type.Prim.RATIONAL;
-            case Shape.Sum _ -> valuesOfTheType(shape, views).size() >= 2;
+            case Shape.Sum sum -> sum.reaches().cases().size() >= 2;
             default -> false;
         };
     }
 
     /**
-     * The values the declaration of a type offers, with no row: both of a {@code Bool}, and the
-     * cases of a sum that carry nothing. A number, a text or a date is offered none here, since
-     * which of them stands for it is a matter of the rules and of the row.
-     */
-    private static List<ObservedValue> valuesOfTheType(Shape shape,
-                                                       Function<Type, TypeView> views) {
-        return switch (shape) {
-            case Shape.Scalar scalar when scalar.prim() == Type.Prim.BOOL ->
-                    List.of(new ObservedValue.Bool(false), new ObservedValue.Bool(true));
-            case Shape.Sum sum -> sum.reaches().cases().stream()
-                    .filter(each -> views.apply(Type.ref(each)).shape() instanceof Shape.Unit)
-                    .<ObservedValue>map(ObservedValue.Unit::new)
-                    .limit(MOST_VALUES_OF_A_KIND).toList();
-            default -> List.of();
-        };
-    }
-
-    /**
-     * The values a field of this shape is given: what the declaration offers
-     * ({@link #valuesOfTheType}), and for a number, a text or a date the ones the statement
-     * compares the field with, the ones the row holds and the ones a row is composed with at the
-     * type, in that order: what the statement names is where its answer turns.
+     * The values a field of {@code type}, standing at {@code fields} below an element, is given.
+     * A number, a text or a date is given the ones the statement compares the field with, the ones
+     * the row holds and the ones a row is composed with at the type, in that order: what the
+     * statement names is where its answer turns. A sum is given one value of each of its cases,
+     * written as a row writes a record, so that a case carrying something is another value of the
+     * field like one that carries nothing.
      *
      * @param named what the statement compares this field with ({@link #namedBy})
      */
-    private List<ObservedValue> valuesFor(Shape shape, Pool pool, List<Place> named) {
-        if (!(shape instanceof Shape.Scalar scalar)) {
-            return valuesOfTheType(shape, views);
+    private List<ObservedValue> valuesFor(Type type, List<String> fields, Pool pool,
+                                          List<Place> named) {
+        Shape shape = views.apply(type).shape();
+        if (shape instanceof Shape.Sum) {
+            return casesOf(type, fields, pool);
         }
+        if (!(shape instanceof Shape.Scalar scalar)) {
+            return List.of();
+        }
+        return scalarValues(scalar, pool, named);
+    }
+
+    private static List<ObservedValue> scalarValues(Shape.Scalar scalar, Pool pool,
+                                                    List<Place> named) {
         List<ObservedValue> held = switch (scalar.prim()) {
-            case BOOL -> valuesOfTheType(shape, views);
+            case BOOL -> List.of(new ObservedValue.Bool(false), new ObservedValue.Bool(true));
             case INT -> pool.of(ObservedValue.Integer.class, scalar.prim());
             case DECIMAL -> pool.of(ObservedValue.Decimal.class, scalar.prim());
             case STRING -> pool.of(ObservedValue.Text.class, scalar.prim());
@@ -313,6 +309,33 @@ public final class KeyOrderCandidates {
         return scalar.prim() == Type.Prim.BOOL ? held
                 : Stream.concat(namedAs(scalar.prim(), named).stream(), held.stream()).distinct()
                         .limit(MOST_VALUES_OF_A_KIND).toList();
+    }
+
+    /**
+     * One value of each case of the sum {@code type}, in the order the declarations write the
+     * cases. The case is the unit and not the value: a case with many values is given one, so that
+     * the first case does not use up the room the others are listed in. A case nothing here writes
+     * a value of is left out, which is a case this did not find and not one that cannot be.
+     */
+    private List<ObservedValue> casesOf(Type type, List<String> fields, Pool pool) {
+        TypeView view = views.apply(type);
+        if (!(view.shape() instanceof Shape.Sum sum)) {
+            return List.of();
+        }
+        TermPath at = plan.container().element();
+        for (String each : fields) {
+            at = at.then(each);
+        }
+        List<ObservedValue> out = new ArrayList<>();
+        for (TypeSymbol leaf : sum.reaches().cases()) {
+            ValuesOfAnElement.Listed listed = ValuesOfAnElement.of(Type.ref(leaf), at,
+                    pool.reading(), 1, (_, held) -> held.shape() instanceof Shape.Scalar scalar
+                            ? scalarValues(scalar, pool, List.of()) : null);
+            if (listed != null && !listed.values().isEmpty()) {
+                out.add(ObservedValue.wrapped(view.wrappers(), listed.values().getFirst()));
+            }
+        }
+        return out.stream().limit(MOST_VALUES_OF_A_KIND).toList();
     }
 
     /**
@@ -408,7 +431,7 @@ public final class KeyOrderCandidates {
             return Stream.empty();
         }
         return plan.targets().stream().flatMap(target -> {
-            List<ObservedValue> values = valuesFor(views.apply(target.type()).shape(), pool,
+            List<ObservedValue> values = valuesFor(target.type(), target.fields(), pool,
                     plan.named().getOrDefault(target.fields(), List.of()));
             return values.stream().flatMap(earlier -> values.stream()
                     .filter(later -> !later.equals(earlier))
@@ -500,7 +523,7 @@ public final class KeyOrderCandidates {
         if (!elsewhere.contains(mine)) {
             return element;
         }
-        ObservedValue another = valuesFor(views.apply(type).shape(), pool,
+        ObservedValue another = valuesFor(type, run, pool,
                 plan.named().getOrDefault(run, List.of())).stream()
                 .filter(each -> !elsewhere.contains(each)).findFirst().orElse(null);
         return another == null ? null : with(element, run, another);
@@ -525,14 +548,24 @@ public final class KeyOrderCandidates {
 
         private final Function<Type.Prim, List<ObservedValue>> composed;
 
-        private Pool(Function<Type.Prim, List<ObservedValue>> composed) {
+        /** The rules the values written are read under. */
+        private final RuleReadingContext reading;
+
+        private Pool(Function<Type.Prim, List<ObservedValue>> composed,
+                     RuleReadingContext reading) {
             this.composed = composed;
+            this.reading = reading;
         }
 
-        static Pool of(List<ObservedValue> seen, Function<Type.Prim, List<ObservedValue>> composed) {
-            Pool pool = new Pool(composed);
+        static Pool of(List<ObservedValue> seen, Function<Type.Prim, List<ObservedValue>> composed,
+                       RuleReadingContext reading) {
+            Pool pool = new Pool(composed, reading);
             seen.forEach(pool::gather);
             return pool;
+        }
+
+        RuleReadingContext reading() {
+            return reading;
         }
 
         List<ObservedValue> of(Class<?> kind, Type.Prim prim) {
