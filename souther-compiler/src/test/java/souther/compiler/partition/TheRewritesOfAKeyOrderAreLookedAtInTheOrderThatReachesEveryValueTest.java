@@ -8,6 +8,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -33,15 +34,25 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
     private static final int MOST_VALUES = KeyOrderCandidates.MOST_CASES_OF_A_SUM
             * KeyOrderCandidates.MOST_VALUES_OF_A_CASE;
 
+    /** Rounds of one visit each, for the values: every value but the last is taken against the
+     *  ones after it. */
+    private static int[] oneVisit(int values) {
+        int[] blocks = new int[Math.max(0, values - 1)];
+        Arrays.fill(blocks, 1);
+        return blocks;
+    }
+
     @Test
     void aValueIsTakenAgainstTheLaterOnesInBothOrdersAtOneSiteBeforeTheNextSite() {
-        assertEquals(List.of(new KeyOrderCandidates.Round(0, 0), new KeyOrderCandidates.Round(0, 1),
-                        new KeyOrderCandidates.Round(1, 0), new KeyOrderCandidates.Round(1, 1)),
-                KeyOrderCandidates.roundsOf(3, 2).toList());
+        assertEquals(List.of(new KeyOrderCandidates.Round(0, 0, 0),
+                        new KeyOrderCandidates.Round(0, 1, 0),
+                        new KeyOrderCandidates.Round(1, 0, 0),
+                        new KeyOrderCandidates.Round(1, 1, 0)),
+                KeyOrderCandidates.roundsOf(oneVisit(3), 2).toList());
         assertEquals(List.of(new KeyOrderCandidates.Pair(1, 2), new KeyOrderCandidates.Pair(2, 1),
                         new KeyOrderCandidates.Pair(1, 3), new KeyOrderCandidates.Pair(3, 1)),
                 KeyOrderCandidates.pairsWith(4, 1));
-        assertEquals(List.of(), KeyOrderCandidates.roundsOf(1, 5).toList(),
+        assertEquals(List.of(), KeyOrderCandidates.roundsOf(oneVisit(1), 5).toList(),
                 "one value has nothing to be taken against");
     }
 
@@ -165,11 +176,12 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         long most = (long) (MOST_VALUES - 1) * KeyOrderCandidates.MOST_SITES_OF_A_CONTAINER;
 
         assertEquals((long) (MOST_VALUES - 1) * 3,
-                KeyOrderCandidates.roundsOf(MOST_VALUES, 3).count(),
+                KeyOrderCandidates.roundsOf(oneVisit(MOST_VALUES), 3).count(),
                 "a container with fewer sites than the most has the rounds of its own");
-        assertEquals(most, KeyOrderCandidates.roundsOf(MOST_VALUES,
+        assertEquals(most, KeyOrderCandidates.roundsOf(oneVisit(MOST_VALUES),
                 KeyOrderCandidates.sitesIn(1000)).count());
-        assertEquals(most, KeyOrderCandidates.roundsOf(MOST_VALUES, Integer.MAX_VALUE).count());
+        assertEquals(most, KeyOrderCandidates.roundsOf(oneVisit(MOST_VALUES),
+                Integer.MAX_VALUE).count());
         assertEquals(new KeyOrderCandidates.Site.Repeating(15),
                 KeyOrderCandidates.siteAt(1000, 30), "the sites visited of a long container");
         assertEquals(new KeyOrderCandidates.Site.Overwriting(0, 16),
@@ -189,7 +201,8 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         Set<Integer> sitesOfDifferentCases = new HashSet<>();
         Set<Integer> sitesOfOneCase = new HashSet<>();
         for (KeyOrderCandidates.Round round
-                : KeyOrderCandidates.roundsOf(values.size(), KeyOrderCandidates.sitesIn(5))
+                : KeyOrderCandidates.roundsOf(oneVisit(values.size()),
+                        KeyOrderCandidates.sitesIn(5))
                         .toList()) {
             for (KeyOrderCandidates.Pair pair
                     : KeyOrderCandidates.pairsOfRound(values, round.value())) {
@@ -244,7 +257,8 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
             boolean repeating = false;
             boolean overwriting = false;
             for (KeyOrderCandidates.Round round
-                    : KeyOrderCandidates.roundsOf(MOST_VALUES, KeyOrderCandidates.sitesIn(elements))
+                    : KeyOrderCandidates.roundsOf(oneVisit(MOST_VALUES),
+                            KeyOrderCandidates.sitesIn(elements))
                             .toList()) {
                 if (looked >= KeyOrderCandidates.MOST_REWRITES_LOOKED_AT) {
                     break;
@@ -257,6 +271,71 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
             }
             assertTrue(repeating && overwriting, elements + " elements");
         }
+    }
+
+    /**
+     * A round of many turns is made of visits, a container given a few of its turns in each, and
+     * the visits are taken before the next site: each container is given its first turns before
+     * any is given its second.
+     */
+    @Test
+    void aRoundOfManyTurnsIsMadeOfVisitsTakenBeforeTheNextSite() {
+        assertEquals(0, KeyOrderCandidates.blocksOf(0));
+        assertEquals(1, KeyOrderCandidates.blocksOf(1));
+        assertEquals(1, KeyOrderCandidates.blocksOf(KeyOrderCandidates.MOST_TURNS_OF_A_VISIT));
+        assertEquals(2, KeyOrderCandidates.blocksOf(KeyOrderCandidates.MOST_TURNS_OF_A_VISIT + 1));
+        assertEquals(List.of(new KeyOrderCandidates.Round(0, 0, 0),
+                        new KeyOrderCandidates.Round(0, 0, 1),
+                        new KeyOrderCandidates.Round(0, 1, 0),
+                        new KeyOrderCandidates.Round(0, 1, 1),
+                        new KeyOrderCandidates.Round(1, 0, 0),
+                        new KeyOrderCandidates.Round(1, 1, 0)),
+                KeyOrderCandidates.roundsOf(new int[] {2, 1}, 2).toList());
+    }
+
+    /**
+     * The containers of a row are each given their turns in a visit, so that the one a statement
+     * is about is reached though it comes after others: with a round of many turns, every container
+     * is given its first visit within the rewrites looked at, up to as many containers as fit.
+     */
+    @Test
+    void everyContainerIsGivenItsFirstTurnsWithinTheRewritesLookedAt() {
+        int[] counts = {2 * (MOST_VALUES - 1)};
+        List<KeyOrderCandidates.Turn> turns = KeyOrderCandidates.turnsOf(counts);
+        int containers = KeyOrderCandidates.MOST_REWRITES_LOOKED_AT
+                / KeyOrderCandidates.MOST_TURNS_OF_A_VISIT;
+        assertTrue(containers >= 16, "as many containers as a row is likely to hold");
+        int[] given = new int[containers];
+        int looked = 0;
+        for (KeyOrderCandidates.Round round
+                : KeyOrderCandidates.roundsOf(new int[] {KeyOrderCandidates.blocksOf(turns.size())},
+                        4).toList()) {
+            for (int container = 0; container < containers; container++) {
+                if (looked >= KeyOrderCandidates.MOST_REWRITES_LOOKED_AT) {
+                    break;
+                }
+                int visit = KeyOrderCandidates.visitOf(turns, round.block()).size();
+                given[container] += visit;
+                looked += visit;
+            }
+        }
+        for (int container = 0; container < containers; container++) {
+            assertTrue(given[container] >= KeyOrderCandidates.MOST_TURNS_OF_A_VISIT,
+                    "container " + container);
+        }
+    }
+
+    @Test
+    void aVisitIsTheNextFewTurnsOfARoundAndTheLastIsTheRest() {
+        List<KeyOrderCandidates.Turn> turns = KeyOrderCandidates.turnsOf(new int[] {10, 9});
+        int visit = KeyOrderCandidates.MOST_TURNS_OF_A_VISIT;
+
+        assertEquals(turns.subList(0, visit), KeyOrderCandidates.visitOf(turns, 0));
+        assertEquals(turns.subList(visit, 2 * visit), KeyOrderCandidates.visitOf(turns, 1));
+        assertEquals(turns.subList(2 * visit, turns.size()),
+                KeyOrderCandidates.visitOf(turns, 2));
+        assertEquals(List.of(), KeyOrderCandidates.visitOf(turns, 3), "none past the end");
+        assertEquals(KeyOrderCandidates.blocksOf(turns.size()), 3);
     }
 
     /** The fields of a round take their pairs in turn, so a field with many does not use up what
@@ -288,7 +367,7 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         for (int elements : new int[] {1, 2, 4, 8, 16}) {
             int sites = KeyOrderCandidates.sitesIn(elements);
             List<KeyOrderCandidates.Pair> looked = new ArrayList<>();
-            KeyOrderCandidates.roundsOf(MOST_VALUES, sites)
+            KeyOrderCandidates.roundsOf(oneVisit(MOST_VALUES), sites)
                     .takeWhile(round -> looked.size() < KeyOrderCandidates.MOST_REWRITES_LOOKED_AT)
                     .forEach(round -> {
                         if (round.site() == 0) {
@@ -314,7 +393,7 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         Set<Integer> valuesAtTheFirstSite = new HashSet<>();
         int looked = 0;
         for (KeyOrderCandidates.Round round
-                : KeyOrderCandidates.roundsOf(MOST_VALUES, sites).toList()) {
+                : KeyOrderCandidates.roundsOf(oneVisit(MOST_VALUES), sites).toList()) {
             if (looked >= KeyOrderCandidates.MOST_REWRITES_LOOKED_AT) {
                 break;
             }

@@ -114,6 +114,11 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many cases of a sum the two copies of an element are given between"
                             + " them; a case past it is not tried, and a case with no row is not"
                             + " found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_TURNS_OF_A_VISIT",
+                    "how many of the turns of a round one container of a row is given in a visit,"
+                            + " so that the rewrites looked at are spread over the containers; a"
+                            + " turn is taken in a later visit, and a case with no row is not"
+                            + " found, which claims nothing of the model"),
             Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_SITES_OF_A_CONTAINER",
                     "how many sites in one container the two copies of an element are written"
                             + " at, the elements held again before the pairs of elements; a site"

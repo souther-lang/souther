@@ -71,10 +71,10 @@ import java.util.stream.Stream;
  *
  * <p>What a bound cuts is the end of an order, so every order here that has more than one kind of
  * thing in it takes them in turn and not one kind after the other: the sites ({@link #siteAt}),
- * the fields of a round ({@link #turnsOf}), the values of the cases of a sum, and the pairs of
- * different cases and of one case. The containers of a round are the one exception, taken in the
- * order the row holds them: they are the rewrites of one observed row, and are alike where the
- * row was composed.
+ * the fields of a round ({@link #turnsOf}), the values of the cases of a sum, the pairs of
+ * different cases and of one case, and the containers a row holds, each given
+ * {@link #MOST_TURNS_OF_A_VISIT} turns of a round at a time. Nothing is assumed of how alike the
+ * containers of a row are: the one a statement is about may be the last the walk meets.
  */
 public final class KeyOrderCandidates {
 
@@ -94,6 +94,11 @@ public final class KeyOrderCandidates {
      *  grow as the square of its elements, and a round is visited whether or not it yields a
      *  rewrite, so the rounds are counted here, by the sites they visit. */
     static final int MOST_SITES_OF_A_CONTAINER = 32;
+
+    /** The most turns of a round that one container is given in a visit. A container is given
+     *  its turns a few at a time, so that the bound on what is looked at is spread over the
+     *  containers a row holds and not used up by the first. */
+    static final int MOST_TURNS_OF_A_VISIT = 8;
 
     /** The most values of one case of a sum that are listed. The first of a case is the one
      *  tried; the others are there for the decoder refusing it. */
@@ -183,17 +188,17 @@ public final class KeyOrderCandidates {
                         plan.named().getOrDefault(target.fields(), List.of())).stream()
                         .filter(value -> admitted.admits(target, value)).toList())
                 .toList();
-        int most = given.stream().mapToInt(List::size).max().orElse(0);
+        Schedule schedule = Schedule.of(given);
         // Three bounds, each counting the work where it is done. The rounds are bounded by the
-        // values and the sites ({@link #roundsOf}), whether or not a round yields; what is looked
-        // at, by the rewrites a round yields, counting those the decoder refuses; and what is run,
-        // by those it admits. Counting only the last would let a rule that refuses nearly
-        // everything be looked at without end, and counting only what is looked at would let the
-        // refused ones use up the rows that are run.
-        return roundsOf(most, mostSitesIn(held)).flatMap(round ->
+        // values, the sites and the turns of a visit ({@link #roundsOf}), whether or not a round
+        // yields; what is looked at, by the rewrites a round yields, counting those the decoder
+        // refuses; and what is run, by those it admits. Counting only the last would let a rule
+        // that refuses nearly everything be looked at without end, and counting only what is
+        // looked at would let the refused ones use up the rows that are run.
+        return roundsOf(schedule.blocks(), mostSitesIn(held)).flatMap(round ->
                         inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
                                 plan.container().steps(),
-                                (here, _, _) -> heldTwice(here, given, round, apart, pool),
+                                (here, _, _) -> heldTwice(here, schedule, round, apart, pool),
                                 views))
                 .limit(MOST_REWRITES_LOOKED_AT)
                 .map(each -> ObservedFixtures.of(each, subject.types().get(plan.parameter()),
@@ -506,9 +511,12 @@ public final class KeyOrderCandidates {
     /**
      * What the container comes to with a key held twice, one rewrite at a time: for each field,
      * the pairs of values {@code round} names, written at the place it names in the container.
+     * Called for each container the walk meets, and gives each of them the turns of the round's
+     * visit and no more, so that the next container is given its own before the bound on what is
+     * looked at is used up by the one before.
      */
-    private Stream<ObservedValue> heldTwice(ObservedValue here, List<List<ObservedValue>> given,
-                                            Round round, List<List<String>> apart, Pool pool) {
+    private Stream<ObservedValue> heldTwice(ObservedValue here, Schedule schedule, Round round,
+                                            List<List<String>> apart, Pool pool) {
         if (!(here instanceof ObservedValue.Sequence(List<ObservedValue> elements))
                 || elements.isEmpty()) {
             return Stream.empty();
@@ -517,18 +525,55 @@ public final class KeyOrderCandidates {
         if (site == null) {
             return Stream.empty();
         }
-        List<List<Pair>> pairs = new ArrayList<>();
-        for (List<ObservedValue> values : given) {
-            pairs.add(pairsOfRound(values, round.value()));
-        }
-        return turnsOf(pairs.stream().mapToInt(List::size).toArray()).stream()
+        return visitOf(schedule.turns().get(round.value()), round.block()).stream()
                 .map(turn -> {
-                    Pair pair = pairs.get(turn.of()).get(turn.at());
-                    List<ObservedValue> values = given.get(turn.of());
+                    Pair pair = schedule.pairs().get(round.value()).get(turn.of()).get(turn.at());
+                    List<ObservedValue> values = schedule.given().get(turn.of());
                     return written(site, elements, plan.targets().get(turn.of()),
                             values.get(pair.earlier()), values.get(pair.later()), apart, pool);
                 })
                 .filter(Objects::nonNull);
+    }
+
+    /**
+     * What the rounds are made of: the values each field is given, the pairs of each value's round
+     * for each field, and the turns the fields take them in. Worked out once for a row.
+     */
+    private record Schedule(List<List<ObservedValue>> given, List<List<List<Pair>>> pairs,
+                            List<List<Turn>> turns) {
+
+        static Schedule of(List<List<ObservedValue>> given) {
+            int most = given.stream().mapToInt(List::size).max().orElse(0);
+            List<List<List<Pair>>> pairs = new ArrayList<>();
+            List<List<Turn>> turns = new ArrayList<>();
+            for (int value = 0; value < Math.max(0, most - 1); value++) {
+                List<List<Pair>> ofTheFields = new ArrayList<>();
+                for (List<ObservedValue> values : given) {
+                    ofTheFields.add(pairsOfRound(values, value));
+                }
+                pairs.add(ofTheFields);
+                turns.add(turnsOf(ofTheFields.stream().mapToInt(List::size).toArray()));
+            }
+            return new Schedule(given, pairs, turns);
+        }
+
+        /** How many visits the round of each value is made of. */
+        int[] blocks() {
+            return turns.stream().mapToInt(each -> blocksOf(each.size())).toArray();
+        }
+    }
+
+    /** The turns of the {@code block}-th visit of a round: {@link #MOST_TURNS_OF_A_VISIT} of them,
+     *  fewer at the end, none past it. */
+    static List<Turn> visitOf(List<Turn> turns, int block) {
+        int from = Math.min(block * MOST_TURNS_OF_A_VISIT, turns.size());
+        return turns.subList(from, Math.min(from + MOST_TURNS_OF_A_VISIT, turns.size()));
+    }
+
+    /** How many visits {@code turns} turns are made of, a visit being
+     *  {@link #MOST_TURNS_OF_A_VISIT} of them. */
+    static int blocksOf(int turns) {
+        return (turns + MOST_TURNS_OF_A_VISIT - 1) / MOST_TURNS_OF_A_VISIT;
     }
 
     /** The {@code at}-th pair of the {@code of}-th field of a round. */
@@ -571,8 +616,9 @@ public final class KeyOrderCandidates {
      *  given and of the one the later copy is. */
     record Pair(int earlier, int later) {}
 
-    /** What a bound cuts last: the sites in the container come one at a time, within a value. */
-    record Round(int value, int site) {}
+    /** What a bound cuts last: the sites in the container come one at a time, within a value, and
+     *  the turns of a round a visit at a time, within a site. */
+    record Round(int value, int site, int block) {}
 
     /**
      * How many sites two copies are written at in a container of {@code size} elements: each
@@ -647,14 +693,22 @@ public final class KeyOrderCandidates {
      * outer of the two, since a site left out costs a position of the container and a value left
      * out costs a case.
      *
-     * @param values the most values any field is given
+     * <p>A round is visited container by container, and a container is given
+     * {@link #MOST_TURNS_OF_A_VISIT} of its turns in a visit: a round of many turns is then made of
+     * several visits, and each container is given its first before any is given its second. A
+     * container taken whole would use up the bound on what is looked at before the next was
+     * reached, and the one a statement is about may be the next.
+     *
+     * @param blocks the visits the round of each value is made of, the first value first
      * @param sites  the most sites any container has, of which the first
      *               {@link #MOST_SITES_OF_A_CONTAINER} are visited
      */
-    static Stream<Round> roundsOf(int values, int sites) {
+    static Stream<Round> roundsOf(int[] blocks, int sites) {
         int most = Math.min(sites, MOST_SITES_OF_A_CONTAINER);
-        return IntStream.range(0, Math.max(0, values - 1)).boxed().flatMap(value ->
-                IntStream.range(0, most).mapToObj(site -> new Round(value, site)));
+        return IntStream.range(0, blocks.length).boxed().flatMap(value ->
+                IntStream.range(0, most).boxed().flatMap(site ->
+                        IntStream.range(0, blocks[value])
+                                .mapToObj(block -> new Round(value, site, block))));
     }
 
     /** The most sites any container in {@code held} has. */
