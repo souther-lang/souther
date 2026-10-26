@@ -30,7 +30,7 @@ public final class GivenTotals {
         return switch (stated) {
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.SameValue _, Proposition.InTheStrings _,
-                 Proposition.LastToHold _ -> true;
+                 Proposition.StringInside _, Proposition.LastToHold _ -> true;
             case Proposition.Compared compared -> compared.relation() instanceof Relation.Affine
                     || compared.relation() instanceof Relation.Ordered;
             case Proposition.All all -> all.parts().stream().allMatch(GivenTotals::canBeGiven);
@@ -73,7 +73,8 @@ public final class GivenTotals {
             };
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.SameValue _, Proposition.InTheStrings _,
-                 Proposition.LastToHold _ -> ExactAnswer.held(stated);
+                 Proposition.StringInside _, Proposition.LastToHold _ ->
+                    ExactAnswer.held(stated);
             case Proposition.Some _, Proposition.SomeReachable _, Proposition.OnAnApplication _,
                  Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _,
                  Proposition.OfTheWays _ ->

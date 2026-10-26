@@ -43,6 +43,16 @@ record PieceWindow(long from, OptionalLong until) {
         return until.isPresent() && until.getAsLong() == 0;
     }
 
+    /**
+     * Whether both ends are indexes an {@code int} says. A reader that states the window in
+     * {@code int}s (a quantity, a repetition count) is handed only such a window, since saturating
+     * an end there would say another window than this one.
+     */
+    boolean isSaidInInts() {
+        return from < Integer.MAX_VALUE
+                && (until.isEmpty() || until.getAsLong() <= Integer.MAX_VALUE);
+    }
+
     /** What is left of this window by {@code List.drop} of {@code count}, which is not negative. */
     PieceWindow dropping(long count) {
         return new PieceWindow(saturatedSum(from, count), until);

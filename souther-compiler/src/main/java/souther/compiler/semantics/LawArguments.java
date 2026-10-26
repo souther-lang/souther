@@ -69,6 +69,11 @@ public final class LawArguments {
                 into(one, out);
                 into(other, out);
             }
+            case LawProposition.Inside<A>(LawSubject<A> inner, LawSubject<A> outer, var _,
+                                          var _) -> {
+                into(inner, out);
+                into(outer, out);
+            }
         }
     }
 }

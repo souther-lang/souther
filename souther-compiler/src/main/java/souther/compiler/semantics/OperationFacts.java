@@ -876,12 +876,11 @@ public final class OperationFacts {
                     new SideAnswered(AnswerAspect.TRUTH, false))))),
             about("Map", "containsKey", law(AnswerAspect.TRUTH,
                     some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
-            about("String", "contains", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER)),
-            about("String", "startsWith", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER)),
-            about("String", "endsWith", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER)),
+            about("String", "contains", law(AnswerAspect.TRUTH, inside(StringContainment.ANYWHERE))),
+            about("String", "startsWith",
+                    law(AnswerAspect.TRUTH, inside(StringContainment.AT_THE_START))),
+            about("String", "endsWith",
+                    law(AnswerAspect.TRUTH, inside(StringContainment.AT_THE_END))),
             about("String", "matches", unsaid(AnswerAspect.TRUTH,
                     Unsayable.A_STRING_MATCHING_A_PATTERN)),
             // No two elements coming to one answer of the closure is as many different answers as
@@ -1244,6 +1243,12 @@ public final class OperationFacts {
     private static LawProposition<ArgumentRef> alike(LawSubject<ArgumentRef> one,
                                                      LawSubject<ArgumentRef> other) {
         return new LawProposition.Same<>(one, other, true);
+    }
+
+    /** The first argument standing inside the second where {@code where} says, as the string
+     *  operations that ask it take them. */
+    private static LawProposition<ArgumentRef> inside(StringContainment where) {
+        return new LawProposition.Inside<>(the(at(0)), the(at(1)), where, true);
     }
 
     /** {@code a} and {@code b} being the same number, {@code b} counted {@code plus} more. */

@@ -96,6 +96,11 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             behavior oneValue : (o: O) -> A | B | C
             let oneValue (o) = if named(o) then (if o.a > 5 then A else B) else C
 
+            let holdsOther (o: O): Bool = String.contains(o.other, o.name)
+
+            behavior aStringInside : (o: O) -> A | B | C
+            let aStringInside (o) = if holdsOther(o) then (if o.a > 5 then A else B) else C
+
             behavior anOrder : (o: O) -> A | B | C
             let anOrder (o) = if o.name /= "M" then (if o.a > 5 then A else B) else C
 
@@ -164,6 +169,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, "aCase");
         // A helper whose answer is two texts being one.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES, "oneValue");
+        // A helper whose answer is one text standing inside another.
+        out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER, "aStringInside");
         // A text held apart from a written place on its order, which is a hole and no range.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, "anOrder");
         // How many elements meet something, against a number.

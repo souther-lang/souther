@@ -23,6 +23,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
+import souther.compiler.semantics.StringContainment;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -153,6 +154,10 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
+        out.put("one string inside another", new Proposition.StringInside(
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("n"))),
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("s"))),
+                StringContainment.ANYWHERE, true));
         out.put("the last of its value", new Proposition.LastToHold(
                 new DecisionSubject.AnInput(TermPath.of("xs")),
                 new DecisionSubject.AnInput(TermPath.of("xs").element()), true));

@@ -172,8 +172,14 @@ public final class ClosedState<A> {
         List<DifferenceBounds<A>> each = new ArrayList<>(closures.size());
         closures.forEach(closure -> each.add(closure.differences));
         DifferenceBounds<A> differences = DifferenceBounds.product(each);
-        Map<A, ExactCut> least = new LinkedHashMap<>();
-        Map<A, ExactCut> most = new LinkedHashMap<>();
+        int leastSize = 0;
+        int mostSize = 0;
+        for (ClosedState<A> closure : closures) {
+            leastSize += closure.box.atLeast().size();
+            mostSize += closure.box.atMost().size();
+        }
+        Map<A, ExactCut> least = LinkedHashMap.newLinkedHashMap(leastSize);
+        Map<A, ExactCut> most = LinkedHashMap.newLinkedHashMap(mostSize);
         Status status = Status.STABLE;
         boolean everyBoundWasComposed = true;
         for (ClosedState<A> closure : closures) {

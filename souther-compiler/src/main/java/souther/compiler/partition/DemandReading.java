@@ -1267,6 +1267,8 @@ final class DemandReading {
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             case Proposition.InTheStrings _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE));
+            case Proposition.StringInside _ ->
+                    List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_INSIDE_ANOTHER));
             // The elements of a container are written alike, so the last of them is the last of
             // its value as well; that a later element holds the same value is two of them being
             // one, which no composer writes.

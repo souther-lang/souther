@@ -93,6 +93,10 @@ public final class WhatAStatementSurvives {
                     subject(one, false);
                     subject(other, false);
                 }
+                case LawProposition.Inside<Integer>(var inner, var outer, var _, var _) -> {
+                    subject(inner, false);
+                    subject(outer, false);
+                }
             }
         }
 
@@ -140,6 +144,10 @@ public final class WhatAStatementSurvives {
                 case LawProposition.Same<Integer>(var one, var other, var _) -> {
                     subject(one, true);
                     subject(other, true);
+                }
+                case LawProposition.Inside<Integer>(var inner, var outer, var _, var _) -> {
+                    subject(inner, true);
+                    subject(outer, true);
                 }
             }
         }

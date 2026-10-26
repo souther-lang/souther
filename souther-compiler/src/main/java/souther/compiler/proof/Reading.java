@@ -12,6 +12,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
@@ -575,6 +576,14 @@ final class Reading {
                 LawProposition<Value> alike = same(subject(one, operation, argument, elements),
                         subject(other, operation, argument, elements));
                 yield holds ? alike : alike.denied();
+            }
+            case LawProposition.Inside<A>(LawSubject<A> inner, LawSubject<A> outer,
+                                          StringContainment where, boolean holds) -> {
+                LawProposition<Value> inside = new LawProposition.Inside<>(
+                        new LawSubject.Argument<>(subject(inner, operation, argument, elements)),
+                        new LawSubject.Argument<>(subject(outer, operation, argument, elements)),
+                        where, true);
+                yield holds ? inside : inside.denied();
             }
         };
     }

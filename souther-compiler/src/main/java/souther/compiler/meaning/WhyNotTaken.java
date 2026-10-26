@@ -178,6 +178,10 @@ public sealed interface WhyNotTaken {
         /** Two values being one, as what a path knows, which is no relation of numbers. */
         A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
 
+        /** One string standing inside another, as what a path knows, which is no relation of
+         *  numbers. */
+        A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER,
+
         /** A place on an order that is no number, where no range says it: a value other than a
          *  written place, which leaves a hole rather than a range, and a quantity that is no value
          *  of the input. A value of the input at or past a written place is a range, and a path
@@ -222,7 +226,7 @@ public sealed interface WhyNotTaken {
                         Domain.WHAT_A_ROW_IS_WRITTEN_IN;
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
                      A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
-                     A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
+                     A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER, A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
                      A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS, A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN,
                      A_NUMBER_THE_PATH_CANNOT_HOLD ->
                         Domain.WHAT_A_PATH_KNOWS;

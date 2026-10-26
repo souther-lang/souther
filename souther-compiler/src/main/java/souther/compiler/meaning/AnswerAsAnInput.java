@@ -170,7 +170,8 @@ public final class AnswerAsAnInput {
             // of it is the answer's to meet.
             case Proposition.Compared _, Proposition.Some _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.SomeReachable _ -> heldAt(inputNumbersIn(stated), pinned, positive);
+                 Proposition.StringInside _, Proposition.SomeReachable _ ->
+                    heldAt(inputNumbersIn(stated), pinned, positive);
             // A statement of the input alone is about no answer, and was returned above.
             case Proposition.Always _, Proposition.Unread _, Proposition.LastToHold _,
                  Proposition.Carried _, Proposition.InTheStrings _ -> stated;
@@ -381,8 +382,9 @@ public final class AnswerAsAnInput {
                 yield in == null || by == null ? null
                         : new Proposition.LastToHold(in, by, holds);
             }
-            // A search is read from a node of the input, and of no answer.
-            case Proposition.SomeReachable _ -> null;
+            // A search is read from a node of the input, and of no answer; neither is a string
+            // inside another, whose strings are values of the input.
+            case Proposition.SomeReachable _, Proposition.StringInside _ -> null;
             case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
                                        boolean holds, var _) -> {
@@ -465,8 +467,8 @@ public final class AnswerAsAnInput {
             case Proposition.Always _, Proposition.Unread _, Proposition.Carried _ -> false;
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.SomeReachable _, Proposition.All _,
-                 Proposition.Any _,
+                 Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
                     !Proposition.aboutAnAnswer(stated)

@@ -47,7 +47,7 @@ class ADocumentSendsAReaderToAPredicateAsAPredicateTest {
             data No
 
             behavior f : (prefix: String, code: String) -> Yes | No
-            let f (prefix, code) = if String.startsWith(prefix, code) then Yes else No
+            let f (prefix, code) = if String.startsWith(String.append(prefix, "x"), code) then Yes else No
             """;
 
     @Test

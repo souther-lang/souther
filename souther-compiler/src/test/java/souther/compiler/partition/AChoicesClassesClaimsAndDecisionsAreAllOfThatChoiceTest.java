@@ -144,7 +144,7 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
         for (int index = 0; index < byIndex.size(); index++) {
             Set<souther.compiler.reading.Condition> expected = new LinkedHashSet<>();
             byIndex.get(index).forEach(each -> expected.addAll(settling(each)));
-            assertEquals(expected, group.settledAt(index),
+            assertEquals(expected, new LinkedHashSet<>(group.settlesAt(index)),
                     "combination " + index + " is the way in and the two ways it settles the"
                             + " factors");
         }
@@ -158,15 +158,15 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
                 List.of(List.of(placed(holding(0), 10), placed(holding(1), 11)),
                         List.of(placed(holding(0), 20), placed(holding(1), 21))));
 
-        assertNull(group.at(1), "the two ways agree on nothing");
-        assertNull(group.settledAt(1), "so there is nothing there to ask a row for");
+        assertNull(group.at(1), "the two ways agree on nothing, so there is nothing there to ask"
+                + " a row for");
         assertEquals(Set.of(new souther.compiler.reading.Condition.Arm(
                         Numberings.armOfForkAt(9), Optional.empty()),
                         new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(10),
                                 Optional.empty()),
                         new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(20),
                                 Optional.empty())),
-                group.settledAt(0),
+                new LinkedHashSet<>(group.settlesAt(0)),
                 "while the choice they do agree on is one");
     }
 

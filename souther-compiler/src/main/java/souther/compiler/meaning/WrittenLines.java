@@ -370,7 +370,8 @@ public final class WrittenLines {
             }
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Carried _, Proposition.Unread _ -> { }
+                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.Unread _ -> { }
         }
     }
 
@@ -448,6 +449,7 @@ public final class WrittenLines {
                     }).toList();
             case Derivation.WhereAnOperationKeepsIt(var _, var _, var handed) -> List.of(handed);
             case Derivation.ALawSettles _, Derivation.TheSameValue _,
+                 Derivation.TheStringsInside _,
                  Derivation.ALawComparison _, Derivation.ASignItsBoundsSettle _,
                  Derivation.WrittenOut _, Derivation.NoRunTakesIt _,
                  Derivation.TheRunStopsHere _, Derivation.WhatAWalkCarried _, Derivation.Folded _,

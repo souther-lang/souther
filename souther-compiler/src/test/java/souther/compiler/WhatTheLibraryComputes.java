@@ -441,6 +441,10 @@ public final class WhatTheLibraryComputes {
                     alike(one, other);
                     alike(other, one);
                 }
+                case LawProposition.Inside<Slot>(var inner, var outer, var _, var _) -> {
+                    subject(inner);
+                    subject(outer);
+                }
             }
         }
 
@@ -638,6 +642,14 @@ public final class WhatTheLibraryComputes {
                 }
                 case LawProposition.Same<Slot> same -> "(" + subject(same.one())
                         + (same.holds() ? " == " : " /= ") + subject(same.other()) + ")";
+                case LawProposition.Inside<Slot> inside -> {
+                    String stands = "String." + switch (inside.where()) {
+                        case ANYWHERE -> "contains";
+                        case AT_THE_START -> "startsWith";
+                        case AT_THE_END -> "endsWith";
+                    } + "(" + subject(inside.inner()) + ", " + subject(inside.outer()) + ")";
+                    yield inside.holds() ? stands : "Bool.not(" + stands + ")";
+                }
             };
         }
 

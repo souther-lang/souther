@@ -9,6 +9,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -78,7 +79,7 @@ public sealed interface Proposition {
                     .map(none -> List.of(reached.atANode(), none))
                     .orElseGet(() -> List.of(reached.atANode()));
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, LastToHold _, Unread _, Carried _ -> List.of();
+                 SameValue _, StringInside _, LastToHold _, Unread _, Carried _ -> List.of();
         };
     }
 
@@ -110,6 +111,8 @@ public sealed interface Proposition {
             case InTheStrings _ -> false;
             case SameValue same -> mayBeAnElementOf(same.one(), container)
                     || mayBeAnElementOf(same.other(), container);
+            case StringInside inside -> mayBeAnElementOf(inside.inner(), container)
+                    || mayBeAnElementOf(inside.outer(), container);
             case LastToHold last -> isAnElementOf(last.position(), container);
             case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
                     somePartMayTurnOnAnElementOf(container);
@@ -441,6 +444,46 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new SameValue(one, other, !holds);
+        }
+    }
+
+    /**
+     * One string standing inside another where {@code where} says, or not.
+     *
+     * <p>Both strings are values of the input or what an operation answers of them, so a string
+     * made of another by {@code String.lowercase} is held as that answer and keeps what it was
+     * made from; read down to the position, it would be a statement about a string nobody wrote.
+     * It relates the two, as {@link SameValue} does. Whether either position is divided by it is
+     * not said here: that follows from the values each position admits and from how the two
+     * depend on each other, and is read where the relation is projected onto the positions.
+     *
+     * @param inner the string looked for
+     * @param outer the string looked in
+     * @param key   spelled from the rest when it is made, whatever is handed in
+     */
+    record StringInside(Quantity inner, Quantity outer, StringContainment where, boolean holds,
+                        String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
+        public StringInside(Quantity inner, Quantity outer, StringContainment where,
+                            boolean holds) {
+            this(inner, outer, where, holds, null);
+        }
+
+        public StringInside {
+            if (inner == null || outer == null || where == null) {
+                throw new IllegalArgumentException("a string inside another is of two strings");
+            }
+            key = (holds ? "" : "!") + inner.spelled() + " " + where + " " + outer.spelled();
+        }
+
+        @Override
+        public Proposition denied() {
+            return new StringInside(inner, outer, where, !holds);
         }
     }
 
@@ -964,7 +1007,7 @@ public sealed interface Proposition {
                         quantifiesOverInside(container, where.answers(), rebound)
                                 || quantifiesOverInside(container, where.states(), rebound);
                 case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                     SameValue _, LastToHold _, Carried _, Unread _ -> false;
+                     SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
             };
         }
 
@@ -988,8 +1031,8 @@ public sealed interface Proposition {
                 case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.key());
                 // One part, whatever it says: two spelled alike are one statement.
                 case Compared _, Truth _, InCases _, Present _, InTheStrings _, SameValue _,
-                     LastToHold _, Any _, Some _, Carried _, SomeReachable _, Unread _,
-                     OnAnApplication _, SoManyHold _, WhereItAnswers _, OfTheWays _ ->
+                     StringInside _, LastToHold _, Any _, Some _, Carried _, SomeReachable _,
+                     Unread _, OnAnApplication _, SoManyHold _, WhereItAnswers _, OfTheWays _ ->
                         Set.of(ofTheElement.key());
             });
         }
@@ -1653,7 +1696,7 @@ public sealed interface Proposition {
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ -> stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, LastToHold _, Carried _ -> false;
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
         };
     }
 
@@ -1783,7 +1826,7 @@ public sealed interface Proposition {
                  OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, Unread _, Carried _, LastToHold _ -> false;
+                 SameValue _, StringInside _, Unread _, Carried _, LastToHold _ -> false;
         };
     }
 
@@ -1811,6 +1854,7 @@ public sealed interface Proposition {
             case InTheStrings _ -> false;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;
+            case StringInside inside -> anAnswerIn(inside.inner()) || anAnswerIn(inside.outer());
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
@@ -2099,7 +2143,7 @@ public sealed interface Proposition {
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
                     "a count or a quantifier is of statements answering on every row: " + stated);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, LastToHold _, Carried _, Unread _ -> stated;
+                 SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> stated;
         };
     }
 
@@ -2113,7 +2157,7 @@ public sealed interface Proposition {
             case All _, Any _, OnAnApplication _, OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, LastToHold _, Carried _, Unread _ -> false;
+                 SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
         };
     }
 
@@ -2138,8 +2182,8 @@ public sealed interface Proposition {
             case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
             case OfTheWays ways -> deniedWhereverItFails(ways.written());
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, LastToHold _, Carried _, Some _, SoManyHold _, SomeReachable _ ->
-                    true;
+                 SameValue _, StringInside _, LastToHold _, Carried _, Some _, SoManyHold _,
+                 SomeReachable _ -> true;
         };
     }
 
