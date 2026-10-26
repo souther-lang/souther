@@ -59,7 +59,9 @@ import java.util.stream.Stream;
  * then the later sites in the container and the later values, and no value is left out for
  * coming late among the others, nor a site for coming after many pairs. The values are listed
  * a rank at a time, the first of every case before the second of any, so that a value the decoder
- * refuses is stood in for by the next of its case after every case has had its first.
+ * refuses is stood in for by the next of its case after every case has had its first. The pairs
+ * of values of different cases are taken before the pairs of values of one case, which are taken
+ * after them in the same order.
  */
 public final class KeyOrderCandidates {
 
@@ -159,18 +161,20 @@ public final class KeyOrderCandidates {
                         plan.named().getOrDefault(target.fields(), List.of())))
                 .toList();
         int most = given.stream().mapToInt(List::size).max().orElse(0);
-        Admitted admitted = new Admitted(held, subject, writing);
+        boolean someOfOneCase = given.stream().anyMatch(KeyOrderCandidates::hasTwoOfOneCase);
+        Admitted admitted = new Admitted(subject, writing);
         // Two bounds, because the decoder refuses some of what is looked at: counting only what
         // it admits would let a rule that refuses nearly everything be looked at without end, and
         // counting what is looked at would let the refused ones use up the rows that are run. A
         // value the decoder refuses on its own is left out before either is counted, since every
         // rewrite holding it is refused and would use up the bound for the values that are not.
-        return roundsOf(most, mostSitesIn(held)).flatMap(round ->
-                        inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
-                                plan.container().steps(),
-                                (here, _, _) -> heldTwice(here, given, round, apart, pool,
-                                        admitted),
-                                views))
+        int sites = mostSitesIn(held);        return Stream.of(false, true).limit(someOfOneCase ? 2 : 1).flatMap(ofOneCase ->
+                        roundsOf(most, sites).flatMap(round ->
+                                inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
+                                        plan.container().steps(),
+                                        (here, _, _) -> heldTwice(here, given, round, ofOneCase,
+                                                apart, pool, admitted),
+                                        views)))
                 .limit(MOST_REWRITES_LOOKED_AT)
                 .map(each -> ObservedFixtures.of(each, subject.types().get(plan.parameter()),
                         subject.ruleReading()))
@@ -484,7 +488,8 @@ public final class KeyOrderCandidates {
      * the pairs of values {@code round} names, written at the place it names in the container.
      */
     private Stream<ObservedValue> heldTwice(ObservedValue here, List<List<ObservedValue>> given,
-                                            Round round, List<List<String>> apart, Pool pool,
+                                            Round round, boolean ofOneCase,
+                                            List<List<String>> apart, Pool pool,
                                             Admitted admitted) {
         if (!(here instanceof ObservedValue.Sequence(List<ObservedValue> elements))
                 || elements.isEmpty()) {
@@ -497,9 +502,7 @@ public final class KeyOrderCandidates {
         return IntStream.range(0, plan.targets().size()).boxed().flatMap(each -> {
             Target target = plan.targets().get(each);
             List<ObservedValue> values = given.get(each);
-            return pairsWith(values.size(), round.value()).stream()
-                    .filter(pair -> !ofOneCase(values.get(pair.earlier()),
-                            values.get(pair.later())))
+            return pairsWith(values, round.value(), ofOneCase).stream()
                     .filter(pair -> admitted.admits(target, values.get(pair.earlier()))
                             && admitted.admits(target, values.get(pair.later())))
                     .map(pair -> written(site, elements, target, values.get(pair.earlier()),
@@ -608,8 +611,34 @@ public final class KeyOrderCandidates {
     }
 
     /**
+     * The pairs of {@link #pairsWith(int, int)} whose two values are of one case of a sum, or of
+     * different cases, as {@code ofOneCase} says. The two between them are every pair: a pair of
+     * one case is taken after the pairs of different cases and not left out.
+     */
+    static List<Pair> pairsWith(List<ObservedValue> values, int value, boolean ofOneCase) {
+        return pairsWith(values.size(), value).stream()
+                .filter(pair -> ofOneCase == ofOneCase(values.get(pair.earlier()),
+                        values.get(pair.later())))
+                .toList();
+    }
+
+    /** Whether two of the values are of one case of a sum. */
+    private static boolean hasTwoOfOneCase(List<ObservedValue> values) {
+        for (int one = 0; one < values.size(); one++) {
+            for (int other = one + 1; other < values.size(); other++) {
+                if (ofOneCase(values.get(one), values.get(other))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Whether the values are of one case of a sum. Two copies of a key given two values of one
-     * case differ as the values do and not as the case does, which a sum is given its values for.
+     * case tell the order apart where the statement reads what the case holds, and are tried
+     * after the pairs of different cases: those are the ones a sum is given its cases for, and
+     * the others are the more of them for a statement that reads the payload.
      */
     private static boolean ofOneCase(ObservedValue one, ObservedValue other) {
         return one instanceof ObservedValue.Constructed first
@@ -710,63 +739,55 @@ public final class KeyOrderCandidates {
     }
 
     /**
-     * Whether the decoder admits a value given to a field, asked of the row as it was written with
-     * only that value changed: at the field of the first element of the container. A value it
-     * refuses so is refused in every rewrite that holds it, and a rewrite refused is counted
-     * against the bound on those looked at ({@link #MOST_REWRITES_LOOKED_AT}) before the decoder
-     * says so, so the value is left out before that.
+     * Whether the type of a field refuses a value on its own, asked of the decoder of that type
+     * ({@link Generator.CandidateCheck#admissibility}) and of nothing beside it. A value it refuses
+     * is refused in every rewrite that holds it, and a rewrite refused is counted against the
+     * bound on those looked at ({@link #MOST_REWRITES_LOOKED_AT}) before the decoder says so, so
+     * the value is left out before that.
+     *
+     * <p>Only that. A value the type admits can still be refused beside the others, by a rule
+     * relating two fields or the elements of the container, and such a value is kept: the
+     * rewrites that hold it are refused, or not, by the decoder of the whole.
      *
      * <p>Asked once of each value of each field, so at most as many times as values are listed.
-     * Where the row cannot be written with the value alone, nothing is known and the value is
-     * kept; so it is where a rule couples the field to others in a way the first element does not
-     * show, which the rewrites themselves are then refused for.
      */
     private final class Admitted {
 
-        private final ObservedValue parameter;
         private final MeasuredInput subject;
         private final RowWriting writing;
         private final Map<List<Object>, Boolean> known = new HashMap<>();
 
-        Admitted(ObservedValue parameter, MeasuredInput subject, RowWriting writing) {
-            this.parameter = parameter;
+        Admitted(MeasuredInput subject, RowWriting writing) {
             this.subject = subject;
             this.writing = writing;
         }
 
         boolean admits(Target target, ObservedValue value) {
-            return known.computeIfAbsent(List.of(target.fields(), value),
-                    _ -> asked(target, value));
+            return known.computeIfAbsent(List.of(target.type(), value), _ -> asked(target, value));
         }
 
         private boolean asked(Target target, ObservedValue value) {
-            ObservedValue alone = inputs.rewritingBelow(parameter,
-                            inputs.types().get(plan.parameter()),
-                            plan.container().steps(), (here, _, _) -> {
-                                if (!(here instanceof ObservedValue.Sequence(
-                                        List<ObservedValue> elements)) || elements.isEmpty()) {
-                                    return Stream.empty();
-                                }
-                                ObservedValue one = with(elements.getFirst(), target.fields(),
-                                        value);
-                                if (one == null) {
-                                    return Stream.empty();
-                                }
-                                List<ObservedValue> changed = new ArrayList<>(elements);
-                                changed.set(0, one);
-                                return Stream.of(new ObservedValue.Sequence(changed));
-                            }, views)
-                    .findFirst().orElse(null);
-            if (alone == null) {
-                return true;
-            }
-            return switch (ObservedFixtures.of(alone, subject.types().get(plan.parameter()),
-                    subject.ruleReading())) {
+            // As the position wears it: the names the field's type wears go on once, here.
+            ObservedValue worn = ObservedValue.wrapped(views.apply(target.type()).wrappers(),
+                    value);
+            return switch (ObservedFixtures.of(worn, target.type(), subject.ruleReading())) {
                 case ObservedFixtures.Writing.Written<FixtureTemplate>(var written) ->
-                        writing.check().refuse(plan.parameter(), written).isEmpty();
+                        !refusedOnItsOwn(writing.check(), target.type(), written);
                 case ObservedFixtures.Writing.NotWritable<FixtureTemplate> _ -> false;
             };
         }
+    }
+
+    /**
+     * Whether the decoder of {@code type} refuses {@code value} on its own: what is refused so is
+     * refused in every value it could be put in. Not whether the whole is refused with it put in
+     * ({@link Generator.CandidateCheck#build}), which a rule relating the elements decides and
+     * which says nothing of the value.
+     */
+    static boolean refusedOnItsOwn(Generator.CandidateCheck check, Type type,
+                                   FixtureTemplate value) {
+        return check.admissibility(type, value)
+                == Generator.CandidateCheck.Admissibility.REFUSED;
     }
 
     /** {@code element} with {@code replacement} at the fields {@code names} below it, or null

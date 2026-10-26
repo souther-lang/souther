@@ -2,9 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +67,82 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
             assertEquals(null, KeyOrderCandidates.siteAt(size, listed.size()));
         }
         assertEquals(null, KeyOrderCandidates.siteAt(3, -1));
+    }
+
+    /**
+     * Two values of one case of a sum are a pair like any other, where the statement reads what
+     * the case holds: they are taken after the pairs of different cases, and none is left out.
+     */
+    @Test
+    void thePairsOfOneCaseAreTakenAfterThoseOfDifferentCasesAndNoneIsLeftOut() {
+        List<ObservedValue> values = List.of(card(4), cash(4), card(6), cash(6), card(5));
+        for (int value = 0; value < values.size() - 1; value++) {
+            Set<KeyOrderCandidates.Pair> different = new HashSet<>(
+                    KeyOrderCandidates.pairsWith(values, value, false));
+            Set<KeyOrderCandidates.Pair> ofOneCase = new HashSet<>(
+                    KeyOrderCandidates.pairsWith(values, value, true));
+            Set<KeyOrderCandidates.Pair> every = new HashSet<>(
+                    KeyOrderCandidates.pairsWith(values.size(), value));
+
+            Set<KeyOrderCandidates.Pair> both = new HashSet<>(different);
+            both.addAll(ofOneCase);
+            assertEquals(every, both, "every pair of the round is in one of the two");
+            assertTrue(different.stream().noneMatch(ofOneCase::contains),
+                    "and in only one of them");
+        }
+        assertTrue(KeyOrderCandidates.pairsWith(values, 0, true)
+                        .contains(new KeyOrderCandidates.Pair(0, 2)),
+                "the two cards are a pair");
+        assertTrue(KeyOrderCandidates.pairsWith(values, 0, false)
+                        .contains(new KeyOrderCandidates.Pair(0, 1)),
+                "a card and a cash are another");
+    }
+
+    /**
+     * A value is refused on its own only where its type refuses it, and not where the whole it is
+     * put in does: the one is a reason to leave it out of every pair, the other is not.
+     */
+    @Test
+    void aValueIsRefusedOnItsOwnOnlyWhereItsTypeRefusesIt() {
+        FixtureTemplate value = FixtureTemplate.string("x");
+        Type type = Type.ref(TypeSymbols.declared(new TypeKey("g", "Pay")));
+        Generator.CandidateCheck refusedBesideTheOthers = new Generator.CandidateCheck() {
+            @Override
+            public Generator.CandidateCheck.Built build(int parameter, FixtureTemplate candidate) {
+                return new Generator.CandidateCheck.Built.Refused("the elements do not add up");
+            }
+
+            @Override
+            public Admissibility admissibility(Type of, FixtureTemplate candidate) {
+                return Admissibility.ADMITTED;
+            }
+        };
+        Generator.CandidateCheck refusedOnItsOwn = new Generator.CandidateCheck() {
+            @Override
+            public Generator.CandidateCheck.Built build(int parameter, FixtureTemplate candidate) {
+                return new Generator.CandidateCheck.Built.Refused("the type refuses it");
+            }
+
+            @Override
+            public Admissibility admissibility(Type of, FixtureTemplate candidate) {
+                return Admissibility.REFUSED;
+            }
+        };
+
+        assertEquals(false, KeyOrderCandidates.refusedOnItsOwn(refusedBesideTheOthers, type, value));
+        assertEquals(false, KeyOrderCandidates.refusedOnItsOwn(Generator.CandidateCheck.ANY, type,
+                value), "nothing asked is nothing refused");
+        assertEquals(true, KeyOrderCandidates.refusedOnItsOwn(refusedOnItsOwn, type, value));
+    }
+
+    private static ObservedValue card(long n) {
+        return new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("g", "Card")),
+                Map.of("n", new ObservedValue.Integer(n)));
+    }
+
+    private static ObservedValue cash(long n) {
+        return new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("g", "Cash")),
+                Map.of("n", new ObservedValue.Integer(n)));
     }
 
     @Test
