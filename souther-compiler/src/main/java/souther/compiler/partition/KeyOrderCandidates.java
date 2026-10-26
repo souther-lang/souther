@@ -17,6 +17,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -67,6 +68,13 @@ import java.util.stream.Stream;
  * the rounds whether or not a round yields a rewrite; {@link #MOST_REWRITES_LOOKED_AT} the
  * rewrites, counting those the decoder refuses; {@link #MOST_CANDIDATES} those it admits. A value
  * the decoder of its own type refuses is left out of the list, so that no round holds one.
+ *
+ * <p>What a bound cuts is the end of an order, so every order here that has more than one kind of
+ * thing in it takes them in turn and not one kind after the other: the sites ({@link #siteAt}),
+ * the fields of a round ({@link #turnsOf}), the values of the cases of a sum, and the pairs of
+ * different cases and of one case. The containers of a round are the one exception, taken in the
+ * order the row holds them: they are the rewrites of one observed row, and are alike where the
+ * row was composed.
  */
 public final class KeyOrderCandidates {
 
@@ -509,14 +517,41 @@ public final class KeyOrderCandidates {
         if (site == null) {
             return Stream.empty();
         }
-        return IntStream.range(0, plan.targets().size()).boxed().flatMap(each -> {
-            Target target = plan.targets().get(each);
-            List<ObservedValue> values = given.get(each);
-            return pairsOfRound(values, round.value()).stream()
-                    .map(pair -> written(site, elements, target, values.get(pair.earlier()),
-                            values.get(pair.later()), apart, pool))
-                    .filter(Objects::nonNull);
-        });
+        List<List<Pair>> pairs = new ArrayList<>();
+        for (List<ObservedValue> values : given) {
+            pairs.add(pairsOfRound(values, round.value()));
+        }
+        return turnsOf(pairs.stream().mapToInt(List::size).toArray()).stream()
+                .map(turn -> {
+                    Pair pair = pairs.get(turn.of()).get(turn.at());
+                    List<ObservedValue> values = given.get(turn.of());
+                    return written(site, elements, plan.targets().get(turn.of()),
+                            values.get(pair.earlier()), values.get(pair.later()), apart, pool);
+                })
+                .filter(Objects::nonNull);
+    }
+
+    /** The {@code at}-th pair of the {@code of}-th field of a round. */
+    record Turn(int of, int at) {}
+
+    /**
+     * The order the fields of a round take their pairs in, one pair of each in turn: a field with
+     * many pairs does not use up the bound on what is looked at before a field with few is given
+     * its first.
+     *
+     * @param counts how many pairs each field has in the round
+     */
+    static List<Turn> turnsOf(int[] counts) {
+        List<Turn> out = new ArrayList<>();
+        int most = Arrays.stream(counts).max().orElse(0);
+        for (int at = 0; at < most; at++) {
+            for (int of = 0; of < counts.length; of++) {
+                if (at < counts[of]) {
+                    out.add(new Turn(of, at));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -549,18 +584,33 @@ public final class KeyOrderCandidates {
     }
 
     /**
-     * The site of rank {@code rank} in a container of {@code size} elements, the elements held
-     * again first and then the pairs of elements, or null past the last. Worked out from the rank
-     * and not listed, since a container is asked for the site of every round.
+     * The site of rank {@code rank} in a container of {@code size} elements, or null past the
+     * last: an element held again and a pair of elements in turn, the one kind continuing alone
+     * once the other has none left. The two kinds are taken alternately because a bound on how many
+     * sites are visited cuts the end of the order, and one kind taken before the other would be
+     * cut whole: the elements held again change how many elements there are, which a rule on the
+     * length refuses, and the pairs do not. Worked out from the rank and not listed, since a
+     * container is asked for the site of every round.
      */
     static Site siteAt(int size, int rank) {
         if (rank < 0 || rank >= sitesIn(size)) {
             return null;
         }
-        if (rank < size) {
-            return new Site.Repeating(rank);
+        long repeats = size;
+        long pairs = repeats * (repeats - 1) / 2;
+        long inTurn = Math.min(repeats, pairs);
+        if (rank < 2 * inTurn) {
+            return rank % 2 == 0 ? new Site.Repeating(rank / 2) : overwritingAt(size, rank / 2);
         }
-        int left = rank - size;
+        long alone = rank - inTurn;
+        return repeats > pairs ? new Site.Repeating((int) alone)
+                : overwritingAt(size, (int) alone);
+    }
+
+    /** The pair of elements of that index, the pairs taken by the first element and then the
+     *  second. */
+    private static Site overwritingAt(int size, int index) {
+        int left = index;
         for (int first = 0; first < size - 1; first++) {
             int pairs = size - 1 - first;
             if (left < pairs) {

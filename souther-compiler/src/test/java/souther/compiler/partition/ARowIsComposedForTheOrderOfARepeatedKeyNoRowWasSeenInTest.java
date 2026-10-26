@@ -567,6 +567,38 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
+     * Where the container holds a fixed number of elements, an element held again is refused and
+     * two elements given one key are not: the pairs of elements are the only way to a row.
+     */
+    @Test
+    void aContainerOfAFixedLengthIsGivenAKeyTwiceByTwoOfItsElements() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, qty: Int }
+                data Snap = { rows: List<Row> }
+                    invariant fixed = List.length(rows) == 2
+                behavior f : (item: LI, snap: Snap) -> Int | Empty
+                let f (item, snap) = {
+                    guard match Map.get(item.sku, List.indexBy(.sku, snap.rows)) with
+                        | Some r -> r.qty >= item.q
+                        | None -> false else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : (LI { sku = "A", q = 5 },
+                        Snap { rows = [Row { sku = "A", qty = 9 }, Row { sku = "B", qty = 9 }] })
+                        -> 1
+                    | "short" : (LI { sku = "A", q = 5 },
+                        Snap { rows = [Row { sku = "A", qty = 1 }, Row { sku = "B", qty = 9 }] })
+                        -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertEquals(2, keysIn(row.inputs().get(1).text(),
+                "sku").size(), () -> "the length kept: " + row.inputs().get(1).text()));
+    }
+
+    /**
      * A case whose first value the decoder refuses is not left unwritten: the next value of the
      * case stands in for it, once every case has been given its first.
      */

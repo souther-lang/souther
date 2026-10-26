@@ -45,18 +45,28 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
                 "one value has nothing to be taken against");
     }
 
-    /** The sites by rank are the elements held again and then the pairs of elements, as listed
-     *  by two plain loops. */
+    /** The sites by rank are an element held again and a pair of elements in turn, as two plain
+     *  lists merged by hand. */
     @Test
-    void theSitesAreTheElementsHeldAgainAndThenThePairsOfElements() {
+    void theSitesAreAnElementHeldAgainAndAPairOfElementsInTurn() {
         for (int size = 0; size <= 12; size++) {
-            List<KeyOrderCandidates.Site> listed = new ArrayList<>();
+            List<KeyOrderCandidates.Site> repeats = new ArrayList<>();
             for (int at = 0; at < size; at++) {
-                listed.add(new KeyOrderCandidates.Site.Repeating(at));
+                repeats.add(new KeyOrderCandidates.Site.Repeating(at));
             }
+            List<KeyOrderCandidates.Site> pairs = new ArrayList<>();
             for (int first = 0; first < size; first++) {
                 for (int second = first + 1; second < size; second++) {
-                    listed.add(new KeyOrderCandidates.Site.Overwriting(first, second));
+                    pairs.add(new KeyOrderCandidates.Site.Overwriting(first, second));
+                }
+            }
+            List<KeyOrderCandidates.Site> listed = new ArrayList<>();
+            for (int at = 0; at < Math.max(repeats.size(), pairs.size()); at++) {
+                if (at < repeats.size()) {
+                    listed.add(repeats.get(at));
+                }
+                if (at < pairs.size()) {
+                    listed.add(pairs.get(at));
                 }
             }
             List<KeyOrderCandidates.Site> byRank = new ArrayList<>();
@@ -160,8 +170,10 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         assertEquals(most, KeyOrderCandidates.roundsOf(MOST_VALUES,
                 KeyOrderCandidates.sitesIn(1000)).count());
         assertEquals(most, KeyOrderCandidates.roundsOf(MOST_VALUES, Integer.MAX_VALUE).count());
-        assertEquals(new KeyOrderCandidates.Site.Repeating(31),
-                KeyOrderCandidates.siteAt(1000, 31), "the sites visited of a long container");
+        assertEquals(new KeyOrderCandidates.Site.Repeating(15),
+                KeyOrderCandidates.siteAt(1000, 30), "the sites visited of a long container");
+        assertEquals(new KeyOrderCandidates.Site.Overwriting(0, 16),
+                KeyOrderCandidates.siteAt(1000, 31));
     }
 
     /**
@@ -192,6 +204,71 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
                 "both at the first site");
         assertEquals(sitesOfDifferentCases, sitesOfOneCase,
                 "and at every site the bound reaches");
+    }
+
+    /**
+     * A bound on the sites visited, or on the rewrites looked at, cuts the end of the order, and
+     * what it must not cut is a kind of site: however long the container is and wherever the bound
+     * falls after the first two sites, an element held again and a pair of elements are both in
+     * what is visited. A container of fixed length is refused every element held again, and one
+     * whose elements may not repeat a key is refused every pair, so each is the only way to a row
+     * for some model.
+     */
+    @Test
+    void anyPrefixOfTheSitesOfAContainerOfSeveralElementsHoldsBothKinds() {
+        for (int size : new int[] {2, 3, 5, 12, 33, 1000}) {
+            for (int visited = 2; visited <= Math.min(KeyOrderCandidates.MOST_SITES_OF_A_CONTAINER,
+                    KeyOrderCandidates.sitesIn(size)); visited++) {
+                boolean repeating = false;
+                boolean overwriting = false;
+                for (int rank = 0; rank < visited; rank++) {
+                    switch (KeyOrderCandidates.siteAt(size, rank)) {
+                        case KeyOrderCandidates.Site.Repeating _ -> repeating = true;
+                        case KeyOrderCandidates.Site.Overwriting _ -> overwriting = true;
+                    }
+                }
+                assertTrue(repeating && overwriting, size + " elements, " + visited + " sites");
+            }
+        }
+    }
+
+    /**
+     * The same where the bound is the one on the rewrites looked at: a value is paired with the
+     * others at each site in turn, and the sites it reaches before the bound is used up have both
+     * kinds, though the pairs of one site are many.
+     */
+    @Test
+    void theRewritesLookedAtReachBothKindsOfSiteWhateverTheValuesAreMany() {
+        for (int elements : new int[] {2, 4, 33}) {
+            int looked = 0;
+            boolean repeating = false;
+            boolean overwriting = false;
+            for (KeyOrderCandidates.Round round
+                    : KeyOrderCandidates.roundsOf(MOST_VALUES, KeyOrderCandidates.sitesIn(elements))
+                            .toList()) {
+                if (looked >= KeyOrderCandidates.MOST_REWRITES_LOOKED_AT) {
+                    break;
+                }
+                looked += KeyOrderCandidates.pairsWith(MOST_VALUES, round.value()).size();
+                switch (KeyOrderCandidates.siteAt(elements, round.site())) {
+                    case KeyOrderCandidates.Site.Repeating _ -> repeating = true;
+                    case KeyOrderCandidates.Site.Overwriting _ -> overwriting = true;
+                }
+            }
+            assertTrue(repeating && overwriting, elements + " elements");
+        }
+    }
+
+    /** The fields of a round take their pairs in turn, so a field with many does not use up what
+     *  is looked at before a field with few has had its first. */
+    @Test
+    void theFieldsOfARoundTakeTheirPairsInTurn() {
+        assertEquals(List.of(new KeyOrderCandidates.Turn(0, 0), new KeyOrderCandidates.Turn(1, 0),
+                        new KeyOrderCandidates.Turn(2, 0), new KeyOrderCandidates.Turn(0, 1),
+                        new KeyOrderCandidates.Turn(2, 1), new KeyOrderCandidates.Turn(0, 2)),
+                KeyOrderCandidates.turnsOf(new int[] {3, 1, 2}));
+        assertEquals(List.of(), KeyOrderCandidates.turnsOf(new int[] {}));
+        assertEquals(List.of(), KeyOrderCandidates.turnsOf(new int[] {0, 0}));
     }
 
     @Test
