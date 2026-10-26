@@ -215,17 +215,17 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
     }
 
     /**
-     * What is proved is a whole measure and not a point: the proof is asked of the length as the
-     * lines on it stand, so one line past the longest string takes the proof from the line a
-     * string can reach as well. Lost precision and no false proof; a proof per point would keep
-     * the line at three.
+     * The line past the longest string is not proved, with another line behind a condition beside
+     * it. What the line a string can reach beside it is proved of, on its own, is held in
+     * {@code ALineBeyondWhatAStringHoldsIsNoLineTest}.
      */
     @Test
-    void aLineBeyondTheLongestTakesTheProofFromTheLinesBesideItOnTheSameLength() {
+    void aLineBeyondTheLongestStringIsNotProvedWithAnotherBesideIt() {
         List<BorderAssessment.Point> points = owedPoints(TWO_LINES, "example.twolines");
         assertTrue(onNumberNamed(points, "268435456").findAny().isPresent(),
                 "the body draws a line past the longest: " + labels(points));
-        assertFalse(provedAny(points), labels(points).toString());
+        assertFalse(provedAny(onNumberNamed(points, "268435456").toList()),
+                labels(points).toString());
     }
 
     @Test
