@@ -968,8 +968,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                                 levelAgainstTheLineOn(demands, origin, side), side, admissible);
             });
         }
-        return new Border(target, origin, demands,
-                leftNothing(space, cut, origin, ends, language.ends(space, cut)));
+        return new Border(target, origin, demands, leftNothing(space, cut, origin, ends));
     }
 
     /** The arrangement of every place the rules part a quantity, and the places this line's own
@@ -1841,16 +1840,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * either: no side is known to be the one it looks like.
      */
     private static Sides leftNothing(LevelSpace space, Level cut, LineOrigin origin,
-                                     DomainEnds ends, DomainEnds language) {
+                                     DomainEnds ends) {
         if (!(origin.lineFacts().claim() instanceof ComparisonClaim.Cut)
                 || !(seamOf(space, cut, origin) instanceof ExactAnswer.Held<Seam>(Seam seam))) {
             return Sides.NEITHER;
         }
-        return new Sides(
-                QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, ends)
-                        || QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, language),
-                QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE, ends)
-                        || QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE, language));
+        return new Sides(QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, ends),
+                QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE, ends));
     }
 
     /**

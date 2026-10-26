@@ -215,12 +215,12 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
     }
 
     /**
-     * What is proved is asked of the line and not of the length as the lines on it stand: the line
-     * past the longest string is not proved, and the line a string can reach beside it is asked
-     * on its own ({@code ALineBeyondWhatAStringHoldsIsNoLineTest}).
+     * The line past the longest string is not proved, with another line behind a condition beside
+     * it. What the line a string can reach beside it is proved of, on its own, is held in
+     * {@code ALineBeyondWhatAStringHoldsIsNoLineTest}.
      */
     @Test
-    void aLineBeyondTheLongestStringIsNotProvedWhateverLinesAreBesideIt() {
+    void aLineBeyondTheLongestStringIsNotProvedWithAnotherBesideIt() {
         List<BorderAssessment.Point> points = owedPoints(TWO_LINES, "example.twolines");
         assertTrue(onNumberNamed(points, "268435456").findAny().isPresent(),
                 "the body draws a line past the longest: " + labels(points));

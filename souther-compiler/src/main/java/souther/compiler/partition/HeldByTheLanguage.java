@@ -82,12 +82,6 @@ public record HeldByTheLanguage(NumericDomain.Bounds range) {
                 : number.compareTo(least) > 0);
     }
 
-    /** The ends of the run as the first and last value the quantity takes there, for what asks
-     *  whether a line leaves nothing on a side. */
-    DomainEnds ends(LevelSpace space, Level like) {
-        return DomainEnds.of(side -> DomainEnd.heldBy(space, like, range, side));
-    }
-
     private static ExactRatio numberOf(Place at) {
         return at instanceof Count count ? count.exactly() : null;
     }

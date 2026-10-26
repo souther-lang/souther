@@ -144,6 +144,19 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         assertTrue(owed(within.get(PointRole.ON)), within.toString());
     }
 
+    /** What the code points of a string come to is at most the longest string of the last one. */
+    @Test
+    void aSumOfCodePointsPassesTheLongestStringOfTheLastOnlyWhereNoStringIs() {
+        long most = LONGEST * Character.MAX_CODE_POINT;
+        Map<PointRole, ItemAssessment> past = linesOf("s: String",
+                "List.sum(String.codePoints(s)) > " + most).getFirst();
+        Map<PointRole, ItemAssessment> within = linesOf("s: String",
+                "List.sum(String.codePoints(s)) > " + (most - 1)).getFirst();
+
+        assertTrue(noValueStands(past.get(PointRole.ON)), past.toString());
+        assertTrue(owed(within.get(PointRole.ON)), within.toString());
+    }
+
     /** A weight multiplies what each can be. */
     @Test
     void twiceALengthPassesTwiceTheLongestOnlyWhereNoStringIs() {

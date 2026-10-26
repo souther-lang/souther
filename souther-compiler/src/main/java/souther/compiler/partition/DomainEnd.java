@@ -80,14 +80,6 @@ public final class DomainEnd {
         return bound == null ? null : new DomainEnd(side, bound, null);
     }
 
-    /**
-     * The first or last value the quantity takes of those {@code held} lets it, at one side; null
-     * where it ends nowhere that way. Its place only: no declaration took it in.
-     */
-    static DomainEnd heldBy(LevelSpace space, Level like, NumericDomain.Bounds held, EndSide side) {
-        return at(side, valueAt(space, like, side.at(held), side));
-    }
-
     /** Which of the quantity's two ends this is. */
     public EndSide side() {
         return side;
