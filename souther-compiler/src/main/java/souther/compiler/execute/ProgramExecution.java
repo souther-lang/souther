@@ -10,8 +10,8 @@ import souther.compiler.source.SourceId;
  * The questions the language can only answer by running the program.
  *
  * <p>Two of the things deciding whether Souther accepts a program need the program to run: a
- * constant construction has to satisfy the invariant of what it builds, and an {@code example} row
- * has to hold — in Souther a row that disagrees is a compile error and not a test failure. ADR-0032
+ * constant construction, and a value a module declares, have to satisfy the invariant of what they
+ * build, and an {@code example} row has to hold — in Souther a row that disagrees is a compile error and not a test failure. ADR-0032
  * settles how they are run: by the same program that will ship, with no second evaluator that could
  * disagree. That is not what this is about. This is about which way the dependency runs.
  *
@@ -34,7 +34,7 @@ import souther.compiler.source.SourceId;
  * "nothing was tried" are the two a caller must never read as one. A question asking for a way to
  * go on asking answers with that way, or with nothing: there is no outcome to report yet, and the
  * absence is that there is no operation to ask. {@link #values} and {@link #trials} are the second
- * kind and answer null; the other four are the first.
+ * kind and answer null; the other five are the first.
  *
  * <p>It does not say which implementation runs. ADR-0032 does, and today the answer is the
  * generated JVM program. If that is ever re-opened, what it takes is a second implementation of
@@ -52,6 +52,17 @@ public interface ProgramExecution {
      * run-time check stands.
      */
     ConstantOutcome check(ConstantConstruction written);
+
+    /**
+     * Whether building the value {@code asked} breaks an invariant of something it builds.
+     *
+     * <p>Answered by building it as the program that ships does. A value is built where its module
+     * builds it and not by a run that reads it, so an invariant it breaks is one the module breaks
+     * and not one of any run. {@link ConstantOutcome.Holds} says it was built, and
+     * {@link ConstantOutcome.Violates} says which clause stopped it; where it cannot be built here
+     * the answer says so, and the check that runs when the program does stands.
+     */
+    ConstantOutcome build(BuiltValue asked);
 
     /**
      * What running the rows written in {@code source} came to.

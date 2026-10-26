@@ -39,6 +39,12 @@ final class RecordingExecution implements ProgramExecution {
     }
 
     @Override
+    public ConstantOutcome build(BuiltValue asked) {
+        this.asked.add("value " + asked.name() + " written in " + asked.writtenIn());
+        return new ConstantOutcome.NotEvaluatedHere();
+    }
+
+    @Override
     public RowRun run(ExampleExecution about, SourceId source, ArmObservation arms) {
         asked.add("rows of " + read(about) + " written in " + source + ", arms " + arms);
         return new RowRun.NotRunHere();

@@ -246,40 +246,31 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
     }
 
     /**
-     * A construction that reads no input is the same on every run, but that is not a proof that
-     * its invariant holds: the compile accepts a table of constants whose whole-table invariant
-     * the constants break, and leaves the check to the run. So a table is read as the rows it
-     * holds only where the invariant is shown, and not because the table reads nothing.
+     * A table of constants is read as the rows it holds where the value that writes it was built
+     * by the code that ships without breaking its invariant, which is about the whole list and is
+     * not worked out here. Reading no input is not that: the same table built out of an input is
+     * built on each run, and is not taken so.
      */
     @Test
-    void aTableOfConstantsIsNotReadAsItsRowsOnTheStrengthOfReadingNoInput() {
-        String broken = """
-                module demo
-
-                data Row = { grade: Int, lowerBound: Int }
-                data Table = List<Row>
-                    invariant distinctGrades = List.allDistinctBy(.grade, value)
-                let rowOf (g: Int, lo: Int): Row = Row { grade = g, lowerBound = lo }
-                let table = Table([ rowOf(1, 100), rowOf(1, 200), rowOf(3, 300) ])
-
-                behavior f : (cur: Int, pay: Int) -> Int
-                let f (cur, pay) = List.length(table.value)
-                """;
-        Compilation compilation = Compilation.ofSource(broken, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the compile leaves this table to the run");
-
+    void aTableIsReadAsItsRowsOnceTheValueThatWritesItIsBuilt() {
         String step = "(acc, r) -> if r.lowerBound <= pay then r.grade else acc";
         String declarations = """
                 data Row = { grade: Int, lowerBound: Int }
                 data Table = List<Row>
+                    invariant threeRows = List.length(value) == 3
                     invariant distinctGrades = List.allDistinctBy(.grade, value)
                 let rowOf (g: Int, lo: Int): Row = Row { grade = g, lowerBound = lo }
-                let table = Table([ rowOf(1, 100), rowOf(1, 200), rowOf(3, 300) ])
+                let table = Table([ rowOf(1, 100), rowOf(2, 200), rowOf(3, 300) ])
                 """;
         Proposition literal = stated(compared("List.fold(%s, 0, %s)".formatted(step, ASCENDING)));
-        assertNotEquals(literal, stated(declarations,
+        assertEquals(literal, stated(declarations,
                 compared("List.fold(%s, 0, table.value)".formatted(step))));
+        Proposition fromAnInput = stated(
+                declarations.replace("let table = Table([ rowOf(1, 100), rowOf(2, 200), "
+                        + "rowOf(3, 300) ])\n", ""),
+                "let table = Table([ rowOf(cur, 100), rowOf(2, 200), rowOf(3, 300) ])\n"
+                        + compared("List.fold(%s, 0, table.value)".formatted(step)));
+        assertNotEquals(literal, fromAnInput);
     }
 
     /**

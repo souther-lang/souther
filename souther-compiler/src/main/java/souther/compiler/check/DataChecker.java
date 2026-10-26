@@ -71,6 +71,46 @@ public final class DataChecker {
         return out;
     }
 
+    /**
+     * A value the module declares, and where it writes a construction of something that holds an
+     * invariant. A value takes nothing, so what it builds is closed, and building it is what shows
+     * those constructions hold.
+     */
+    public record ValueConstructions(String value, SourcePos pos, List<SourcePos> constructions) {}
+
+    /**
+     * Every value the module declares whose body writes a construction of a type holding an
+     * invariant, with the places those are written.
+     *
+     * <p>Desugared definitions for the reason {@link #constNewtypeChecks} gives: a newtype is
+     * written as a construction only once its application has been rewritten as one.
+     */
+    public static List<ValueConstructions> valueConstructions(List<Desugared.Fn> fns,
+                                                              Symbols symbols) {
+        List<ValueConstructions> out = new ArrayList<>();
+        for (Desugared.Fn fn : fns) {
+            if (!fn.read().params().isEmpty()) {
+                continue;
+            }
+            List<SourcePos> written = new ArrayList<>();
+            collectConstructions(fn.read().writtenBody(), symbols, written);
+            if (!written.isEmpty()) {
+                out.add(new ValueConstructions(fn.name(), fn.read().pos(), written));
+            }
+        }
+        return out;
+    }
+
+    private static void collectConstructions(Hir.Expr e, Symbols symbols, List<SourcePos> out) {
+        if (e instanceof Hir.NewData nd
+                && nd.typeName() instanceof Hir.Name.Denoting built
+                && built.type() instanceof TypeSymbol.AtModule constructed
+                && isInvariantBearing(constructed, symbols)) {
+            out.add(nd.pos());
+        }
+        TypeChecker.forEachChild(e, c -> collectConstructions(c, symbols, out));
+    }
+
     /** Walked under what each name in force was given: a construction's argument is a
      *  sub-expression, and a name in it stands for what the bindings above it gave. */
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, BoundValues at,

@@ -9169,6 +9169,16 @@ final class Pullback {
             return endsNoRun(new Denotation(let.value(), at))
                     && endsNoRun(new Denotation(let.body(), at.and(let.binder(), let.value())));
         }
+        // Written in a value that was built, whatever is inside it: the build ran all of it.
+        if (written instanceof Core.Construct made && read.rules().declarations().answers()
+                .builtWhereItsModuleIsBuilt(read.rules().symbols().module(), made.pos())) {
+            return true;
+        }
+        // A reference to a value is run as the value is defined, which no part of this node says.
+        if (written instanceof Core.MaterialisedValue) {
+            Denotation defined = at.taken(written);
+            return defined != null && endsNoRun(defined);
+        }
         if (!endsNoRunItself(value)) {
             return false;
         }

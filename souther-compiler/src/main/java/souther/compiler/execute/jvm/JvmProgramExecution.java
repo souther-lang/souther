@@ -1,6 +1,7 @@
 package souther.compiler.execute.jvm;
 
 import souther.compiler.codegen.Backend;
+import souther.compiler.execute.BuiltValue;
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
@@ -21,7 +22,10 @@ import souther.compiler.observe.RowRun;
 import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
+import souther.runtime.ConstraintViolation;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -184,6 +188,32 @@ public final class JvmProgramExecution implements ProgramExecution {
             return new ConstantOutcome.NotEvaluatedHere();
         }
         return new ConstantOutcome.Violates(failingClause(ctfe, written));
+    }
+
+    @Override
+    public ConstantOutcome build(BuiltValue asked) {
+        ClassLoader loader = images.compileTimeLoader(asked.writtenIn());
+        if (loader == null) {
+            return new ConstantOutcome.NotEvaluatedHere();
+        }
+        try {
+            Class<?> fns = Class.forName(SoutherJvmAbi.nameOf(
+                    new GeneratedClass.Helpers(asked.writtenIn())).binaryName(), true, loader);
+            Method built = fns.getDeclaredMethod(Backend.helperMethod(asked.name()));
+            built.setAccessible(true);
+            built.invoke(null);
+            return new ConstantOutcome.Holds();
+        } catch (InvocationTargetException failed) {
+            // A value breaking an invariant leaves by the abort every construction leaves by. Any
+            // other way of failing is the machine's and not the language's, and the check that runs
+            // when the program does stands.
+            return failed.getCause() != null && failed.getCause().getClass().getName()
+                    .equals(ConstraintViolation.class.getName())
+                    ? new ConstantOutcome.Violates(Optional.empty())
+                    : new ConstantOutcome.NotEvaluatedHere();
+        } catch (ReflectiveOperationException | LinkageError _) {
+            return new ConstantOutcome.NotEvaluatedHere();
+        }
     }
 
     /**

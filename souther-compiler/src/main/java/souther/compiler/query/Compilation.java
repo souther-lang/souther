@@ -339,6 +339,7 @@ public final class Compilation {
         db.ask(new Output.All());
         for (String module : modules()) {
             db.ask(new Output.ConstConstructions(module));
+            db.ask(new Output.BuiltValues(module));
             for (SourceId id : exampleSourcesOf(module)) {
                 db.ask(new Front.RowNames(id));
                 db.ask(new Names.StandInBlocks(id));

@@ -229,6 +229,9 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E2010)
     record TheWrittenValueViolatesTheClause(String value, String clause) implements DataMessage, Reported {}
 
+    @Code(DiagnosticCode.E2010)
+    record TheValueBreaksAnInvariantWhenItIsBuilt(String value) implements DataMessage, Reported {}
+
     @Code(DiagnosticCode.E1018)
     record ItCannotBeConstructedHere(String data) implements DataMessage, Reported {}
 

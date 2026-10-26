@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.execute.BuiltValue;
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ExampleExecution;
@@ -58,6 +59,11 @@ class WhatRunsAProgramIsNamedOnceTest {
 
         @Override
         public ConstantOutcome check(ConstantConstruction written) {
+            return new ConstantOutcome.NotEvaluatedHere();
+        }
+
+        @Override
+        public ConstantOutcome build(BuiltValue asked) {
             return new ConstantOutcome.NotEvaluatedHere();
         }
 
