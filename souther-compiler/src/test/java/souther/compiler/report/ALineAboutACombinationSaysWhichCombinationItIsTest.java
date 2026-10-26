@@ -197,9 +197,6 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
                 | (Gold, Gold, Gold) -> Pair { x = 20, y = 20 }
             """;
 
-    private static final String[] EVERY_FIXTURE = {"MEETING", "TWICE", "NO_ROWS", "NESTED",
-            "NAMED", "SAME_CASES", "OPERATION", "MEETS_TWICE", "KEPT", "SHARED"};
-
     private static final Map<String, String> FIXTURES = Map.of(
             "MEETING", MEETING, "TWICE", TWICE, "NO_ROWS", NO_ROWS, "NESTED", NESTED,
             "NAMED", NAMED, "SAME_CASES", SAME_CASES, "OPERATION", OPERATION,
