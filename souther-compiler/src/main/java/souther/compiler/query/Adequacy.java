@@ -3555,7 +3555,11 @@ public final class Adequacy {
             Set<TermPath> below = new LinkedHashSet<>();
             for (CaseOfAStatement each : unseen) {
                 if (each instanceof CaseOfAStatement.Search search) {
-                    below.addAll(search.placesBelow());
+                    // Only a place the measurement's reading has no position at needs a reading of
+                    // its own; where every one is read already, the second reading would be the
+                    // first divided again.
+                    search.placesBelow().stream().filter(place -> domain.at(place) == null)
+                            .forEach(below::add);
                 }
             }
             DecisionSearch.SearchSetting building = below.isEmpty() ? setting
