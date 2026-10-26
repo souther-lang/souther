@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -862,6 +864,54 @@ public sealed interface Proposition {
          */
         public boolean startsBelowWhereItWasWritten() {
             return at.isAtOrUnder(writtenAt) && !at.equals(writtenAt);
+        }
+
+        /**
+         * What the search asks of a node, said of some element of the one field it goes down, and
+         * the places a row writes at for it.
+         *
+         * @param meets  some element of the field meeting the statement moved to it
+         * @param places the element and each place of it the statement reads
+         */
+        public record ElementMeeting(Proposition meets, List<TermPath> places) {}
+
+        /**
+         * The statement the search asks of a node, moved to some element of the field it goes down
+         * — or none where the search goes down several fields, or asks something other than a
+         * comparison of numbers at the node's own places.
+         */
+        public Optional<ElementMeeting> someElementMeetingIt() {
+            if (through.size() != 1
+                    || !(atANode instanceof Compared(Relation.Affine affine, boolean asked, var _))) {
+                return Optional.empty();
+            }
+            TermPath field = at.then(through.getFirst());
+            TermPath element = field.element();
+            boolean[] strays = {false};
+            List<TermPath> places = new ArrayList<>(List.of(element));
+            PlacesMoved moved = PlacesMoved.by(place -> {
+                TermPath to = place.movedFrom(at, element);
+                strays[0] |= to == null;
+                if (to != null) {
+                    places.add(to);
+                }
+                return to == null ? place : to;
+            });
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                    return Optional.empty();
+                }
+                coefs.put(new DecisionAtom.OfTheInput(term.movedTo(moved)), each.getValue());
+            }
+            if (strays[0]) {
+                return Optional.empty();
+            }
+            Relation relation = new Relation.Affine(
+                    new LinearForm<>(affine.form().constant(), coefs), affine.proposition());
+            return Optional.of(new ElementMeeting(
+                    new Some(new DecisionSubject.AnInput(field), new Compared(relation, asked),
+                            true), List.copyOf(places)));
         }
 
         /**

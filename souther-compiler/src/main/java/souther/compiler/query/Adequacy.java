@@ -842,6 +842,20 @@ public final class Adequacy {
 
         @Override
         public Answer<InputDomain> compute(Db db) {
+            return readingWith(db, module, behavior, List.of());
+        }
+
+        /**
+         * The reading the measurement is made against, closed over {@code also} as well as over
+         * what the body and clauses name.
+         *
+         * <p>For a caller that builds a value and measures nothing: the paths a candidate has to
+         * write at, which the enumeration stopped short of. A measurement reads {@link InputsOf}
+         * itself, with no extra path, so the positions it counts do not depend on what anyone
+         * built a value for.
+         */
+        static Answer<InputDomain> readingWith(Db db, String module, String behavior,
+                                               List<TermPath> also) {
             Answer<Hir.SpecBehavior> spec = db.ask(new Bodies.Spec(module, behavior));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
@@ -872,7 +886,7 @@ public final class Adequacy {
                     RuleReadingContext.of(reading.value(), db.ask(new Front.Reading()).value(),
                             db.readings(), Front.dayOf(db)),
                     new Shapes.CountedElsewhere(db),
-                    named.value().demand(),
+                    named.value().demand().and(also),
                     dependenciesOf(spec.value())));
         }
     }
@@ -2655,6 +2669,15 @@ public final class Adequacy {
 
         @Override
         public Answer<BodyDivided> compute(Db db) {
+            return over(db, name, behavior, null);
+        }
+
+        /**
+         * The same, divided over {@code builtAgainst} where there is one: the reading a value is
+         * built against, closed over more paths than the measurement's is ({@link InputsOf}).
+         */
+        static Answer<BodyDivided> over(Db db, String name, String behavior,
+                                        InputDomain builtAgainst) {
             // The assembly. What says whether there is anything to divide is the behavior's own
             // signature: a module one of whose declarations did not come out still has behaviors
             // whose boundary was built, and those are divided like any other.
@@ -2685,9 +2708,10 @@ public final class Adequacy {
             if (!(BoundaryForMeasurement.of(sigs.value(), db.ask(new Inputs(name)).value(), spec)
                     instanceof BoundaryForMeasurement.Derived(
                             Sig _, InputForMeasurement.Local(Hir.SpecBehavior _,
-                                    InputDomain domain)))) {
+                                    InputDomain measured)))) {
                 return Answer.absent();
             }
+            InputDomain domain = builtAgainst == null ? measured : builtAgainst;
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Observable(name)).value();
             souther.compiler.coverage.CoverageSites.Plan plan =
@@ -2790,6 +2814,18 @@ public final class Adequacy {
         /** The setting a search of {@code behavior} is made in, or null where nothing builds its
          *  values or nothing places its rows. */
         static SearchSetting settingOf(Db db, String name, String behavior) {
+            return settingOf(db, name, behavior, List.of());
+        }
+
+        /**
+         * The same, with candidates built against a reading closed over {@code also} as well.
+         *
+         * <p>Only what builds a candidate reads the wider input: the probe and the region the
+         * values are chosen from. The placement of a run and everything that judges one stay the
+         * measurement's, so a row built at a path the enumeration stopped short of is judged by
+         * the account that measured the rows already written.
+         */
+        static SearchSetting settingOf(Db db, String name, String behavior, List<TermPath> also) {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
@@ -2803,8 +2839,21 @@ public final class Adequacy {
             if (spec == null || sig == null || emitted == null) {
                 return null;
             }
-            InputReading read = inputReadingOf(db, name, spec);
-            MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
+            InputReading read;
+            MeasuredInput subject;
+            if (also.isEmpty()) {
+                read = inputReadingOf(db, name, spec);
+                subject = read == null ? null : subjectOf(db, name, spec, read);
+            } else {
+                Answer<InputDomain> wider = InputsOf.readingWith(db, name, behavior, also);
+                Answer<RuleReadingSource> source = Shapes.ruleReading(db, name);
+                read = wider.present() && source.present()
+                        ? readingOf(db, wider.value(), source.value()) : null;
+                Answer<BodyDivided> divided = read == null ? null
+                        : Dividing.over(db, name, behavior, wider.value());
+                subject = divided != null && divided.present()
+                        ? MeasuredInput.of(behavior, read, divided.value().geometry()) : null;
+            }
             Coverages.Probe probe = subject == null ? null
                     : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(db, name, trialling(db, name), behavior, sig,
@@ -3470,6 +3519,20 @@ public final class Adequacy {
             }
             CasesTheRowsTook cases = CasesTheRowsTook.of(evidence.read(), setting.taken().inputs(),
                     readingOf(db, domain, source).quantities());
+            // The places the cases looked for ask a row to write at, which the enumeration of the
+            // input stops short of where the type recurses. Candidates are built against a reading
+            // closed over them; what judges a candidate is the measurement's own.
+            Set<TermPath> below = new LinkedHashSet<>();
+            for (CaseOfAStatement each : unseen) {
+                if (each instanceof CaseOfAStatement.Search search) {
+                    below.addAll(search.placesBelow());
+                }
+            }
+            DecisionSearch.SearchSetting building = below.isEmpty() ? setting
+                    : DecisionSearch.settingOf(db, name, behavior, List.copyOf(below));
+            if (building == null) {
+                return Answer.absent();
+            }
             Map<CaseOfAStatement, RowToRun> out = new LinkedHashMap<>();
             for (DecisionReading.Stated stated : evidence.read().stated()) {
                 for (DecisionReading.Ruled each : stated.occurrences()) {
@@ -3477,7 +3540,7 @@ public final class Adequacy {
                         if (!unseen.contains(way.which()) || out.containsKey(way.which())) {
                             continue;
                         }
-                        RowToRun row = whatACaseFinds(each, way, setting, cases);
+                        RowToRun row = whatACaseFinds(each, way, setting, building, cases);
                         if (row != null) {
                             out.put(way.which(), row);
                         }
@@ -3490,12 +3553,16 @@ public final class Adequacy {
         /**
          * A row composed for the way to {@code ruled} and what {@code way} asks of the node, whose
          * run was placed at the rule and was evidence of the case; null where none was.
+         *
+         * @param setting  what judges a row: the measurement's own
+         * @param building what builds one, which reads the places the cases ask a row to write at
          */
         private static RowToRun whatACaseFinds(DecisionReading.Ruled ruled, CaseWay way,
                                                DecisionSearch.SearchSetting setting,
+                                               DecisionSearch.SearchSetting building,
                                                CasesTheRowsTook cases) {
             if (!(souther.compiler.partition.Reachability.of(ruled.statesToACase(way),
-                    setting.declared())
+                    building.declared())
                     instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
                 return null;
             }
@@ -3512,7 +3579,7 @@ public final class Adequacy {
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
             for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
-                for (Generator.BoundaryAttempt made : setting.probe().attempt(
+                for (Generator.BoundaryAttempt made : building.probe().attempt(
                         "a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
                         Optional.of(inTheCase))) {

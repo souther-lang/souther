@@ -148,34 +148,36 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
     }
 
     /**
-     * A step no search can look a row for is no work, and is still reported as unmeasured.
-     *
-     * <p>Finding a node below the start says nothing of the start node, so no row is composed
-     * toward it. An offer for it would be a lightbulb that writes nothing; the measure goes on
-     * saying the decision is short of it.
+     * Finding a node below the start is composed for with a start that does not meet the search
+     * and has something below it; the run says whether a child does.
      */
     @Test
-    void aStepNoRowCanBeLookedForIsNoWorkAndIsStillUnmeasured() {
-        Compilation compilation = Compilation.ofSource(SOME + """
+    void theStepThatFindsOneBelowTheStartIsComposedAndItsRowFindsOne() {
+        Map<CaseOfAStatement, RowToRun> found = search(SOME + """
                 example f
                     | "the top" : (Node { v = 9, below = [] }) -> Yes
                     | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
                     | "a child that fails" :
                         (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String module = compilation.modules().getFirst();
-        DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
-                .get("f");
+                """);
+        assertEquals(Set.of(CaseOfAStatement.Step.BELOW_IT), stepsOf(found),
+                () -> "the one step no row was seen in: " + found.keySet());
+        String written = found.values().iterator().next().inputs().getFirst().text();
+        assertTrue(written.contains("below = [Node {") && !written.startsWith("Node { v = 9"),
+                () -> "a start with a child, whose run found one below: " + written);
+    }
 
-        assertEquals(Set.of(CaseOfAStatement.Step.BELOW_IT),
-                evidence.took().made().orElseThrow().unseenCases().stream()
-                        .map(each -> ((CaseOfAStatement.Search) each).step())
-                        .collect(Collectors.toSet()),
-                "the step below the start is the one no row was seen in");
-        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().isEmpty(),
-                "and there is no row to offer for it");
+    @Test
+    void theBlockOffersARowForTheStepThatFindsOneBelowTheStart() {
+        String block = blockOf(SOME + """
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> Yes
+                    | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
+                    | "a child that fails" :
+                        (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
+                """);
+        assertTrue(block.contains("a search that finds what it asks below the node it starts at"),
+                () -> "a row for the step below the start: " + block);
     }
 
     private static String blockOf(String model) {

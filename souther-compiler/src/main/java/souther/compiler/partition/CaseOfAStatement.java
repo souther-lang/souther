@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
 import java.util.List;
@@ -28,7 +29,8 @@ public sealed interface CaseOfAStatement {
     String spelled();
 
     /**
-     * Whether a row can be looked for by what the case says of the node a search starts at.
+     * Whether a row can be looked for by what the case says of the node a search starts at and of
+     * the places inside it that the case names.
      *
      * <p>The criterion for work: a case none of the searches that compose rows can look for is a
      * case the measure still reports as unmeasured, and is no work a person is offered rows for.
@@ -81,10 +83,12 @@ public sealed interface CaseOfAStatement {
          * What the step says of the node the search starts at, as statements about that node, or
          * none where a row cannot be asked for the step by what it writes at the node.
          *
-         * <p>Finding one below is no statement about the node: it is about what is under it at
-         * any depth, which a row is composed for by the nodes it writes and not by a distinction at
-         * the start. The other three are the node meeting what the search asks, and the node not
-         * meeting it with and without anything below.
+         * <p>Finding one below is no statement about the node alone: which node below meets what
+         * the search asks is for the run to say. What the reading can ask of the start is that it
+         * does not meet it and has something below, and a candidate with that start whose
+         * children do not come out as the case needs is passed over by the run. The other three
+         * are the node meeting what the search asks, and the node not meeting it with and without
+         * anything below.
          *
          * @param denying what holds exactly where a statement does not, which is the reading's own
          */
@@ -95,7 +99,11 @@ public sealed interface CaseOfAStatement {
             Proposition notAtTheNode = denying.apply(statement.atANode());
             return switch (step) {
                 case AT_THE_NODE -> Optional.of(List.of(statement.atANode()));
-                case BELOW_IT -> Optional.empty();
+                case BELOW_IT -> Optional.of(statement.someElementMeetingIt()
+                        .map(below -> List.of(notAtTheNode, below.meets()))
+                        .orElseGet(() -> statement.noneBelow()
+                                .map(none -> List.of(notAtTheNode, denying.apply(none)))
+                                .orElseGet(() -> List.of(notAtTheNode))));
                 case NOWHERE_AT_A_LEAF -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, none));
                 // What every node below comes to is no statement about the start node: a row is in
@@ -104,6 +112,20 @@ public sealed interface CaseOfAStatement {
                 case NOWHERE_BELOW -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, denying.apply(none)));
             };
+        }
+
+        /**
+         * The places inside an element of the field the search goes down that a row has to write
+         * for some element to meet what the search asks: the element itself and each place of it
+         * the statement reads. Empty where no such element is asked for.
+         *
+         * <p>Finite whatever the depth the type recurses to, because it is the places the one
+         * statement names. A reading of the input that stops where the type returns to a
+         * declaration is asked for these and no others.
+         */
+        public List<TermPath> placesBelow() {
+            return statement.someElementMeetingIt()
+                    .map(Proposition.SomeReachable.ElementMeeting::places).orElse(List.of());
         }
     }
 
