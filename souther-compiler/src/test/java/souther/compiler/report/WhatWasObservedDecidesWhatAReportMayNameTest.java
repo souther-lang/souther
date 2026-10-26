@@ -78,7 +78,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                 new souther.compiler.query.RowSummary(List.of()),
                 null, List.of(), shown(), AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of(),
                 Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE, Map.of(),
-                Map.of());
+                List.of(), Map.of());
     }
 
     /** Where this report shows each of the two forks. A place per fork and not per arm: the arms of

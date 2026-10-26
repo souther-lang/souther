@@ -200,35 +200,32 @@ public final class InteractionCells {
         }
 
         /**
-         * Which decisions the {@code index}th choice is, or null where it is not a combination.
+         * Which decisions the {@code index}th choice is: the way in and the outcome taken at each
+         * factor, in the model's own words, as they were stated.
          *
-         * <p>The way in and the outcome taken at each factor, in the model's own words. This is
-         * what the combination is; the cell beside it is that projected into the classes a search
-         * steers by, and the claims are how a run is held to it. So a requirement is named here and
-         * certified there, and a reading of the classes that is off moves where a candidate is
-         * looked for without moving what is being asked for.
+         * <p>This is what the combination is; the cell beside it is that projected into the
+         * classes a search steers by, and the claims are how a run is held to it. So a requirement
+         * is named here and certified there, and a reading of the classes that is off moves where
+         * a candidate is looked for without moving what is being asked for.
          *
-         * <p>A set, because what a run has to have done is what it has to have done. Two choices
-         * that come to the same decisions ask one thing of a row, however the way in and the
-         * factors divided them up between them.
+         * <p>Handed as a list and not made a set here. What a run has to have done is a set — two
+         * choices that come to the same decisions ask one thing of a row, however the way in and
+         * the factors divided them up between them — and the caller makes it, with the hash of each
+         * decision it already holds. A set made here would hash every decision of every choice
+         * again, and a group of thousands of choices pays that thousands of times over for the
+         * same few decisions.
          *
-         * <p>Null under the same condition {@link #at} is, and read off it rather than worked out
-         * again: a choice whose factors leave a position nothing is no combination the body has a
-         * path to, and a requirement raised here that no cell answers would be one nothing could
-         * ever be steered to.
+         * <p>Not told whether the choice is a combination: that is {@link #at}'s answer, and a
+         * choice whose factors leave a position nothing is no combination the body has a path to.
          */
-        public java.util.Set<souther.compiler.reading.Condition> settledAt(int index) {
-            if (at(index) == null) {
-                return null;
-            }
-            java.util.LinkedHashSet<souther.compiler.reading.Condition> out =
-                    new java.util.LinkedHashSet<>(reach.settles());
+        public List<souther.compiler.reading.Condition> settlesAt(int index) {
+            List<souther.compiler.reading.Condition> out = new ArrayList<>(reach.settles());
             int left = index;
             for (List<Placed> factor : byFactor) {
                 out.addAll(factor.get(left % factor.size()).settles());
                 left /= factor.size();
             }
-            return java.util.Collections.unmodifiableSet(out);
+            return out;
         }
 
         /** How many cells the group has from {@code from} on, which is what a stopped search left. */

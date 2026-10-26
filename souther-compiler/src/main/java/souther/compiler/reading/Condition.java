@@ -37,6 +37,17 @@ public sealed interface Condition {
      */
     boolean excludes(Condition other);
 
+    /** The finalizer of a 32-bit murmur hash: every bit of the input moves every bit of the output. */
+    static int mixed(int h) {
+        int x = h;
+        x ^= x >>> 16;
+        x *= 0x85ebca6b;
+        x ^= x >>> 13;
+        x *= 0xc2b2ae35;
+        x ^= x >>> 16;
+        return x;
+    }
+
     /**
      * That the value at a position is one of a set of cases of its union.
      *
@@ -152,6 +163,21 @@ public sealed interface Condition {
             }
         }
 
+        /**
+         * Spread over the whole of an int.
+         *
+         * <p>The decisions of one comparison in a closure applied to each element of a list differ
+         * only in the visit and in the way it came out. Hashed as the fields are, those two enter
+         * the hash linearly, and a set of such decisions — which hashes to the sum of its members —
+         * then depends only on how many of them held: the combinations of a group fall into as many
+         * buckets as there are counts, and a lookup among thousands of them compares deep values
+         * against all the others in its bucket.
+         */
+        @Override
+        public int hashCode() {
+            return mixed(Objects.hash(at, statedAt, visit, held, line));
+        }
+
         /** The same comparison coming out the other way. */
         @Override
         public boolean excludes(Condition other) {
@@ -191,6 +217,16 @@ public sealed interface Condition {
         public Arm {
             Objects.requireNonNull(arm, "an arm of some fork");
             Objects.requireNonNull(decidedBy, "decided by some construct, or by none said");
+        }
+
+        /**
+         * Spread over the whole of an int, for the reason {@link Side#hashCode} is: the arms of
+         * one fork differ in their part number alone, which the hash of the fields takes in
+         * linearly, so a set of arms of several forks depends only on the sum of the parts taken.
+         */
+        @Override
+        public int hashCode() {
+            return mixed(Objects.hash(arm, decidedBy));
         }
 
         /**

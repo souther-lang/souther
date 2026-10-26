@@ -69,6 +69,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -2456,6 +2457,9 @@ public final class Generator {
             String behavior, InteractionCells.Offered offered) {
         Map<ObligationIdentity.OfACombinationOfDecisions, List<CellSelection>> out =
                 new LinkedHashMap<>();
+        // What each decision hashes to, once: the choices of a group are taken from the same few
+        // outcomes, and a decision is a deep value that costs as much to hash each time.
+        Map<souther.compiler.reading.Condition, Integer> hashes = new IdentityHashMap<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
@@ -2463,7 +2467,8 @@ public final class Generator {
                     continue;
                 }
                 out.computeIfAbsent(new ObligationIdentity.OfACombinationOfDecisions(
-                        behavior, group.settledAt(index)), _ -> new ArrayList<>()).add(selection);
+                        behavior, DecisionSet.of(group.settlesAt(index), hashes)),
+                        _ -> new ArrayList<>()).add(selection);
             }
         }
         return out;
