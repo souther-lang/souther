@@ -358,12 +358,13 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
-     * A case is offered only where a row can be written for it: a field whose type offers no other
-     * value is no field to change, and so there is nothing to offer.
+     * A field of a sum whose cases all carry something is given another value like any other:
+     * one value of each case, written as the record the case is, so that the two copies of the
+     * key hold different cases.
      */
     @Test
-    void aCaseIsNotOfferedWhereTheFieldTheStatementReadsHasNoOtherValue() {
-        Compilation compilation = Compilation.ofSource(HEAD + """
+    void aSumWhoseCasesAllCarrySomethingIsGivenItsOtherCase() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data Card = { n: Int }
                 data Cash = { n: Int }
                 data Pay = Card | Cash
@@ -383,35 +384,305 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                         [Row { sku = "A", pay = Card { n = 1 } }]) -> 1
                     | "refused" : ([LI { sku = "A", q = 5 }],
                         [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """);
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
-        String module = compilation.modules().getFirst();
-        assertTrue(compilation.db().ask(new Adequacy.Decides(module)).value().get("f").took()
-                        .made().orElseThrow().unseenCases().stream()
-                        .anyMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "the order is unmeasured, so that not being offered is the plan's answer");
-        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().cases()
-                        .stream().noneMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "no order is offered for a field with no other value to give");
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found),
+                () -> "a row for each way: " + found.keySet());
+        found.values().forEach(row -> {
+            String rows = row.inputs().get(1).text();
+            assertTrue(rows.contains("Card {") && rows.contains("Cash {"),
+                    () -> "the two copies hold the two cases: " + rows);
+        });
     }
 
     /**
-     * A list reached through the values of a map is a container the rewrite does not rebuild, so
-     * the order of a key in it is reported unmeasured and no row is offered for it: what is
-     * offered is what the rewrite does.
+     * The names a sum wears are put on once by the walk that rebuilds the row: the value written
+     * for a case is the case, and a field of a sum declared under one name or under a name of
+     * that name is written under each of them exactly once.
      */
     @Test
-    void anOrderInAListBelowAMapIsNotOffered() {
-        Compilation compilation = Compilation.ofSource(HEAD + """
+    void aSumDeclaredUnderANameIsWrittenUnderEachNameOnce() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Card = { n: Int }
+                data Cash = { n: Int }
+                data Pay = Card | Cash
+                data PayN = Pay
+                data PayNN = PayN
+                data Row = { sku: String, pay: PayNN }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay.value.value with
+                            | Card as c -> true
+                            | Cash as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = PayNN(PayN(Card { n = 1 })) }]) -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = PayNN(PayN(Cash { n = 1 })) }])
+                        -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            String rows = row.inputs().get(1).text();
+            assertEquals(2, rows.split("PayNN\\(PayN\\(", -1).length - 1,
+                    () -> "each copy under both names once: " + rows);
+            assertTrue(!rows.contains("PayN(PayN(") && !rows.contains("PayNN(PayNN("),
+                    () -> "no name twice: " + rows);
+        });
+    }
+
+    /**
+     * A case is not left out for coming last among the most a sum is given, nor for the container
+     * holding several elements, which makes many sites to write the copies at: the statement tells
+     * the twelfth case from the rest, and the copies are given it.
+     */
+    @Test
+    void theLastCaseOfTheMostASumIsGivenIsWrittenInAContainerOfSeveralElements() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data C1 = { n: Int }
+                data C2 = { n: Int }
+                data C3 = { n: Int }
+                data C4 = { n: Int }
+                data C5 = { n: Int }
+                data C6 = { n: Int }
+                data C7 = { n: Int }
+                data C8 = { n: Int }
+                data C9 = { n: Int }
+                data C10 = { n: Int }
+                data C11 = { n: Int }
+                data C12 = { n: Int }
+                data Pay = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 | C10 | C11 | C12
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    guard List.length(rows) >= 4 else Empty { n = 2 }
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | C1 as c -> true
+                            | C2 as c -> true
+                            | C3 as c -> true
+                            | C4 as c -> true
+                            | C5 as c -> true
+                            | C6 as c -> true
+                            | C7 as c -> true
+                            | C8 as c -> true
+                            | C9 as c -> true
+                            | C10 as c -> true
+                            | C11 as c -> true
+                            | C12 as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 1 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C1 { n = 1 } }, Row { sku = "B", pay = C1 { n = 1 } },
+                         Row { sku = "C", pay = C1 { n = 1 } }, Row { sku = "D", pay = C1 { n = 1 } }])
+                        -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C12 { n = 1 } }, Row { sku = "B", pay = C1 { n = 1 } },
+                         Row { sku = "C", pay = C1 { n = 1 } }, Row { sku = "D", pay = C1 { n = 1 } }])
+                        -> Empty { n = 1 }
+                    | "few" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C1 { n = 1 } }]) -> Empty { n = 2 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(row.inputs().get(1).text().contains("C12 {"),
+                () -> "the twelfth case is written: " + row.inputs().get(1).text()));
+    }
+
+    /**
+     * One value the decoder refuses does not use up the rewrites that are looked at: the first
+     * value of the first case is refused, every pair holding it is refused with it, and the
+     * pairs of the other values are still reached, though the container holds several elements
+     * and so many sites, and a sum has the most cases.
+     */
+    @Test
+    void aValueTheDecoderRefusesDoesNotUseUpTheRewritesLookedAt() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data C1 = { n: Int }
+                    invariant positive = n >= 1
+                data C2 = { n: Int }
+                data C3 = { n: Int }
+                data C4 = { n: Int }
+                data C5 = { n: Int }
+                data C6 = { n: Int }
+                data C7 = { n: Int }
+                data C8 = { n: Int }
+                data C9 = { n: Int }
+                data C10 = { n: Int }
+                data C11 = { n: Int }
+                data C12 = { n: Int }
+                data Pay = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 | C10 | C11 | C12
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    guard List.length(rows) >= 4 else Empty { n = 2 }
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | C1 as c -> true
+                            | C2 as c -> true
+                            | C3 as c -> true
+                            | C4 as c -> true
+                            | C5 as c -> true
+                            | C6 as c -> true
+                            | C7 as c -> true
+                            | C8 as c -> true
+                            | C9 as c -> true
+                            | C10 as c -> true
+                            | C11 as c -> true
+                            | C12 as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 1 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C2 { n = 1 } }, Row { sku = "B", pay = C2 { n = 1 } },
+                         Row { sku = "C", pay = C2 { n = 1 } }, Row { sku = "D", pay = C2 { n = 1 } }])
+                        -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C12 { n = 1 } }, Row { sku = "B", pay = C2 { n = 1 } },
+                         Row { sku = "C", pay = C2 { n = 1 } }, Row { sku = "D", pay = C2 { n = 1 } }])
+                        -> Empty { n = 1 }
+                    | "few" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C2 { n = 1 } }]) -> Empty { n = 2 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(
+                !row.inputs().get(1).text().contains("C1 { n = 0 }"),
+                () -> "no row holds the value the decoder refuses: " + row.inputs().get(1).text()));
+    }
+
+    /**
+     * Where the container holds a fixed number of elements, an element held again is refused and
+     * two elements given one key are not: the pairs of elements are the only way to a row.
+     */
+    @Test
+    void aContainerOfAFixedLengthIsGivenAKeyTwiceByTwoOfItsElements() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, qty: Int }
+                data Snap = { rows: List<Row> }
+                    invariant fixed = List.length(rows) == 2
+                behavior f : (item: LI, snap: Snap) -> Int | Empty
+                let f (item, snap) = {
+                    guard match Map.get(item.sku, List.indexBy(.sku, snap.rows)) with
+                        | Some r -> r.qty >= item.q
+                        | None -> false else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : (LI { sku = "A", q = 5 },
+                        Snap { rows = [Row { sku = "A", qty = 9 }, Row { sku = "B", qty = 9 }] })
+                        -> 1
+                    | "short" : (LI { sku = "A", q = 5 },
+                        Snap { rows = [Row { sku = "A", qty = 1 }, Row { sku = "B", qty = 9 }] })
+                        -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertEquals(2, keysIn(row.inputs().get(1).text(),
+                "sku").size(), () -> "the length kept: " + row.inputs().get(1).text()));
+    }
+
+    /**
+     * A case whose first value the decoder refuses is not left unwritten: the next value of the
+     * case stands in for it, once every case has been given its first.
+     */
+    @Test
+    void aCaseWhoseFirstValueIsRefusedIsGivenAnotherOfItsValues() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Card = { n: Int }
+                data Cash = { n: Int }
+                    invariant positive = n >= 1
+                data Pay = Card | Cash
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | Card as c -> true
+                            | Cash as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Card { n = 0 } }]) -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(!row.inputs().get(1).text().contains("Cash { n = 0 }"),
+                () -> "no row holds the value the decoder refuses: " + row.inputs().get(1).text()));
+    }
+
+    /**
+     * The room is counted by case: a first case with more values than a listing holds does not
+     * use it up, and the other case is still written.
+     */
+    @Test
+    void aCaseWithManyValuesDoesNotCrowdOutTheNext() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Card = { a: Bool, b: Bool, c: Bool, d: Bool }
+                data Cash = { n: Int }
+                data Pay = Card | Cash
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | Card as c -> true
+                            | Cash as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Card { a = true, b = true, c = true, d = true } }])
+                        -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> {
+            String rows = row.inputs().get(1).text();
+            assertTrue(rows.contains("Card {") && rows.contains("Cash {"),
+                    () -> "the two copies hold the two cases: " + rows);
+        });
+    }
+
+    /**
+     * A list reached through the values of a map is rebuilt around the map's own keys, so the
+     * order of a key in it is composed for, with the entry's key and the other entries kept.
+     */
+    @Test
+    void anOrderInAListBelowAMapIsComposedForWithTheKeysKept() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data Row = { sku: String, qty: Int }
                 data Snap = { byDay: Map<String, List<Row>> }
                 behavior f : (item: LI, snap: Snap) -> Int | Empty
                 let f (item, snap) = {
-                    guard match Map.get("d", snap.byDay) with
+                    guard match Map.get(item.sku, snap.byDay) with
                         | Some rows -> match Map.get(item.sku, List.indexBy(.sku, rows)) with
                             | Some r -> r.qty >= item.q
                             | None -> false
@@ -420,24 +691,68 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                 }
                 example f
                     | "stocked" : (LI { sku = "A", q = 5 },
-                        Snap { byDay = [("d", [Row { sku = "A", qty = 9 }])] }) -> 1
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 9 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] }) -> 1
                     | "short" : (LI { sku = "A", q = 5 },
-                        Snap { byDay = [("d", [Row { sku = "A", qty = 1 }])] })
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 1 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] })
                         -> Empty { n = 0 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """);
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
-        String module = compilation.modules().getFirst();
-        assertTrue(compilation.db().ask(new Adequacy.Decides(module)).value().get("f").took()
-                        .made().orElseThrow().unseenCases().stream()
-                        .anyMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "the order is unmeasured, so that not being offered is the plan's answer");
-        assertTrue(compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value().cases()
-                        .stream().noneMatch(each -> each instanceof CaseOfAStatement.KeyOrder),
-                "no order is offered for a list the rewrite does not go through");
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found),
+                () -> "a row for each way: " + found.keySet());
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            List<String> keys = keysIn(snap, "sku");
+            assertEquals(2, keys.size(), () -> "two elements: " + snap);
+            assertEquals(keys.get(0), keys.get(1), () -> "holding one key: " + snap);
+            assertTrue(snap.contains("byDay = [(" + keys.get(0) + ", ["),
+                    () -> "the entry keeps its key: " + snap);
+        });
+    }
+
+    /**
+     * Where the map holds more than one entry, one entry's list is the one written again: the
+     * others keep their keys and their elements.
+     */
+    @Test
+    void theOtherEntriesOfTheMapAreKept() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Row = { sku: String, qty: Int }
+                data Snap = { byDay: Map<String, List<Row>> }
+                    invariant Map.size(byDay) >= 2
+                behavior f : (item: LI, snap: Snap) -> Int | Empty
+                let f (item, snap) = {
+                    guard match Map.get(item.sku, snap.byDay) with
+                        | Some rows -> match Map.get(item.sku, List.indexBy(.sku, rows)) with
+                            | Some r -> r.qty >= item.q
+                            | None -> false
+                        | None -> false else Empty { n = 0 }
+                    1
+                }
+                example f
+                    | "stocked" : (LI { sku = "A", q = 5 },
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 9 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] }) -> 1
+                    | "short" : (LI { sku = "A", q = 5 },
+                        Snap { byDay = [("A", [Row { sku = "A", qty = 1 }]),
+                            ("e", [Row { sku = "Z", qty = 0 }])] })
+                        -> Empty { n = 0 }
+                """);
+
+        assertTrue(!found.isEmpty(), "a row is written for some way");
+        found.values().forEach(row -> {
+            String snap = row.inputs().get(1).text();
+            Matcher entries = Pattern.compile("\\(\"[^\"]*\", \\[").matcher(snap);
+            int keys = 0;
+            while (entries.find()) {
+                keys++;
+            }
+            assertEquals(2, keys, () -> "both entries kept: " + snap);
+            assertEquals(3, keysIn(snap, "sku").size(),
+                    () -> "one element added to one list, the other list as it was: " + snap);
+        });
     }
 
     /**

@@ -243,7 +243,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *
      * <p>Handed the value as the position wears it with the names it wears taken off, and the type
      * and view of the position; answers values of the same kind, which the walk puts the names back
-     * on.
+     * on. A value that is already written under the names, such as one listed at the position's own
+     * type ({@link ValuesOfAnElement}), is not one to answer: the names would be on it twice.
      */
     @FunctionalInterface
     interface Rewrite {
@@ -487,10 +488,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         static Type rewritableTypeAfter(TermPath.Step step, Type type,
                                         Function<Type, TypeView> viewOf) {
             // The one place that says which containers a rewrite goes through, and the rewrite
-            // below asks the same of the shape: a map's values are read by a walk over a row and
-            // are not rebuilt by this.
+            // below rebuilds each of them: a list or set around its elements, a map around its
+            // values with the keys kept.
             return step instanceof TermPath.Step.Element
-                    && !(viewOf.apply(type).shape() instanceof Shape.Sequence)
+                    && !(viewOf.apply(type).shape() instanceof Shape.Container)
                     ? null : typeAfter(step, type, viewOf);
         }
 
@@ -552,18 +553,37 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 }
                 case TermPath.Step.Element _ -> {
                     // Only where the type is a container this rebuilds, as the types are asked.
-                    if (rewritableTypeAfter(taken, type, viewOf) == null
-                            || !(here instanceof ObservedValue.Sequence written)
-                            || below.size() != written.elements().size()) {
+                    if (rewritableTypeAfter(taken, type, viewOf) == null) {
                         yield Stream.empty();
                     }
-                    yield IntStream.range(0, below.size()).boxed().flatMap(one ->
-                            below.get(one).rewriting(steps, from + 1, viewOf, how).map(each -> {
-                                List<ObservedValue> held = new ArrayList<>(written.elements());
-                                held.set(one, each);
-                                return ObservedValue.wrapped(view.wrappers(),
-                                        new ObservedValue.Sequence(held));
-                            }));
+                    yield switch (here) {
+                        case ObservedValue.Sequence written
+                                when below.size() == written.elements().size() ->
+                                IntStream.range(0, below.size()).boxed().flatMap(one ->
+                                        below.get(one).rewriting(steps, from + 1, viewOf, how)
+                                                .map(each -> {
+                                                    List<ObservedValue> held =
+                                                            new ArrayList<>(written.elements());
+                                                    held.set(one, each);
+                                                    return ObservedValue.wrapped(view.wrappers(),
+                                                            new ObservedValue.Sequence(held));
+                                                }));
+                        // An entry's value is what is rewritten and its key stays, so the map
+                        // comes back with the same keys in the same places.
+                        case ObservedValue.Mapping written
+                                when below.size() == written.entries().size() ->
+                                IntStream.range(0, below.size()).boxed().flatMap(one ->
+                                        below.get(one).rewriting(steps, from + 1, viewOf, how)
+                                                .map(each -> {
+                                                    List<ObservedValue.Entry> held =
+                                                            new ArrayList<>(written.entries());
+                                                    held.set(one, new ObservedValue.Entry(
+                                                            held.get(one).key(), each));
+                                                    return ObservedValue.wrapped(view.wrappers(),
+                                                            new ObservedValue.Mapping(held));
+                                                }));
+                        default -> Stream.empty();
+                    };
                 }
                 case TermPath.Step.Key _, TermPath.Step.Refine _ -> Stream.empty();
             };
