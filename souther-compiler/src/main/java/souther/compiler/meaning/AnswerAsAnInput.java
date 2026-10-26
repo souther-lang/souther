@@ -656,6 +656,7 @@ public final class AnswerAsAnInput {
                         : new Quantity.SumOver(container, each.coefs().keySet().iterator().next());
             }
             case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+            case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.APieceOf _,
                  Quantity.IsAmongThePieces _, Quantity.RemainderOfADividend _,

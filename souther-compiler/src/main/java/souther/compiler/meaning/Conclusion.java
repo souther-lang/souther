@@ -223,7 +223,7 @@ public final class Conclusion {
                     partsIn(among.value()) + partsIn(among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                  DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
-                 Quantity.OfABinding _,
+                 Quantity.OfABinding _, Quantity.TheKeptTotal _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
                  Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
                  Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,

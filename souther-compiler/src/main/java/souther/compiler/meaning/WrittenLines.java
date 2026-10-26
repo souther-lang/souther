@@ -394,6 +394,7 @@ public final class WrittenLines {
             case Derivation.ItDeparted(var clauses, var _) -> clauses;
             case Derivation.OneOfItsArms(var arms) -> ofTheArms(arms);
             case Derivation.AComparisonOfAChoice(var cases) -> List.of(cases);
+            case Derivation.WithTheTotalsOfAWay(var reading, var _) -> List.of(reading.read());
             case Derivation.AnOperationsCases(var _, var cases) -> ofTheArms(cases);
             case Derivation.ASizeInCases(var _, var cases) -> ofTheArms(cases);
             case Derivation.HeldAgainstAWrittenTruth(var truth, var _) -> List.of(truth);

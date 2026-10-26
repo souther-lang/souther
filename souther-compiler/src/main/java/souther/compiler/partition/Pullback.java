@@ -80,6 +80,7 @@ import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.GivenTotals;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.HowTheElementsAreAsked;
 import souther.compiler.meaning.PieceDemand;
@@ -7423,6 +7424,9 @@ final class Pullback {
      * each way the sum of the elements that way keeps. An element that composes into no form stops
      * only the ways that keep it.
      *
+     * <p>Where the comparison is read over the totals as quantities of their own and states
+     * relations of them ({@link #keptOnceFor}), it is read once and each way is given its totals.
+     *
      * @param reads where the reading being split stands, which counts the readings it is one of
      * @param at    where what is read again is a part of a larger condition, or null
      * @param fixed whether its answer is the same on every run
@@ -7430,6 +7434,13 @@ final class Pullback {
     private Derivation keepingOf(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
                                  boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
+        Derivation once = total.counted()
+                ? (keptReading == null ? null : countInTheReading(total, again))
+                : (keptReading == null && truthsDecided.isEmpty()
+                        ? keptOnceFor(total, reads, at, fixed, again) : null);
+        if (once != null) {
+            return once;
+        }
         WaysOfKeeping ways = new WaysOfKeeping(total.occurrences());
         Boolean[] decided = alreadyDecided(ways);
         // The elements the leaves of the tree read, as a total of elements kept by nothing reads
@@ -7441,6 +7452,191 @@ final class Pullback {
         }
         return new Derivation.AComparisonOfAChoice(
                 keptAs(total, ways, decided, new Derivation[ways.truthCount()], at, fixed, again));
+    }
+
+    /**
+     * The reading of a comparison over the totals of the elements a way keeps, made once for all
+     * the ways ({@link #keptOnceFor}): which count it met while it was read, and whether it met
+     * more than it can give a way.
+     */
+    private static final class KeptReading {
+        private final int number;
+        private List<ReadMeaning.Occurrence> counted;
+        private Quantity.TheKeptTotal count;
+        private boolean refused;
+
+        private KeptReading(int number) {
+            this.number = number;
+        }
+    }
+
+    /** The reading of a comparison over totals that is being made, or null. */
+    private KeptReading keptReading;
+
+    private int keptReadings;
+
+    /**
+     * {@code again} read once with the total {@code total} adds up to standing as a quantity of
+     * its own, and the count of the elements a way keeps that the reading meets standing as
+     * another, and each way of keeping given what it makes of them
+     * ({@link Derivation.WithTheTotalsOfAWay}) — or null where the comparison is not one that can
+     * be, and is read once for each way.
+     *
+     * <p>A comparison reads the same in every way but for what the totals are, so reading it for
+     * each way reads it again and again. It can be given them where every element composes into a
+     * form, so that a way's total is a sum of forms, and where what is read states relations of
+     * the totals and their joins and nothing else ({@link GivenTotals#canBeGiven}).
+     *
+     * <p>Charged as a leaf for each way and a reading for each element, which each is read once
+     * for all of them.
+     */
+    private Derivation keptOnceFor(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
+                                   boolean fixed,
+                                   Function<UnaryOperator<InputReads>, Derivation> again) {
+        List<LinearForm<Quantity>> forms = formsOfTheKept(total);
+        if (forms == null) {
+            return null;
+        }
+        KeptReading reading = new KeptReading(++keptReadings);
+        Quantity.TheKeptTotal sum = new Quantity.TheKeptTotal(reading.number, false);
+        AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
+                LinearForm.atom(sum));
+        ElementsMet metBefore = elementsMet.copied();
+        aggregatesInACase.add(standing);
+        keptReading = reading;
+        Derivation read;
+        try {
+            read = again.apply(on -> on);
+        } finally {
+            keptReading = null;
+            aggregatesInACase.remove(standing);
+            elementsMet = metBefore;
+        }
+        if (reading.refused || read == null
+                || !GivenTotals.canBeGiven(new Conclusion(Optional.empty()).of(read))) {
+            return null;
+        }
+        List<ReadMeaning.Occurrence> every = new ArrayList<>(total.occurrences());
+        if (reading.counted != null) {
+            every.addAll(reading.counted);
+        }
+        WaysOfKeeping ways = new WaysOfKeeping(every);
+        Boolean[] decided = ways.undecided();
+        WhyUnread past = splitInto(reads,
+                limit -> Math.min(limit, ways.work(decided, limit, false) + forms.size()),
+                new Denotation(total.call(), total.at()));
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, fixed));
+        }
+        return new Derivation.AComparisonOfAChoice(keptWithTheTotals(ways, forms, sum, reading,
+                new Derivation.ReadOverTotals(read), decided, new Derivation[ways.truthCount()],
+                at, fixed));
+    }
+
+    /**
+     * What the elements of {@code total} come to as forms, in the order they are written, or null
+     * where one composes into none.
+     */
+    private List<LinearForm<Quantity>> formsOfTheKept(Inside.ATotalByKeeping total) {
+        ElementsMet metBefore = elementsMet.copied();
+        try {
+            List<LinearForm<Quantity>> forms = new ArrayList<>();
+            for (ReadMeaning.Occurrence occurrence : total.occurrences()) {
+                Denotation element = occurrence.value();
+                if (!(AffineForms.outcome(element.value(), element.at(), quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> form))) {
+                    return null;
+                }
+                forms.add(form);
+            }
+            return forms;
+        } finally {
+            elementsMet = metBefore;
+        }
+    }
+
+    /**
+     * The count of the elements a way keeps, met while a comparison over totals is read
+     * ({@link #keptOnceFor}): read with the count standing as a quantity of its own, or null
+     * where the reading has met another count, which is then given no ways.
+     */
+    private Derivation countInTheReading(Inside.ATotalByKeeping total,
+                                         Function<UnaryOperator<InputReads>, Derivation> again) {
+        if (keptReading.counted != null && !keptReading.counted.equals(total.occurrences())) {
+            keptReading.refused = true;
+            return null;
+        }
+        if (keptReading.counted == null) {
+            keptReading.counted = total.occurrences();
+            keptReading.count = new Quantity.TheKeptTotal(keptReading.number, true);
+        }
+        AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
+                LinearForm.atom(keptReading.count));
+        ElementsMet metBefore = elementsMet.copied();
+        aggregatesInACase.add(standing);
+        try {
+            return again.apply(on -> on);
+        } finally {
+            aggregatesInACase.remove(standing);
+            elementsMet = metBefore;
+        }
+    }
+
+    /**
+     * The ways of keeping decided in turn as {@link #keptAs} does, each leaf the comparison read
+     * over the totals with what that way makes of them.
+     *
+     * @param forms what the elements of the total come to, which are the first of the elements the
+     *              ways are of
+     */
+    private Derivation keptWithTheTotals(WaysOfKeeping ways, List<LinearForm<Quantity>> forms,
+                                         Quantity.TheKeptTotal sum, KeptReading reading,
+                                         Derivation.ReadOverTotals read, Boolean[] decided,
+                                         Derivation[] conditions, Denotation at, boolean fixed) {
+        int next = ways.nextEvaluated(decided);
+        if (next >= 0) {
+            if (conditions[next] == null) {
+                Denotation truth = ways.truth(next);
+                conditions[next] = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
+            }
+            Derivation[] each = new Derivation[2];
+            for (int way = 0; way < 2; way++) {
+                ATruthDecided now = new ATruthDecided(ways.truth(next), way == 0);
+                decided[next] = now.holds();
+                truthsDecided.add(now);
+                try {
+                    each[way] = keptWithTheTotals(ways, forms, sum, reading, read, decided,
+                            conditions, at, fixed);
+                } finally {
+                    truthsDecided.remove(now);
+                    decided[next] = null;
+                }
+            }
+            return madeBy(ways.truth(next).value(),
+                    new Derivation.IfThenElse(conditions[next], each[0], each[1]));
+        }
+        List<LinearForm<Quantity>> there = new ArrayList<>();
+        for (int i = 0; i < forms.size(); i++) {
+            if (ways.isThere(i, decided)) {
+                there.add(forms.get(i));
+            }
+        }
+        LinearForm<Quantity> total;
+        switch (LinearForm.sum(there)) {
+            case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> total = held;
+            case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
+                return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
+            }
+        }
+        Map<Quantity, LinearForm<Quantity>> totals = new HashMap<>();
+        totals.put(sum, total);
+        if (reading.count != null) {
+            long kept = IntStream.range(forms.size(), forms.size() + reading.counted.size())
+                    .filter(i -> ways.isThere(i, decided)).count();
+            totals.put(reading.count, LinearForm.constant(ExactRatio.of(kept)));
+        }
+        return new Derivation.WithTheTotalsOfAWay(read, totals);
     }
 
     /**

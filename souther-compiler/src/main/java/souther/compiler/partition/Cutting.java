@@ -1283,6 +1283,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,
                      Quantity.IsAmongThePieces _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+                case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             }
         }
         return new TheParts.NotDrawn(stops, beyondTheForm);

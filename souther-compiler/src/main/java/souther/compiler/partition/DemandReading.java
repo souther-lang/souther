@@ -2208,6 +2208,7 @@ final class DemandReading {
                      Quantity.IsAmongThePieces _ -> answered = true;
                 case DecisionAtom.OfTheInput _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+                case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             }
         }
         if (answered) {

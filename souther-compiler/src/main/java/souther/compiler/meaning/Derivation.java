@@ -692,6 +692,73 @@ public sealed interface Derivation {
     }
 
     /**
+     * A comparison read once over the totals of the elements a way keeps
+     * ({@link Quantity.TheKeptTotal}), stated for one way: what it states with each total given as
+     * that way makes it.
+     *
+     * <p>The reading is one however many ways there are, and shared by all of them; what a way adds
+     * is only its totals. The statement is {@link GivenTotals#in}, which a reading that makes this
+     * has already found the reading to be made of.
+     *
+     * @param reading the comparison, read over the stand-ins
+     * @param totals  what each stand-in comes to in this way
+     */
+    record WithTheTotalsOfAWay(ReadOverTotals reading, Map<Quantity, LinearForm<Quantity>> totals)
+            implements Derivation {
+
+        public WithTheTotalsOfAWay {
+            Objects.requireNonNull(reading, "a way states what a reading does");
+            totals = Map.copyOf(totals);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return switch (GivenTotals.in(reading.concluded(numbering), totals)) {
+                case ExactAnswer.Held<Proposition>(var given) -> given;
+                case ExactAnswer.Unheld<Proposition>(var why) -> numbering.unread(
+                        new Stopped(new WhyUnread.ANumberNotHeld(why), false));
+            };
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(reading.read());
+        }
+    }
+
+    /**
+     * A comparison read over the totals of the elements a way keeps, shared by every way that is
+     * given its totals.
+     *
+     * <p>What it concludes is the same in every way and does not turn on how parts nothing read
+     * are numbered or on what a walk's carried value is supposed to be, since a reading that
+     * has either is not given ways ({@link GivenTotals#canBeGiven}). It is concluded once, by
+     * whichever way is asked first.
+     */
+    final class ReadOverTotals {
+
+        private final Derivation read;
+        private volatile Proposition concluded;
+
+        public ReadOverTotals(Derivation read) {
+            this.read = Objects.requireNonNull(read, "a reading is of something");
+        }
+
+        public Derivation read() {
+            return read;
+        }
+
+        Proposition concluded(Conclusion numbering) {
+            Proposition known = concluded;
+            if (known == null) {
+                known = numbering.of(read);
+                concluded = known;
+            }
+            return known;
+        }
+    }
+
+    /**
      * The cases the library writes {@code operation}'s definition in: a case is taken where its
      * arguments stand as it says and none before it, and what is stated is what the case taken
      * states. The library's cases cover everything the operation can be given, which is what makes

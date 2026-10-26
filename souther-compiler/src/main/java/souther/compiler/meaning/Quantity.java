@@ -46,7 +46,7 @@ import java.util.function.Predicate;
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent,
         Quantity.HowManyDifferentMeet, Quantity.HowManyDifferentBelow,
-        Quantity.HowManyDifferentAcross, Quantity.SumOver,
+        Quantity.HowManyDifferentAcross, Quantity.SumOver, Quantity.TheKeptTotal,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
         Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
@@ -80,7 +80,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      DecisionAtom.ComputedOverAnAnswer _,
                      DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
-                     HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _ -> false;
+                     HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _,
+                     TheKeptTotal _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
                 case APieceOf piece -> isIn(piece.string());
                 case IsAmongThePieces among -> isIn(among.value()) || isIn(among.string());
@@ -1206,6 +1207,38 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         @Override
         public String spelled() {
             return "#sum " + container + " [" + ofTheElement.spelled() + "]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What a total over a container the body wrote out adds up to, or how many that container
+     * holds, in the ways its elements are kept, read once for all of them: a stand-in that
+     * {@link GivenTotals} replaces by the total of each way.
+     *
+     * <p>It never reaches a reader. A comparison read over it states the same thing in every way
+     * but for what the total is, and the derivation that gives each way its total concludes the
+     * statement with the stand-in taken out.
+     *
+     * @param reading which reading of a comparison it stands in, so that two totals of two
+     *                readings are two quantities
+     * @param counted whether it is how many the container holds, and not what it adds up to
+     */
+    record TheKeptTotal(int reading, boolean counted) implements Quantity {
+
+        /** What a reader that is handed the stand-in has been given wrongly. */
+        public IllegalStateException reachedAReader() {
+            return new IllegalStateException("a total of the elements a way keeps is given its"
+                    + " ways before a reader is handed it: " + this);
+        }
+
+        @Override
+        public String spelled() {
+            return (counted ? "#kept-count " : "#kept-sum ") + reading;
         }
 
         @Override
