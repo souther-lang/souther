@@ -440,11 +440,12 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     /**
-     * A case is not left out for coming after many: the statement tells the eighth case from the
-     * rest, and the copies are given it.
+     * A case is not left out for coming last among the most a sum is given, nor for the container
+     * holding several elements, which makes many sites to write the copies at: the statement tells
+     * the twelfth case from the rest, and the copies are given it.
      */
     @Test
-    void aCaseAfterMoreThanAKindOfValuesHoldsIsStillWritten() {
+    void theLastCaseOfTheMostASumIsGivenIsWrittenInAContainerOfSeveralElements() {
         Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
                 data C1 = { n: Int }
                 data C2 = { n: Int }
@@ -454,10 +455,15 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                 data C6 = { n: Int }
                 data C7 = { n: Int }
                 data C8 = { n: Int }
-                data Pay = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8
+                data C9 = { n: Int }
+                data C10 = { n: Int }
+                data C11 = { n: Int }
+                data C12 = { n: Int }
+                data Pay = C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 | C10 | C11 | C12
                 data Row = { sku: String, pay: Pay }
                 behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
                 let f (items, rows) = {
+                    guard List.length(rows) >= 4 else Empty { n = 2 }
                     let stock = List.indexBy(.sku, rows)
                     guard List.all(i -> match Map.get(i.sku, stock) with
                         | Some r -> match r.pay with
@@ -468,21 +474,66 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                             | C5 as c -> true
                             | C6 as c -> true
                             | C7 as c -> true
-                            | C8 as c -> false
+                            | C8 as c -> true
+                            | C9 as c -> true
+                            | C10 as c -> true
+                            | C11 as c -> true
+                            | C12 as c -> false
+                        | None -> i.q <= 0, items) else Empty { n = 1 }
+                    1
+                }
+                example f
+                    | "stocked" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C1 { n = 1 } }, Row { sku = "B", pay = C1 { n = 1 } },
+                         Row { sku = "C", pay = C1 { n = 1 } }, Row { sku = "D", pay = C1 { n = 1 } }])
+                        -> 1
+                    | "refused" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C12 { n = 1 } }, Row { sku = "B", pay = C1 { n = 1 } },
+                         Row { sku = "C", pay = C1 { n = 1 } }, Row { sku = "D", pay = C1 { n = 1 } }])
+                        -> Empty { n = 1 }
+                    | "few" : ([LI { sku = "A", q = 5 }],
+                        [Row { sku = "A", pay = C1 { n = 1 } }]) -> Empty { n = 2 }
+                """);
+
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
+        found.values().forEach(row -> assertTrue(row.inputs().get(1).text().contains("C12 {"),
+                () -> "the twelfth case is written: " + row.inputs().get(1).text()));
+    }
+
+    /**
+     * A case whose first value the decoder refuses is not left unwritten: the next value of the
+     * case stands in for it, once every case has been given its first.
+     */
+    @Test
+    void aCaseWhoseFirstValueIsRefusedIsGivenAnotherOfItsValues() {
+        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+                data Card = { n: Int }
+                data Cash = { n: Int }
+                    invariant positive = n >= 1
+                data Pay = Card | Cash
+                data Row = { sku: String, pay: Pay }
+                behavior f : (items: List<LI>, rows: List<Row>) -> Int | Empty
+                let f (items, rows) = {
+                    let stock = List.indexBy(.sku, rows)
+                    guard List.all(i -> match Map.get(i.sku, stock) with
+                        | Some r -> match r.pay with
+                            | Card as c -> true
+                            | Cash as c -> false
                         | None -> i.q <= 0, items) else Empty { n = 0 }
                     1
                 }
                 example f
                     | "stocked" : ([LI { sku = "A", q = 5 }],
-                        [Row { sku = "A", pay = C1 { n = 1 } }]) -> 1
+                        [Row { sku = "A", pay = Card { n = 0 } }]) -> 1
                     | "refused" : ([LI { sku = "A", q = 5 }],
-                        [Row { sku = "A", pay = C8 { n = 1 } }]) -> Empty { n = 0 }
+                        [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
                 """);
 
         assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
                 CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
-        found.values().forEach(row -> assertTrue(row.inputs().get(1).text().contains("C8 {"),
-                () -> "the eighth case is written: " + row.inputs().get(1).text()));
+        found.values().forEach(row -> assertTrue(!row.inputs().get(1).text().contains("Cash { n = 0 }"),
+                () -> "no row holds the value the decoder refuses: " + row.inputs().get(1).text()));
     }
 
     /**
@@ -514,7 +565,8 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                         [Row { sku = "A", pay = Cash { n = 1 } }]) -> Empty { n = 0 }
                 """);
 
-        assertTrue(!found.isEmpty(), "a row is written for some way");
+        assertEquals(Set.of(CaseOfAStatement.Way.HOLDS_BY_THE_LAST,
+                CaseOfAStatement.Way.FAILS_BY_THE_LAST), waysOf(found), found::toString);
         found.values().forEach(row -> {
             String rows = row.inputs().get(1).text();
             assertTrue(rows.contains("Card {") && rows.contains("Cash {"),

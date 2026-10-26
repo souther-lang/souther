@@ -49,6 +49,17 @@ import java.util.stream.Stream;
  * the row still stands at the rule, are for a run to say ({@link CasesTheRowsTook#casesSeenBy}).
  * What a case can be looked for by is the same question as what is written for it
  * ({@link #of}), asked of the same plan.
+ *
+ * <p><b>The order the rewrites are looked at in.</b> What is written is a product — the values the
+ * two copies are given, where in the container they are written, in which container, at which
+ * field — and a row is looked for by taking the first so many ({@link #MOST_REWRITES_LOOKED_AT},
+ * {@link #MOST_CANDIDATES}). So the order is what says what is reached, and it is {@link #roundsOf}:
+ * one value against each of the others, in both orders, at one site in the container, in every
+ * container and at every field, before that value is paired anywhere else. What a bound cuts is
+ * then the later sites in the container and the later values, and no value is left out for
+ * coming late among the others, nor a site for coming after many pairs. The values are listed
+ * a rank at a time, the first of every case before the second of any, so that a value the decoder
+ * refuses is stood in for by the next of its case after every case has had its first.
  */
 public final class KeyOrderCandidates {
 
@@ -61,9 +72,12 @@ public final class KeyOrderCandidates {
 
     /** The most cases of a sum that two copies of an element are given between them. Counted
      *  apart from the values of one kind, since a sum has a value for each case and no case is
-     *  another's room; and few enough that every ordered pair of them is among the rewrites looked
-     *  at ({@link #MOST_REWRITES_LOOKED_AT}) for one container. */
+     *  another's room. */
     static final int MOST_CASES_OF_A_SUM = 12;
+
+    /** The most values of one case of a sum that are listed. The first of a case is the one
+     *  tried; the others are there for the decoder refusing it. */
+    static final int MOST_VALUES_OF_A_CASE = 3;
 
     /** The most rewrites of one row that the decoder admits and that are handed on to be run. */
     static final int MOST_CANDIDATES = 48;
@@ -139,12 +153,20 @@ public final class KeyOrderCandidates {
         MeasuredInput subject = writing.subject();
         Pool pool = Pool.of(seen, prim -> composedAt(subject, prim), subject.ruleReading());
         List<List<String>> apart = subject.keptApartAt(plan.container());
+        ObservedValue held = seen.get(plan.parameter());
+        List<List<ObservedValue>> given = plan.targets().stream()
+                .map(target -> valuesFor(target.type(), target.fields(), pool,
+                        plan.named().getOrDefault(target.fields(), List.of())))
+                .toList();
+        int most = given.stream().mapToInt(List::size).max().orElse(0);
         // Two bounds, because the decoder refuses some of what is looked at: counting only what
         // it admits would let a rule that refuses nearly everything be looked at without end, and
         // counting what is looked at would let the refused ones use up the rows that are run.
-        return inputs.rewritingBelow(seen.get(plan.parameter()),
-                        inputs.types().get(plan.parameter()), plan.container().steps(),
-                        (here, _, _) -> heldTwice(here, pool, apart), views)
+        return roundsOf(most, mostSitesIn(held)).flatMap(round ->
+                        inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
+                                plan.container().steps(),
+                                (here, _, _) -> heldTwice(here, given, round, apart, pool),
+                                views))
                 .limit(MOST_REWRITES_LOOKED_AT)
                 .map(each -> ObservedFixtures.of(each, subject.types().get(plan.parameter()),
                         subject.ruleReading()))
@@ -318,12 +340,12 @@ public final class KeyOrderCandidates {
     }
 
     /**
-     * One value of each case of the sum {@code type}, in the order the declarations write the
-     * cases, up to {@link #MOST_CASES_OF_A_SUM} of them. The case is the unit and not the value: a
-     * case with many values is given one, so that the first case does not use up the room the
-     * others are listed in. A case nothing here writes a value of is left out, which is a case
-     * this did not find and not one that cannot be; so is a case past the most, which is not
-     * tried.
+     * The values of the cases of the sum {@code type}, up to {@link #MOST_CASES_OF_A_SUM} of them
+     * in the order the declarations write them, and up to {@link #MOST_VALUES_OF_A_CASE} of each,
+     * the first of every case before the second of any. The case is the unit and not the value: a
+     * case with many values does not use up the room the others are listed in. A case nothing here
+     * writes a value of is left out, which is a case this did not find and not one that cannot be;
+     * so is a case past the most, which is not tried.
      *
      * <p>Each value is the case itself, without the names the field wears. The walk that puts the
      * rewritten value back puts those on ({@link BehaviorInputs.Rewrite}), as it does for the
@@ -343,13 +365,27 @@ public final class KeyOrderCandidates {
             at = at.then(each);
         }
         TermPath inCase = at;
-        return sum.reaches().cases().stream()
-                .map(leaf -> ValuesOfAnElement.of(Type.ref(leaf), inCase, pool.reading(), 1,
+        List<List<ObservedValue>> ofEachCase = sum.reaches().cases().stream()
+                .limit(MOST_CASES_OF_A_SUM)
+                .map(leaf -> ValuesOfAnElement.of(Type.ref(leaf), inCase, pool.reading(),
+                        MOST_VALUES_OF_A_CASE,
                         (_, held) -> held.shape() instanceof Shape.Scalar scalar
                                 ? scalarValues(scalar, pool, List.of()) : null))
                 .filter(listed -> listed != null && !listed.values().isEmpty())
-                .map(listed -> listed.values().getFirst())
-                .limit(MOST_CASES_OF_A_SUM).toList();
+                .map(ValuesOfAnElement.Listed::values)
+                .toList();
+        // The first of every case, then the second of every case that has one: the order the
+        // rounds take the values in, so that the case the decoder refused the first value of is
+        // stood in for after each case has been given its first.
+        List<ObservedValue> out = new ArrayList<>();
+        for (int rank = 0; rank < MOST_VALUES_OF_A_CASE; rank++) {
+            for (List<ObservedValue> ofTheCase : ofEachCase) {
+                if (rank < ofTheCase.size()) {
+                    out.add(ofTheCase.get(rank));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -437,49 +473,136 @@ public final class KeyOrderCandidates {
         };
     }
 
-    /** What the container comes to with a key held twice, one rewrite at a time. */
-    private Stream<ObservedValue> heldTwice(ObservedValue here, Pool pool,
-                                            List<List<String>> apart) {
+    /**
+     * What the container comes to with a key held twice, one rewrite at a time: for each field,
+     * the pairs of values {@code round} names, written at the place it names in the container.
+     */
+    private Stream<ObservedValue> heldTwice(ObservedValue here, List<List<ObservedValue>> given,
+                                            Round round, List<List<String>> apart, Pool pool) {
         if (!(here instanceof ObservedValue.Sequence(List<ObservedValue> elements))
                 || elements.isEmpty()) {
             return Stream.empty();
         }
-        return plan.targets().stream().flatMap(target -> {
-            List<ObservedValue> values = valuesFor(target.type(), target.fields(), pool,
-                    plan.named().getOrDefault(target.fields(), List.of()));
-            return betweenThem(values).flatMap(pair -> Stream.concat(
-                    overwritten(elements, target, pair.earlier(), pair.later()),
-                    repeated(elements, target, pair.earlier(), pair.later(), apart, pool)));
+        List<Site> sites = sitesIn(elements.size());
+        if (round.site() >= sites.size()) {
+            return Stream.empty();
+        }
+        Site site = sites.get(round.site());
+        return IntStream.range(0, plan.targets().size()).boxed().flatMap(each -> {
+            Target target = plan.targets().get(each);
+            List<ObservedValue> values = given.get(each);
+            return pairsWith(values.size(), round.value()).stream()
+                    .filter(pair -> !ofOneCase(values.get(pair.earlier()),
+                            values.get(pair.later())))
+                    .map(pair -> written(site, elements, target, values.get(pair.earlier()),
+                            values.get(pair.later()), apart, pool))
+                    .filter(Objects::nonNull);
         });
     }
 
-    /** The two values two copies are given, the earlier and the later of them. */
-    private record Between(ObservedValue earlier, ObservedValue later) {}
+    /**
+     * Where two copies are written in a container: an element given the key of an earlier one,
+     * or an element held again.
+     */
+    sealed interface Site {
+
+        /** Two of the elements, the later given the key of the earlier. */
+        record Overwriting(int first, int second) implements Site {}
+
+        /** One element, held again beside itself. */
+        record Repeating(int at) implements Site {}
+    }
+
+    /** One value to be given, paired with another: the index of the value the earlier copy is
+     *  given and of the one the later copy is. */
+    record Pair(int earlier, int later) {}
+
+    /** What a bound cuts last: the sites in the container come one at a time, within a value. */
+    record Round(int value, int site) {}
 
     /**
-     * Every ordered pair of different values of {@code values}, the first value paired with each
-     * of the others in both orders before any other pair.
-     *
-     * <p>What tells the two ways round the order apart is a value on which the statement comes
-     * out one way and another on which it comes out the other, and the first value is on one side
-     * of any such line unless the statement is the same at all of them. So the pairs that reach
-     * every line come first, however many values there are, and the pairs among the others, which
-     * only repeat them for a statement that tells nothing but those, come after: a bound on how
-     * many rewrites are looked at or run then cuts those and not a value for coming late in the
-     * list.
+     * The sites two copies are written at in a container of {@code size} elements, the elements
+     * repeated first and then the pairs of elements.
      */
-    private static Stream<Between> betweenThem(List<ObservedValue> values) {
-        if (values.size() < 2) {
-            return Stream.empty();
+    static List<Site> sitesIn(int size) {
+        List<Site> out = new ArrayList<>();
+        for (int at = 0; at < size; at++) {
+            out.add(new Site.Repeating(at));
         }
-        ObservedValue first = values.getFirst();
-        List<ObservedValue> others = values.subList(1, values.size());
-        return Stream.concat(
-                others.stream().flatMap(other -> Stream.of(new Between(first, other),
-                        new Between(other, first))),
-                others.stream().flatMap(earlier -> others.stream()
-                        .filter(later -> !later.equals(earlier))
-                        .map(later -> new Between(earlier, later))));
+        for (int first = 0; first < size; first++) {
+            for (int second = first + 1; second < size; second++) {
+                out.add(new Site.Overwriting(first, second));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The value {@code value} against each later one, in both orders: the pairs of the round of
+     * that value.
+     */
+    static List<Pair> pairsWith(int values, int value) {
+        List<Pair> out = new ArrayList<>();
+        for (int other = value + 1; other < values; other++) {
+            out.add(new Pair(value, other));
+            out.add(new Pair(other, value));
+        }
+        return out;
+    }
+
+    /**
+     * The rounds the rewrites are looked at in: a value is taken against every other, in both
+     * orders, at the first site in the container, then at the second, and so on, before the next
+     * value is taken against those after it.
+     *
+     * <p>What tells the two ways round the order apart is a value the statement comes out one way
+     * on and another it comes out the other way on, and a value is on one side of any such line
+     * unless the statement is the same at every value after it. So every line is reached in the
+     * rounds of the first value that has one after it — {@code 2 × (values − 1)} pairs for each
+     * site — and what a bound cuts is the later sites and the later values. The sites are the
+     * outer of the two, since a site left out costs a position of the container and a value left
+     * out costs a case.
+     *
+     * @param values the most values any field is given
+     * @param sites  the most sites any container has
+     */
+    static Stream<Round> roundsOf(int values, int sites) {
+        return IntStream.range(0, Math.max(0, values - 1)).boxed().flatMap(value ->
+                IntStream.range(0, sites).mapToObj(site -> new Round(value, site)));
+    }
+
+    /** The most sites any container in {@code held} has. */
+    private int mostSitesIn(ObservedValue held) {
+        int[] most = {0};
+        inputs.rewritingBelow(held, inputs.types().get(plan.parameter()),
+                plan.container().steps(), (here, _, _) -> {
+                    if (here instanceof ObservedValue.Sequence(List<ObservedValue> elements)) {
+                        most[0] = Math.max(most[0], sitesIn(elements.size()).size());
+                    }
+                    return Stream.empty();
+                }, views).forEach(_ -> { });
+        return most[0];
+    }
+
+    /**
+     * Whether the values are of one case of a sum. Two copies of a key given two values of one
+     * case differ as the values do and not as the case does, which a sum is given its values for.
+     */
+    private static boolean ofOneCase(ObservedValue one, ObservedValue other) {
+        return one instanceof ObservedValue.Constructed first
+                && other instanceof ObservedValue.Constructed second
+                && first.type().equals(second.type());
+    }
+
+    private ObservedValue written(Site site, List<ObservedValue> elements, Target target,
+                                  ObservedValue earlier, ObservedValue later,
+                                  List<List<String>> apart, Pool pool) {
+        return switch (site) {
+            case Site.Overwriting(int first, int second) ->
+                    overwritten(elements, first, second, target, earlier, later);
+            case Site.Repeating(int at) ->
+                    repeated(elements, at, target, earlier, later, apart, pool);
+        };
     }
 
     /**
@@ -487,25 +610,20 @@ public final class KeyOrderCandidates {
      * between them. Everything else each held stays, so a field that must differ between
      * elements, and the number of elements, are as they were.
      */
-    private Stream<ObservedValue> overwritten(List<ObservedValue> elements, Target target,
-                                              ObservedValue earlier, ObservedValue later) {
-        return IntStream.range(0, elements.size()).boxed().flatMap(first ->
-                IntStream.range(first + 1, elements.size()).boxed().map(second -> {
-                    ObservedValue key = inputs.readingAt(elements.get(first), plan.element(),
-                            plan.key(), views);
-                    ObservedValue keyed = key == null ? null
-                            : with(elements.get(second), plan.key(), key);
-                    ObservedValue one = with(elements.get(first), target.fields(), earlier);
-                    ObservedValue other = keyed == null ? null
-                            : with(keyed, target.fields(), later);
-                    if (one == null || other == null) {
-                        return null;
-                    }
-                    List<ObservedValue> held = new ArrayList<>(elements);
-                    held.set(first, one);
-                    held.set(second, other);
-                    return (ObservedValue) new ObservedValue.Sequence(held);
-                })).filter(Objects::nonNull);
+    private ObservedValue overwritten(List<ObservedValue> elements, int first, int second,
+                                      Target target, ObservedValue earlier, ObservedValue later) {
+        ObservedValue key = inputs.readingAt(elements.get(first), plan.element(), plan.key(),
+                views);
+        ObservedValue keyed = key == null ? null : with(elements.get(second), plan.key(), key);
+        ObservedValue one = with(elements.get(first), target.fields(), earlier);
+        ObservedValue other = keyed == null ? null : with(keyed, target.fields(), later);
+        if (one == null || other == null) {
+            return null;
+        }
+        List<ObservedValue> held = new ArrayList<>(elements);
+        held.set(first, one);
+        held.set(second, other);
+        return new ObservedValue.Sequence(held);
     }
 
     /**
@@ -517,26 +635,24 @@ public final class KeyOrderCandidates {
      * equal to another element's there, and then one that no element of the container holds. A
      * field the two copies already differ at, because the order is told by it, is left as it is.
      */
-    private Stream<ObservedValue> repeated(List<ObservedValue> elements, Target target,
-                                           ObservedValue earlier, ObservedValue later,
-                                           List<List<String>> apart, Pool pool) {
-        return IntStream.range(0, elements.size()).boxed().map(at -> {
-            ObservedValue one = with(elements.get(at), target.fields(), earlier);
-            ObservedValue other = with(elements.get(at), target.fields(), later);
-            if (one == null || other == null) {
-                return null;
+    private ObservedValue repeated(List<ObservedValue> elements, int at, Target target,
+                                   ObservedValue earlier, ObservedValue later,
+                                   List<List<String>> apart, Pool pool) {
+        ObservedValue one = with(elements.get(at), target.fields(), earlier);
+        ObservedValue other = with(elements.get(at), target.fields(), later);
+        if (one == null || other == null) {
+            return null;
+        }
+        List<ObservedValue> held = new ArrayList<>(elements);
+        held.set(at, one);
+        held.add(at + 1, other);
+        for (List<String> run : apart) {
+            if (other != null && !startsWith(run, plan.key()) && !startsWith(plan.key(), run)) {
+                other = keptApartAt(held, at + 1, run, pool);
+                held.set(at + 1, other);
             }
-            List<ObservedValue> held = new ArrayList<>(elements);
-            held.set(at, one);
-            held.add(at + 1, other);
-            for (List<String> run : apart) {
-                if (other != null && !startsWith(run, plan.key()) && !startsWith(plan.key(), run)) {
-                    other = keptApartAt(held, at + 1, run, pool);
-                    held.set(at + 1, other);
-                }
-            }
-            return other == null ? null : (ObservedValue) new ObservedValue.Sequence(held);
-        }).filter(Objects::nonNull);
+        }
+        return other == null ? null : new ObservedValue.Sequence(held);
     }
 
     /**
