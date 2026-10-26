@@ -1,11 +1,8 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -64,18 +61,6 @@ public sealed interface CaseOfAStatement {
         FAILS_BY_THE_LAST
     }
 
-    /**
-     * How many levels below the start a node is looked for that meets what a search asks. Walked
-     * from the first up, so a node is looked for at the least depth the rules leave room for.
-     *
-     * <p>A bound on which candidates are built and no claim about the model: a case no candidate
-     * was found for stays unmeasured and is never said to be out of reach. It is not one of the
-     * published figures ({@link CompositionBudget}) because a search that comes back without a row
-     * reports no figure it stopped at, and a figure nothing reports is one nobody could be told
-     * to raise.
-     */
-    int MOST_LEVELS_BELOW_THE_START = 3;
-
     /** A step of a search the statement states. */
     record Search(Proposition.SomeReachable statement, Step step) implements CaseOfAStatement {
 
@@ -108,23 +93,14 @@ public sealed interface CaseOfAStatement {
         }
 
         /**
-         * How many levels the step is asked at: the levels below the start it is looked for a node
-         * at, and the one asking there is for every other step.
-         *
-         * <p>Finding one below is a node at some depth, which no one statement says. Each level is
-         * a candidate for it, and the rules of the decision may leave room at one and none at
-         * another: a rule that keeps every child from meeting the search leaves room for a
-         * grandchild only.
-         */
-        public int levelsAsked() {
-            return step == Step.BELOW_IT ? MOST_LEVELS_BELOW_THE_START : 1;
-        }
-
-        /**
          * What the step says of the node the search starts at, with finding one below asked of the
          * node {@code levels} down ({@link Proposition.SomeReachable#someNodeBelowMeetingIt});
          * none where the search is not of that form, because a row then has nothing that steers
          * it to a node below. The other three steps are asked the same at every level.
+         *
+         * <p>Finding one below is a node at some depth, which no one statement says. Each level is
+         * a candidate for it, and the rules of the decision may leave room at one and none at
+         * another; which levels are tried is the search's ({@link CaseCandidates}).
          */
         public Optional<List<Proposition>> askedAtLevel(int levels,
                                                         UnaryOperator<Proposition> denying) {
@@ -146,38 +122,8 @@ public sealed interface CaseOfAStatement {
             };
         }
 
-        /**
-         * The places a row has to write at to be a candidate for the step, at every level it is
-         * asked at: the containers and elements on the way down and each place of the node reached
-         * that the statement reads. Empty for a step that asks nothing inside the nodes below.
-         *
-         * <p>Finite whatever the depth the type recurses to, because it is the places the one
-         * statement names at the levels the step is asked at. A reading of the input that stops
-         * where the type returns to a declaration is asked for these and no others.
-         */
-        public List<TermPath> placesToBuildFor(InputDomain measured) {
-            List<TermPath> out = new ArrayList<>();
-            for (int level = 1; level <= levelsAsked(); level++) {
-                Optional<Proposition.SomeReachable.NodeBelowMeeting> below = step == Step.BELOW_IT
-                        ? statement.someNodeBelowMeetingIt(level) : Optional.empty();
-                below.ifPresent(each -> {
-                    out.addAll(each.places());
-                    // A node below is a node as the start is: every place the reading holds of the
-                    // start, whatever the statement happens to read of it, is a place of it. The
-                    // elements of a container whose elements a number is taken of are among them.
-                    for (Position position : measured.positions()) {
-                        TermPath there = position.path().movedFrom(statement.at(), each.reached());
-                        if (there != null) {
-                            out.add(there);
-                        }
-                    }
-                });
-            }
-            return List.copyOf(out);
-        }
-
         /** The places the step is asked at {@code levels} below the start, which are the ones a
-         *  reading has to hold to say what a row has to be there. None for a step that asks
+         *  reading has to have read to say what a row has to be there. None for a step that asks
          *  nothing inside the nodes below. */
         public List<TermPath> placesAtLevel(int levels) {
             return step != Step.BELOW_IT ? List.of()

@@ -103,7 +103,7 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // Which candidates a row for a case of a statement is built from. The search for such
             // a row says the rows it found and nothing of the cases it did not: a case with no row
             // is not found, which is not out of reach, so there is no figure it came back with.
-            Map.entry("souther.compiler.partition.CaseOfAStatement.MOST_LEVELS_BELOW_THE_START",
+            Map.entry("souther.compiler.partition.CaseCandidates.MOST_LEVELS_BELOW_THE_START",
                     "how many levels below the start of a search a node meeting it is looked for"
                             + " at, which bounds the candidates and claims nothing of the model"),
 

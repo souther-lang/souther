@@ -24,6 +24,7 @@ import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.CaseCandidates;
 import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CaseWay;
 import souther.compiler.partition.CasesTheRowsTook;
@@ -1478,27 +1479,33 @@ public final class Adequacy {
                 if (analysis == null) {
                     continue;
                 }
-                out.put(spec.name(), over(db, spec.name(), analysis, read, reading.value()));
+                out.put(spec.name(), over(db, spec.name(), analysis, read, reading.value(),
+                        souther.compiler.partition.CaseCandidates.NEARBY));
             }
             return Answer.of(Ordered.map(out));
         }
 
         /**
-         * The decision {@code analysis} states, read under {@code read}.
+         * The decision {@code analysis} states, read under {@code read}, with the ways to the
+         * cases made for {@code candidates}.
          *
          * <p>The reading of the input is a parameter so that a search can read the same decision
          * under a reading closed over more places than the measurement's. What a measure counts
-         * is read under {@link Inputs}, and nothing a search reads is kept in an answer.
+         * is read under {@link Inputs}, and nothing a search reads is kept in an answer. The rules
+         * come out the same under either: what a reading of more places adds is ways to cases, and
+         * {@code AWiderReadingOfADecisionKeepsItsRulesTest} holds the two to it.
          */
         static souther.compiler.partition.DecisionReading over(
                 Db db, String behavior, AnalysisBody analysis, InputDomain read,
-                RuleReadingSource source) {
+                RuleReadingSource source,
+                souther.compiler.partition.CaseCandidates candidates) {
             return souther.compiler.partition.DecisionReading.of(behavior, analysis,
                     readingOf(db, read, source),
                     InputReads.ofParametersWhereCallsStand(read.parameterReads(),
                             read.declared(source),
                             ElementBindings.of(analysis, source.newtypes()),
-                            read.dependencies()));
+                            read.dependencies()),
+                    candidates);
         }
     }
 
@@ -3570,7 +3577,8 @@ public final class Adequacy {
                     // Only a place the measurement's reading has no position at needs a reading of
                     // its own; where every one is read already, the second reading would be the
                     // first divided again.
-                    search.placesToBuildFor(domain).stream().filter(place -> domain.at(place) == null)
+                    CaseCandidates.OF_THE_SEARCH.placesToBuildFor(search, domain).stream()
+                            .filter(place -> !CaseCandidates.reads(domain, place))
                             .forEach(below::add);
                 }
             }
@@ -3588,10 +3596,20 @@ public final class Adequacy {
             // could not be made the cases that ask for it find nothing, as a case the reading has
             // no words for does, and the rest are searched as before.
             DecisionReading ways = widened
-                    ? DecisionReadings.over(db, behavior, analysis, wider, source)
+                    ? DecisionReadings.over(db, behavior, analysis, wider, source,
+                            CaseCandidates.OF_THE_SEARCH)
                     : evidence.read();
+            // A row is judged against the rules the measurement placed the rows in, so a way is
+            // taken only to a rule the measured reading has too. The two readings state the same
+            // rules ({@code AWiderReadingOfADecisionKeepsItsRulesTest}); where one did not, the
+            // way to it is not offered rather than judged against a rule that is none of those
+            // the rows were placed at.
+            Set<DecisionRule> measuredRules = new HashSet<>(evidence.read().rules());
             Map<CaseOfAStatement, RowToRun> out = new LinkedHashMap<>();
             for (DecisionReading.Stated stated : ways.stated()) {
+                if (!measuredRules.contains(stated.rule())) {
+                    continue;
+                }
                 for (DecisionReading.Ruled each : stated.occurrences()) {
                     for (CaseWay way : each.caseWays()) {
                         if (!unseen.contains(way.which()) || out.containsKey(way.which())) {

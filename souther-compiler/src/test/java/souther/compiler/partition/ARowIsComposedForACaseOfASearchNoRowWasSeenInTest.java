@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
@@ -251,7 +252,8 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
                 .stream().map(CaseOfAStatement.Search.class::cast).toList();
         assertTrue(!unseen.isEmpty(), "the empty steps are unseen");
         InputDomain measured = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
-        assertTrue(unseen.stream().allMatch(each -> each.placesToBuildFor(measured).isEmpty()),
+        assertTrue(unseen.stream().allMatch(each ->
+                        CaseCandidates.OF_THE_SEARCH.placesToBuildFor(each, measured).isEmpty()),
                 () -> "no place below is read for " + unseen);
     }
 
@@ -277,6 +279,33 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
         assertEquals(before, positionsOf(compilation, module));
         assertTrue(before.stream().noneMatch(each -> each.contains("below[*].v")),
                 () -> "the measurement stops where the type returns to itself: " + before);
+    }
+
+    /**
+     * A place whose rules some value names is not a place the reading read. The element of a
+     * container on the edge of a recursive type is named by its own rules and has no position, so
+     * the measurement makes no way to a step that asks something there, and the ways to it are the
+     * ones of a reading made to read the places.
+     */
+    @Test
+    void theMeasurementMakesNoWayAtAPlaceItDidNotRead() {
+        Compilation compilation = Compilation.ofSource(SOME + ROWS_THAT_FIND, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        InputDomain measured = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
+        TermPath below = TermPath.of("t").then("below").element().then("v");
+
+        assertTrue(!measured.ruleRoots().naming(below).isEmpty(),
+                "the rules of an element name the place");
+        assertTrue(!CaseCandidates.reads(measured, below), "and no position was read there");
+        DecisionReading decision = compilation.db().ask(new Adequacy.Decides(module)).value()
+                .get("f").read();
+        assertTrue(decision.stated().stream().flatMap(each -> each.occurrences().stream())
+                        .flatMap(each -> each.caseWays().stream())
+                        .noneMatch(each -> each.which() instanceof CaseOfAStatement.Search search
+                                && search.step() == CaseOfAStatement.Step.BELOW_IT),
+                "so no way asks anything of a node below");
     }
 
     private static List<String> positionsOf(Compilation compilation, String module) {

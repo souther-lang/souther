@@ -41,7 +41,8 @@ import java.util.function.UnaryOperator;
  * @param states   what every condition of this body states about its input
  * @param subjects what the body's expressions name that a row can control
  */
-record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
+record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
+                        CaseCandidates candidates) {
 
     /**
      * One condition of a path: the column it is, and what it states about the input.
@@ -134,12 +135,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         for (CaseOfAStatement.Step step : CasesTheRowsTook.owedBy(search, held == search.holds())) {
             CaseOfAStatement.Search which = new CaseOfAStatement.Search(search, step);
             // One way for each level the step is asked at, the nearest first: a search for a row
-            // takes the first that composes one. Only the levels this reading holds the places
-            // of; a reading made to stop where the type returns to itself holds fewer, and the
-            // levels past them are the ways of a reading that holds more ({@link
-            // CaseOfAStatement.Search#placesToBuildFor}).
-            for (int level = 1; level <= which.levelsAsked(); level++) {
-                if (!holdsEvery(which.placesAtLevel(level))) {
+            // takes the first that composes one. Only the levels whose places this reading read;
+            // a reading made to stop where the type returns to itself reads fewer, and the levels
+            // past them are the ways of a reading made to read more ({@link CaseCandidates}).
+            for (int level = 1; level <= candidates.levelsAsked(which); level++) {
+                if (!readEvery(which.placesAtLevel(level))) {
                     break;
                 }
                 wayTo(condition, which, which.askedAtLevel(level, states::denied))
@@ -149,11 +149,10 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         return List.copyOf(out);
     }
 
-    /** Whether the reading holds the rules of a value that names every one of {@code places}, so
-     *  that it can say what a row has to be there. */
-    private boolean holdsEvery(List<TermPath> places) {
-        return places.stream().allMatch(each ->
-                !states.read().domain().ruleRoots().naming(each).isEmpty());
+    /** Whether the reading read a position at every one of {@code places}, which is what it needs
+     *  to say what a row has to be there. */
+    private boolean readEvery(List<TermPath> places) {
+        return places.stream().allMatch(each -> CaseCandidates.reads(states.read().domain(), each));
     }
 
     /** What {@code asked} comes to on the way at {@code condition}, as the way to {@code which}:
