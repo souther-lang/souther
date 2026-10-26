@@ -2431,7 +2431,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (sides.get(at).number() != null) {
                     settled.put(sides.get(at).number(), runs);
                 }
-                if (!runs.ofTheTypeAlone().isEmpty() && runs.linesOfTheModel().isEmpty()) {
+                // A number taken over a run is no position, so the values that settle the relation
+                // there are a line on none: a line of the model is drawn on the number and parts
+                // no class of the places it is read from.
+                if ((!runs.ofTheTypeAlone().isEmpty() && runs.linesOfTheModel().isEmpty())
+                        || sides.get(at).number() instanceof NumericTerm.TakenOver) {
                     undivided.addAll(sides.get(at).madeOf());
                 }
             }
