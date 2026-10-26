@@ -4278,9 +4278,12 @@ public final class InputReads {
     }
 
     /**
-     * What the name {@code e} was bound to here, followed no further: the one value it stands for,
-     * or each of the values it is one of; none where {@code e} is not a name, or is one standing
-     * for something of its own.
+     * What the name {@code e} was bound to here, followed no further: the one value it stands for;
+     * none where {@code e} is not a name, or is one standing for something of its own.
+     *
+     * <p>Every value a name is one of is answered where the environment has them, so that a
+     * reader asking what a use runs asks it of each. This environment keeps none
+     * ({@link ValueStanding.Names#alternativesOf}), and a name is one value or none.
      *
      * <p>Beside {@link #standing}, which follows the name on to where it ends. What was run to
      * work the bound value out is run whatever the name goes on to stand as, and a reader asking
