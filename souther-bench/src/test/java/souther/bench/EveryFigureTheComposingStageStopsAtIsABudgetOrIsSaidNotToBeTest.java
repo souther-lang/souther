@@ -110,6 +110,10 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many distinct values of one kind the two copies of an element are given"
                             + " between them; a case with no row is not found, which claims"
                             + " nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CASES_OF_A_SUM",
+                    "how many cases of a sum the two copies of an element are given between"
+                            + " them; a case past it is not tried, and a case with no row is not"
+                            + " found, which claims nothing of the model"),
             Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_LEVELS_OF_FIELDS",
                     "how many records down an element a field is looked for to be given another"
                             + " value where the statement does not name one; a field past it is"
