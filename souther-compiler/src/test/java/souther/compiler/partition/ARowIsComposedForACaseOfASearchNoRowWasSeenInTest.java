@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
@@ -178,6 +179,109 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
                 """);
         assertTrue(block.contains("a search that finds what it asks below the node it starts at"),
                 () -> "a row for the step below the start: " + block);
+    }
+
+    /**
+     * Finding one below is a node at some depth, and the rules may leave room at one depth only:
+     * where every child must fail the search, the node it finds is a grandchild.
+     */
+    @Test
+    void theStepBelowTheStartIsLookedForDeeperWhereTheRulesKeepEveryChildFromMeetingIt() {
+        Map<CaseOfAStatement, RowToRun> found = search("""
+                module m
+                data Node = { v: Int, below: List<Node> }
+                data Yes
+                data No
+                let anyBig (n: Node): Bool = n.v > 5 || List.any(c -> anyBig(c), n.below)
+                behavior f : (t: Node) -> Yes | No
+                let f (t) = if List.all(c -> c.v <= 5, t.below) && anyBig(t) then Yes else No
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> Yes
+                    | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
+                """);
+        assertEquals(Set.of(CaseOfAStatement.Step.BELOW_IT), stepsOf(found),
+                () -> "the step is composed at the depth the rule leaves room at: "
+                        + found.keySet());
+        String written = found.values().iterator().next().inputs().getFirst().text();
+        assertTrue(written.chars().filter(c -> c == '[').count() >= 3
+                        && written.contains("below = [Node { v = ")
+                        && written.indexOf("below = [Node", written.indexOf("below = [Node") + 1)
+                        > 0,
+                () -> "a node two levels down: " + written);
+    }
+
+    /**
+     * A number that is none where the search's condition is moved to a node below is no reason to
+     * stop: the step has nothing that steers a row to a node below, so it is not offered, and the
+     * other steps are looked for as before.
+     */
+    @Test
+    void aConditionThatCannotBeMovedBelowTheStartLeavesTheOtherStepsSearched() {
+        Map<CaseOfAStatement, RowToRun> found = search("""
+                module m
+                data Node = { xs: List<Int>, below: List<Node> }
+                data Yes
+                data No
+                let anyBig (n: Node): Bool =
+                    List.sum(List.map(x -> x * 2, n.xs)) > 5 || List.any(c -> anyBig(c), n.below)
+                behavior f : (t: Node) -> Yes | No
+                let f (t) = if anyBig(t) then Yes else No
+                example f
+                    | "the top" : (Node { xs = [9], below = [] }) -> Yes
+                """);
+        assertTrue(!stepsOf(found).contains(CaseOfAStatement.Step.BELOW_IT),
+                () -> "nothing steers a row below the start: " + found.keySet());
+        assertTrue(stepsOf(found).contains(CaseOfAStatement.Step.NOWHERE_AT_A_LEAF),
+                () -> "and the steps that need no node below are searched: " + found.keySet());
+    }
+
+    /**
+     * Only the step below the start reads places inside the nodes below: a search asked for the
+     * ways of coming back empty builds against the reading the measurement was made against.
+     */
+    @Test
+    void aStepThatAsksNothingInsideTheNodesBelowReadsNoPlaceThere() {
+        Compilation compilation = Compilation.ofSource(SOME + ROWS_THAT_FIND, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
+                .get("f");
+        List<CaseOfAStatement.Search> unseen = evidence.took().made().orElseThrow().unseenCases()
+                .stream().map(CaseOfAStatement.Search.class::cast).toList();
+        assertTrue(!unseen.isEmpty(), "the empty steps are unseen");
+        InputDomain measured = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
+        assertTrue(unseen.stream().allMatch(each -> each.placesToBuildFor(measured).isEmpty()),
+                () -> "no place below is read for " + unseen);
+    }
+
+    /**
+     * Looking for a row reads the input of its own and leaves the measurement's alone: the
+     * positions the measure counts are the same after a search as before it.
+     */
+    @Test
+    void lookingForTheStepBelowTheStartLeavesThePositionsTheMeasureCountsAlone() {
+        Compilation compilation = Compilation.ofSource(SOME + """
+                example f
+                    | "the top" : (Node { v = 9, below = [] }) -> Yes
+                    | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
+                    | "a child that fails" :
+                        (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        List<String> before = positionsOf(compilation, module);
+        assertTrue(!compilation.db().ask(new Adequacy.CaseSearch(module, "f")).value().isEmpty(),
+                "a row is found for the step");
+        assertEquals(before, positionsOf(compilation, module));
+        assertTrue(before.stream().noneMatch(each -> each.contains("below[*].v")),
+                () -> "the measurement stops where the type returns to itself: " + before);
+    }
+
+    private static List<String> positionsOf(Compilation compilation, String module) {
+        return compilation.db().ask(new Adequacy.Inputs(module)).value().get("f").positions()
+                .stream().map(each -> each.toString()).toList();
     }
 
     /**

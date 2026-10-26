@@ -953,34 +953,47 @@ public sealed interface Proposition {
         }
 
         /**
-         * What the search asks of a node, said of some element of the one field it goes down, and
-         * the places a row writes at for it.
+         * What the search asks of a node, said of a node some levels below the one it starts at,
+         * and the places a row writes at for it.
          *
-         * @param meets  some element of the field meeting the statement moved to it
-         * @param places the element and each place of it the statement reads
+         * @param meets  some node that deep meeting the statement moved to it: some element of the
+         *               field, of some element of which there is some element, and so on down
+         * @param places  the containers and elements on the way down and each place of the node
+         *                reached that the statement reads
+         * @param reached the node it is said of, which a place of the start node is moved to
          */
-        public record ElementMeeting(Proposition meets, List<TermPath> places) {}
+        public record NodeBelowMeeting(Proposition meets, List<TermPath> places,
+                                       TermPath reached) {}
 
         /**
-         * The statement the search asks of a node, moved to some element of the field it goes down
-         * — or none where the search goes down several fields, or asks something other than a
-         * comparison of numbers at the node's own places.
+         * The statement the search asks of a node, moved to a node {@code levels} below the one it
+         * starts at, by way of some node at each level between — or none where the search goes
+         * down several fields, asks something other than a comparison of numbers at the node's own
+         * places, or asks of a number that is no such number at the node moved to.
+         *
+         * <p>One depth of the nodes below and not what finding one below means: that is a node at
+         * some depth, and a row composed for a depth is a candidate for the case which a run then
+         * settles. The depth is the caller's to walk, and to stop walking at.
          */
-        public Optional<ElementMeeting> someElementMeetingIt() {
-            if (through.size() != 1
+        public Optional<NodeBelowMeeting> someNodeBelowMeetingIt(int levels) {
+            if (levels < 1 || through.size() != 1
                     || !(atANode instanceof Compared(Relation.Affine affine, boolean asked, var _))) {
                 return Optional.empty();
             }
-            TermPath field = at.then(through.getFirst());
-            TermPath element = field.element();
+            List<TermPath> containers = new ArrayList<>();
+            TermPath node = at;
+            for (int level = 0; level < levels; level++) {
+                TermPath container = node.then(through.getFirst());
+                containers.add(container);
+                node = container.element();
+            }
+            TermPath reached = node;
+            List<TermPath> places = new ArrayList<>(containers);
+            places.add(reached);
             boolean[] strays = {false};
-            List<TermPath> places = new ArrayList<>(List.of(element));
             PlacesMoved moved = PlacesMoved.by(place -> {
-                TermPath to = place.movedFrom(at, element);
+                TermPath to = place.movedFrom(at, reached);
                 strays[0] |= to == null;
-                if (to != null) {
-                    places.add(to);
-                }
                 return to == null ? place : to;
             });
             Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
@@ -988,16 +1001,24 @@ public sealed interface Proposition {
                 if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
                     return Optional.empty();
                 }
-                coefs.put(new DecisionAtom.OfTheInput(term.movedTo(moved)), each.getValue());
+                // A number may be none where the places are put, which is the term's to say.
+                NumericTerm there = term.movedTo(moved);
+                if (there == null) {
+                    return Optional.empty();
+                }
+                coefs.put(new DecisionAtom.OfTheInput(there), each.getValue());
+                places.addAll(there.placesReadOff());
             }
             if (strays[0]) {
                 return Optional.empty();
             }
-            Relation relation = new Relation.Affine(
-                    new LinearForm<>(affine.form().constant(), coefs), affine.proposition());
-            return Optional.of(new ElementMeeting(
-                    new Some(new DecisionSubject.AnInput(field), new Compared(relation, asked),
-                            true), List.copyOf(places)));
+            Proposition meets = new Compared(new Relation.Affine(
+                    new LinearForm<>(affine.form().constant(), coefs), affine.proposition()),
+                    asked);
+            for (TermPath container : containers.reversed()) {
+                meets = new Some(new DecisionSubject.AnInput(container), meets, true);
+            }
+            return Optional.of(new NodeBelowMeeting(meets, List.copyOf(places), reached));
         }
 
         /**

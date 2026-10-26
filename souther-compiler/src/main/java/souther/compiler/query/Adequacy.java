@@ -1478,14 +1478,27 @@ public final class Adequacy {
                 if (analysis == null) {
                     continue;
                 }
-                out.put(spec.name(), souther.compiler.partition.DecisionReading.of(spec.name(),
-                        analysis, readingOf(db, read, reading.value()),
-                        InputReads.ofParametersWhereCallsStand(read.parameterReads(),
-                                read.declared(reading.value()),
-                                ElementBindings.of(analysis, reading.value().newtypes()),
-                                read.dependencies())));
+                out.put(spec.name(), over(db, spec.name(), analysis, read, reading.value()));
             }
             return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * The decision {@code analysis} states, read under {@code read}.
+         *
+         * <p>The reading of the input is a parameter so that a search can read the same decision
+         * under a reading closed over more places than the measurement's. What a measure counts
+         * is read under {@link Inputs}, and nothing a search reads is kept in an answer.
+         */
+        static souther.compiler.partition.DecisionReading over(
+                Db db, String behavior, AnalysisBody analysis, InputDomain read,
+                RuleReadingSource source) {
+            return souther.compiler.partition.DecisionReading.of(behavior, analysis,
+                    readingOf(db, read, source),
+                    InputReads.ofParametersWhereCallsStand(read.parameterReads(),
+                            read.declared(source),
+                            ElementBindings.of(analysis, source.newtypes()),
+                            read.dependencies()));
         }
     }
 
@@ -2814,18 +2827,19 @@ public final class Adequacy {
         /** The setting a search of {@code behavior} is made in, or null where nothing builds its
          *  values or nothing places its rows. */
         static SearchSetting settingOf(Db db, String name, String behavior) {
-            return settingOf(db, name, behavior, List.of());
+            return settingOf(db, name, behavior, null);
         }
 
         /**
-         * The same, with candidates built against a reading closed over {@code also} as well.
+         * The same, with candidates built against {@code wider}, a reading of the input closed
+         * over more places than the measurement's, where there is one.
          *
          * <p>Only what builds a candidate reads the wider input: the probe and the region the
          * values are chosen from. The placement of a run and everything that judges one stay the
          * measurement's, so a row built at a path the enumeration stopped short of is judged by
          * the account that measured the rows already written.
          */
-        static SearchSetting settingOf(Db db, String name, String behavior, List<TermPath> also) {
+        static SearchSetting settingOf(Db db, String name, String behavior, InputDomain wider) {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
@@ -2841,16 +2855,14 @@ public final class Adequacy {
             }
             InputReading read;
             MeasuredInput subject;
-            if (also.isEmpty()) {
+            if (wider == null) {
                 read = inputReadingOf(db, name, spec);
                 subject = read == null ? null : subjectOf(db, name, spec, read);
             } else {
-                Answer<InputDomain> wider = InputsOf.readingWith(db, name, behavior, also);
                 Answer<RuleReadingSource> source = Shapes.ruleReading(db, name);
-                read = wider.present() && source.present()
-                        ? readingOf(db, wider.value(), source.value()) : null;
+                read = source.present() ? readingOf(db, wider, source.value()) : null;
                 Answer<BodyDivided> divided = read == null ? null
-                        : Dividing.over(db, name, behavior, wider.value());
+                        : Dividing.over(db, name, behavior, wider);
                 subject = divided != null && divided.present()
                         ? MeasuredInput.of(behavior, read, divided.value().geometry()) : null;
             }
@@ -3558,17 +3570,28 @@ public final class Adequacy {
                     // Only a place the measurement's reading has no position at needs a reading of
                     // its own; where every one is read already, the second reading would be the
                     // first divided again.
-                    search.placesBelow().stream().filter(place -> domain.at(place) == null)
+                    search.placesToBuildFor(domain).stream().filter(place -> domain.at(place) == null)
                             .forEach(below::add);
                 }
             }
-            DecisionSearch.SearchSetting wider = below.isEmpty() ? null
-                    : DecisionSearch.settingOf(db, name, behavior, List.copyOf(below));
-            // Where the wider reading could not be made the cases that ask for it find nothing,
-            // as a case the reading has no words for does, and the rest are searched as before.
-            DecisionSearch.SearchSetting building = wider == null ? setting : wider;
+            InputDomain wider = below.isEmpty() ? null
+                    : InputsOf.readingWith(db, name, behavior, List.copyOf(below)).value();
+            DecisionSearch.SearchSetting widerSetting = wider == null ? null
+                    : DecisionSearch.settingOf(db, name, behavior, wider);
+            AnalysisBody analysis = widerSetting == null ? null
+                    : db.ask(new Bodies.Observable(name)).value().analysisBodies().get(behavior);
+            boolean widened = analysis != null;
+            DecisionSearch.SearchSetting building = widened ? widerSetting : setting;
+            // The ways to the cases are read off the decision under the reading they are built
+            // against: a reading that stops where the type returns to itself holds no place below
+            // the first level, and cannot say what a row has to be there. Where the wider reading
+            // could not be made the cases that ask for it find nothing, as a case the reading has
+            // no words for does, and the rest are searched as before.
+            DecisionReading ways = widened
+                    ? DecisionReadings.over(db, behavior, analysis, wider, source)
+                    : evidence.read();
             Map<CaseOfAStatement, RowToRun> out = new LinkedHashMap<>();
-            for (DecisionReading.Stated stated : evidence.read().stated()) {
+            for (DecisionReading.Stated stated : ways.stated()) {
                 for (DecisionReading.Ruled each : stated.occurrences()) {
                     for (CaseWay way : each.caseWays()) {
                         if (!unseen.contains(way.which()) || out.containsKey(way.which())) {

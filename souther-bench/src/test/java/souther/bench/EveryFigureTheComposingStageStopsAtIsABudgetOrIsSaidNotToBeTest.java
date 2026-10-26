@@ -100,6 +100,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
                     "how many element-wise readings of one row a point is tried against"),
 
+            // Which candidates a row for a case of a statement is built from. The search for such
+            // a row says the rows it found and nothing of the cases it did not: a case with no row
+            // is not found, which is not out of reach, so there is no figure it came back with.
+            Map.entry("souther.compiler.partition.CaseOfAStatement.MOST_LEVELS_BELOW_THE_START",
+                    "how many levels below the start of a search a node meeting it is looked for"
+                            + " at, which bounds the candidates and claims nothing of the model"),
+
             // What counts are composed against the total of their container, and past which they
             // are composed as any are. No search runs to them and stops there: they say which
             // statements this takes, and a statement past them is not stopped but left to the
