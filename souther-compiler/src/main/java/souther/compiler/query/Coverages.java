@@ -946,6 +946,10 @@ final class Coverages {
          * the candidate was composed.
          */
         RowAsRead read(souther.compiler.partition.RowToRun row);
+
+        /** What the rows built and run here are written against: their parameters and the
+         *  decoder every value put in a row besides the ones a search composed is held to. */
+        souther.compiler.partition.RowWriting rowWriting();
     }
 
     /**

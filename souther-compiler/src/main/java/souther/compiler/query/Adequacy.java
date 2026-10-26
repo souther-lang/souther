@@ -23,6 +23,7 @@ import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.partition.RowWriting;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.CaseCandidates;
 import souther.compiler.partition.CaseOfAStatement;
@@ -139,9 +140,12 @@ import souther.compiler.inputs.InputUses;
 import souther.compiler.core.Contract;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.types.BindingId;
+import souther.compiler.partition.DecidedCondition;
+import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.KeyOrderCandidates;
 import souther.compiler.partition.FixtureReferences;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.CompositionAccount;
@@ -178,6 +182,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -3615,14 +3620,112 @@ public final class Adequacy {
                         if (!unseen.contains(way.which()) || out.containsKey(way.which())) {
                             continue;
                         }
-                        RowToRun row = whatACaseFinds(each, way, setting, building, cases);
+                        // The way to the rule and what the case asks of the row on top of it: for
+                        // a step of a search the row is composed to the node, and for an order
+                        // the row is composed with the entry looked up there and then written
+                        // again with its key held twice.
+                        RowToRun row = way.which() instanceof CaseOfAStatement.KeyOrder order
+                                ? whatAKeyOrderFinds(each, each.statesToACase(way), order, setting,
+                                        building, cases)
+                                : whatACaseFinds(each, way, setting, building, cases);
                         if (row != null) {
                             out.put(way.which(), row);
+                        }
+                    }
+                    // An order the reading could not say an entry of is looked for on the way to
+                    // the rule alone.
+                    for (CaseOfAStatement owed : unseen) {
+                        if (owed instanceof CaseOfAStatement.KeyOrder order
+                                && !out.containsKey(order) && consultsAsTheCaseHas(each, order)) {
+                            RowToRun row = whatAKeyOrderFinds(each, each.states(), order, setting,
+                                    building, cases);
+                            if (row != null) {
+                                out.put(order, row);
+                            }
                         }
                     }
                 }
             }
             return Answer.of(Ordered.map(out));
+        }
+
+        /** Whether the run read ran and was placed at {@code ruled}'s rule: the part of being
+         *  evidence of a case that is the same for every kind of case. */
+        private static boolean ranAtTheRule(DecisionSearch.SearchSetting setting, RowAsRead read,
+                                            DecisionReading.Ruled ruled) {
+            return read.watched() instanceof Generator.Watched.Ran
+                    && setting.taken().takenBy(read.asRun())
+                            instanceof RulesTaken.WhichRule.TookThis took
+                    && took.rule().equals(ruled.rule());
+        }
+
+        /**
+         * Whether the rule consults the statement of {@code order} and has it come out the way the
+         * case has it: holding where the last element decides it to, failing where it does.
+         */
+        private static boolean consultsAsTheCaseHas(DecisionReading.Ruled ruled,
+                                                    CaseOfAStatement.KeyOrder order) {
+            boolean holds = order.way() == CaseOfAStatement.Way.HOLDS_BY_THE_LAST;
+            return ruled.rule().consulted().entrySet().stream().anyMatch(each ->
+                    each.getKey() instanceof DecisionCondition.AStatement(var stated)
+                            && stated.equals(order.statement())
+                            && each.getValue() instanceof DecidedCondition.Held(var _, boolean held)
+                            && held == holds);
+        }
+
+        /**
+         * A row for the order of a repeated key: composed to stand at {@code ruled}, then written
+         * again with the key held twice ({@link KeyOrderCandidates}), whose run was placed at the
+         * rule and was evidence of the case; null where none was.
+         *
+         * <p>The rewrite is asked inside the walk that composes the rows, as the case of a search
+         * is: a row that stands at the rule but has nothing to hold a key twice in, or is no row
+         * whose rewrite decides the statement, is passed over for the next the walk composes.
+         */
+        private static RowToRun whatAKeyOrderFinds(DecisionReading.Ruled ruled,
+                                                   WayToTheBorder states,
+                                                   CaseOfAStatement.KeyOrder order,
+                                                   DecisionSearch.SearchSetting setting,
+                                                   DecisionSearch.SearchSetting building,
+                                                   CasesTheRowsTook cases) {
+            if (!(souther.compiler.partition.Reachability.of(states, building.declared())
+                    instanceof souther.compiler.partition.Reachability.Reaching reaching)) {
+                return null;
+            }
+            RowWriting writing = building.probe().rowWriting();
+            Optional<KeyOrderCandidates> rewriting =
+                    KeyOrderCandidates.of(order, writing.subject().inputs());
+            if (rewriting.isEmpty()) {
+                return null;
+            }
+            RowToRun[] found = new RowToRun[1];
+            Generator.RowJudge rewrittenIntoTheCase = row -> {
+                RowAsRead read = setting.probe().read(row);
+                if (!ranAtTheRule(setting, read, ruled)) {
+                    return false;
+                }
+                Iterator<RowToRun> candidates = rewriting.get()
+                        .refining(row, read.asRun().inputs(), writing).iterator();
+                while (candidates.hasNext()) {
+                    RowToRun candidate = candidates.next();
+                    RowAsRead ran = setting.probe().read(candidate);
+                    if (ranAtTheRule(setting, ran, ruled)
+                            && cases.casesSeenBy(ran.asRun(), ruled.rule()).contains(order)) {
+                        found[0] = candidate;
+                        return true;
+                    }
+                }
+                return false;
+            };
+            for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
+                building.probe().attempt("a case of a statement of the decision", Map.of(),
+                        NumbersAskedFor.ANYTHING, along, ruled.demands(),
+                        Optional.of(rewrittenIntoTheCase));
+                if (found[0] != null) {
+                    return found[0];
+                }
+            }
+            return null;
         }
 
         /**
@@ -3647,10 +3750,7 @@ public final class Adequacy {
             // assignment of the values below.
             Generator.RowJudge inTheCase = row -> {
                 RowAsRead read = setting.probe().read(row);
-                return read.watched() instanceof Generator.Watched.Ran
-                        && setting.taken().takenBy(read.asRun())
-                                instanceof RulesTaken.WhichRule.TookThis took
-                        && took.rule().equals(ruled.rule())
+                return ranAtTheRule(setting, read, ruled)
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
             for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
@@ -3871,6 +3971,11 @@ public final class Adequacy {
                 // refused, and neither of them says the row cannot be written.
                 return List.of();
             }
+        }
+
+        @Override
+        public souther.compiler.partition.RowWriting rowWriting() {
+            return new souther.compiler.partition.RowWriting(subject, checkAgainst(building, sig));
         }
 
         @Override
@@ -5711,8 +5816,15 @@ public final class Adequacy {
                     || RowReadings.readingFor(byTarget, behavior).someRowsUnseen()) {
                 return List.of();
             }
+            BehaviorInputs inputs = inputsOf(db, name, behavior);
             return evidence.took().made().orElseThrow().unseenCases().stream()
-                    .filter(CaseOfAStatement::canBeLookedFor).toList();
+                    .filter(each -> switch (each) {
+                        case CaseOfAStatement.Search search -> search.canBeLookedFor();
+                        // Asked of the plan the rewrite is made by, so that a case offered is a
+                        // case the rewrite can write a row for.
+                        case CaseOfAStatement.KeyOrder order -> inputs != null
+                                && KeyOrderCandidates.canRewrite(order, inputs);
+                    }).toList();
         }
 
         /**

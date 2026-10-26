@@ -1505,6 +1505,50 @@ public sealed interface Proposition {
     }
 
     /**
+     * What it is for the entry {@code last} picks to be there: some element of the container, being
+     * the last of its key and the one the key is looked up by. The quantifier nearest {@code last}
+     * in {@code stated}, with what it says of an element cut down to those two parts.
+     *
+     * <p>A consequence of {@code stated} where it holds, and no rule's conclusion: it is what a
+     * row has to be for the statement to look anything up at all, since a statement over an empty
+     * container or an empty list of the things it looks up says nothing of any order. Nothing where
+     * no quantifier is around {@code last}, or what is left of it would quantify its container twice.
+     */
+    static Optional<Proposition> theEntryLookedUp(Proposition stated, LastToHold last) {
+        Some around = innermostQuantifierAround(stated, last, null);
+        if (around == null) {
+            return Optional.empty();
+        }
+        List<Proposition> parts = around.ofTheElement() instanceof All all
+                ? all.parts() : List.of(around.ofTheElement());
+        List<Proposition> kept = new ArrayList<>();
+        for (Proposition part : parts) {
+            if (part.equals(last) || (part instanceof SameValue same && same.holds())) {
+                kept.add(part);
+            }
+        }
+        if (kept.isEmpty() || Some.quantifiesOver(around.container(), all(kept))) {
+            return Optional.empty();
+        }
+        return Optional.of(new Some(around.container(), all(kept), true));
+    }
+
+    private static Some innermostQuantifierAround(Proposition stated, LastToHold last,
+                                                  Some nearest) {
+        if (stated.equals(last)) {
+            return nearest;
+        }
+        Some here = stated instanceof Some some ? some : nearest;
+        for (Proposition part : stated.partsHeld()) {
+            Some found = innermostQuantifierAround(part, last, here);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Whether {@code stated} is, or holds, a search from a node for some node below it meeting
      * something.
      */
