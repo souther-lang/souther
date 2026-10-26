@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -318,6 +319,10 @@ public final class KeyOrderCandidates {
      * a value of is left out, which is a case this did not find and not one that cannot be.
      */
     private List<ObservedValue> casesOf(Type type, List<String> fields, Pool pool) {
+        return pool.casesAt(List.of(type, fields), () -> writeCasesOf(type, fields, pool));
+    }
+
+    private List<ObservedValue> writeCasesOf(Type type, List<String> fields, Pool pool) {
         TypeView view = views.apply(type);
         if (!(view.shape() instanceof Shape.Sum sum)) {
             return List.of();
@@ -546,6 +551,8 @@ public final class KeyOrderCandidates {
 
         private final Map<Class<?>, Set<ObservedValue>> byKind = new HashMap<>();
 
+        private final Map<List<Object>, List<ObservedValue>> cases = new HashMap<>();
+
         private final Function<Type.Prim, List<ObservedValue>> composed;
 
         /** The rules the values written are read under. */
@@ -566,6 +573,12 @@ public final class KeyOrderCandidates {
 
         RuleReadingContext reading() {
             return reading;
+        }
+
+        /** The cases of a sum written at one place, worked out once for the row: the container
+         *  is rewritten once per element and the place is the same each time. */
+        List<ObservedValue> casesAt(List<Object> place, Supplier<List<ObservedValue>> written) {
+            return cases.computeIfAbsent(place, _ -> written.get());
         }
 
         List<ObservedValue> of(Class<?> kind, Type.Prim prim) {
