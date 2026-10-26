@@ -83,11 +83,11 @@ public sealed interface CaseOfAStatement {
          * What the step says of the node the search starts at, as statements about that node, or
          * none where a row cannot be asked for the step by what it writes at the node.
          *
-         * <p>Finding one below is no statement about the node alone: which node below meets what
-         * the search asks is for the run to say. What the reading can ask of the start is that it
-         * does not meet it and has something below, and a candidate with that start whose
-         * children do not come out as the case needs is passed over by the run. The other three
-         * are the node meeting what the search asks, and the node not meeting it with and without
+         * <p>Finding one below is asked as the start not meeting what the search asks and some
+         * element of the field the search goes down doing so ({@link
+         * Proposition.SomeReachable#someElementMeetingIt}); none where the search is not of that
+         * form, because a row then has nothing that steers it to a node below. The other three are
+         * the node meeting what the search asks, and the node not meeting it with and without
          * anything below.
          *
          * @param denying what holds exactly where a statement does not, which is the reading's own
@@ -99,11 +99,8 @@ public sealed interface CaseOfAStatement {
             Proposition notAtTheNode = denying.apply(statement.atANode());
             return switch (step) {
                 case AT_THE_NODE -> Optional.of(List.of(statement.atANode()));
-                case BELOW_IT -> Optional.of(statement.someElementMeetingIt()
-                        .map(below -> List.of(notAtTheNode, below.meets()))
-                        .orElseGet(() -> statement.noneBelow()
-                                .map(none -> List.of(notAtTheNode, denying.apply(none)))
-                                .orElseGet(() -> List.of(notAtTheNode))));
+                case BELOW_IT -> statement.someElementMeetingIt()
+                        .map(below -> List.of(notAtTheNode, below.meets()));
                 case NOWHERE_AT_A_LEAF -> statement.noneBelow()
                         .map(none -> List.of(notAtTheNode, none));
                 // What every node below comes to is no statement about the start node: a row is in

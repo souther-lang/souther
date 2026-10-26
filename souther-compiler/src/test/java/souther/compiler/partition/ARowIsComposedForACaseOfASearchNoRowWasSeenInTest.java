@@ -180,6 +180,40 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
                 () -> "a row for the step below the start: " + block);
     }
 
+    /**
+     * A search down two fields has no one field to move what it asks to, so nothing steers a row
+     * to a node below and the step is no work: it stays reported as unmeasured and is not offered.
+     */
+    @Test
+    void aStepBelowTheStartOfASearchDownTwoFieldsIsNoWork() {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+                data Tree = { v: Int, left: List<Tree>, right: List<Tree> }
+                data Yes
+                data No
+                let anyBig (n: Tree): Bool =
+                    n.v > 5 || List.any(c -> anyBig(c), n.left) || List.any(c -> anyBig(c), n.right)
+                behavior f : (t: Tree) -> Yes | No
+                let f (t) = if anyBig(t) then Yes else No
+                example f
+                    | "the top" : (Tree { v = 9, left = [], right = [] }) -> Yes
+                    | "a leaf that fails" : (Tree { v = 0, left = [], right = [] }) -> No
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
+                .get("f");
+        assertTrue(evidence.took().made().orElseThrow().unseenCases().stream().anyMatch(
+                        each -> each instanceof CaseOfAStatement.Search search
+                                && search.step() == CaseOfAStatement.Step.BELOW_IT),
+                "the step is owed and no row was seen in it");
+        RowWork owed = compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value();
+        assertTrue(owed.cases().stream().noneMatch(each -> each instanceof CaseOfAStatement.Search
+                        search && search.step() == CaseOfAStatement.Step.BELOW_IT),
+                () -> "no row is looked for below the start: " + owed.cases());
+    }
+
     private static String blockOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

@@ -3562,11 +3562,11 @@ public final class Adequacy {
                             .forEach(below::add);
                 }
             }
-            DecisionSearch.SearchSetting building = below.isEmpty() ? setting
+            DecisionSearch.SearchSetting wider = below.isEmpty() ? null
                     : DecisionSearch.settingOf(db, name, behavior, List.copyOf(below));
-            if (building == null) {
-                return Answer.absent();
-            }
+            // Where the wider reading could not be made the cases that ask for it find nothing,
+            // as a case the reading has no words for does, and the rest are searched as before.
+            DecisionSearch.SearchSetting building = wider == null ? setting : wider;
             Map<CaseOfAStatement, RowToRun> out = new LinkedHashMap<>();
             for (DecisionReading.Stated stated : evidence.read().stated()) {
                 for (DecisionReading.Ruled each : stated.occurrences()) {

@@ -116,12 +116,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
 
     /**
      * What a row has to be to be evidence of each case the statement {@code answer} is about draws
-     * inside itself, for the cases a search draws that the reading can say what a row at the start
-     * of it has to be ({@link CaseOfAStatement.Search#askedOfTheNode}).
+     * inside itself, for the cases a search draws that the reading can say what a row has to be
+     * for ({@link CaseOfAStatement.Search#askedOfTheNode}).
      *
      * <p>Only the cases the decision owes where the statement came out as it did
      * ({@link CasesTheRowsTook#owedBy}): a search that came out finding one owes the node meeting
-     * it, and one that came out empty owes the two ways of coming back empty.
+     * it and one found below it, and one that came out empty owes the two ways of coming back
+     * empty.
      */
     private List<CaseWay> casesOf(Condition condition, DecidedCondition answer) {
         if (!(answer.condition() instanceof DecisionCondition.AStatement(
