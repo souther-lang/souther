@@ -17,6 +17,12 @@ public final class RepresentationBounds {
 
     private static final String STRING = "String";
 
+    /** Asked at every border of every quantity, so built once. */
+    private static final NumericDomain.Bounds UP_TO_THE_LONGEST = atMost(TextExtents.LONGEST_STRING);
+
+    private static final NumericDomain.Bounds UP_TO_THE_GREATEST_SUM =
+            atMost(TextExtents.LONGEST_STRING * Character.MAX_CODE_POINT);
+
     private RepresentationBounds() {
     }
 
@@ -42,7 +48,13 @@ public final class RepresentationBounds {
     /** The run {@link #mostOf} leaves {@code term}: open below, and ended above where it is. */
     public static NumericDomain.Bounds of(NumericTerm term) {
         Long most = mostOf(term);
-        return most == null ? NumericDomain.Bounds.OPEN
-                : new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(most)));
+        if (most == null) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        return most == TextExtents.LONGEST_STRING ? UP_TO_THE_LONGEST : UP_TO_THE_GREATEST_SUM;
+    }
+
+    private static NumericDomain.Bounds atMost(long most) {
+        return new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(most)));
     }
 }
