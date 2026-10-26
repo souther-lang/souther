@@ -283,11 +283,15 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
         assertTrue(report.contains(NOT_READ + "@" + second + ":"), report);
     }
 
-    /** A way that does not hold on both sides of the line, as far from it as a row beside it can
-     *  be, is not met by such a row, and the guard after it is read as it was. */
+    /** A way that ends at the line leaves the sum at the line and below it. A number near an end
+     *  of {@code Int} has no partner for the sum at the line, which is the representation running
+     *  out and no line of the model, so the guard is read as it is on a difference. */
     @Test
-    void aWayEndingAtTheLineLeavesNoRoomAndStillTiesTheNumbers() {
-        String report = report("    guard a + b <= 200 else Low\n    guard a + b < 200 else High");
-        assertTrue(report.contains(NOT_READ), report);
+    void aWayEndingAtTheLineIsReadAsOnTheDifference() {
+        for (String form : List.of("a - b", "a + b")) {
+            String report = report("    guard " + form + " <= 200 else Low\n    guard " + form
+                    + " < 200 else High");
+            assertFalse(report.contains(NOT_READ), form + "\n" + report);
+        }
     }
 }
