@@ -100,6 +100,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     case Relation.Affine affine -> isIn(affine.form());
                     case Relation.Ordered ordered -> isIn(ordered.term());
                 };
+                case Proposition.StringInside inside ->
+                        isIn(inside.inner()) || isIn(inside.outer());
                 case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Carried _,
@@ -1085,6 +1087,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         case Proposition.InCases cases -> alike(cases.of(), apart);
                         case Proposition.SameValue same ->
                                 alike(same.one(), apart) && alike(same.other(), apart);
+                        case Proposition.StringInside inside ->
+                                alike(inside.inner(), apart) && alike(inside.outer(), apart);
                         // Which element holding the value is the last to, what some element of a
                         // container meets, what an operation answered of something: each turns on
                         // which element it is asked of, or on what nothing here reads. And which

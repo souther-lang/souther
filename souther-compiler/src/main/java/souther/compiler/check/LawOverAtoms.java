@@ -294,6 +294,12 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return null;
     }
 
+    /** One string inside another, which no relation between numbers says. */
+    @Override
+    public Holding inside(LawProposition.Inside<DeclaredArgument> inside) {
+        return null;
+    }
+
     /** The size of an argument, by the count its type is counted by, and an argument that is a
      *  number; nothing else. */
     @Override

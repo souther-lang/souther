@@ -75,6 +75,9 @@ final class Substituted {
             case LawProposition.Same<Value>(var one, var other, boolean alike) ->
                     new LawProposition.Same<>(subject(one, from, to), subject(other, from, to),
                             alike);
+            case LawProposition.Inside<Value>(var inner, var outer, var where, boolean inside) ->
+                    new LawProposition.Inside<>(subject(inner, from, to), subject(outer, from, to),
+                            where, inside);
         };
     }
 

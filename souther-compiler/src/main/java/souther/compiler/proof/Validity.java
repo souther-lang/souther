@@ -11,6 +11,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.StringContainment;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -87,6 +88,9 @@ final class Validity {
 
         /** That two values are one. */
         record Alike(Set<Value> values) implements Atom {}
+
+        /** That one string stands inside another where the place says. */
+        record Inside(Value inner, Value outer, StringContainment where) implements Atom {}
     }
 
     /**
@@ -167,6 +171,22 @@ final class Validity {
                             return false;
                         }
                     }
+                    case LawProposition.Inside<Value>(LawSubject<Value> inner,
+                                                      LawSubject<Value> outer,
+                                                      StringContainment place, boolean holds) -> {
+                        Value a = valueOf(inner);
+                        Value b = valueOf(outer);
+                        // A string is inside itself, at the start of itself and at the end of it.
+                        if (a.equals(b)) {
+                            if (!holds) {
+                                return false;
+                            }
+                            continue;
+                        }
+                        if (!take(new Atom.Inside(a, b, place), holds, truths, todo, known)) {
+                            return false;
+                        }
+                    }
                 }
             }
             List<List<LawProposition<Value>>> still = new ArrayList<>();
@@ -241,6 +261,13 @@ final class Validity {
                 Value b = valueOf(other);
                 yield a.equals(b) ? Boolean.valueOf(holds)
                         : polarity(truths.get(new Atom.Alike(Set.of(a, b))), holds);
+            }
+            case LawProposition.Inside<Value>(LawSubject<Value> inner, LawSubject<Value> outer,
+                                              StringContainment place, boolean holds) -> {
+                Value a = valueOf(inner);
+                Value b = valueOf(outer);
+                yield a.equals(b) ? Boolean.valueOf(holds)
+                        : polarity(truths.get(new Atom.Inside(a, b, place)), holds);
             }
             case LawProposition.Compared<Value>(LinearForm<LawNumber<Value>> form, Rel states) -> {
                 if (!numbers.keySet().containsAll(form.coefs().keySet())) {
@@ -423,6 +450,9 @@ final class Validity {
                 yield new LawProposition.Same<>(new LawSubject.Argument<>(two.get(0)),
                         new LawSubject.Argument<>(two.get(1)), true);
             }
+            case Atom.Inside(Value inner, Value outer, StringContainment place) ->
+                    new LawProposition.Inside<>(new LawSubject.Argument<>(inner),
+                            new LawSubject.Argument<>(outer), place, true);
         };
     }
 
@@ -510,6 +540,9 @@ final class Validity {
                     Props.either(new LawProposition.SomeElement<>(container, ofTheElement, false),
                             holds(container)));
             case Atom.Alike _ -> List.of();
+            // Nothing is taken of a string standing inside another beyond what the statements
+            // about it say: the facts a string being inside another carries are laws of their own.
+            case Atom.Inside _ -> List.of();
         };
     }
 

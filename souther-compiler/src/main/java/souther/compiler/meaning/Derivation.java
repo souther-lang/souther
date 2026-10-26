@@ -1143,6 +1143,10 @@ public sealed interface Derivation {
                             read instanceof TheSameValue(var part, var one, var other)
                                     && part.equals(law) && stands(same.one(), one)
                                     && stands(same.other(), other);
+                    case LawProposition.Inside<DeclaredArgument> inside ->
+                            read instanceof TheStringsInside(var part, var inner, var outer)
+                                    && part.equals(law) && standsAsAString(inside.inner(), inner)
+                                    && standsAsAString(inside.outer(), outer);
                     case LawProposition.SomeElement<DeclaredArgument> some ->
                             read instanceof ALawQuantifies(var part, Derivation meeting)
                                     && part.equals(law) && meets(some, meeting);
@@ -1336,6 +1340,15 @@ public sealed interface Derivation {
                 };
             }
 
+            /** Whether {@code read}, the string {@code subject} was read as, is the one at the
+             *  position the call has it at — or an answer of the input, where the call has it
+             *  at none. */
+            private boolean standsAsAString(LawSubject<DeclaredArgument> subject, Quantity read) {
+                TermPath at = positionOf(subject);
+                return at == null || new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))
+                        .equals(read);
+            }
+
             /** Whether {@code read}, the subject {@code subject} was read as, is the position the
              *  call has it at. */
             private boolean stands(LawSubject<DeclaredArgument> subject, DecisionSubject read) {
@@ -1489,8 +1502,8 @@ public sealed interface Derivation {
 
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
-            permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, ALawQuantifies,
-                    ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
+            permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, TheStringsInside,
+                    ALawQuantifies, ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
         /** The part of the law this reads. */
         LawProposition<?> part();
@@ -1570,6 +1583,23 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.SameValue(one, other, part.holds());
+        }
+    }
+
+    /** A part of a law that states one string stands inside another, or not, with the two read
+     *  as {@code inner} and {@code outer}. */
+    record TheStringsInside(LawProposition.Inside<?> part, Quantity inner, Quantity outer)
+            implements ALawPart {
+
+        public TheStringsInside {
+            Objects.requireNonNull(part, "a step reads a part of a law");
+            Objects.requireNonNull(inner, "a string inside another is of two strings");
+            Objects.requireNonNull(outer, "a string inside another is of two strings");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.StringInside(inner, outer, part.where(), part.holds());
         }
     }
 
@@ -2000,7 +2030,8 @@ public sealed interface Derivation {
                 // A count turning on the element is met by some element as one statement.
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Some _,
+                     Proposition.SameValue _, Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Some _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.SoManyHold _,
                      Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> List.of(element);
@@ -2664,7 +2695,7 @@ public sealed interface Derivation {
                         .allMatch(part -> onlyOfACharacter(within, part, named));
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
                      Proposition.OfTheWays _ -> false;
@@ -2707,7 +2738,7 @@ public sealed interface Derivation {
                 }
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
                      Proposition.OfTheWays _ ->

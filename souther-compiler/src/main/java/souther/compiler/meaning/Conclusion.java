@@ -353,6 +353,8 @@ public final class Conclusion {
                 }
                 case Relation.Ordered _ -> 0;
             };
+            case Proposition.StringInside inside ->
+                    partsIn(inside.inner()) + partsIn(inside.outer());
             case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,

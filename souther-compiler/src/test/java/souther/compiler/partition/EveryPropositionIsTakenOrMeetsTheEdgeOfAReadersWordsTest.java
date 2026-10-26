@@ -26,6 +26,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
+import souther.compiler.semantics.StringContainment;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -82,8 +83,9 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
             data Held = { o: Int? }
             data Node = { v: Int, below: List<Node> }
 
-            behavior f : (n: Int, b: Bool, s: String, h: Held, xs: List<Int>, t: Node) -> Yes
-            let f (n, b, s, h, xs, t) = Yes
+            behavior f : (n: Int, b: Bool, s: String, u: String, h: Held, xs: List<Int>,
+                          t: Node) -> Yes
+            let f (n, b, s, u, h, xs, t) = Yes
             """;
 
     /** Where a row reader's words stop: the input's own words, and nothing of a path's. */
@@ -278,6 +280,10 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
+        out.put("one string inside another", new Proposition.StringInside(
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("u"))),
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("s"))),
+                StringContainment.ANYWHERE, true));
         out.put("the last of its value", new Proposition.LastToHold(
                 new DecisionSubject.AnInput(TermPath.of("xs")),
                 new DecisionSubject.AnInput(TermPath.of("xs").element()), true));

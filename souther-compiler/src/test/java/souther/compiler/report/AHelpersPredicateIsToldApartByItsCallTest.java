@@ -31,7 +31,7 @@ class AHelpersPredicateIsToldApartByItsCallTest {
 
             behavior k : (a: String, b: String) -> Int
 
-            let has (c: String, p: String): Bool = String.startsWith(c, p)
+            let has (c: String, p: String): Bool = String.startsWith(String.append(c, "x"), p)
 
             let k (a, b) = if has(a, b) then 1 else (if has(b, a) then 2 else 3)
             """;

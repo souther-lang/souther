@@ -68,8 +68,10 @@ final class Collect {
                     out.add(b);
                 }
             }
+            // Standing inside another string is no sameness of the two, and a string the proof
+            // reads it of is no value two others are compared to.
             case LawProposition.Always<Value> _, LawProposition.Observed<Value> _,
-                 LawProposition.Compared<Value> _ -> { }
+                 LawProposition.Compared<Value> _, LawProposition.Inside<Value> _ -> { }
         }
     }
 
@@ -97,7 +99,7 @@ final class Collect {
     private static <A> void numbers(LawProposition<A> statement, Consumer<LawNumber<A>> each) {
         switch (statement) {
             case LawProposition.Always<A> _, LawProposition.Observed<A> _,
-                 LawProposition.Same<A> _ -> { }
+                 LawProposition.Same<A> _, LawProposition.Inside<A> _ -> { }
             case LawProposition.All<A>(var parts) -> parts.forEach(part -> numbers(part, each));
             case LawProposition.Any<A>(var parts) -> parts.forEach(part -> numbers(part, each));
             case LawProposition.Compared<A>(LinearForm<LawNumber<A>> form, var _) ->
@@ -134,6 +136,11 @@ final class Collect {
             case LawProposition.Same<A>(LawSubject<A> one, LawSubject<A> other, var _) -> {
                 slots(one, each);
                 slots(other, each);
+            }
+            case LawProposition.Inside<A>(LawSubject<A> inner, LawSubject<A> outer, var _,
+                                          var _) -> {
+                slots(inner, each);
+                slots(outer, each);
             }
         }
     }
@@ -184,6 +191,11 @@ final class Collect {
                                             var _) -> {
                 visit(one, each);
                 visit(other, each);
+            }
+            case LawProposition.Inside<Value>(LawSubject<Value> inner, LawSubject<Value> outer,
+                                              var _, var _) -> {
+                visit(inner, each);
+                visit(outer, each);
             }
         }
     }

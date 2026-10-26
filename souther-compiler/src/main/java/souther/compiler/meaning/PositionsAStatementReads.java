@@ -87,6 +87,7 @@ public final class PositionsAStatementReads {
             // statement is about is no part of this statement to collect.
             case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
+            case Proposition.StringInside inside -> reads(inside.inner()) && reads(inside.outer());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All all -> all.parts().stream().allMatch(this::reads);
             case Proposition.WhereItAnswers where ->

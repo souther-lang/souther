@@ -45,10 +45,14 @@ public final class ARuleNoReadingTakesIn {
      * this is for a test about what happens where nothing the compiler derives from the rules it
      * can read clears the one it cannot — a search that came back empty, an offer short of a rule.
      * What it looks for is text made of the value itself, so the text is not one the compiler works
-     * out, and the plain values a reading proposes do not begin with their own length.
+     * out, and the plain values a reading proposes do not begin with their own length. Written
+     * with an empty text appended to the length, because a text made of nothing but values of the
+     * input is a relation between two strings, which a body's rule is read as; the written text
+     * stays one nothing works out, and a rule in a body stays one nobody read.
      */
     public static String narrowly(String subject) {
-        return "String.startsWith(String.fromInt(String.length(" + subject + ")), " + subject + ")";
+        return "String.startsWith(String.append(String.fromInt(String.length(" + subject
+                + ")), \"\"), " + subject + ")";
     }
 
     /** A value {@link #narrowly} admits, where a row has to carry one. */

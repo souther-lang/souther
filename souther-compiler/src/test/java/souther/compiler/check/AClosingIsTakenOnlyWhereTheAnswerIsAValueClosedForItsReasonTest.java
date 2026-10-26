@@ -33,7 +33,7 @@ class AClosingIsTakenOnlyWhereTheAnswerIsAValueClosedForItsReasonTest {
             new ValueName.Stdlib.Operation("List", "isEmpty");
 
     private static final Unsayable WHY = Unsayable.WHICH_CHARACTERS_ARE_WHITESPACE;
-    private static final Unsayable ANOTHER = Unsayable.A_STRING_INSIDE_ANOTHER;
+    private static final Unsayable ANOTHER = Unsayable.A_STRING_MATCHING_A_PATTERN;
 
     /** A prover over the library, with every observation of every operation closed for
      *  {@code why}. */

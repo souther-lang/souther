@@ -100,7 +100,7 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             let emptyDenied (o) = Bool.not(List.isEmpty(o.lines))
 
             behavior wordAsked : (o: Order, s: String) -> Bool
-            let wordAsked (o, s) = String.contains("x", s)
+            let wordAsked (o, s) = String.matches("x+", s)
             """;
 
     /** Either way it comes out, an emptiness check asks what the size against nought asks. */
@@ -135,9 +135,9 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     only("wordAsked", holding));
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(new WhyUnread.NoWordsFor(
-                    new ValueName.Stdlib.Operation("String", "contains"),
+                    new ValueName.Stdlib.Operation("String", "matches"),
                     OperationLaw.Observed.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER))),
+                    Unsayable.A_STRING_MATCHING_A_PATTERN))),
                     declined.whys());
         }
     }

@@ -105,6 +105,10 @@ public sealed interface WhyUnread {
             /** The value a condition asks whether a container holds. */
             VALUE,
 
+            /** A string a condition asks whether it stands inside another, or whether another
+             *  stands inside it. */
+            STRING,
+
             /** The value a {@code match} chooses its arm by. */
             SCRUTINEE,
 

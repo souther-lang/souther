@@ -307,7 +307,8 @@ final class Pullback {
                 }
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SameValue _, Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _ -> {
                     into.add(stated.key());
                     into.add(stated.denied().key());
@@ -3309,6 +3310,24 @@ final class Pullback {
         }
 
         @Override
+        public Derivation inside(LawProposition.Inside<DeclaredArgument> inside) {
+            Quantity inner = stringOf(inside.inner());
+            Quantity outer = stringOf(inside.outer());
+            return inner == null || outer == null
+                    ? unread(e, reads,
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.STRING))
+                    : leaf(new Derivation.TheStringsInside(inside, inner, outer), e, reads);
+        }
+
+        /** The string the call was handed as {@code subject}, as a value of the input or what an
+         *  operation answers of one — or null where it is neither. */
+        private Quantity stringOf(LawSubject<DeclaredArgument> subject) {
+            return subject instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)
+                    && applied.argument(at) instanceof Core given
+                    ? valueOfAString(given, reads) : null;
+        }
+
+        @Override
         public Sized counted(LawNumber<DeclaredArgument> number) {
             return atom(number);
         }
@@ -5773,6 +5792,7 @@ final class Pullback {
                     statesTheValueOfTheElement(some.ofTheElement());
             case LawProposition.Always<DeclaredArgument> _,
                  LawProposition.Compared<DeclaredArgument> _,
+                 LawProposition.Inside<DeclaredArgument> _,
                  LawProposition.Observed<DeclaredArgument> _ -> false;
         };
     }
@@ -5781,6 +5801,7 @@ final class Pullback {
     private static DeclaredArgument closureIn(LawProposition<DeclaredArgument> law) {
         return switch (law) {
             case LawProposition.Always<DeclaredArgument> _,
+                 LawProposition.Inside<DeclaredArgument> _,
                  LawProposition.Same<DeclaredArgument> _ -> null;
             case LawProposition.Compared<DeclaredArgument> compared -> {
                 for (LawNumber<DeclaredArgument> number : compared.form().coefs().keySet()) {
@@ -5862,6 +5883,9 @@ final class Pullback {
             case LawProposition.Same<DeclaredArgument> same ->
                     same.one().equals(new LawSubject.ElementOf<>(container))
                             || same.other().equals(new LawSubject.ElementOf<>(container));
+            case LawProposition.Inside<DeclaredArgument> inside ->
+                    inside.inner().equals(new LawSubject.ElementOf<>(container))
+                            || inside.outer().equals(new LawSubject.ElementOf<>(container));
         };
     }
 
@@ -6461,13 +6485,35 @@ final class Pullback {
         }
         List<Quantity> of = new ArrayList<>();
         for (Core argument : applied.args()) {
-            Quantity one = valueOfTheInput(argument, call.at());
+            // A string is followed by the structure it is made by, and a number by the arithmetic:
+            // asked of the arithmetic, every link of a chain of joined texts follows the chain
+            // under it again.
+            Quantity one = Type.STRING.equals(argument.type())
+                    ? valueOfAString(argument, call.at())
+                    : valueOfTheInput(argument, call.at());
             if (one == null) {
                 return null;
             }
             of.add(one);
         }
         return new Quantity.WhatAnOperationAnswers(operation, of);
+    }
+
+    /**
+     * {@code argument}, a string read in {@code at}, as the value of the input it is or what an
+     * operation answers of one — or null where it is neither.
+     *
+     * <p>Asked of the structure and not of the arithmetic ({@link #valueOfTheInput}): the
+     * arithmetic follows a name to what it was given, and a string made of a chain of joined
+     * texts is followed link by link for every link it is asked about.
+     */
+    private Quantity valueOfAString(Core argument, InputReads at) {
+        if (at.pathOf(argument, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath held)) {
+            return new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(held));
+        }
+        return callOf(new Denotation(argument, at)) instanceof Denotation inner
+                ? whatAnOperationAnswers(inner) : null;
     }
 
     /** {@code argument}, read in {@code at}, as a number of the input or what an operation

@@ -480,7 +480,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     @Test
     void aLawIsTheOneTheLibrarySettlesTheSideBy() {
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
-                new Derivation.TheCall(STRING_CONTAINS, Map.of()), AnswerAspect.TRUTH,
+                new Derivation.TheCall(STRING_MATCHES, Map.of()), AnswerAspect.TRUTH,
                 new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
                 new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.PRESENCE,
@@ -717,8 +717,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             new ValueName.Stdlib.Operation("Set", "contains");
     private static final ValueName.Stdlib SET_INSERT =
             new ValueName.Stdlib.Operation("Set", "insert");
-    private static final ValueName.Stdlib STRING_CONTAINS =
-            new ValueName.Stdlib.Operation("String", "contains");
+    private static final ValueName.Stdlib STRING_MATCHES =
+            new ValueName.Stdlib.Operation("String", "matches");
     private static final ValueName.Stdlib STRING_SLICE =
             new ValueName.Stdlib.Operation("String", "slice");
     private static final ValueName.Stdlib INT_MIN = new ValueName.Stdlib.Operation("Int", "min");

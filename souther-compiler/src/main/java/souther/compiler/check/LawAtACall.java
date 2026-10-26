@@ -86,6 +86,9 @@ public final class LawAtACall {
         /** Two subjects being one value, or not. */
         P same(LawProposition.Same<DeclaredArgument> same);
 
+        /** One string standing inside another, or not. */
+        P inside(LawProposition.Inside<DeclaredArgument> inside);
+
         /** A number of the arguments, where this did not settle it. */
         N counted(LawNumber<DeclaredArgument> number);
 
@@ -128,6 +131,7 @@ public final class LawAtACall {
                 yield meets != null ? reading.writtenOut(some, meets) : reading.someElement(some);
             }
             case LawProposition.Same<DeclaredArgument> same -> reading.same(same);
+            case LawProposition.Inside<DeclaredArgument> inside -> reading.inside(inside);
         };
     }
 
@@ -250,6 +254,15 @@ public final class LawAtACall {
                     case PRESENCE -> null;
                 };
                 yield holds == null ? null : holds == side.holds();
+            }
+            case LawProposition.Inside<DeclaredArgument>(var inner, var outer, var where,
+                                                         boolean holds) -> {
+                ElementsWrittenOut.Stood<E> within = valueOf(inner, container, element, reading);
+                ElementsWrittenOut.Stood<E> around = valueOf(outer, container, element, reading);
+                yield within != null && around != null
+                        && reading.elements().folded(within).orElse(null) instanceof String looked
+                        && reading.elements().folded(around).orElse(null) instanceof String in
+                        ? where.holds(looked, in) == holds : null;
             }
             case LawProposition.Compared<DeclaredArgument>(var form, var states) -> {
                 LinearForm<Object> total = form.over(number -> {

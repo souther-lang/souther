@@ -65,8 +65,8 @@ public final class TruthTable {
             // whichever way its statements do.
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
-                 Proposition.SomeReachable _, Proposition.OnAnApplication _,
+                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
+                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.OnAnApplication _,
                  Proposition.SoManyHold _ -> {
                 into.putIfAbsent(spelledAs(stated), into.size());
                 yield true;
@@ -89,8 +89,9 @@ public final class TruthTable {
             case Proposition.OfTheWays ways -> valueOf(ways.written(), parts, assignment);
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
-                 Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
+                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _,
                  Proposition.SoManyHold _ -> {
                 String spelled = spelledAs(stated);
                 boolean set = (assignment >> parts.get(spelled) & 1L) == 1L;
