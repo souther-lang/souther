@@ -135,10 +135,13 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
             assertFalse(Proposition.leavesSomethingUnread(stated(plain, compared(walked))),
                     walked);
         }
-        // The same rows of a type that holds an invariant are not the rows of the walk above: the
-        // comparison is no longer the choice among their grades.
+        // Rows of a type that holds an invariant are the rows of the walk above where the
+        // invariant is shown to hold of what each is handed, and are not where it cannot be shown
+        // from what is handed. A constant it refuses is no model: the compile refuses it.
         String walked = "List.fold(%s, 0, %s)".formatted(step, rows.formatted("1"));
-        assertNotEquals(stated(plain, compared(walked)), stated(held, compared(walked)));
+        assertEquals(stated(plain, compared(walked)), stated(held, compared(walked)));
+        String unknown = "List.fold(%s, 0, %s)".formatted(step, rows.formatted("cur"));
+        assertNotEquals(stated(plain, compared(unknown)), stated(held, compared(unknown)));
     }
 
     private static String compared(String computed) {

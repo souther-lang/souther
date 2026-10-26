@@ -9158,24 +9158,58 @@ final class Pullback {
      * <p>Being the same value on every run is another fact: a negation of the least {@code Int} is
      * written out all the way down and ends the run. What ends a run is {@link WhatARunMayEndFor}'s
      * to say, except for a construction, which it leaves unknown because the invariant that may end
-     * it is the declaration's ({@link #endsNoRun(Core)}).
+     * it is the declaration's ({@link #endsNoRun(Denotation)}).
      */
     private boolean endsNoRun(Denotation value) {
-        return endsNoRun(value.at().standing(value.value(), read.rules().symbols(),
-                read.rules().newtypes()).value());
+        Denotation stood = value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        return switch (Core.withoutStanding(stood.value())) {
+            case Core.Construct made -> made.values().stream().allMatch(
+                            each -> endsNoRun(new Denotation(each.value(), stood.at())))
+                    && (holdsNoInvariant(made.typeName()) || holdsWhatItIsHanded(made, stood.at()));
+            case Core.ListLit list -> list.elements().stream().allMatch(
+                    each -> endsNoRun(new Denotation(each, stood.at())));
+            case Core other -> WhatARunMayEndFor.of(other).endsNone()
+                    || endsNoRunAsACall(new Denotation(other, stood.at()));
+        };
     }
 
     /**
-     * A construction of a type that holds no invariant, of values that end no run, and a list of
-     * such values, are known to end none; anything else is {@link WhatARunMayEndFor}'s answer.
+     * Whether every clause of the invariant of {@code made} is known to hold of the values it is
+     * handed where it stands at {@code at}, and working a clause out ends no run: each is read
+     * ({@link ClausesInOrder}), none is left unread, and each folds to true with its fields
+     * standing for what {@code made} hands them. What cannot be shown is not held.
      */
-    private boolean endsNoRun(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Construct made -> holdsNoInvariant(made.typeName())
-                    && made.values().stream().allMatch(each -> endsNoRun(each.value()));
-            case Core.ListLit list -> list.elements().stream().allMatch(this::endsNoRun);
-            case Core other -> WhatARunMayEndFor.of(other).endsNone();
-        };
+    private boolean holdsWhatItIsHanded(Core.Construct made, InputReads at) {
+        ClausesInOrder clauses = ClausesInOrder.at(made, read.rules());
+        if (!clauses.everyRuleReached()) {
+            return false;
+        }
+        for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
+            if (!(clause instanceof ClausesInOrder.OneClause.Stated stated)
+                    || !WhatARunMayEndFor.of(stated.term()).endsNone()
+                    || !Boolean.TRUE.equals(handingTheFields(at.forADeclaredRule(), stated.given(),
+                            at).folded(stated.term(), read.rules().symbols(),
+                            read.rules().newtypes()).orElse(null))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@code value} is a call of a behavior whose arguments end no run and whose body, read
+     * with its parameters standing for them, ends none — which {@link WhatARunMayEndFor} leaves
+     * unknown of a helper, because it is not the helper's to say.
+     */
+    private boolean endsNoRunAsACall(Denotation value) {
+        Inside.ACall called = intoACall(value);
+        return called != null
+                && AnOperationApplied.of(Core.withoutStanding(value.value()))
+                        instanceof AnOperationApplied applied
+                && applied.args().stream().allMatch(
+                        arg -> endsNoRun(new Denotation(arg, value.at())))
+                && endsNoRun(called.body());
     }
 
     /**
