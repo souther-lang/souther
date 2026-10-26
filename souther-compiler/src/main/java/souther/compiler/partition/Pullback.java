@@ -9191,7 +9191,7 @@ final class Pullback {
     private boolean whatItRunsAsWrittenEndsNone(Core written, InputReads at) {
         if (Core.withoutStanding(written) instanceof Core.LetIn let) {
             return endsNoRun(new Denotation(let.value(), at))
-                    && endsNoRun(new Denotation(let.body(), at));
+                    && endsNoRun(new Denotation(let.body(), at.and(let.binder(), let.value())));
         }
         for (Evaluated.Step step : Evaluated.inOrder(written)) {
             if (!endsNoRun(new Denotation(step.expression(), at))) {

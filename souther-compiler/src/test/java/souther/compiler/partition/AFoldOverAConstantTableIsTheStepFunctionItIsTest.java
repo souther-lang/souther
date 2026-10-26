@@ -174,6 +174,14 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 + "let rowOf (g: Int): Row = Row { grade = g, lowerBound = 100 }";
         String heldOf = plainOf.replace("lowerBound: Int }",
                 "lowerBound: Int }\n    invariant grade >= 0");
+        // What a let binds is what its body is asked about, so a row built through one is the row
+        // built without it.
+        String through = "\nlet through (n: Int): Row = {\n    let k = n\n    rowOf(k)\n}";
+        for (String row : List.of("rowOf(1)", "through(1)")) {
+            String rowsOf = "List.fold(%s, 0, [ %s, rowOf(2) ])".formatted(step, row);
+            assertEquals(stated(plainOf + through, compared(rowsOf)),
+                    stated(heldOf + through, compared(rowsOf)), row);
+        }
         String unproven = "List.fold(%s, 0, [ rowOf(cur), rowOf(2) ])".formatted(step);
         assertNotEquals(stated(plainOf, compared(unproven)), stated(heldOf, compared(unproven)));
     }
