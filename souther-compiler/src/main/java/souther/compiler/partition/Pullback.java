@@ -1428,7 +1428,6 @@ final class Pullback {
      */
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
-    private static final ValueName.Stdlib TAKE = ValueName.Stdlib.operation("List", "take");
 
     /**
      * Why {@code more} readings of the condition, made at one place where it splits, are not
@@ -2141,6 +2140,11 @@ final class Pullback {
             return window.until().isEmpty() ? 0
                     : (int) Math.min(window.until().getAsLong(), Integer.MAX_VALUE);
         }
+
+        /** The index of the first piece the container holds. */
+        int from() {
+            return (int) Math.min(window.from(), Integer.MAX_VALUE);
+        }
     }
 
     /**
@@ -2176,31 +2180,6 @@ final class Pullback {
         }
         return new Pieces(call, operation, container.at(), parted, separatedBy,
                 PieceWindow.ALL);
-    }
-
-    /**
-     * The pieces {@code container} is, or of which it holds the first ones: what {@code List.take}
-     * answers of them, for a count written as a number of one or more. Or null where it is
-     * neither.
-     */
-    private Pieces piecesOrTheFirstOf(Denotation container) {
-        Pieces whole = piecesOf(container);
-        if (whole != null) {
-            return whole;
-        }
-        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
-                || !TAKE.equals(call.declared().operation())) {
-            return null;
-        }
-        Denotation count = container.at().standing(call.args().get(0),
-                read.rules().symbols(), read.rules().newtypes());
-        if (!(Core.withoutStanding(count.value()) instanceof Core.Int number)
-                || number.value() < 1) {
-            return null;
-        }
-        Pieces taken = piecesOf(container.at().standing(call.args().get(1),
-                read.rules().symbols(), read.rules().newtypes()));
-        return taken == null ? null : taken.through(taken.window().taking(number.value()));
     }
 
     /**
@@ -2303,14 +2282,9 @@ final class Pullback {
      * The pieces {@code e}, read in {@code at}, is one of — where it is a parameter a walk
      * hands each element of what an operation answering the pieces of a string was given, or
      * of what only kept some of those — or null where it is not.
-     */
-    private Pieces pieceThatIs(Core e, InputReads at, boolean ofTheFirstToo) {
-        return pieceThatIs(e, at, ofTheFirstToo ? this::piecesOrTheFirstOf : this::piecesOf);
-    }
-
-    /**
-     * The same, of the pieces {@code held} says a container holds, so that a window of them is
-     * one a piece is of ({@link #piecesInAWindow}).
+     *
+     * <p>Of the pieces {@code held} says a container holds, so that a window of them is one a
+     * piece is of ({@link #piecesInAWindow}).
      */
     private Pieces pieceThatIs(Core e, InputReads at, Function<Denotation, Pieces> held) {
         Denotation whole = theContainerOfTheElement(e, at);
@@ -2464,7 +2438,7 @@ final class Pullback {
             return null;
         }
         return new Quantity.IsAmongThePieces(value, piece.operation(), piece.separator(),
-                piece.string(), piece.among());
+                piece.string(), piece.from(), piece.among());
     }
 
     /** Whether what {@code pieces} are of has a piece however the string stands, as the library
@@ -2489,8 +2463,9 @@ final class Pullback {
      * depth this is read at: either way the one the same statement names.
      */
     private Quantity.APieceOf aPiece(Denotation side) {
-        Pieces piece = pieceThatIs(side.value(), side.at(), true);
-        if (piece == null) {
+        Pieces piece = pieceThatIs(side.value(), side.at(), this::piecesInAWindow);
+        // A window of none holds no piece for a value to be, and is no number this says.
+        if (piece == null || piece.window().isEmpty()) {
             return null;
         }
         int within = parting.getOrDefault(piece, parting.size());
@@ -2499,7 +2474,7 @@ final class Pullback {
                 piece.split().args().get(piece.parted().string().position()), piece.at());
         return string == null ? null
                 : new Quantity.APieceOf(piece.operation(), piece.separator(), string, within,
-                        piece.first());
+                        piece.from(), piece.first());
     }
 
     /** A statement read of each value a container written out holds, or why it was not. */
@@ -3866,21 +3841,22 @@ final class Pullback {
             if (inALanguage != null) {
                 return inALanguage;
             }
-            // The pieces past the first few are not the string's own pieces, so what is said of
-            // the string off all of them — which of its values one is, which code points they
-            // hold — is not said of them. Only which language they are in is.
-            if (!pieces.window().startsAtTheFirst()) {
-                return unread(over, in, new WhyUnread.AtNoPosition(
-                        WhyUnread.AtNoPosition.Place.CONTAINER));
-            }
             // Some piece being the same value as one of the input is that value being one of the
-            // pieces, which relates it to the string and divides neither where the string has a
-            // piece for every value to be or not to be. What leaves the statement is that, and
-            // never the piece, which the statement binds.
+            // pieces of the window, which relates it to the string. What leaves the statement is
+            // that, and never the piece, which the statement binds. It is said of the window it
+            // is asked of: the pieces from a later index are the string's own pieces only where
+            // it has that many, and that is the window's to say and not left out.
             Quantity.IsAmongThePieces among = valueBeingOneOfThePieces(element, within, pieces);
             if (among != null) {
                 return leaf(new Derivation.SomePieceEqualling(answered, among),
                         askedAt != null ? askedAt : new Denotation(e, reads));
+            }
+            // The pieces past the first few are not the string's own pieces, so what is said of
+            // the string off all of them — which code points they hold — is not said of them.
+            // Only which language they are in is, and which value one is.
+            if (!pieces.window().startsAtTheFirst()) {
+                return unread(over, in, new WhyUnread.AtNoPosition(
+                        WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             CodePoints held = pieces.first() > 0 ? null
                     : Derivation.SomePieceMeeting.held(pieces.separator(), within, element);
@@ -4242,7 +4218,8 @@ final class Pullback {
             StringPredicates predicate =
                     StringPredicates.of(read.rules().symbols().kernelOf(operation));
             Pieces piece = predicate == null ? null
-                    : pieceThatIs(call.args().get(predicate.subject()), reads, false);
+                    : pieceThatIs(call.args().get(predicate.subject()), reads,
+                            Pullback.this::piecesOf);
             Integer within = piece == null ? null : parting.get(piece);
             return within == null || piece.separator().isPresent() ? null
                     : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within), e, reads);
@@ -4946,7 +4923,7 @@ final class Pullback {
             if (converted != null) {
                 return converted;
             }
-            Pieces piece = pieceThatIs(value, in, false);
+            Pieces piece = pieceThatIs(value, in, Pullback.this::piecesOf);
             if (piece != null) {
                 return codePointsOfAPiece(piece, counted);
             }

@@ -51,6 +51,11 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
         Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
 
+    /** Where the pieces a window holds begin, as a key spells it: nothing for the first. */
+    private static String fromSpelled(int from) {
+        return from > 0 ? " from piece " + from : "";
+    }
+
     /**
      * What a recursion carries, whatever that is: how many what a walk carried into the step
      * being read holds, the number a walk over the elements of an answer carried into its step, or
@@ -219,12 +224,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param separator the code point it is parted at, or none where it parts into characters
      * @param string    the string, a number of the input or what an operation answers of one
      * @param within    how many statements about some piece this one is read inside of
-     * @param among     how many of the first pieces it is one of, or nought where it is one of
-     *                  all of them: the piece of the first one and the piece of the first two
-     *                  are two values, as a string can hold the value in its second piece alone
+     * @param from      the index of the first piece it may be, nought where it may be the first
+     * @param among     the index the pieces it may be stop before, or nought where they run to
+     *                  the last: the piece of the first one and the piece of the first two are
+     *                  two values, as a string can hold the value in its second piece alone,
+     *                  and so are those of the pieces from the second on and from the third
      */
     record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
-                    int within, int among) implements Quantity {
+                    int within, int from, int among) implements Quantity {
 
         public APieceOf {
             Objects.requireNonNull(operation, "a piece is of what some operation parts");
@@ -238,9 +245,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException(
                         "a piece is of a statement some number of statements in: " + within);
             }
-            if (among < 0) {
+            if (from < 0 || among < 0 || (among > 0 && among <= from)) {
                 throw new IllegalArgumentException(
-                        "a piece is one of some number of the first pieces: " + among);
+                        "a piece is one of the pieces from one index to a later one: " + from
+                                + " " + among);
             }
         }
 
@@ -255,7 +263,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "a piece " + within + " in"
+            return "a piece " + within + " in" + fromSpelled(from)
                     + (among > 0 ? " among the first " + among : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
@@ -284,11 +292,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param operation the library's operation that parts the string
      * @param separator the code point it is parted at, or none where it parts into characters
      * @param string    the string, a number of the input or what an operation answers of one
-     * @param among     how many of the first pieces it is one of, or nought where it is one of
-     *                  all of them
+     * @param from      the index of the first piece it may be one of, nought for the first
+     * @param among     the index the pieces it may be one of stop before, or nought where they
+     *                  run to the last
      */
     record IsAmongThePieces(Quantity value, ValueName.Stdlib operation, OptionalInt separator,
-                            Quantity string, int among) implements Quantity {
+                            Quantity string, int from, int among) implements Quantity {
 
         public IsAmongThePieces {
             Objects.requireNonNull(operation, "the pieces are what some operation parts");
@@ -300,9 +309,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                             "a piece is compared here with a value of the input: " + each);
                 }
             }
-            if (among < 0) {
+            if (from < 0 || among < 0 || (among > 0 && among <= from)) {
                 throw new IllegalArgumentException(
-                        "the value is one of some number of the first pieces: " + among);
+                        "the value is one of the pieces from one index to a later one: " + from
+                                + " " + among);
             }
         }
 
@@ -322,7 +332,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "[" + value.spelled() + " is among the pieces"
+            return "[" + value.spelled() + " is among the pieces" + fromSpelled(from)
                     + (among > 0 ? " (the first " + among + ")" : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())

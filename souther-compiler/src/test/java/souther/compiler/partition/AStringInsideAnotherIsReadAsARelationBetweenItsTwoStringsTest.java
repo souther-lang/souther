@@ -138,6 +138,68 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
                 StringContainment.ANYWHERE, true), quantified.ofTheElement());
     }
 
+    /** The value being one of the pieces of the window, wherever in the statement it stands. */
+    private static Quantity.IsAmongThePieces among(Proposition stated) {
+        if (stated instanceof Proposition.Compared(
+                souther.compiler.meaning.Relation.Affine affine, boolean _, String _)) {
+            for (Quantity each : affine.form().coefs().keySet()) {
+                if (each instanceof Quantity.IsAmongThePieces among) {
+                    return among;
+                }
+            }
+        }
+        for (Proposition part : stated.partsHeld()) {
+            Quantity.IsAmongThePieces among = among(part);
+            if (among != null) {
+                return among;
+            }
+        }
+        return null;
+    }
+
+    private static Quantity.IsAmongThePieces among(String pieces) {
+        return among(stated("List.any(d -> i.a == d, " + pieces + ")"));
+    }
+
+    /** The pieces a window holds are the ones it is asked of: dropping begins the window later
+     *  and taking ends it sooner, and the two are told apart by the order they were applied. */
+    @Test
+    void theWindowOfThePiecesIsTheOneTheyAreAskedOf() {
+        String split = "String.split(\"@\", i.b)";
+        assertEquals(0, among(split).from());
+        assertEquals(0, among(split).among());
+        assertEquals(1, among("List.drop(1, " + split + ")").from());
+        assertEquals(0, among("List.drop(1, " + split + ")").among());
+        assertEquals(0, among("List.take(2, " + split + ")").from());
+        assertEquals(2, among("List.take(2, " + split + ")").among());
+        // The second and the third, and the second alone.
+        assertEquals(1, among("List.take(2, List.drop(1, " + split + "))").from());
+        assertEquals(3, among("List.take(2, List.drop(1, " + split + "))").among());
+        assertEquals(1, among("List.drop(1, List.take(2, " + split + "))").from());
+        assertEquals(2, among("List.drop(1, List.take(2, " + split + "))").among());
+    }
+
+    /** A window is part of which value this is: the pieces from the second on and all of them
+     *  are two values, as a string can hold the value in its first piece alone. */
+    @Test
+    void twoWindowsOfOneStringAreTwoStatements() {
+        String split = "String.split(\"@\", i.b)";
+        assertTrue(!stated("List.any(d -> i.a == d, " + split + ")").key().equals(
+                stated("List.any(d -> i.a == d, List.drop(1, " + split + "))").key()));
+        assertTrue(!stated("List.any(d -> i.a == d, List.take(2, List.drop(1, " + split
+                + "))) ").key().equals(stated("List.any(d -> i.a == d, List.drop(1, List.take(2, "
+                + split + ")))").key()));
+    }
+
+    /** A window that holds no piece is no number of the pieces a value is among, and is not read
+     *  as one that holds some. */
+    @Test
+    void aWindowOfNoPieceIsNotReadAsOneOfSome() {
+        String split = "String.split(\"@\", i.b)";
+        assertEquals(null, among("List.take(0, " + split + ")"));
+        assertEquals(null, among("List.drop(100000, List.take(1, " + split + "))"));
+    }
+
     /** Two spellings of one relation are one statement, and two different relations are not. */
     @Test
     void theRelationIsToldApartByTheStringsAndWhereOneStandsInTheOther() {
