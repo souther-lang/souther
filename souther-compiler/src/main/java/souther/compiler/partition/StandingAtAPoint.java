@@ -247,9 +247,32 @@ public final class StandingAtAPoint {
             return AtTheRow.COULD_NOT_TELL;
         }
         AStatementAtARow asked = AStatementAtARow.of(stated, behavior, quantities);
-        DiscoveringRow row = new DiscoveringRow(new RowWalk(where, observed, readTheOtherWay));
-        asked.lookAt(row);
-        return switch (asked.at(row)) {
+        RowWalk walk = new RowWalk(where, observed, readTheOtherWay);
+        DiscoveringRow discovering = new DiscoveringRow(walk);
+        asked.lookAt(discovering);
+        Map<TermPath, Integer> containers = discovering.containers();
+        // Positions of the statement inside a container no quantifier of it ranges over stand for
+        // an element of it, so the statement is about the row where some element of each is
+        // chosen: it holds where a reading holds, as a line is met where a reading stands.
+        if (containers.isEmpty()) {
+            return atTheRow(asked.at(discovering));
+        }
+        boolean couldNotTell = false;
+        for (Map<TermPath, Integer> choice : readingsOver(containers)) {
+            switch (atTheRow(asked.at(new OneReadingOfARow(walk, choice)))) {
+                case HOLDS -> {
+                    return AtTheRow.HOLDS;
+                }
+                case COULD_NOT_TELL -> couldNotTell = true;
+                case FAILS -> { }
+            }
+        }
+        return couldNotTell || containersAllowMoreThan(containers, MOST_READINGS)
+                ? AtTheRow.COULD_NOT_TELL : AtTheRow.FAILS;
+    }
+
+    private static AtTheRow atTheRow(AStatementAtARow.Answer answer) {
+        return switch (answer) {
             case AStatementAtARow.Answer.Holds _ -> AtTheRow.HOLDS;
             case AStatementAtARow.Answer.Fails _ -> AtTheRow.FAILS;
             case AStatementAtARow.Answer.CouldNotTell _ -> AtTheRow.COULD_NOT_TELL;
