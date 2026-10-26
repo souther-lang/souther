@@ -132,10 +132,22 @@ public final class DifferenceBounds<A> {
      *         is a path from one into the other that neither of them closed
      */
     static <A> DifferenceBounds<A> product(List<DifferenceBounds<A>> parts) {
-        Map<A, Map<A, ExactCut>> related = new LinkedHashMap<>();
-        Map<A, ExactCut> above = new LinkedHashMap<>();
-        Map<A, ExactCut> below = new LinkedHashMap<>();
-        Set<A> positions = new LinkedHashSet<>();
+        // The tables are the parts' put side by side, so how many there will be is known before
+        // the first is copied: held to that, none of them is grown while it is filled.
+        int relatedSize = 0;
+        int aboveSize = 0;
+        int belowSize = 0;
+        int positionsSize = 0;
+        for (DifferenceBounds<A> part : parts) {
+            relatedSize += part.related.size();
+            aboveSize += part.above.size();
+            belowSize += part.below.size();
+            positionsSize += part.positions.size();
+        }
+        Map<A, Map<A, ExactCut>> related = LinkedHashMap.newLinkedHashMap(relatedSize);
+        Map<A, ExactCut> above = LinkedHashMap.newLinkedHashMap(aboveSize);
+        Map<A, ExactCut> below = LinkedHashMap.newLinkedHashMap(belowSize);
+        Set<A> positions = LinkedHashSet.newLinkedHashSet(positionsSize);
         boolean holdsNothing = false;
         boolean everyHopWasComposed = true;
         for (DifferenceBounds<A> part : parts) {
