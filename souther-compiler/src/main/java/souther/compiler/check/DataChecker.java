@@ -72,15 +72,24 @@ public final class DataChecker {
     }
 
     /**
-     * A value the module declares, and where it writes a construction of something that holds an
-     * invariant. A value takes nothing, so what it builds is closed, and building it is what shows
-     * those constructions hold.
+     * A value the module declares, and the constructions of something that holds an invariant that
+     * building it certainly runs. A value takes nothing, so what it builds is closed, and building
+     * it is what shows those constructions hold.
+     *
+     * <p>Not the constructions it writes. A branch it does not take, the body of a function it does
+     * not apply and a helper it calls are all places a build can break an invariant, which is why
+     * every value is built, and none of them is a construction the build is known to have run, which
+     * is what the list is.
      */
     public record ValueConstructions(String value, SourcePos pos, List<SourcePos> constructions) {}
 
     /**
-     * Every value the module declares whose body writes a construction of a type holding an
-     * invariant, with the places those are written.
+     * Every value the module declares, with the constructions of a type holding an invariant that
+     * building it certainly runs.
+     *
+     * <p>Every value and not the ones that write a construction: which values break an invariant
+     * when they are built is what building them answers, and a construction written in one branch,
+     * or in a helper the value calls, is not written where a walk of the value's own body looks.
      *
      * <p>Desugared definitions for the reason {@link #constNewtypeChecks} gives: a newtype is
      * written as a construction only once its application has been rewritten as one.
@@ -94,9 +103,7 @@ public final class DataChecker {
             }
             List<SourcePos> written = new ArrayList<>();
             collectConstructions(fn.read().writtenBody(), symbols, written);
-            if (!written.isEmpty()) {
-                out.add(new ValueConstructions(fn.name(), fn.read().pos(), written));
-            }
+            out.add(new ValueConstructions(fn.name(), fn.read().pos(), written));
         }
         return out;
     }

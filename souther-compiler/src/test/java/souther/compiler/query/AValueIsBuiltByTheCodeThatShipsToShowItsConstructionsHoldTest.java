@@ -178,6 +178,39 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
                         .toList());
     }
 
+    /**
+     * Which values are built is not which values write a construction the build is known to run.
+     * One that breaks an invariant in a branch it takes, or in a helper it calls, is as much a value
+     * that breaks it when it is built.
+     */
+    @Test
+    void aValueIsBuiltWhereverItBreaksTheInvariant() {
+        String module = """
+                module demo
+
+                data Row = { grade: Int }
+                data Table = List<Row>
+                    invariant distinctGrades = List.allDistinctBy(.grade, value)
+                let rowOf (g: Int): Row = Row { grade = g }
+                let tableOf (g: Int): Table = Table([ rowOf(g), rowOf(g) ])
+                %s
+
+                behavior f : (cur: Int) -> Int
+                let f (cur) = cur
+                """;
+        for (String value : List.of(
+                "let table = if 1 > 0 then Table([ rowOf(1), rowOf(1) ])"
+                        + " else Table([ rowOf(1), rowOf(2) ])",
+                "let table = tableOf(1)")) {
+            Compilation compilation = Compilation.ofSource(module.formatted(value), "Main");
+            compilation.answerEverything();
+            assertEquals(List.of("E2010 TheValueBreaksAnInvariantWhenItIsBuilt[value=table]"),
+                    compilation.errors().stream()
+                            .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                            .toList(), value);
+        }
+    }
+
     @Test
     void aConstructionBuildingTheValueRunsIsRecorded() {
         assertEquals(1, constructionsBuildingRuns(" = Row { grade = 3 }"));
