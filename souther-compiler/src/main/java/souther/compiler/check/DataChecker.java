@@ -71,6 +71,103 @@ public final class DataChecker {
         return out;
     }
 
+    /**
+     * A value the module declares, and the constructions of something that holds an invariant that
+     * building it certainly runs. A value takes nothing, so what it builds is closed, and building
+     * it is what shows those constructions hold.
+     *
+     * <p>Not the constructions it writes. A branch it does not take, the body of a function it does
+     * not apply and a helper it calls are all places a build can break an invariant, which is why
+     * every value is built, and none of them is a construction the build is known to have run, which
+     * is what the list is.
+     */
+    public record ValueConstructions(String value, SourcePos pos, List<SourcePos> constructions) {}
+
+    /**
+     * Every value the module declares, with the constructions of a type holding an invariant that
+     * building it certainly runs.
+     *
+     * <p>Every value and not the ones that write a construction: which values break an invariant
+     * when they are built is what building them answers, and a construction written in one branch,
+     * or in a helper the value calls, is not written where a walk of the value's own body looks.
+     *
+     * <p>Desugared definitions for the reason {@link #constNewtypeChecks} gives: a newtype is
+     * written as a construction only once its application has been rewritten as one.
+     */
+    public static List<ValueConstructions> valueConstructions(List<Desugared.Fn> fns,
+                                                              Symbols symbols) {
+        List<ValueConstructions> out = new ArrayList<>();
+        for (Desugared.Fn fn : fns) {
+            if (!fn.read().params().isEmpty()) {
+                continue;
+            }
+            List<SourcePos> written = new ArrayList<>();
+            collectConstructions(fn.read().writtenBody(), symbols, written);
+            out.add(new ValueConstructions(fn.name(), fn.read().pos(), written));
+        }
+        return out;
+    }
+
+    /**
+     * The constructions of an invariant-bearing type that building {@code e} runs, whichever way
+     * it goes.
+     *
+     * <p>Not every construction written in a value is run by building it: the body of a function
+     * value runs when a call applies it, one branch of an {@code if} and one arm of a {@code match}
+     * run and the others do not, and the right operand of a short-circuiting operator runs where the
+     * left does not settle it. A position gathered from one of those would be recorded as held by a
+     * build that never ran it, so what is walked is what {@code Evaluated.inOrder} gives for the
+     * same node kinds — the parts that run whenever the node does — and a kind added to
+     * {@link Hir.Expr} is decided here, in the switch, rather than reached by a walk of its slots.
+     *
+     * <p>The construction an {@code if ... as} tests is not one of them: its refusal is caught and
+     * answered by an arm, so building the value succeeds whether or not it holds. What it is built
+     * from does run.
+     */
+    private static void collectConstructions(Hir.Expr e, Symbols symbols, List<SourcePos> out) {
+        switch (e) {
+            case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _, Hir.Var _,
+                 Hir.Unreachable _, Hir.ValueBuild _, Hir.ValueInvocation _ -> { }
+            // A function value is made here and run by whoever applies it, on arguments not given
+            // here.
+            case Hir.Block _ -> { }
+            case Hir.NewData nd -> {
+                if (nd.typeName() instanceof Hir.Name.Denoting built
+                        && built.type() instanceof TypeSymbol.AtModule constructed
+                        && isInvariantBearing(constructed, symbols)) {
+                    out.add(nd.pos());
+                }
+                collectWhatIsRunWith(nd, symbols, out);
+            }
+            case Hir.IfConstructed tested -> {
+                if (tested.construct() instanceof Hir.NewData made) {
+                    collectWhatIsRunWith(made, symbols, out);
+                }
+            }
+            case Hir.Binary b when b.op().stopsWhenItsAnswerIsSettled() ->
+                    collectConstructions(b.left(), symbols, out);
+            case Hir.If iff -> collectConstructions(iff.cond(), symbols, out);
+            case Hir.Match m -> collectConstructions(m.scrutinee(), symbols, out);
+            // The guards are tried in turn and each only where the one before it held, so the first
+            // is the one that runs whenever the comprehension does; the element is run for the rows
+            // they keep, which may be none.
+            case Hir.ListComp comp -> comp.guards().stream().limit(1)
+                    .forEach(g -> collectConstructions(g, symbols, out));
+            // A row's brackets are written in an example, and no value a module declares holds them.
+            case Hir.RowCollection _ -> { }
+            // The body of a definition this value reaches, written at that definition's positions
+            // and run there with whatever it is handed elsewhere: a position found in it says
+            // nothing of this build.
+            case Hir.Expansion _, Hir.Materialised _ -> { }
+            case Hir.Neg _, Hir.FieldAccess _, Hir.Binary _, Hir.Apply _, Hir.LetIn _,
+                 Hir.ListLit _, Hir.Tuple _, Hir.TupleGet _ -> collectWhatIsRunWith(e, symbols, out);
+        }
+    }
+
+    private static void collectWhatIsRunWith(Hir.Expr e, Symbols symbols, List<SourcePos> out) {
+        TypeChecker.forEachChild(e, c -> collectConstructions(c, symbols, out));
+    }
+
     /** Walked under what each name in force was given: a construction's argument is a
      *  sub-expression, and a name in it stands for what the bindings above it gave. */
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, BoundValues at,

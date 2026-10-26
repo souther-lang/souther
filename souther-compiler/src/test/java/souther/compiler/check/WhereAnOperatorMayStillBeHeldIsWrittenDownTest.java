@@ -421,6 +421,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // Which operand runs when, which is the enum's own answer.
             new Held("souther.compiler.core.Evaluated.inOrder",
                     "asks the enum which way the left has to come out for the right to run"),
+            new Held("souther.compiler.check.DataChecker.collectConstructions",
+                    "asks the enum whether the right operand runs on every run, for which"
+                            + " constructions building a value runs"),
             new Held("souther.compiler.flow.ValueArrivals.reading",
                     "asks the enum whether the right operand runs on every run"),
             new Held("souther.compiler.flow.ValueArrivals.through", "and which way it runs under"),
