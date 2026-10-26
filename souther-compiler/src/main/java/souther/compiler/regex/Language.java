@@ -243,6 +243,23 @@ public final class Language {
         return StringsHeldAsWritten.of(machine);
     }
 
+    /**
+     * Whether it holds a string a {@code String} holds as written ({@link StringsHeldAsWritten}).
+     * Answered without making their machine.
+     */
+    public boolean holdsAStringAsWritten() {
+        return !StringsHeldAsWritten.holdsNoneIn(machine);
+    }
+
+    /**
+     * Whether a string a {@code String} holds as written has every length {@code wanted} names.
+     * {@code endless} where the lengths it names have no greatest. They are the lengths of one
+     * stretch. False also where that was not shown within what is walked.
+     */
+    public boolean reachesEveryLength(IntPredicate wanted, boolean endless) {
+        return heldAsWritten().reachesEveryLength(wanted, endless);
+    }
+
     /** Where the code point a string it holds has at {@code index} lies, or null where it holds
      *  no string that long. */
     public Ends codePointsAt(int index) {

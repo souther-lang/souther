@@ -1,9 +1,13 @@
 package souther.compiler.regex;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
@@ -75,6 +79,100 @@ public final class StringsHeldAsWritten {
             at += Character.charCount(codePoint);
         }
         return machine.stopsAt(state);
+    }
+
+    /**
+     * Whether there are none of these.
+     *
+     * <p>Only a non-empty answer is evidence: one of these is a value. A language holding a
+     * string made of code points that are not stable starters may hold a value too, so an empty
+     * answer here does not say that no value exists.
+     */
+    public boolean isEmpty() {
+        return holdsNoneIn(machine);
+    }
+
+    /**
+     * {@link #isEmpty} of the strings of {@code language}, without making their machine: a step
+     * is taken where it holds a stable starter, which stops at the first one, and the machine of
+     * these keeps every such code point of every step.
+     */
+    static boolean holdsNoneIn(Automaton language) {
+        BitSet reached = new BitSet();
+        Deque<Integer> pending = new ArrayDeque<>();
+        reached.set(Automaton.START);
+        pending.add(Automaton.START);
+        while (!pending.isEmpty()) {
+            int state = pending.poll();
+            if (language.stopsAt(state)) {
+                return false;
+            }
+            for (Automaton.Step step : language.stepsFrom(state)) {
+                if (!reached.get(step.to()) && StableStarters.anyWithin(step.over())) {
+                    reached.set(step.to());
+                    pending.add(step.to());
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether these have a string of every length {@code wanted} names.
+     *
+     * <p>The machine is walked a code point at a time with the states it can be in, which is a
+     * unary automaton of it. {@code wanted} names the lengths of one stretch. Where {@code
+     * endless}, the stretch has no end, so the walk ends at the first set of states it meets again
+     * and every layer of the cycle must stop; otherwise it ends at the first layer past the
+     * stretch. A walk that does not end within {@link #LAYERS} is a refusal to answer: false then
+     * says only that it was not shown.
+     */
+    boolean reachesEveryLength(IntPredicate wanted, boolean endless) {
+        BitSet states = new BitSet();
+        states.set(Automaton.START);
+        Map<BitSet, Integer> metAt = new HashMap<>();
+        List<Boolean> stops = new ArrayList<>();
+        boolean inStretch = false;
+        for (int layer = 0; layer < LAYERS; layer++) {
+            boolean stopsHere = stopsIn(machine, states);
+            boolean named = wanted.test(layer);
+            if (named && !stopsHere) {
+                return false;
+            }
+            if (!endless && inStretch && !named) {
+                return true;
+            }
+            inStretch |= named;
+            stops.add(stopsHere);
+            Integer before = endless ? metAt.putIfAbsent(states, layer) : null;
+            if (before != null) {
+                return stops.subList(before, layer).stream().allMatch(stop -> stop);
+            }
+            states = after(machine, states);
+        }
+        return false;
+    }
+
+    /** The layers {@link #reachesEveryLength} walks before it gives up. */
+    private static final int LAYERS = 4096;
+
+    private static boolean stopsIn(Automaton automaton, BitSet states) {
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            if (automaton.stopsAt(state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static BitSet after(Automaton automaton, BitSet states) {
+        BitSet next = new BitSet();
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            for (Automaton.Step step : automaton.stepsFrom(state)) {
+                next.set(step.to());
+            }
+        }
+        return next;
     }
 
     /** The code points standing at {@code index} of these of {@code length} code points. */

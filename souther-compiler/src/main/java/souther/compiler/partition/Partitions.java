@@ -46,6 +46,7 @@ import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -163,7 +164,9 @@ public final class Partitions {
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure,
                                souther.compiler.inputs.EmptyInput inputIsEmpty,
-                               WhereTheOperationsStand operationsStanding) {
+                               WhereTheOperationsStand operationsStanding,
+                               StringsReached strings) {
+
         public Partitioning {
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
@@ -294,6 +297,23 @@ public final class Partitions {
             return along.getOrDefault(axis.id(), List.of());
         }
 
+        /** Where the lines drawn on {@code term} fall, as numbers. A line at a level that is no
+         *  number is not among them. */
+        private List<ExactRatio> linesOn(NumericTerm term) {
+            List<ExactRatio> out = new ArrayList<>();
+            for (Axis axis : axes()) {
+                if (axis.term().equals(term)) {
+                    for (Border each : along(axis)) {
+                        ExactRatio at = each.cut().cut().at().asANumber();
+                        if (at != null) {
+                            out.add(at);
+                        }
+                    }
+                }
+            }
+            return out;
+        }
+
         /** Whether an edge of this term is a value some row could carry.
          *
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
@@ -311,11 +331,15 @@ public final class Partitions {
          * settled already gets. Read as a proof, a floor no value reaches became a row an author was
          * told to write.
          *
-         * <p>A string's length is the one that stays proven, because a string of any length is
-         * written by repeating a character. Declining the proof there too would take away every
-         * `String.length` edge in the corpus over collections that have no values. */
+         * <p>A string's length stays proven where the position's strings have a value of every
+         * length ({@link StringsReached}), because a string of any length is written by repeating
+         * a character. Declining the proof there too would take away every `String.length` edge
+         * in the corpus over collections that have no values. And false at a number of a string
+         * the position's strings do not reach, and wherever a string position may hold no value:
+         * a row is a whole value of the input. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return !uncertain.contains(term) && switch (term) {
+            return strings.allowsAnEdgeAt(term, linesOn(term))
+                    && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.
                 case NumericTerm.ValueOf _ -> true;
@@ -561,7 +585,10 @@ public final class Partitions {
                 // asking per position or per rule would be asking what neither of them decides.
                 quantities.emptiness().orElse(null),
                 // No body is read here.
-                WhereTheOperationsStand.NONE);
+                WhereTheOperationsStand.NONE,
+                // Every position, whether or not an axis is drawn at it: a body measures a
+                // number of a string the declarations never did.
+                StringsReached.of(inputs.positions()));
     }
 
     /**
@@ -1161,7 +1188,7 @@ public final class Partitions {
                 // Carried across. Whether the rules leave the input a value is the declarations'
                 // answer, and a body drawing lines on what they left does not change it.
                 base.inputIsEmpty(),
-                operationsStanding);
+                operationsStanding, base.strings());
     }
 
     /**

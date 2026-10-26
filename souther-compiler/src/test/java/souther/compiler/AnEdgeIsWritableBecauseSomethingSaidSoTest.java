@@ -90,16 +90,16 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
     }
 
     /**
-     * A projection's proof and a search that came back with nothing are both true at once.
+     * A search that came back with nothing says so, whatever the model proves.
      *
      * <p>Two answers about two different things: whether a value at the edge exists, and whether this
      * run managed to produce one. Reading the second off the first is what left `--generate` silent
      * about a boundary it could say something useful about — the report named the row as owed and the
      * block printed neither a row nor a reason.
      *
-     * <p>Every rule of {@code Amount} was read, so 0 is proven to be a value it holds. The row needs a
-     * second input as well, and nothing can be written for that one — which is a fact about this
-     * search and not about the edge.
+     * <p>Every rule of {@code Amount} was read, and the rule of {@code Code} was not. A row is a
+     * value of both, so nothing shows a row exists and the edge is not proved; the search that could
+     * not write the second input is a fact about the search, and is said.
      */
     private static final String PROVEN_BUT_UNREACHED = """
             module example.proven
@@ -128,12 +128,11 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
 at.coverage().made().orElseThrow());
-        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED),
-                at.writabilityEvidence().grounds().written(),
-                "every rule of `Amount` was read, so 0 is a value it holds, and that is the whole"
-                        + " of what showed it");
+        assertEquals(List.of(), at.writabilityEvidence().grounds().written(),
+                "every rule of `Amount` was read, but a row is a value of every parameter and the"
+                        + " rule of `Code` was not, so nothing shows there is a row to write");
         assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.searches().only(),
-                "and the search still came back with nothing, which takes nothing away from that");
+                "and the search came back with nothing, which is its own answer");
     }
 
     /**

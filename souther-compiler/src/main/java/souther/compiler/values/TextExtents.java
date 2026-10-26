@@ -8,7 +8,14 @@ import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
+import souther.compiler.evaluate.EvaluationContext;
+import souther.runtime.Strings;
+import souther.runtime.TextAdmission;
+
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.IntPredicate;
 
 /**
  * Where a language stops on the order the strings it holds are measured on.
@@ -129,7 +136,8 @@ public final class TextExtents {
             return new TextExtent.NotBuilt(stopped(meter));
         }
         if (left.isEmpty()) {
-            return new TextExtent.One(Text.of(first), null);
+            return isAValue(first)
+                    ? new TextExtent.One(Text.of(first), null) : new TextExtent.NotEstablished();
         }
         String after = left.least();
         if (after == null) {
@@ -139,9 +147,12 @@ public final class TextExtents {
         if (beyond == null) {
             return new TextExtent.NotBuilt(stopped(meter));
         }
-        return beyond.equals(left)
+        if (!beyond.equals(left)) {
+            return new TextExtent.NoNamedRun();
+        }
+        return isAValue(first) && isAValue(after)
                 ? new TextExtent.One(Text.of(first), Text.of(after))
-                : new TextExtent.NoNamedRun();
+                : new TextExtent.NotEstablished();
     }
 
     /**
@@ -161,7 +172,125 @@ public final class TextExtents {
         if (inside == null) {
             return Emptiness.UNDECIDED;
         }
-        return inside.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
+        return holdsAValue(inside);
+    }
+
+    /**
+     * Whether {@code language} holds a string a {@code String} can be.
+     *
+     * <p>A language bounds the values; it does not say that one exists. No string is the answer
+     * where the language holds none, and a value is the answer where it holds one as written
+     * ({@link Language#heldAsWritten}). A language all of whose strings are changed by
+     * normalization holds none of those, and may still hold a value made of code points that
+     * compose with nothing, so that is {@link Emptiness#UNDECIDED}.
+     */
+    public static Emptiness holdsAValue(Language language) {
+        if (language.isEmpty()) {
+            return Emptiness.EMPTY;
+        }
+        return language.holdsAStringAsWritten() ? Emptiness.NONEMPTY : Emptiness.UNDECIDED;
+    }
+
+    /**
+     * Whether {@code set} holds a value of the carrier it stands at. A set of strings that names a
+     * language is {@link #holdsAValue(Language)}'s; any other set lists its values or leaves out a
+     * few, and holds one wherever it is not the empty set.
+     */
+    public static Emptiness holdsAValue(ValueSet set) {
+        if (set instanceof ValueSet.Matching it) {
+            return holdsAValue(it.language());
+        }
+        return set.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
+    }
+
+    /** The most code points a {@code String} holds, which no length, count or sum of one passes. */
+    public static final long LONGEST_STRING = Strings.LONGEST_TEXT;
+
+    /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds one. */
+    public static boolean shownToHoldAValue(ValueSet set) {
+        Emptiness held = holdsAValue(set);
+        return held.isDecided() && !held.isEmpty();
+    }
+
+    /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds none. */
+    public static boolean shownToHoldNone(ValueSet set) {
+        return holdsAValue(set).isEmpty();
+    }
+
+    /**
+     * Whether every length {@code wanted} names is the length of a value of {@code set}.
+     *
+     * <p>A format reaches the lengths of its strings held as written and no others, and a set of
+     * every string but a few lacks the one string of length nought where it leaves that out; there
+     * are strings of every other length however many are left out. A set that lists its values
+     * is not shown to reach any length.
+     *
+     * @param wanted  the lengths asked about, which are those of one stretch
+     * @param endless whether the stretch has no end
+     */
+    public static boolean reachesEveryLength(ValueSet set, IntPredicate wanted, boolean endless) {
+        return switch (set) {
+            case ValueSet.Matching it -> it.language().reachesEveryLength(wanted, endless);
+            case ValueSet.Cofinite it -> leavesAStringOfEveryLength(it, wanted);
+            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
+        };
+    }
+
+    /**
+     * Whether a set of every string but those it excludes has one of every length {@code wanted}
+     * names. The excluded are finite, and so are the strings of one length they can take: of a
+     * length that many are excluded as there are strings of it, none is left. Strings of ASCII
+     * alone are always their own Normalization Form C, so the number of them of a length is a
+     * count of values that length has, and fewer than that excluded leaves one.
+     */
+    private static boolean leavesAStringOfEveryLength(ValueSet.Cofinite set, IntPredicate wanted) {
+        Map<Integer, Integer> excludedOfLength = new HashMap<>();
+        for (String each : Sets.textsIn(set.excluded())) {
+            excludedOfLength.merge(each.codePointCount(0, each.length()), 1, Integer::sum);
+        }
+        for (Map.Entry<Integer, Integer> each : excludedOfLength.entrySet()) {
+            if (wanted.test(each.getKey()) && each.getValue() >= asciiStringsOfLength(each.getKey())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** How many strings of ASCII alone have {@code length} code points, saturating. */
+    private static long asciiStringsOfLength(int length) {
+        long count = 1;
+        for (int at = 0; at < length; at++) {
+            count *= ASCII_CODE_POINTS;
+            if (count > Integer.MAX_VALUE) {
+                return Long.MAX_VALUE;
+            }
+        }
+        return count;
+    }
+
+    /** The code points of ASCII, whose strings are in Normalization Form C however they are put
+     *  together. */
+    private static final int ASCII_CODE_POINTS = 128;
+
+    /**
+     * Whether every count of the code points of a class, and every sum of code points, is that of
+     * a value of {@code set}. Shown only of the strings no rule restricts: a format or a few left
+     * out can take the one string a count or a sum needs.
+     */
+    public static boolean reachesEveryCount(ValueSet set) {
+        return switch (set) {
+            case ValueSet.Matching it -> it.language().isEverything();
+            case ValueSet.Cofinite it -> it.excluded().isEmpty();
+            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
+        };
+    }
+
+    /** Whether {@code text} is a string a {@code String} holds, which is to say it is its own
+     *  Normalization Form C. */
+    private static boolean isAValue(String text) {
+        return Strings.admission(text, EvaluationContext.checkpoint())
+                instanceof TextAdmission.Admitted held
+                && held.text().equals(text);
     }
 
     /**

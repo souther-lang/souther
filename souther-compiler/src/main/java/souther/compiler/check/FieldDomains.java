@@ -19,6 +19,7 @@ import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.StoppedReading;
@@ -2857,7 +2858,7 @@ public final class FieldDomains {
         if (!handedOn.contains(at)) {
             AdmissibleSet left = admits(at);
             return (left.completeness() instanceof AdmissibleSet.Completeness.Complete
-                    && !left.approximation().isEmpty())
+                    && TextExtents.shownToHoldAValue(left.approximation()))
                     || answeredOfIt(at);
         }
         Counted counted = countAt.get(at);
