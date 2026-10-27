@@ -154,13 +154,18 @@ public final class DerivedValues {
                             border.origin() instanceof LineOrigin.ComparisonOrigin comparison
                                     && comparison.read().writtenAgainst().isPresent()
                                     ? new ThresholdOfADerivedValue.WrittenAt(each.value(),
-                                            comparison.read().writtenAgainst().get())
+                                            comparison.read().writtenAgainst().get(),
+                                            comparison.read().heldIn())
                                     : new ThresholdOfADerivedValue.CutAt(each.value(),
                                             cuts.getFirst().place()));
                 }
             }
         }
-        return border;
+        return border.origin() instanceof LineOrigin.ComparisonOrigin comparison
+                && comparison.read().heldIn().isPresent()
+                ? border.atThreshold(
+                        new ThresholdOfADerivedValue.HeldIn(comparison.read().heldIn().get()))
+                : border;
     }
 
     /** What the lines cutting one comparison as one call reads it come to. */

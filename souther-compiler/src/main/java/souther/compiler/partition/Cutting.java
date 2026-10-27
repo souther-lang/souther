@@ -90,21 +90,36 @@ import java.util.stream.Stream;
  * @param written the number the comparison was written against, where one of its sides is a number
  *               the same on every run and the other is not: the table bound of a lookup, before the
  *               quantity it is held against was weighed and divided into the level above
+ * @param heldIn the data the number the comparison is held against is read out of, where it is
+ *               read out of data: the table a helper was handed, which is written once however
+ *               alike the bounds of another table are
  */
 record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
-               NumericDomain.Bounds within, Optional<ExactRatio> written) {
+               NumericDomain.Bounds within, Optional<ExactRatio> written,
+               Optional<BoundHeldIn> heldIn) {
 
     Cutting {
         Objects.requireNonNull(written, "a number is written against, or none is");
+        Objects.requireNonNull(heldIn, "a bound is held in data, or in none");
     }
 
     Cutting(BorderQuantity of, Level at, ComparisonClaim claim, NumericDomain.Bounds within) {
-        this(of, at, claim, within, Optional.empty());
+        this(of, at, claim, within, Optional.empty(), Optional.empty());
+    }
+
+    Cutting(BorderQuantity of, Level at, ComparisonClaim claim, NumericDomain.Bounds within,
+            Optional<ExactRatio> written) {
+        this(of, at, claim, within, written, Optional.empty());
     }
 
     /** This line as a comparison written against {@code level}. */
     Cutting writtenAgainst(Optional<ExactRatio> level) {
-        return new Cutting(of, at, claim, within, level);
+        return new Cutting(of, at, claim, within, level, heldIn);
+    }
+
+    /** This line as a comparison whose bound is held in {@code data}. */
+    Cutting heldIn(Optional<BoundHeldIn> data) {
+        return new Cutting(of, at, claim, within, written, data);
     }
 
     /**
@@ -1013,10 +1028,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                  InputReading read, InputReads reads, Arrivals answering,
                                  Pullback.OnTheInput onTheInput,
                                  Optional<ExpansionLineage> writtenIn) {
-        return writtenAgainst(
+        return heldIn(writtenAgainst(
                 readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
                         writtenIn),
-                Pullback.writtenAgainst(comparison, read, reads));
+                Pullback.writtenAgainst(comparison, read, reads)),
+                Pullback.heldIn(comparison, read, reads));
     }
 
     /** {@code drawn}, every line of it noted as the comparison written against {@code level}. */
@@ -1032,6 +1048,23 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Read.Several several -> new Read.Several(several.parts().stream()
                     .map(part -> new Read.Several.Part(part.id(),
                             writtenAgainst(part.line(), level), part.cases()))
+                    .toList());
+            default -> drawn;
+        };
+    }
+
+    /**
+     * {@code drawn}, every line of it noted as held against the data {@code data} names.
+     *
+     * <p>Every line the comparison draws and not only one on a derived value: a bound read out of
+     * a table is written in the table whatever the line is cut on.
+     */
+    private static Read heldIn(Read drawn, Optional<BoundHeldIn> data) {
+        return switch (drawn) {
+            case Read.Cuts cuts -> new Read.Cuts(cuts.cutting().heldIn(data), cuts.authored());
+            case Read.Several several -> new Read.Several(several.parts().stream()
+                    .map(part -> new Read.Several.Part(part.id(), heldIn(part.line(), data),
+                            part.cases()))
                     .toList());
             default -> drawn;
         };
@@ -2126,7 +2159,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
         }
-        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()), written);
+        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()), written,
+                heldIn);
     }
 
     /**

@@ -832,6 +832,15 @@ public final class InputReads {
                 ? containerOfTheElementHandedTo(read.binding()) : null;
     }
 
+    /**
+     * The containers the operations applying the closure {@code name} is a parameter of took what
+     * it is handed from, whatever else the name stands for here: an element a fold was unrolled
+     * over is a name for that element, and the container is what it was taken out of.
+     */
+    public List<Core> containersTheElementCameFrom(Core.Read name) {
+        return names.handedFrom(name.binding()).stream().map(HeldIn::container).toList();
+    }
+
     /** The same, of the parameter {@code binding} itself. */
     public Core containerOfTheElementHandedTo(BindingId binding) {
         return names.roleOf(binding) instanceof BindingRole.Element(var held)

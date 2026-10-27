@@ -548,6 +548,88 @@ final class Pullback {
     }
 
     /**
+     * The data the number {@code comparison} is held against is read out of, where it is: the
+     * field of an entry of a table, however the table was reached.
+     *
+     * <p>A number the comparison or a call writes outright is no data it is held in, so a helper
+     * applied to different values is not told apart by them; a field read is, because what it
+     * stands for is written once in the table, and the same table reached by two calls, or under
+     * another name, is the same data.
+     */
+    static Optional<BoundHeldIn> heldIn(StatedComparison comparison, InputReading read,
+                                        InputReads reads) {
+        TheSignOfAnOrder.Sides<InputReads> sides =
+                new Pullback(read, Optional.empty()).sides();
+        boolean leftIsANumber = sides.constant(comparison.left(), reads) != null;
+        boolean rightIsANumber = sides.constant(comparison.right(), reads) != null;
+        if (leftIsANumber == rightIsANumber) {
+            return Optional.empty();
+        }
+        Set<BoundHeldIn.Data> data = new LinkedHashSet<>();
+        readOutOf(leftIsANumber ? comparison.left() : comparison.right(), reads, read, data);
+        return data.isEmpty() ? Optional.empty() : Optional.of(new BoundHeldIn(data));
+    }
+
+    /** The values the numbers of {@code number} are fields of an element of, into {@code into}. */
+    private static void readOutOf(Core number, InputReads reads, InputReading read,
+                                  Set<BoundHeldIn.Data> into) {
+        switch (Core.withoutStanding(number)) {
+            case Core.FieldAccess field
+                    when Core.withoutStanding(field.target()) instanceof Core.Read value ->
+                    heldByWhatItIsReadOff(value, reads, read, into);
+            case Core.FieldProjection projection
+                    when Core.withoutStanding(projection.base()) instanceof Core.Read value ->
+                    heldByWhatItIsReadOff(value, reads, read, into);
+            case Core.Binary binary -> {
+                readOutOf(binary.left(), reads, read, into);
+                readOutOf(binary.right(), reads, read, into);
+            }
+            case Core.Neg negated -> readOutOf(negated.operand(), reads, read, into);
+            default -> { }
+        }
+    }
+
+    /**
+     * The data {@code value} is read off: the container it is an element of where a walk handed it
+     * one, and the value itself where it is a record a call was given.
+     */
+    private static void heldByWhatItIsReadOff(Core.Read value, InputReads reads,
+                                              InputReading read, Set<BoundHeldIn.Data> into) {
+        List<Core> containers = reads.containersTheElementCameFrom(value);
+        if (containers.isEmpty()) {
+            heldBy(value, reads, read, into);
+        }
+        containers.forEach(container -> heldBy(container, reads, read, into));
+    }
+
+    /**
+     * The binding {@code container} comes to, which is the last name on the way to the table: a
+     * parameter of a helper is the name its call gave it, and that one the name of what it is a
+     * copy of, so the table under two names is one binding and a table written at each call is one
+     * binding for each.
+     */
+    private static void heldBy(Core container, InputReads reads, InputReading read,
+                               Set<BoundHeldIn.Data> into) {
+        Set<BindingId> met = new HashSet<>();
+        Core under = container;
+        InputReads at = reads;
+        Core.Read last = null;
+        while (Core.withoutStanding(under) instanceof Core.Read name && met.add(name.binding())) {
+            last = name;
+            if (!(at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                    instanceof ReadMeaning.Through through)) {
+                break;
+            }
+            under = through.denotes().value();
+            at = through.denotes().at();
+        }
+        if (last != null) {
+            into.add(new BoundHeldIn.Data(last.binding(),
+                    last.name().replaceFirst("^\\$v\\d+_", "")));
+        }
+    }
+
+    /**
      * What {@code truth} holding states.
      *
      * @param where the construct of the model the condition is, where the caller knows it

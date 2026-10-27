@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.numeric.ExactRatio;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * One threshold of a computation cut at several places, which is what an ON and an OFF point are
@@ -30,14 +31,34 @@ public sealed interface ThresholdOfADerivedValue {
     /**
      * The bound the comparison was written against, as the table holds it.
      *
-     * @param value the computation the bound is a threshold of
-     * @param level the number one side of the comparison is on every run
+     * @param value  the computation the bound is a threshold of
+     * @param level  the number one side of the comparison is on every run
+     * @param heldIn the data the bound is read out of, where it is read out of data: the same
+     *               bound in another table is another threshold
      */
-    record WrittenAt(DerivedValue value, ExactRatio level) implements ThresholdOfADerivedValue {
+    record WrittenAt(DerivedValue value, ExactRatio level, Optional<BoundHeldIn> heldIn)
+            implements ThresholdOfADerivedValue {
 
         public WrittenAt {
             Objects.requireNonNull(value, "a threshold is a threshold of some computation");
             Objects.requireNonNull(level, "a bound is a number");
+            Objects.requireNonNull(heldIn, "a bound is held in data, or in none");
+        }
+    }
+
+    /**
+     * The bound of a line that is no place of a computation cut at several places, told by the data
+     * it is written in.
+     *
+     * <p>A comparison a helper holds is one line however many tables its calls are given, and each
+     * table writes its own bound. Rows at the points of the bound of one table say nothing of
+     * another table whose bound is alike, since a bound written wrong in the second is shown by no
+     * row through the first.
+     */
+    record HeldIn(BoundHeldIn data) implements ThresholdOfADerivedValue {
+
+        public HeldIn {
+            Objects.requireNonNull(data, "a bound is held in some data");
         }
     }
 

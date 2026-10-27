@@ -777,18 +777,26 @@
     },
     "thresholdOfADerivedValue": {
       "type": "object",
-      "description": "Which threshold of a computation cut at several places a point or a line is, for a total looked up in a table: it owes its ON and OFF points once for each threshold, and a threshold belongs to one computation, whatever number the bounds of two computations come to. `written_at` is the bound the comparison was written against, as the table holds it, and is one threshold however many places the computation is cut at. `cut_at` is the place the computation is cut at, for a comparison whose bound could not be told. `copies` names the computation. Absent for a comparison cut at one place.",
+      "description": "Which threshold of a computation cut at several places a point or a line is, for a total looked up in a table: it owes its ON and OFF points once for each threshold, and a threshold belongs to one computation, whatever number the bounds of two computations come to. `written_at` is the bound the comparison was written against, as the table holds it, and is one threshold however many places the computation is cut at. `cut_at` is the place the computation is cut at, for a comparison whose bound could not be told. `held_in` is the bound of a comparison that is no place of such a computation, told by the data it is written in: two calls of one helper given two tables read two thresholds however alike the bounds, while one table reached by two calls, or under another name, is one. `copies` names the computation. `heldIn` names the data the bound is read out of, which a `written_at` threshold carries too where its bound is read out of a table. Absent for a comparison cut at one place whose bound is held in no data.",
       "required": [
-        "kind",
-        "copies"
+        "kind"
       ],
       "additionalProperties": false,
       "properties": {
         "kind": {
           "enum": [
             "written_at",
-            "cut_at"
+            "cut_at",
+            "held_in"
           ]
+        },
+        "heldIn": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The data the bound is read out of, each as the name its binding is called and the binding, in one order.",
+          "items": {
+            "type": "string"
+          }
         },
         "copies": {
           "type": "array",
@@ -809,46 +817,114 @@
           "$ref": "#/$defs/level"
         }
       },
-      "if": {
-        "properties": {
-          "kind": {
-            "const": "written_at"
-          }
-        },
-        "required": [
-          "kind"
-        ]
-      },
-      "then": {
-        "required": [
-          "bound"
-        ],
-        "not": {
-          "anyOf": [
-            {
-              "required": [
-                "quantity"
-              ]
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "written_at"
+              }
             },
-            {
-              "required": [
-                "level"
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "copies",
+              "bound"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "quantity"
+                  ]
+                },
+                {
+                  "required": [
+                    "level"
+                  ]
+                }
               ]
             }
-          ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "cut_at"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "copies",
+              "quantity",
+              "level"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "bound"
+                  ]
+                },
+                {
+                  "required": [
+                    "heldIn"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "held_in"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "heldIn"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "copies"
+                  ]
+                },
+                {
+                  "required": [
+                    "bound"
+                  ]
+                },
+                {
+                  "required": [
+                    "quantity"
+                  ]
+                },
+                {
+                  "required": [
+                    "level"
+                  ]
+                }
+              ]
+            }
+          }
         }
-      },
-      "else": {
-        "required": [
-          "quantity",
-          "level"
-        ],
-        "not": {
-          "required": [
-            "bound"
-          ]
-        }
-      }
+      ]
     },
     "boundaryLineId": {
       "type": "object",
