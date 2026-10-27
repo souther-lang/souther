@@ -1696,6 +1696,26 @@ public sealed interface NumericTerm
     }
 
     /**
+     * Whether a line on this number parts the values of no place it is read from.
+     *
+     * <p>A total of a run is one number that many splits among the elements come to: sixty and
+     * forty are on the boundary of a hundred as surely as one hundred is, so a line on the total
+     * is a class of no element. A count of how often a value occurs, or the extreme of a key's
+     * values, is read off the elements beside one and picks out elements by what they hold, so a
+     * line on it is a class of elements though no single place can be asked for it.
+     *
+     * <p>Exhaustive over the terms there are, with no {@code default}, as {@link #atOnePosition}
+     * is: a kind added is one this is answered for.
+     */
+    default boolean partsNoPlaceByALine() {
+        return switch (this) {
+            case TakenOver _ -> true;
+            case FromOnePosition _, OfAnElementsNeighbours _, OccurrencesOfItsValue _,
+                 OccurrencesOfAKey _, GatheredUnderItsKey _, GatheredUnderAKey _ -> false;
+        };
+    }
+
+    /**
      * Which number of what stands at {@link #subjectPath} this is, as a place and a kind of number
      * name it — or null where they do not say which number it is.
      *

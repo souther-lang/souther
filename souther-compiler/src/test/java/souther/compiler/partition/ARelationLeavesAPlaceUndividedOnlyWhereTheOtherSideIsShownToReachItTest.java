@@ -880,6 +880,25 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
     }
 
+    /**
+     * Held at nought or more beside the terms it is compared with, a total of amounts is at nought
+     * only where the list is empty or every element is, and there the relation holds whatever the
+     * others are. That is a line on a number taken over a run, which is no position: it parts the
+     * values of no place the total is read from, and the total stays a term of the relation as it
+     * is where the terms beside it are not held at nought.
+     */
+    @Test
+    void aTotalSettlingTheRelationAtNoughtDividesNoPlaceItIsReadFrom() {
+        String inputs = "a: Nat, b: Nat, ns: List<Nat>";
+        String sum = "a.value + b.value >= " + TOTAL;
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "a", RELATES, "b", RELATES),
+                left(inputs, NAT, sum, atThe(">=", NAT, inputs, sum)));
+        String alone = "a.value >= " + TOTAL;
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "a", RELATES),
+                left("a: Nat, ns: List<Nat>", NAT, alone,
+                        atThe(">=", NAT, "a: Nat, ns: List<Nat>", alone)));
+    }
+
     private static final String FORECAST = """
             module w1
 

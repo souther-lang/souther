@@ -203,6 +203,10 @@ final class ReadQuantities implements Quantities {
      *  and not by what a fixing happened to settle. */
     private final Map<StructuralContext, ConstraintState<InputAtom>> withTheFixings =
             new ConcurrentHashMap<>();
+    /** The run each term is shown to take whole here ({@link #wholeRunOf}), worked out once for
+     *  the reading it is asked of: what it answers is this reading's alone, fixings included. */
+    private final Map<NumericTerm, Optional<NumericDomain.Bounds>> wholeRuns =
+            new ConcurrentHashMap<>();
 
     /**
      * The term this reading fixed one more of than the reading it was made from, with what that
@@ -1678,6 +1682,15 @@ final class ReadQuantities implements Quantities {
      * ({@link #insideItsOrder}).
      */
     NumericDomain.Bounds wholeRunOf(NumericTerm term) {
+        Optional<NumericDomain.Bounds> had = wholeRuns.get(term);
+        if (had == null) {
+            had = Optional.ofNullable(runShownWhole(term));
+            wholeRuns.put(term, had);
+        }
+        return had.orElse(null);
+    }
+
+    private NumericDomain.Bounds runShownWhole(NumericTerm term) {
         if (!(asking(List.of(term))
                 instanceof StructuralContext.Merge.Together(StructuralContext under))) {
             return null;
