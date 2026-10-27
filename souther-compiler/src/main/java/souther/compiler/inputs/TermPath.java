@@ -294,6 +294,19 @@ public record TermPath(String head, List<Step> steps) {
         return append(new Step.Field(field));
     }
 
+    /** The same path, each of {@code fields} further in, made once rather than once per field. */
+    public TermPath then(List<String> fields) {
+        if (fields.isEmpty()) {
+            return this;
+        }
+        List<Step> longer = new ArrayList<>(steps.size() + fields.size());
+        longer.addAll(steps);
+        for (String field : fields) {
+            longer.add(new Step.Field(field));
+        }
+        return new TermPath(head, longer);
+    }
+
     /**
      * The same way in, taken into what stands at {@code root} instead of into what {@link #head}
      * names: a way into a behavior's parameter, as the same way into what a call handed it.

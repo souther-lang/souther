@@ -1495,11 +1495,7 @@ final class ReadQuantities implements Quantities {
 
     /** Where a value's own rules put a coordinate, as a place of this input. */
     private static TermPath pathOf(TermPath root, RuleKey named) {
-        TermPath at = root;
-        for (String field : named.steps()) {
-            at = at.then(field);
-        }
-        return at;
+        return root.then(named.steps());
     }
 
     /**
