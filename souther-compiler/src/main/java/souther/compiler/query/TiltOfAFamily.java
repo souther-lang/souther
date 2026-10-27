@@ -69,13 +69,14 @@ public record TiltOfAFamily(AuthoredLine line, SequencedMap<NumericTerm, Standin
      * One border of a total as the rows are put to it.
      *
      * @param border   the border, which says which total and where it is cut
-     * @param standsOn whether a row is on the border, at the point a row is owed there for where
-     *                 the line falls
+     * @param standsOn whether one of the rows given is on the border, at the point a row is owed
+     *                 there for where the line falls. Answered at once for a border no row is on,
+     *                 so asking it of every row costs a walk of the rows only where one is
      * @param valuesOf what each position of the total holds at a row, once for every way the row
      *                 reaches the border
      * @param least    what the declarations leave each position, which says the least it holds
      */
-    public record Reading(Border border, Predicate<ObservedInputs> standsOn,
+    public record Reading(Border border, Predicate<List<ObservedInputs>> standsOn,
                           Function<ObservedInputs, List<Map<NumericTerm, Place>>> valuesOf,
                           SearchRegion least) {
 
@@ -109,7 +110,7 @@ public record TiltOfAFamily(AuthoredLine line, SequencedMap<NumericTerm, Standin
             LinearQuantity total = totalOf(reading);
             Set<NumericTerm> weighed = weighedBy(reading);
             for (ObservedInputs row : rows) {
-                if (!reading.standsOn().test(row)) {
+                if (!reading.standsOn().test(List.of(row))) {
                     continue;
                 }
                 for (Map<NumericTerm, Place> values : reading.valuesOf().apply(row)) {

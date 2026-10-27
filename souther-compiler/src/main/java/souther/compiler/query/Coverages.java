@@ -1438,7 +1438,7 @@ final class Coverages {
         // A total's weights are shown by the rows read against it, so a reading nothing was read
         // against says nothing of them: a position there is not one no row shows.
         return new ReadingOfALine(border, items, absent, shape.beside(rows),
-                absent == null ? tiltReading(border, shape) : Optional.empty());
+                absent == null ? tiltReading(border, items, shape) : Optional.empty());
     }
 
     /**
@@ -1446,23 +1446,30 @@ final class Coverages {
      * cuts no total.
      *
      * <p>A row is on the border where it meets the point a row is owed at to show where the line
-     * falls, which the border says as it says it for every other reader of that point.
+     * falls, which the border says as it says it for every other reader of that point. Whether
+     * some row does is already the answer the points above came to, so a border no row is on is
+     * not put to the rows again: only a border some row is on is asked which.
      */
-    private static Optional<TiltOfAFamily.Reading> tiltReading(Border border,
-                                                                OneShapeOfBorder shape) {
+    private static Optional<TiltOfAFamily.Reading> tiltReading(
+            Border border, Map<DomainPoint, ItemAssessment> items, OneShapeOfBorder shape) {
         if (DerivedFamily.of(border.origin(), border.cut().of()).isEmpty()) {
             return Optional.empty();
         }
         List<Criterion> on = new ArrayList<>();
+        boolean someRowIsOn = false;
         for (DomainPoint point : border.answers().keySet()) {
             if (border.roleOf(point) == PointRole.ON
                     && border.demand(point) instanceof Demand.Owed owed) {
                 on.add(owed.criterion());
+                someRowIsOn |= items.get(point) instanceof ItemAssessment.Owed measured
+                        && measured.coverage().made()
+                                .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
             }
         }
+        boolean rowsAreOn = someRowIsOn;
         return Optional.of(new TiltOfAFamily.Reading(border,
-                row -> on.stream().anyMatch(criterion ->
-                        shape.met(criterion, List.of(row)) instanceof StandingAtAPoint.Met.Reached),
+                rows -> rowsAreOn && on.stream().anyMatch(criterion ->
+                        shape.met(criterion, rows) instanceof StandingAtAPoint.Met.Reached),
                 row -> shape.beside(List.of(row)).read().get().each(),
                 shape.declarations()));
     }
