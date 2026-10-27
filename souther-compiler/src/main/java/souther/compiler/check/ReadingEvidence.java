@@ -153,7 +153,6 @@ final class ReadingEvidence {
         return freed.containsKey(rule) && !beyondTheirDefinitions.contains(rule);
     }
 
-
     /** Whether {@code rule} leaves {@code position} as free as it was, being a place its
      *  definition of another is made of ({@link #freedByDefinition}). */
     boolean isFreedByDefinition(RuleRef.Invariant rule, FactSubject position) {

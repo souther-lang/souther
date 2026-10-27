@@ -964,7 +964,8 @@ public final class InvariantChecker {
             List<ComputedNumbers.Defining> defining =
                     ComputedNumbers.definingIn(origin, owed, orders);
             definitions.addAll(defining);
-            if (defining.size() != owed.parts().size()) {
+            if (defining.size() != owed.parts().size()
+                    || owed.folded() != Predicates.Fold.NOT_DECIDED) {
                 took.notOnlyDefinitions(origin);
             }
             read &= !owed.unreadable();

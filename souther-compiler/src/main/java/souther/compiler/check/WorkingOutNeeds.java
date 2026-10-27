@@ -36,7 +36,7 @@ record WorkingOutNeeds(List<NumericConstraint> asked, boolean read, boolean bind
         asked = List.copyOf(asked);
     }
 
-    /** What is needed by a clause under no binding whose value is left unread. */
+    /** What a clause needs where every binding's value it holds, if any, was read. */
     WorkingOutNeeds(List<NumericConstraint> asked, boolean read) {
         this(asked, read, true);
     }
