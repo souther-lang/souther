@@ -1566,11 +1566,11 @@ final class Terms {
     /**
      * Whether some leaf the scrutinee, read as the value it comes to, can be is one the arm takes.
      *
-     * <p>A name for the matched value stands for that value, and a tree read with a split replaced
-     * by one of its arms has a scrutinee that is only that arm's value. An arm taking none of the
-     * leaves that value can be is one no run enters in that reading, and the name it binds stands
-     * for nothing the scrutinee says: it is a place of its own type, which is all that can be said
-     * of it.
+     * <p>A tree read with a split replaced by one of its arms has a scrutinee that is only that
+     * arm's value. An arm taking none of the leaves that value can be is one no run enters in that
+     * reading: {@link PathEngine#takingItsCases} reads it as reaching nothing, and the name it binds
+     * stands for nothing the scrutinee says — a place of its own type, which is all that can be said
+     * of it where this is asked on its own.
      *
      * <p>An intersection and not an inclusion. An arm over a sum the scrutinee's leaf is under, or
      * over several leaves one of which it is, takes it although neither is assignable from it. What
@@ -1580,7 +1580,7 @@ final class Terms {
      * <p>Answered as taking it wherever the type names no leaf, which is what no reading of the
      * scrutinee has said anything against.
      */
-    private boolean mayTake(Core.Case arm, Core scrutinee, Denotations at) {
+    boolean mayTake(Core.Case arm, Core scrutinee, Denotations at) {
         if (arm.pattern() == null) {
             return true;
         }

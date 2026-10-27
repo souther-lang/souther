@@ -330,10 +330,17 @@ final class PathEngine {
      * the value's type divides into less those, which this does not read, so it settles nothing; an
      * arm that binds the whole value selects nothing.
      *
+     * <p>Nothing is reached where the arm takes none of the leaves the value, read as it stands
+     * here, can be ({@link Terms#mayTake}): a scrutinee that is only one case of what was matched
+     * has the arms for the others entered by no run.
+     *
      * <p>Asked on its own as well, by a reader that wants to know whether the cases are what leave
      * the arm nothing, apart from what opening the value says.
      */
     Known takingItsCases(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        if (!terms.mayTake(arm, scrutinee, at)) {
+            return k.reachingNothing();
+        }
         CasesLeft selected = arm.pattern() == null ? null : CasesLeft.selectedBy(arm.pattern());
         FactSubject value = selected == null ? null : terms.subjectOf(scrutinee, at);
         return value == null ? k : settled(k.inCases(value, selected));

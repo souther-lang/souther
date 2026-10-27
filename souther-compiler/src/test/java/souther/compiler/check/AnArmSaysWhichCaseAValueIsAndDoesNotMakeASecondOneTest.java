@@ -399,11 +399,53 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         assertTrue(opensTheScrutinee(symbols, numericAnswer(), single(AN_INT)));
     }
 
-    private boolean opensTheScrutinee(Symbols symbols, Core scrutinee, Core.ResolvedPattern pattern) {
-        PathEngine reading = new PathEngine(
+    /** A type naming no leaf says nothing against an arm, so the arm opens the scrutinee and is
+     * reached. */
+    @Test
+    void aScrutineeOfATypeNamingNoLeafSaysNothingAgainstTheArm() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core optional = optionalAnswer();
+
+        assertTrue(opensTheScrutinee(symbols, optional, single(AN_INT)));
+        assertTrue(reached(symbols, optional, single(AN_INT)));
+    }
+
+    /** An arm no run enters is read as reaching nothing, so what is built inside it owes nothing. */
+    @Test
+    void anArmTakingNoLeafTheScrutineeCanBeIsNotReached() {
+        Symbols symbols = symbolsOf(NESTED);
+
+        assertFalse(reached(symbols, answerOf(Type.ref(named(symbols, "Renkei"))),
+                stationOrHospital(symbols)));
+        assertFalse(reached(symbols, answerOf(Type.ref(MISSING)), single(AN_INT)));
+    }
+
+    @Test
+    void anArmTakingALeafTheScrutineeCanBeIsReached() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core station = answerOf(Type.ref(named(symbols, "Station")));
+
+        assertTrue(reached(symbols, station,
+                new Core.ResolvedPattern.Single(resolved(symbols, "OnceKind"))));
+        assertTrue(reached(symbols, station, stationOrHospital(symbols)));
+        assertTrue(reached(symbols, numericAnswer(), single(AN_INT)));
+    }
+
+    private PathEngine readingOver(Symbols symbols) {
+        return new PathEngine(
                 RuleReadingContext.unshared(RuleReadings.ofNoClauseFiled(symbols),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 Terms.Of.THE_DISCHARGE_TREE);
+    }
+
+    private boolean reached(Symbols symbols, Core scrutinee, Core.ResolvedPattern pattern) {
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
+        return !readingOver(symbols).enteringArm(arm(pattern, x), scrutinee, Known.top(),
+                Denotations.none()).known().reachesNothing();
+    }
+
+    private boolean opensTheScrutinee(Symbols symbols, Core scrutinee, Core.ResolvedPattern pattern) {
+        PathEngine reading = readingOver(symbols);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         FactSubject opened = reading.enteringArm(arm(pattern, x), scrutinee, Known.top(),

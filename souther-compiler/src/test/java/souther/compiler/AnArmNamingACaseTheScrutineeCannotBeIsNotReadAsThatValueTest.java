@@ -78,4 +78,33 @@ class AnArmNamingACaseTheScrutineeCannotBeIsNotReadAsThatValueTest {
         compiles(HELPER_INT_FIRST, BUILDS_A_NEWTYPE);
         compiles(HELPER_INT_FIRST, BUILDS_A_NEWTYPE_INT_ARM_FIRST);
     }
+
+    /** A helper whose scrutinee is another helper's {@code match} is read once per arm of each. */
+    @Test
+    void aNewtypeBuiltThroughTwoHelpersCompiles() {
+        compiles("""
+                let 整数 (s: String): Int | 失敗 =
+                    match String.toInt(s) with
+                        | NotANumber -> 失敗
+                        | Int as n -> n
+
+                let 外 (s: String): Int | 失敗 =
+                    match 整数(s) with
+                        | 失敗 -> 失敗
+                        | Int as n -> n
+
+                """, """
+                behavior 読む : (s: String) -> 番号 | 失敗
+                    constructs 番号
+
+                let 読む (s) =
+                    match 外(s) with
+                        | 失敗 -> 失敗
+                        | Int as n -> {
+                            guard 番号(n) as x else
+                                | 一以上 -> 失敗
+                            x
+                        }
+                """);
+    }
 }
