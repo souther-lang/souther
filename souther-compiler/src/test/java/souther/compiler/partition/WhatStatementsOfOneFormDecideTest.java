@@ -8,8 +8,11 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -173,6 +176,70 @@ class WhatStatementsOfOneFormDecideTest {
                 "the greatest of the weights' magnitudes is three");
         assertFalse(leavesRoom(over(-3, 1, -200, Rel.LT), over(-3, 1, -199, Rel.GE)),
                 "-3x + y >= 199 is not three below the line");
+    }
+
+    /**
+     * Statements of one form leave a point of the line exactly where some value of the form
+     * stands on the right side of every one of them. Every set of up to three statements of a few
+     * weights, constants and relations is held to the points between, at and beyond where they
+     * cross, which are at quarters of a unit when the weights are one and two.
+     */
+    @Test
+    void whatStatementsLeaveIsWhatEveryValueOfTheFormBetweenTheirCrossingsLeaves() {
+        List<Written> all = new ArrayList<>();
+        for (long weight : new long[] {1, -2}) {
+            for (long constant : new long[] {-2, 0, 3}) {
+                for (Rel rel : Rel.values()) {
+                    all.add(new Written(weight, constant, rel));
+                }
+            }
+        }
+        List<Written> asks = List.of(new Written(1, -1, Rel.GE), new Written(-2, 3, Rel.EQ),
+                new Written(1, 0, Rel.NE));
+        for (int first = 0; first < all.size(); first++) {
+            for (int second = first; second < all.size(); second++) {
+                for (int third = second; third < all.size(); third++) {
+                    List<Written> stated = List.of(all.get(first), all.get(second),
+                            all.get(third));
+                    for (Written asked : asks) {
+                        assertEquals(everyValueBetween(stated, asked),
+                                WhatStatementsOfOneFormDecide.of(
+                                        stated.stream().map(Written::affine).toList(),
+                                        asked.affine()),
+                                stated + " asking " + asked);
+                    }
+                }
+            }
+        }
+    }
+
+    /** A statement as {@code weight * x + constant} against nought. */
+    private record Written(long weight, long constant, Rel rel) {
+
+        TakenConstraint.Affine affine() {
+            return on(X, weight, constant, rel);
+        }
+
+        boolean holdsAt(int quarters) {
+            return rel.holds(Long.signum(weight * quarters + constant * 4));
+        }
+    }
+
+    private static WhatStatementsOfOneFormDecide.Verdict everyValueBetween(
+            List<Written> stated, Written asked) {
+        boolean any = false;
+        Set<Boolean> askedAt = new HashSet<>();
+        for (int quarters = -40; quarters <= 40; quarters++) {
+            boolean holdsAll = true;
+            for (Written each : stated) {
+                holdsAll &= each.holdsAt(quarters);
+            }
+            if (holdsAll) {
+                any = true;
+                askedAt.add(asked.holdsAt(quarters));
+            }
+        }
+        return new WhatStatementsOfOneFormDecide.Verdict(!any, any && askedAt.size() == 1);
     }
 
     @Test
