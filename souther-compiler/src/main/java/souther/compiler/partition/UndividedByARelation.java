@@ -3524,8 +3524,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             || each.number() instanceof NumericTerm.GatheredUnderItsKey,
                     on.spacingBetweenValues(), on.whereItStops()));
         }
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(
-                stating.get(pair.first()), stating.get(pair.second()));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
+                stating);
         if (held == null) {
             return Set.of();
         }
@@ -3580,8 +3580,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, null, true, on.spacingBetweenValues(), on.whereItStops()));
         }
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(
-                stating.get(pair.first()), stating.get(pair.second()));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
+                stating);
         if (held == null) {
             return List.of();
         }
@@ -3656,17 +3656,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return null;
     }
 
-    /** Everything {@code first} and {@code second}, what a way states of each of two sides, hold
-     *  of them as statements about their difference — or null where something it holds is not. A
-     *  statement about both sides is in each side's list; it is one statement. */
+    /** Everything a way states of each of the two sides {@code pair} asks about, held of them as
+     *  statements about their difference — or null where something it holds is not. A statement
+     *  about both sides is in each side's list; it is one statement. */
     private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
-            List<OnAWay> first, List<OnAWay> second) {
-        Set<OnAWay> aboutEither = new LinkedHashSet<>(first);
-        aboutEither.addAll(second);
+            TwoSides pair, List<List<OnAWay>> stating) {
+        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
+        aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
         for (OnAWay each : aboutEither) {
             WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
-                    : onTheDifference(each.affine().form(), each.affine().rel());
+                    : onTheDifference(each.affine().form(), each.affine().rel(), pair);
             if (statement == null) {
                 return null;
             }
@@ -3732,14 +3732,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * over anything else, or weighs them other than the relation does.
      */
     private WhatARelationLeavesUndivided.OnTheDifference onTheDifference(
-            LinearForm<NumericTerm> form, Rel rel) {
-        ExactRatio first = form.coefs().get(sides.get(0).statedTerm());
-        ExactRatio second = form.coefs().get(sides.get(1).statedTerm());
+            LinearForm<NumericTerm> form, Rel rel, TwoSides pair) {
+        Side one = sides.get(pair.first());
+        Side other = sides.get(pair.second());
+        ExactRatio first = form.coefs().get(one.statedTerm());
+        ExactRatio second = form.coefs().get(other.statedTerm());
         if (form.coefs().size() != 2 || first == null || second == null) {
             return null;
         }
         // A statement is about the combination the relation is about: a sum is not a difference.
-        boolean asked = sides.get(0).weight().equals(sides.get(1).weight());
+        boolean asked = one.weight().equals(other.weight());
         boolean alike = first.equals(second);
         boolean opposed = first.plus(second) instanceof ExactAnswer.Held<ExactRatio>(
                 ExactRatio sum) && sum.signum() == 0;

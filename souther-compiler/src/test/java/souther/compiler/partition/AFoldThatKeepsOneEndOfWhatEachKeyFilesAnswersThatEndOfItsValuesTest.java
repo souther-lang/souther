@@ -483,6 +483,37 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         assertEquals(new java.util.TreeMap<>(expected), read);
     }
 
+    /**
+     * Of three numbers a relation asks about two, and what the way states of those two is held to
+     * their difference: whichever of the three the other two are asked beside. A statement of the
+     * second and the third is read when the first is the one held still, and not only a statement
+     * of the first and the second.
+     */
+    @Test
+    void whatTheWayStatesOfTheTwoAskedAboutIsHeldWhicheverOfThreeTheyAre() {
+        // A statement of a and b is about their difference, and the relation weighs the two alike
+        // and so asks of their sum: it is not read, which no choice of the pair changes.
+        Map<String, String> unreadAbout = Map.of(
+                "b >= c", "a",
+                "a >= c", "b");
+        for (Map.Entry<String, String> each : unreadAbout.entrySet()) {
+            String source = """
+                    module example.three
+
+                    behavior f : (a: Int, b: Int, c: Int) -> Bool
+
+                    let f (a, b, c) = %s && a + b - c >= 0
+                    """.formatted(each.getKey());
+            String report = report(read(source));
+            List<String> unread = unreadAnywhere(report);
+            // The number held still is settled at one end by the statement, which is why it is
+            // the one that is not read: the other two are.
+            assertEquals(1, unread.size(), each.getKey() + "\n" + report);
+            assertTrue(unread.getFirst().endsWith("about `" + each.getValue() + "`"),
+                    each.getKey() + "\n" + report);
+        }
+    }
+
     private static final String UNBOUNDED = """
             module example.stale
 
