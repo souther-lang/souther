@@ -1005,6 +1005,10 @@ final class AnswerClosure {
                 arm("souther.compiler.values.AdmittedPlan$Of"),
                 part("souther.compiler.values.AdmittedPlan$Of", "set"));
         theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
+                part(facts, "realized"), MAP_KEY,
+                arm("souther.compiler.values.AdmittedPlan$Without"),
+                part("souther.compiler.values.AdmittedPlan$Without", "set"));
+        theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
                 part(facts, "realized"), MAP_VALUE);
         theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
                 part(facts, "extents"), MAP_KEY);
