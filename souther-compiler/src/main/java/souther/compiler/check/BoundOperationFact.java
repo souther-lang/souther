@@ -105,6 +105,13 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                                    DeclaredArgument to, long perUnit)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the step of a coarser order that {@code of} falls in, where one step of
+     *  that order is {@code perUnit} steps of the order {@code of} is counted on, floored toward
+     *  the earlier step. */
+    record CountsTheWholeUnitsOf(DeclaredOperation operation, DeclaredArgument of, Type answers,
+                                 long perUnit)
+            implements OneAboutAnOperation {}
+
     /**
      * The operation answers {@code value} rounded to a whole multiple of ten to the minus
      * {@code scale} the way {@code mode} says — to a whole number where it takes no scale — and

@@ -2553,6 +2553,18 @@ final class ReadQuantities implements Quantities {
      * where the string does.
      */
     private NumericDomain.Bounds ownOf(NumericTerm.FromOnePosition term) {
+        // The steps some value of the position's type falls in, and — where the rules hold the value
+        // to a run — the steps that run falls in: a floor keeps the order, so a lower bound on the
+        // seconds is a lower bound on the days.
+        if (term instanceof NumericTerm.WholeUnitsOf steps) {
+            Position of = byPath.get(steps.position());
+            PositionBounds ofTheValue = of == null ? null
+                    : of.boundsFor(new NumericTerm.ValueOf(steps.position()));
+            NumericDomain.Bounds held = ofTheValue == null ? null
+                    : steps.stepsFallenIntoBy(ofTheValue.admissible());
+            return held == null ? steps.image()
+                    : steps.image() == null ? held : steps.image().meet(held);
+        }
         Position at = byPath.get(term.position());
         PositionBounds bounds = at == null ? null : at.boundsFor(term);
         if (bounds != null) {
@@ -2582,7 +2594,7 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.CodePointValueSum _ -> language.sumsOfCodePoints();
             case NumericTerm.CodePointAt at -> language.codePointsAt(at.index());
             case NumericTerm.ValueOf _, NumericTerm.TakenOf _,
-                 NumericTerm.CodePointClassCount _ -> null;
+                 NumericTerm.CodePointClassCount _, NumericTerm.WholeUnitsOf _ -> null;
         };
     }
 

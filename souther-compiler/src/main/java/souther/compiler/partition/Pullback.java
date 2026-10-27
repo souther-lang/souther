@@ -6715,7 +6715,7 @@ final class Pullback {
             return ofThePlace;
         }
         NumericTerm term = NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
-                read.number(), read.each(), gathering, read.selection());
+                read.number(), read.each(), gathering, read.selection(), this::stepsAt);
         if (!readOnAnOrder(term)) {
             return null;
         }
@@ -6728,6 +6728,14 @@ final class Pullback {
             return null;
         }
         return ofTheInput(moved);
+    }
+
+    /** The steps {@code operation} counts of the value at {@code position}, made against the type
+     *  that stands there — or null where the operation counts none of it. */
+    private NumericTerm.WholeUnitsOf stepsAt(ValueName.Stdlib operation, TermPath position) {
+        return NumericTerm.WholeUnitsOf.of(operation, position,
+                read.domain().typeAt(position, read.rules()), read.rules().inners(),
+                read.rules().declarations());
     }
 
     /** {@code form}, each number of which is a number of the input, as a form of quantities. */

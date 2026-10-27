@@ -353,6 +353,8 @@ final class OperationFactBinder {
             case OperationFact.ShiftsBy shifts -> holdShift(stdlib, declaration, shifts);
             case OperationFact.CountsWholeUnitsBetween counts ->
                     holdCountOfWholeUnits(declaration, counts);
+            case OperationFact.CountsTheWholeUnitsOf counts ->
+                    holdCountOfTheWholeUnitsOf(declaration, counts);
             case OperationFact.RoundsToAStep rounds ->
                     holdRounding(stdlib, declaration, rounds);
             case OperationFact.BoundsItsResult bounded ->
@@ -768,6 +770,20 @@ final class OperationFactBinder {
         }
         return new BoundOperationFact.CountsWholeUnitsBetween(declaration.declaring(), from, to,
                 counts.perUnit());
+    }
+
+    /**
+     * As {@link #holdToTheDeclaration}, for the whole units of a counted value: what is counted is
+     * of an order whose steps are numbers, and the answer is counted too, on the coarser order.
+     */
+    static BoundOperationFact.CountsTheWholeUnitsOf holdCountOfTheWholeUnitsOf(
+            CompleteSignature declaration, OperationFact.CountsTheWholeUnitsOf counts) {
+        DeclaredArgument of = holdToTheDeclaration(declaration, counts.of(), null,
+                TypeRequirement.COUNTED, "the value whose whole units are counted");
+        holdTheResultToTheDeclaration(declaration, TypeRequirement.COUNTED,
+                "the step of the coarser order the value falls in");
+        return new BoundOperationFact.CountsTheWholeUnitsOf(declaration.declaring(), of,
+                declaration.result(), counts.perUnit());
     }
 
     /**

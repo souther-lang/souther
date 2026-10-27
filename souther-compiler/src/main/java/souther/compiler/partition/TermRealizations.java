@@ -394,6 +394,11 @@ final class TermRealizations {
                      NumericTerm.GatheredUnderAKey _ -> {
                     return nothingSolvesAGroup();
                 }
+                // A number read off a value the group asks for, as any number taken of the place is:
+                // the step a value falls in is what reading that value comes to. Asked beside the
+                // value itself, the candidates are the value's and the step is read off each of
+                // them; asked with no value beside it, nothing below writes one for it.
+                case NumericTerm.WholeUnitsOf _ -> takenOfIt.add(target);
                 case NumericTerm.ValueOf _ -> itself = target;
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.
@@ -1746,7 +1751,7 @@ final class TermRealizations {
                 // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
-                     NumericTerm.Multiplicity _,
+                     NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
                      NumericTerm.GatheredUnderAKey _ -> false;
@@ -1949,9 +1954,15 @@ final class TermRealizations {
             }
             // Written as the value it is the end of, at the place it is taken of, on the order the
             // values stand on ({@link RealizationTarget.AtItsKey}).
-            case NumericTerm.ExtremeOfItsKey _ -> {
+            case NumericTerm.ExtremeOfItsKey end -> {
                 nothingInside(inside);
-                yield standing(sourceType, orders, asked, within, reading);
+                // The end of the steps the values fall in is written as the end that falls in the
+                // step asked for: the first value of the step, as a step of one value is.
+                yield end.through() == null
+                        ? standing(sourceType, orders, asked, within, reading)
+                        : multipliedBackAt(BigDecimal.valueOf(end.perUnit()),
+                                UsualPlaces.of(orders.term(), orders.answered(), reading.today()),
+                                sourceType, orders, asked, within, reading.source());
             }
             // Written as the container of the elements, holding elements of one key that come to
             // the number ({@link RealizationTarget.UnderItsKey}).
@@ -1979,6 +1990,14 @@ final class TermRealizations {
             }
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, keptApart,
                     orders, asked, within, reading, inside);
+            // Written as the first value of the step asked for: the step times the unit, which
+            // falls in that step and reads back as it.
+            case NumericTerm.WholeUnitsOf units -> {
+                nothingInside(inside);
+                yield multipliedBackAt(BigDecimal.valueOf(units.perUnit()),
+                        UsualPlaces.of(orders.term(), orders.answered(), reading.today()),
+                        sourceType, orders, asked, within, reading.source());
+            }
             // Written by composing the container its elements stand in, which a value of one
             // element's type is not: a group holding it is never answered by one number alone
             // ({@link #jointRealizationOf}).
@@ -2476,6 +2495,17 @@ final class TermRealizations {
                                               AskedAt asked,
                                               SearchRegion within,
                                               RuleReadingSource ruleSource) {
+        // A quotient is of whole numbers, which are near nowhere in particular.
+        return multipliedBackAt(by, UsualPlace.NONE, sourceType, orders, asked, within, ruleSource);
+    }
+
+    /**
+     * The same, for the numbers asked for being places of an order with a usual place of its own,
+     * which a step of a coarser order is: the day a date-time falls on is usually near today.
+     */
+    private static Realization multipliedBackAt(BigDecimal by, UsualPlace near, Type sourceType,
+                                                TermOrders orders, AskedAt asked,
+                                                SearchRegion within, RuleReadingSource ruleSource) {
         Carrier observed = orders.observed();
         // A divisor that is not there, or is nought, is a term nothing built — what quotients there
         // are is settled where the account is asked for. Answered here as a place nothing composes
@@ -2488,8 +2518,7 @@ final class TermRealizations {
         // carrier's. Walked as whole numbers between figures of this compiler's instead, a quotient
         // the position holds and an int does not was a number nothing offered.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                // A quotient is of whole numbers, which are near nowhere in particular.
-                onTheOrder(asked.walking(), orders, asked.named(), within, UsualPlace.NONE),
+                onTheOrder(asked.walking(), orders, asked.named(), within, near),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
     }
 
@@ -3813,6 +3842,7 @@ final class TermRealizations {
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
                 case NumericTerm.CodePointAt at -> new At(at.index());
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
+                     NumericTerm.WholeUnitsOf _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
                      NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->

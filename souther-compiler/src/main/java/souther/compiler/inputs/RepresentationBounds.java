@@ -65,7 +65,7 @@ public final class RepresentationBounds {
             case NumericTerm.CodePointValueSum _ -> times(longestString(), Character.MAX_CODE_POINT);
             case NumericTerm.CodePointClassCount _ -> longestString();
             case NumericTerm.TakenOf taken -> whereItsOperationStops(taken.operation());
-            case NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
+            case NumericTerm.ValueOf _, NumericTerm.CodePointAt _, NumericTerm.WholeUnitsOf _,
                  NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;

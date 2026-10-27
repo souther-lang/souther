@@ -1887,6 +1887,10 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
                             + " about " + extreme.spelledAt(path.toString()));
+            // Nor which step of a coarser order the value falls in.
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                    throw new IllegalStateException("a clause of a declaration was read as a rule"
+                            + " about " + units.operation() + "(" + path + ")");
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1907,8 +1911,8 @@ public final class InputDomain {
         NarrowedBounds projected = switch (term) {
             case NumericTerm.ValueOf _ -> placed.at(path);
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _ ->
-                    NarrowedBounds.NOTHING;
+                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                 NumericTerm.WholeUnitsOf _ -> NarrowedBounds.NOTHING;
         };
         return new PositionBounds(term,
                 // Two questions of one pair of readings, and they do not have one answer. What the
@@ -1961,8 +1965,22 @@ public final class InputDomain {
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
-            // One of the values standing there, so on their order.
-            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
+            // The steps a value falls in are counted on the order the operation answers, which is
+            // the term's own orders to say (TermOrders.answered) and not a classification of the
+            // kind: a date counts days where the date-time it falls on counts seconds.
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf steps -> throw new IllegalStateException(
+                    "the steps " + steps.operation() + " counts are counted on the order it"
+                            + " answers on, which a clause of a declaration does not name");
+            // One of the values standing there, so on their order; one of their steps, on the
+            // order the steps are counted on.
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> {
+                if (extreme.through() != null) {
+                    throw new IllegalStateException("the end of the steps "
+                            + extreme.through() + " counts is counted on the order it answers on,"
+                            + " which a clause of a declaration does not name");
+                }
+                yield carried;
+            }
         };
     }
 
@@ -2066,6 +2084,16 @@ public final class InputDomain {
                 }
                 yield one;
             }
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units -> {
+                NumericTerm.WholeUnitsOf steps = NumericTerm.WholeUnitsOf.of(
+                        (ValueName.Stdlib) units.operation(), path, type, source.inners(),
+                        source.declarations());
+                if (steps == null) {
+                    throw new IllegalStateException("the steps " + units.operation() + " counts of `"
+                            + path + "` were asked for, and what stands there is not what it counts");
+                }
+                yield steps;
+            }
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> {
                 List<TermPath> holding = path.containersHoldingIt();
                 NumericTerm.Multiplicity multiplicity = holding.isEmpty() ? null
@@ -2095,8 +2123,12 @@ public final class InputDomain {
                     throw new IllegalStateException("how often the value at " + path + " equals "
                             + asked.key() + " was asked for by name, and no declaration names it");
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
-                NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(
-                        path, extremeOf.key(), extremeOf.extreme());
+                NumericTerm.WholeUnitsOf steps = extremeOf.through() == null ? null
+                        : NumericTerm.WholeUnitsOf.of((ValueName.Stdlib) extremeOf.through(), path,
+                                type, source.inners(), source.declarations());
+                NumericTerm.ExtremeOfItsKey extreme = extremeOf.through() != null && steps == null
+                        ? null : NumericTerm.ExtremeOfItsKey.ofTheValueAt(path, extremeOf.key(),
+                                extremeOf.extreme(), steps);
                 if (extreme == null) {
                     throw new IllegalStateException(extremeOf.spelledAt(path.toString())
                             + " was asked for, and nothing holds `" + path + "` as an element");

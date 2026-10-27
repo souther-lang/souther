@@ -1273,6 +1273,7 @@ public final class InvariantChecker {
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                      NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                      NumberAt.OfWhatNumber.OfTheCodePointAt _,
+                     NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                      NumberAt.OfWhatNumber.OfItsMultiplicity _,
                      NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                      NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,

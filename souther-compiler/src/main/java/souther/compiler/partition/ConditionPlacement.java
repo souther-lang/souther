@@ -164,6 +164,8 @@ sealed interface ConditionPlacement {
                     measured instanceof NumericTerm.CodePointValueSum;
             case NumericTerm.CodePointAt point -> measured instanceof NumericTerm.CodePointAt there
                     && there.index() == point.index();
+            case NumericTerm.WholeUnitsOf units -> measured instanceof NumericTerm.WholeUnitsOf there
+                    && there.operation().equals(units.operation());
             // No number a position answers is this one.
             case NumericTerm.OfAnElementsNeighbours _ -> false;
             case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;

@@ -268,6 +268,9 @@ public final class OperationFacts {
             // A date-time counts seconds and a minute is sixty of them. The answer drops what is
             // left toward zero, so it is no form of the two and is stated through their difference.
             about("DateTime", "minutesBetween", countsWholeUnitsBetween(at(0), at(1), 60)),
+            // The date a date-time falls on: a date counts days, a date-time counts seconds, and a
+            // day is eighty-six thousand four hundred of them, floored toward the earlier day.
+            about("DateTime", "toDate", countsTheWholeUnitsOf(at(0), 86400)),
 
             // The operations that move a value by an amount, each stated through the measure that
             // counts two such values apart. Every one of them works on a local value, where a day
@@ -1484,6 +1487,10 @@ public final class OperationFacts {
     private static OperationFact countsWholeUnitsBetween(ArgumentRef from, ArgumentRef to,
                                                          long perUnit) {
         return new OperationFact.CountsWholeUnitsBetween(from, to, perUnit);
+    }
+
+    private static OperationFact countsTheWholeUnitsOf(ArgumentRef of, long perUnit) {
+        return new OperationFact.CountsTheWholeUnitsOf(of, perUnit);
     }
 
     private static OperationFact roundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) {
