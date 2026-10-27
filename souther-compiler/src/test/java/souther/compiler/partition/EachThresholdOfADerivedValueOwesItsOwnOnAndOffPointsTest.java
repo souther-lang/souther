@@ -132,6 +132,9 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         assertEquals(2, count(report, MISSING_OFF + " (comparison@10"), report);
         assertTrue(report.contains("a.amount + b.amount: = 200 in gradeOf")
                 && report.contains("a.amount + b.amount + c.amount: = 300 in gradeOf"), report);
+        // And the bound the table holds, which is what a reader changes, beside the total.
+        assertTrue(report.contains(", the bound written is 100"), report);
+        assertTrue(report.contains(", the bound written is 300"), report);
     }
 
     private static String tableHeldAgainst(String comparison) {
@@ -197,6 +200,43 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         assertEquals(2, count(report, "= 126 in gradeOf"), report);
     }
 
+    private static final String TWO_BRANCHES_REACHING_ONE_NUMBER = """
+            module demo
+
+            data N = { v: Int }
+                invariant v >= 0
+            data Row = { grade: Int, lowerBound: Int }
+            let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
+                                     Row { grade = 2, lowerBound = 63 },
+                                     Row { grade = 3, lowerBound = 126 } ]
+            let gradeOf (months: Int, m: Int): Int =
+                List.fold((acc, r) -> if r.lowerBound * months <= m then r.grade else acc, 0, table)
+
+            behavior f : (a: N, b: N, useTwo: Bool) -> Int
+
+            let f (a, b, useTwo) =
+                if useTwo then gradeOf(2, a.v + b.v) else gradeOf(1, a.v + b.v)
+
+            example f
+                | (N { v = 126 }, N { v = 0 }, true) -> 2
+                | (N { v = 125 }, N { v = 0 }, true) -> 1
+            """;
+
+    /**
+     * Rows at the points of the bound 63 held twice over say nothing of the bound 126 held once,
+     * though both come to 126 on the same total: the other branch is not run by them.
+     */
+    @Test
+    void anotherBranchsBoundAtTheSameNumberIsStillOwed() {
+        String report = reportOf(TWO_BRANCHES_REACHING_ONE_NUMBER);
+        // The branch of the bound 63 held twice over is answered at 126 and owes 252; the other
+        // branch owes both of its bounds, 63 and the 126 it comes to.
+        assertEquals(1, count(report, "= 126 in gradeOf"), report);
+        assertEquals(1, count(report, "= 252 in gradeOf"), report);
+        assertEquals(1, count(report, "= 63 in gradeOf"), report);
+        assertTrue(report.contains("= 126 in gradeOf@15:47"), report);
+    }
+
     /** Where a total may be negative, the bound 0 owes its points like any other. */
     @Test
     void theBoundZeroOwesItsPointsWhereTheTotalCanBeBelowIt() {
@@ -206,13 +246,21 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
     }
 
     /**
-     * The same bounds held against the one total are thresholds of that total: a row at 126 shows
-     * where either falls, so the number is owed once.
+     * The bound 63 held twice over and the bound 126 held once are the bounds of two computations
+     * though they are held against one total: each is a threshold of its own.
      */
     @Test
-    void aNumberTwoBoundsComeToIsOneThresholdOfOneTotal() {
+    void aNumberTwoBoundsComeToIsTwoThresholdsOfOneTotal() {
         String report = reportOf(TWO_CALLS_REACHING_ONE_NUMBER
                 .replace("gradeOf(1, c.v)", "gradeOf(1, a.v + b.v)"));
+        assertEquals(2, count(report, "= 126 in gradeOf"), report);
+    }
+
+    /** The same bound read by two calls cut at the same places is one threshold. */
+    @Test
+    void theCallsCutAtTheSamePlacesShareTheirThresholds() {
+        String report = reportOf(TWO_CALLS_REACHING_ONE_NUMBER
+                .replace("gradeOf(1, c.v)", "gradeOf(2, a.v + b.v)"));
         assertEquals(1, count(report, "= 126 in gradeOf"), report);
     }
 

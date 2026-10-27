@@ -153,7 +153,7 @@ public final class DerivedValues {
                     return border.atThreshold(
                             border.origin() instanceof LineOrigin.ComparisonOrigin comparison
                                     && comparison.read().writtenAgainst().isPresent()
-                                    ? new ThresholdOfADerivedValue.WrittenAt(
+                                    ? new ThresholdOfADerivedValue.WrittenAt(each.value(),
                                             comparison.read().writtenAgainst().get())
                                     : new ThresholdOfADerivedValue.CutAt(each.value(),
                                             cuts.getFirst().place()));

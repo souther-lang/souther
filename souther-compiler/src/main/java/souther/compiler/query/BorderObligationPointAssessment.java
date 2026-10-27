@@ -131,7 +131,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      *
      * <p><b>So a point and a reading of it are a line and where and how it was read.</b> A point
      * carries the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this
-     * carries the target and the placement, and the two together are the
+     * carries the target and the placement, and the two together — the point also carrying the
+     * threshold of a derived value that the line is — are the
      * {@link souther.compiler.partition.BoundaryLine} the readings of one behavior were folded under
      * ({@code Coverages.merged}). That is why the fold and this cannot come apart: they are one
      * equivalence written once, rather than two that agree while every quantity has one position

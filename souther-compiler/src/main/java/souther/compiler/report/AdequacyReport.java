@@ -3776,13 +3776,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And which calls of a helper the line was read at, after what it asks. The comparison
             // that drew it is one place for every call, so two readings of a helper's line read
             // alike but for the calls.
-            out.append(String.format("          · read as %s: %s%s%s%n", each.at(), each.asks(),
+            BorderAssessment reading = point.met().get(each.where());
+            out.append(String.format("          · read as %s: %s%s%s%s%n", each.at(), each.asks(),
                     inCopies(each.readAt(), copies, rendering, declaredIn),
-                    beside.apply(point.met().get(each.where()))));
+                    beside.apply(reading), boundWritten(reading)));
         }
         if (said.size() > say) {
             out.append(String.format("          · %d more readings%n", said.size() - say));
         }
+    }
+
+    /**
+     * The bound a table holds, where the reading is a threshold of one: the number the reading is
+     * cut at is the bound weighed by the positions it was made of, and it is the bound a reader
+     * changes in the table.
+     */
+    private static String boundWritten(BorderAssessment reading) {
+        return reading.border().threshold().map(each -> switch (each) {
+            case ThresholdOfADerivedValue.WrittenAt written ->
+                    ", the bound written is " + written.level().spelled();
+            case ThresholdOfADerivedValue.CutAt _ -> "";
+        }).orElse("");
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
@@ -6693,8 +6707,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static void thresholdId(ObjectNode into, ThresholdOfADerivedValue threshold) {
         switch (threshold) {
-            case ThresholdOfADerivedValue.WrittenAt(var level) -> {
+            case ThresholdOfADerivedValue.WrittenAt(var value, var level) -> {
                 into.put("kind", "written_at");
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
                 into.put("bound", level.spelled());
             }
             case ThresholdOfADerivedValue.CutAt(var value, var place) -> {
@@ -6769,6 +6785,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case AuthoredPlacement.NotShown _ ->
                     into.putObject("placement").put("kind", "not_shown");
         }
+        line.threshold().ifPresent(each -> thresholdId(into.putObject("threshold"), each));
     }
 
     /** Every point a line can have, in the order the technique names them. */
