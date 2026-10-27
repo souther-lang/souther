@@ -114,7 +114,7 @@ public final class DerivedValues {
             replaced.add(new DerivedValue.Replaced(
                     new DerivedValue(group.line(),
                             calls.stream().map(DerivedValue.Reading::copy).toList()),
-                    positions, List.copyOf(forms.values()), cited));
+                    positions, List.copyOf(forms.values()), List.copyOf(cited)));
         });
         List<LineEvidence> evidence = new ArrayList<>();
         List<LineDrawn> kept = new ArrayList<>();

@@ -19,6 +19,8 @@ import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -369,14 +371,14 @@ public sealed interface About {
      * @param cited    the rule the weight is owed under
      */
     record ATiltOfADerivedValueNoRowShows(DerivedValue value, NumericTerm position,
-                                          LinearQuantity into, Set<RuleCitation> cited)
+                                          LinearQuantity into, List<RuleCitation> cited)
             implements OfAnObligation, RuleCitations {
 
         public ATiltOfADerivedValueNoRowShows {
             Objects.requireNonNull(value, "a weight is a weight in some computation");
             Objects.requireNonNull(position, "a weight is a weight of some position");
             Objects.requireNonNull(into, "in some weighing of the positions");
-            cited = Set.copyOf(cited);
+            cited = List.copyOf(cited);
         }
 
         /** Keyed on the computation and the position, which no row written moves. */
@@ -387,7 +389,7 @@ public sealed interface About {
 
         @Override
         public Set<RuleCitation> ruleCitations() {
-            return cited;
+            return new LinkedHashSet<>(cited);
         }
     }
 

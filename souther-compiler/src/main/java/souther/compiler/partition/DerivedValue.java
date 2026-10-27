@@ -72,15 +72,17 @@ public record DerivedValue(AuthoredLine line, List<ModelOccurrence> copies) {
      * @param value     the computation
      * @param positions every position any weighing of it names that a weight can be written for
      * @param forms     the weighings of the positions it was cut at, each once
-     * @param cited     the rule a weight of it is owed under, as the lines that cut it cite it
+     * @param cited     the rule a weight of it is owed under, as the lines that cut it cite it, each
+     *                  once in the order the lines were read: a set would hand a reader an order
+     *                  that changes between runs
      */
     public record Replaced(DerivedValue value, Set<NumericTerm> positions,
-                           List<LinearQuantity> forms, Set<RuleCitation> cited) {
+                           List<LinearQuantity> forms, List<RuleCitation> cited) {
 
         public Replaced {
             positions = Set.copyOf(positions);
             forms = List.copyOf(forms);
-            cited = Set.copyOf(cited);
+            cited = List.copyOf(cited);
         }
     }
 

@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -53,13 +52,13 @@ import java.util.function.Predicate;
  * @param cited     the rule the weights are owed under
  */
 public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, Standing> positions,
-                                  List<LinearQuantity> forms, Set<RuleCitation> cited) {
+                                  List<LinearQuantity> forms, List<RuleCitation> cited) {
 
     public TiltOfADerivedValue {
         Objects.requireNonNull(value, "a weight is a weight in some computation");
         positions = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(positions));
         forms = List.copyOf(forms);
-        cited = Set.copyOf(cited);
+        cited = List.copyOf(cited);
     }
 
     /** What the rows came to for one position. */
