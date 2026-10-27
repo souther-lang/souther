@@ -1554,10 +1554,25 @@ final class Terms {
             return null;
         }
         return switch (arm.binding()) {
-            case Core.ArmBinding.Selected selected -> arithmetic(selected.type(), scrutinee, at);
+            case Core.ArmBinding.Selected selected ->
+                    isACaseOfWhatItStandsFor(selected.type(), scrutinee, at)
+                            ? arithmetic(selected.type(), scrutinee, at)
+                            : null;
             case Core.ArmBinding.Payload _ -> new Opens(heldValue(scrutinee, at), heldBy(of), null);
             case Core.ArmBinding.Unbound _ -> null;
         };
+    }
+
+    /**
+     * Whether the case an arm selects is one the scrutinee, read as the value it comes to, can be.
+     *
+     * <p>A name for the matched value stands for that value, and a tree read with a split replaced
+     * by one of its arms has a scrutinee that is only that arm's value. An arm selecting a case that
+     * value is not is one no run enters in that reading, and the name it binds stands for nothing
+     * the scrutinee says: it is a place of its own type, which is all that can be said of it.
+     */
+    private boolean isACaseOfWhatItStandsFor(Type selected, Core scrutinee, Denotations at) {
+        return TypeOps.assignable(selected, given(scrutinee, at).value().type(), kinds(), sums());
     }
 
     /**
