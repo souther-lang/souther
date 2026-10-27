@@ -1962,12 +1962,25 @@ public final class InputDomain {
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfTheCodePointAt _,
-                 NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
-            // One of the values standing there, so on their order.
-            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
+            // The steps a value falls in are counted on the order the operation answers, which is
+            // the term's own orders to say (TermOrders.answered) and not a classification of the
+            // kind: a date counts days where the date-time it falls on counts seconds.
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf steps -> throw new IllegalStateException(
+                    "the steps " + steps.operation() + " counts are counted on the order it"
+                            + " answers on, which a clause of a declaration does not name");
+            // One of the values standing there, so on their order; one of their steps, on the
+            // order the steps are counted on.
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> {
+                if (extreme.through() != null) {
+                    throw new IllegalStateException("the end of the steps "
+                            + extreme.through() + " counts is counted on the order it answers on,"
+                            + " which a clause of a declaration does not name");
+                }
+                yield carried;
+            }
         };
     }
 

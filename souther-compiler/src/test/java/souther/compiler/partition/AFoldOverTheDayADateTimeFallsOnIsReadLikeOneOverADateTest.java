@@ -2,12 +2,23 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
+import souther.compiler.check.Extreme;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -24,6 +35,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -179,6 +191,132 @@ class AFoldOverTheDayADateTimeFallsOnIsReadLikeOneOverADateTest {
                     : "DateTime.toDate(at)")));
             assertTrue(report.contains("measurement: complete"), report);
         }
+    }
+
+    private static final ValueName.Stdlib TO_DATE =
+            ValueName.Stdlib.operation("DateTime", "toDate");
+
+    /** A fold over touches whose date-time is held to a lower bound, and the end of the days. */
+    private static final String A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED = """
+            module example.stale
+
+            data Touch = { account: String, at: DateTime }
+                invariant at >= DateTime("2026-01-01T00:00:00")
+
+            let sinceOf (touches: List<Touch>, today: Date): Map<String, Int> =
+                List.fold((acc, p) -> Map.updateOrInsert(p.account,
+                              Date.daysBetween(DateTime.toDate(p.at), today),
+                              seen -> Int.min(seen, Date.daysBetween(DateTime.toDate(p.at), today)),
+                              acc),
+                          Map.empty, touches)
+
+            behavior stale : (touches: List<Touch>, today: Date, staleAfter: Int)
+                -> Map<String, Int>
+
+            let stale (touches, today, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches, today))
+            """;
+
+    private static NumericTerm.ExtremeOfItsKey theLatestDay(InputReading reading) {
+        TermPath touches = TermPath.of("touches");
+        TermPath at = touches.element().then("at");
+        NumericTerm.WholeUnitsOf day = NumericTerm.WholeUnitsOf.of(TO_DATE, at, Type.Prim.DATETIME,
+                reading.rules().inners(), reading.rules().declarations());
+        assertNotNull(day, "toDate counts the days of the date-times a touch holds");
+        return NumericTerm.ExtremeOfItsKey.of(touches, touches.element().then("account"), at,
+                Extreme.GREATEST, day);
+    }
+
+    private static InputReading readingOf(String source) {
+        Compilation read = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
+        read.answerEverything();
+        RuleReadingSource rules = RuleReadings.of(read, read.modules().get(0));
+        return read.db().ask(new Adequacy.Inputs(read.modules().get(0))).value().get("stale")
+                .reading(rules);
+    }
+
+    /**
+     * What the rules leave the end of the days is counted in days, whatever the date-time it is
+     * the end of the days of is held to in seconds.
+     *
+     * <p>The end of some steps is one of those steps and not one of the values they are the steps
+     * of. A lower bound on the second a touch is at, carried over unchanged, would be a lower bound
+     * of a billion and a half days; carried over by the floor it is the day the year started.
+     */
+    @Test
+    void aBoundOnTheSecondsOfATouchIsABoundOnTheDaysOfTheLatestOne() {
+        InputReading reading = readingOf(A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED);
+        NumericTerm.ExtremeOfItsKey latest = theLatestDay(reading);
+        NumericDomain.Bounds days = reading.quantities().runsBetween(latest);
+
+        assertEquals(Count.of(LocalDate.of(2026, 1, 1).toEpochDay()), days.min().at(),
+                "the days start where the year does");
+        assertEquals(days.min(), reading.quantities().runsBetween(latest.steps()).min(),
+                "and the end of the days starts where the days of one touch do");
+    }
+
+    /**
+     * Whatever is asked of the days, the answer is in days: the steps of one touch and the end of
+     * them under a key, over a date-time held to nothing, to a lower bound, and to two values.
+     *
+     * <p>The class of defect this holds the line against is a reader that answers about a number
+     * out of the place it is read from. The days are counted on an order of their own, and every
+     * question has to come back on that order — a bound, a projection of the declarations, the
+     * values the position's own values read as.
+     */
+    @Test
+    void everyAnswerAboutTheDaysIsInDays() {
+        String unconstrained = A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED
+                .replace("\n    invariant at >= DateTime(\"2026-01-01T00:00:00\")", "");
+        String twoValues = A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED.replace(
+                "invariant at >= DateTime(\"2026-01-01T00:00:00\")",
+                "invariant at == DateTime(\"2026-03-15T12:00:00\")"
+                        + " || at == DateTime(\"2026-03-16T00:00:00\")");
+        assertTrue(!unconstrained.equals(A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED)
+                && !twoValues.equals(A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED));
+
+        for (String source : List.of(unconstrained, A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED,
+                twoValues)) {
+            InputReading reading = readingOf(source);
+            NumericTerm.ExtremeOfItsKey latest = theLatestDay(reading);
+            NumericDomain.Bounds extent = new NumericDomain.Bounds(
+                    reading.quantities().ordersOf(latest).answered().extent().low(),
+                    reading.quantities().ordersOf(latest).answered().extent().high());
+            for (NumericTerm each : List.of(latest.steps(), latest)) {
+                assertTrue(reading.quantities().runsBetween(each).liesWithin(extent),
+                        each + " runs within the days: " + source);
+                if (reading.quantities().projectionOfTheDeclarations(each)
+                        instanceof NumericDomain.FormProjection.Within(var bounds)) {
+                    assertTrue(bounds.liesWithin(extent), each + " is held within the days");
+                }
+            }
+        }
+
+        InputReading two = readingOf(twoValues);
+        NumericDomain.Bounds days = two.quantities().runsBetween(theLatestDay(two));
+        assertEquals(Count.of(LocalDate.of(2026, 3, 15).toEpochDay()), days.min().at());
+        assertEquals(Count.of(LocalDate.of(2026, 3, 16).toEpochDay()), days.max().at());
+    }
+
+    /** An end is counted on the order of the number it is one of the values of, with the steps and
+     *  without them: asked of the one, the other is not answered in another unit. */
+    @Test
+    void anEndIsCountedOnTheOrderOfTheNumberItIsOneOfTheValuesOf() {
+        InputReading reading = readingOf(A_FOLD_OVER_TOUCHES_AFTER_THE_YEAR_STARTED);
+        NumericTerm.ExtremeOfItsKey latest = theLatestDay(reading);
+        TermPath touches = TermPath.of("touches");
+        NumericTerm.ExtremeOfItsKey ofTheSeconds = NumericTerm.ExtremeOfItsKey.of(touches,
+                touches.element().then("account"), touches.element().then("at"),
+                Extreme.GREATEST);
+
+        for (NumericTerm.ExtremeOfItsKey each : List.of(latest, ofTheSeconds)) {
+            assertEquals(reading.quantities().ordersOf(each).answered(),
+                    reading.quantities().ordersOf(each.valuesTakenFrom()).answered(),
+                    each + " is one of the values of " + each.valuesTakenFrom());
+        }
+        assertFalse(reading.quantities().ordersOf(latest).answered()
+                .equals(reading.quantities().ordersOf(ofTheSeconds).answered()),
+                "the days and the seconds are two orders");
     }
 
     private static Compilation compiled(String source) {

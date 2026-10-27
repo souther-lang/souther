@@ -737,10 +737,35 @@ public sealed interface NumericTerm
                     answered.extent().high()).liesWithin(fallenInto);
         }
 
-        /** The step the count at {@code end} falls in, as an end; null where there is no end or it
-         *  is not a count the value holds. */
+        /**
+         * The steps the values fall in where the rules hold them to {@code values}: each end taken
+         * to the step it falls in, which keeps the order, so every value of the run falls in a step
+         * of the one it is taken to. An end a run leaves out is taken as one it holds, so the steps
+         * are the ones the run could fall in and never fewer — or null where an end is not a count.
+         *
+         * <p>What the rules hold the end of some steps to is this and the steps' own image
+         * ({@link #image}) together: a lower bound on the seconds is a lower bound on the days.
+         */
+        public NumericDomain.Bounds stepsFallenIntoBy(NumericDomain.Bounds values) {
+            if (values == null) {
+                return null;
+            }
+            Endpoint low = stepOfAnEnd(values.min(), perUnit(), true);
+            Endpoint high = stepOfAnEnd(values.max(), perUnit(), true);
+            boolean unknown = (values.min() != null && low == null)
+                    || (values.max() != null && high == null);
+            return unknown ? null : new NumericDomain.Bounds(low, high);
+        }
+
         private static Endpoint stepOfTheEnd(Endpoint end, long perUnit) {
-            if (end == null || !end.inclusive() || !(end.at() instanceof Count count)) {
+            return stepOfAnEnd(end, perUnit, false);
+        }
+
+        /** The step the count at {@code end} falls in, as an end; null where there is no end or it
+         *  is not a count the value holds, or — unless {@code widening} — it is left out. */
+        private static Endpoint stepOfAnEnd(Endpoint end, long perUnit, boolean widening) {
+            if (end == null || (!widening && !end.inclusive())
+                    || !(end.at() instanceof Count count)) {
                 return null;
             }
             return ExactRatio.of(count.at()).dividedBy(ExactRatio.of(perUnit))
@@ -1014,15 +1039,20 @@ public sealed interface NumericTerm
         }
 
         /**
-         * The number this one is always one of the values of: what stands at {@link #value()}.
+         * The number this one is always one of the values of: what stands at {@link #value()}, or
+         * the steps those values fall in where this is the end of the steps.
          *
          * <p>Which values this number can take — the run the rules leave it, the set a place
          * admits — is that number's question, since an end of some of the values is one of them.
          * Whether a row exists holding one at it is not: that takes a container holding the
          * elements, which no answer about the values says exists.
+         *
+         * <p>In the order this number is counted on, which is the answer's for the steps. Handed
+         * the value itself, a reader asking what the end can be would be answered in the units of
+         * the seconds for a number of days.
          */
-        public ValueOf valuesTakenFrom() {
-            return new ValueOf(value);
+        public FromOnePosition valuesTakenFrom() {
+            return steps != null ? steps : new ValueOf(value);
         }
 
         /** Where the values one end of which is taken stand, which is where a reader is sent and no
