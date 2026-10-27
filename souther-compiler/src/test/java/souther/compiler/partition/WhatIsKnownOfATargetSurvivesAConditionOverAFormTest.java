@@ -113,6 +113,29 @@ class WhatIsKnownOfATargetSurvivesAConditionOverAFormTest {
         }
     }
 
+    /**
+     * A condition both sides carry is carried once, in the order it was first met, and two
+     * conditions that are equal are one whichever instance each is.
+     */
+    @Test
+    void aConditionBothSidesCarryIsCarriedOnceInTheOrderItWasMet() {
+        TakenConstraint.Affine copyOfTheFirst = new TakenConstraint.Affine(
+                LinearForm.<NumericTerm>sumOfAtoms(
+                        new NumericTerm.ValueOf(TermPath.of("r").then("cost")),
+                        new NumericTerm.ValueOf(TermPath.of("r").then("paid"))),
+                Rel.GE);
+        NumbersAskedFor first = NumbersAskedFor.onlyTogether(OVER_A_FORM)
+                .meet(NumbersAskedFor.onlyTogether(OVER_ANOTHER_FORM));
+
+        NumbersAskedFor crossed = first.meet(NumbersAskedFor.onlyTogether(copyOfTheFirst));
+
+        assertEquals(List.of(OVER_A_FORM, OVER_ANOTHER_FORM), crossed.onlyTogether(),
+                "the first met stays first, and its equal is not carried again");
+        assertEquals(List.of(OVER_A_FORM, OVER_ANOTHER_FORM),
+                NumbersAskedFor.of(from("0", "10")).meet(first).onlyTogether(),
+                "a side that carries none leaves the other's as they are");
+    }
+
     /** Two rules about the target alone leave what both of them leave, and are walked whole. */
     @Test
     void twoRulesAboutTheTargetAreCrossed() {

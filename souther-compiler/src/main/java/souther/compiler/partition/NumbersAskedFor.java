@@ -7,7 +7,9 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The numbers a search for a value at one target is about.
@@ -204,9 +206,20 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      * searching a position the rules bound and searching the whole of its order.
      */
     public NumbersAskedFor meet(NumbersAskedFor other) {
+        // Nothing to add on one side leaves the other as it is, which is what almost every
+        // crossing is: the joint conditions are the few.
+        if (other.onlyTogether.isEmpty()) {
+            return new NumbersAskedFor(values.meet(other.values), onlyTogether);
+        }
+        if (onlyTogether.isEmpty()) {
+            return new NumbersAskedFor(values.meet(other.values), other.onlyTogether);
+        }
+        // Looked up by hash rather than compared with each of them: two equal conditions are
+        // walked through once, where a scan walks every pair.
         List<JointDemand> both = new ArrayList<>(onlyTogether);
+        Set<JointDemand> held = new HashSet<>(onlyTogether);
         for (JointDemand each : other.onlyTogether) {
-            if (!both.contains(each)) {
+            if (held.add(each)) {
                 both.add(each);
             }
         }
