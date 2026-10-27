@@ -24,7 +24,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ConditionOutcomeSite;
@@ -1319,6 +1321,9 @@ final class Coverages {
          *  through the same walk over them, and the way they took here. */
         AnotherLineTheRowsAllow.Reading beside(List<ObservedInputs> rows);
 
+        /** What the readings of {@code rows} that stand at {@code criterion}'s point read as. */
+        StandingAtAPoint.RowsRead valuesAt(Criterion criterion, List<ObservedInputs> rows);
+
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
          *  question is not one whose rules failed to answer it. */
@@ -1443,7 +1448,10 @@ final class Coverages {
         // The weights of a derived value are fixed by the rows read against it, so a reading
         // nothing was read against says nothing of them.
         return new ReadingOfALine(border, items, absent, shape.beside(rows),
-                absent == null ? tiltReading(border, items, shape) : Optional.empty());
+                // Only the rows that hold: one whose answer is not the model's says nothing of the
+                // model, and a weight is not fixed by what is not evidence of it.
+                absent == null ? tiltReading(border, items, shape, put.others())
+                        : Optional.empty());
     }
 
     /**
@@ -1456,26 +1464,48 @@ final class Coverages {
      * not put to the rows again: only a border some row is on is asked which.
      */
     private static Optional<TiltOfADerivedValue.Reading> tiltReading(
-            Border border, Map<DomainPoint, ItemAssessment> items, OneShapeOfBorder shape) {
-        if (border.cut().of().derivedFromSeveralPositions().isEmpty()) {
+            Border border, Map<DomainPoint, ItemAssessment> items, OneShapeOfBorder shape,
+            List<ObservedInputs> rows) {
+        Optional<LinearQuantity> form = border.cut().of().derivedFromSeveralPositions();
+        if (form.isEmpty()) {
             return Optional.empty();
         }
         List<Criterion> on = new ArrayList<>();
         boolean someRowIsOn = false;
+        boolean pointsRead = true;
         for (DomainPoint point : border.answers().keySet()) {
             if (border.roleOf(point) == PointRole.ON
                     && border.demand(point) instanceof Demand.Owed owed) {
                 on.add(owed.criterion());
-                someRowIsOn |= items.get(point) instanceof ItemAssessment.Owed measured
-                        && measured.coverage().made()
-                                .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
+                ItemAssessment.Owed measured = (ItemAssessment.Owed) items.get(point);
+                someRowIsOn |= measured.coverage().made()
+                        .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
+                // That no row is at the point is the whole of what there is to say only where the
+                // rows were all read, which the point's own measurement says.
+                pointsRead &= measured.coverage() instanceof Measurement.Complete;
             }
         }
         boolean rowsAreOn = someRowIsOn;
-        return Optional.of(new TiltOfADerivedValue.Reading(border,
-                rows -> rowsAreOn && on.stream().anyMatch(criterion ->
-                        shape.met(criterion, rows) instanceof StandingAtAPoint.Met.Reached),
-                row -> shape.beside(List.of(row)).read().get().each()));
+        boolean noRowIsOnAndTheyWereRead = pointsRead;
+        Map<NumericTerm, ExactRatio> weights = form.get().direction().coefs();
+        return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
+            if (!rowsAreOn) {
+                return new TiltOfADerivedValue.Evidence(weights, List.of(),
+                        noRowIsOnAndTheyWereRead);
+            }
+            // The readings of the rows that stand at the point, asked of the walk that says
+            // whether a row does, and no others: a reading of the same row away from the point
+            // holds numbers that are not on the border.
+            List<Map<NumericTerm, Place>> onTheBorder = new ArrayList<>();
+            boolean complete = true;
+            for (Criterion criterion : on) {
+                StandingAtAPoint.RowsRead read = shape.valuesAt(criterion, rows);
+                onTheBorder.addAll(read.each());
+                complete &= read.why().isEmpty() && !read.unwatched()
+                        && read.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne;
+            }
+            return new TiltOfADerivedValue.Evidence(weights, onTheBorder, complete);
+        }));
     }
 
     /**
@@ -1533,17 +1563,22 @@ final class Coverages {
             List<DerivedValue.Replaced> replaced) {
         List<TiltOfADerivedValue> out = new ArrayList<>();
         for (DerivedValue.Replaced each : replaced) {
-            List<TiltOfADerivedValue.Reading> cutBy = new ArrayList<>();
-            boolean everyBorderRead = true;
-            for (ReadingOfALine reading : readings) {
-                if (each.value().isCutBy(reading.border())) {
-                    reading.tilt().ifPresent(cutBy::add);
-                    // A border nothing was read against may be where a weight is fixed, so what the
-                    // rest leave unfixed is not shown to be unfixed.
-                    everyBorderRead &= reading.tilt().isPresent();
+            Map<ModelOccurrence, List<TiltOfADerivedValue.Evidence>> byCall = new LinkedHashMap<>();
+            for (ModelOccurrence copy : each.value().copies()) {
+                List<TiltOfADerivedValue.Evidence> ofOneCall = new ArrayList<>();
+                for (ReadingOfALine reading : readings) {
+                    if (each.value().isCutBy(reading.border(), copy)) {
+                        // A border nothing was read against says nothing, and is not left out of
+                        // the call: the call's weights are fixed by the rows on every border of it,
+                        // and not by the ones that happened to be read.
+                        ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
+                                .orElseGet(() -> new TiltOfADerivedValue.Evidence(Map.of(),
+                                        List.of(), false)));
+                    }
                 }
+                byCall.put(copy, ofOneCall);
             }
-            out.add(TiltOfADerivedValue.of(each, cutBy, rows, everyBorderRead));
+            out.add(TiltOfADerivedValue.of(each, byCall));
         }
         return out;
     }
@@ -1662,6 +1697,12 @@ final class Coverages {
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
                 return toRows.met(rows, criterion);
+            }
+
+            @Override
+            public StandingAtAPoint.RowsRead valuesAt(Criterion criterion,
+                                                      List<ObservedInputs> rows) {
+                return toRows.valuesAt(rows, criterion);
             }
 
             @Override

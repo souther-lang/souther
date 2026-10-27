@@ -38,10 +38,10 @@ public record DerivedValue(AuthoredLine line, List<ModelOccurrence> copies) {
         }
     }
 
-    /** Whether the border is one this computation is cut by. */
-    public boolean isCutBy(Border border) {
-        return line.equals(border.origin().authoredLine())
-                && border.origin().readAt().inOrder().stream().anyMatch(copies::contains);
+    /** Whether the border is one the call that made {@code copy} reads the comparison cut by. */
+    public boolean isCutBy(Border border, ModelOccurrence copy) {
+        return copies.contains(copy) && line.equals(border.origin().authoredLine())
+                && border.origin().readAt().inOrder().contains(copy);
     }
 
     /** One comparison as one call of it reads it. */

@@ -23,6 +23,12 @@ import java.util.Set;
  * the values that settle the one comparison are the same outcome throughout, and the position keeps
  * its classes.
  *
+ * <p><b>Only a comparison a body wrote draws a computation.</b> What says which computation it is,
+ * is the copy of the comparison a call of its helper made ({@link LineOrigin#readAt}). A comparison
+ * a clause of a declaration states has no call and names no copy, so it draws no computation: its
+ * lines are never held apart, and its positions keep the classes they are divided into. That is the
+ * contract of this decision for every reader that hands it lines, and not an omission of one.
+ *
  * <p><b>One decision, and nothing derives it again.</b> The lines the classes were dropped for and
  * the computations owed weights are the one value this returns: a reader that worked the second out
  * from the borders afterwards would count thresholds over a different set of lines — a comparison

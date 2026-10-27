@@ -9,16 +9,16 @@ import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.LinearQuantity;
-import souther.compiler.partition.ObservedInputs;
+import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Whether the rows fix how each position weighs into the value a computation derives from several
@@ -36,20 +36,26 @@ import java.util.function.Predicate;
  * every such row only where {@code Σ cₚ·(λₚ − 1)·xₚ = 0} for each, so the weights are fixed where
  * the vectors {@code (cₚ·xₚ)} the rows give span the space of the positions, and a position's own
  * weight is fixed where its axis is in the span. That is a property of what the rows determine, and
- * not of how a row is shaped: a row that moves one position alone and three rows that each move two
- * can fix the same weights, and a position weighed by minus one has no row that moves it alone and
- * can still be fixed.
+ * not of how a row is shaped.
  *
- * <p><b>The computation and not one border's weighing.</b> A comparison read at one call over the
- * different windows of a table's input weighs the same positions into every window, so the rows of
- * every border it cuts are put together; the same comparison read at another call is another
- * computation and has its own rows.
+ * <p><b>Evidence belongs to the call that reads it.</b> A computation names the calls cut at the
+ * same places, and which of them is one computation is not something the borders can prove: two
+ * calls written alike may take the value from one place or from two. So a weight is fixed for a
+ * computation only where it is fixed for every call of it by the rows on that call's own borders.
+ * One value handed to two calls is put to the same rows by both, and each is fixed together; two
+ * calls on exclusive branches are put to different rows, and the one no row reaches leaves the
+ * weight unfixed.
+ *
+ * <p><b>And a claim is as strong as the reading behind it.</b> Rows fix a weight whatever else went
+ * unread. A weight they leave unfixed is said to be unfixed only where every border was read
+ * against every row and every reading of every row was tried; where not, the reading left out is
+ * the one place the rest could have been fixed, and the weight is undecided.
  *
  * @param value     the computation
  * @param positions for each position of it a weight can be written for, whether the rows fix it
  * @param forms     the weighings of the positions the computation was cut at, which is what the
  *                  weights are weights in
- * @param cited     the rule the weights are owed under
+ * @param cited     the rule the weights are owed under, each once in the order the lines were read
  */
 public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, Standing> positions,
                                   List<LinearQuantity> forms, List<RuleCitation> cited) {
@@ -71,86 +77,127 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
         record NotShown() implements Standing {}
 
         /**
-         * Nothing says: no row was read against the computation, a border of it was not read and
-         * the rest leave the weight unfixed, or the exact arithmetic gave out on a row. Not a claim
-         * that the rows fix nothing, which is a claim about the rows.
+         * Nothing says: no row was read against the computation, a border of it was not read or a
+         * reading of a row was not tried and the rest leave the weight unfixed, or the exact
+         * arithmetic gave out on a row. Not a claim that the rows fix nothing, which is a claim
+         * about the rows.
          */
         record Undecided() implements Standing {}
     }
 
     /**
-     * One border of a computation as the rows are put to it.
+     * What the rows on one border say of the weights, as numbers.
      *
-     * @param border   the border, which says which weighing of the positions it cuts and where
-     * @param standsOn whether one of the rows given is on the border, at the point a row is owed
-     *                 there for where the line falls. Answered at once for a border no row is on,
-     *                 so asking it of every row costs a walk of the rows only where one is
-     * @param valuesOf what each position of the weighing holds at a row, once for every way the row
-     *                 reaches the border
+     * @param weights     the model's weight of each position the border's weighing names
+     * @param onTheBorder what each position holds at each reading of a row that stands at the
+     *                    border's point, and at no other reading
+     * @param complete    whether those are every reading of every row there is: the border was read
+     *                    against every row, every reading of each was tried, and none was left out
+     *                    for nothing having watched it run
      */
-    public record Reading(Border border, Predicate<List<ObservedInputs>> standsOn,
-                          Function<ObservedInputs, List<Map<NumericTerm, Place>>> valuesOf) {
+    public record Evidence(Map<NumericTerm, ExactRatio> weights,
+                           List<Map<NumericTerm, Place>> onTheBorder, boolean complete) {
 
-        public Reading {
-            Objects.requireNonNull(border, "a reading is of a border");
-            Objects.requireNonNull(standsOn, "a row is on a border or not");
-            Objects.requireNonNull(valuesOf, "a row holds a number at each position");
+        public Evidence {
+            weights = Map.copyOf(weights);
+            onTheBorder = List.copyOf(onTheBorder);
         }
     }
 
     /**
-     * What {@code rows} fix of each position of the computation {@code of}, put to the borders
-     * {@code readings} it is cut by.
+     * One border of a computation, and what its rows say.
      *
-     * <p>Existential over the borders and over the ways a row reaches one, the way a point met at
-     * one position of a behavior is met: a row on any border, at any reading of it, is a row that
-     * fixes what it fixes. Undecided throughout where no border was read.
-     *
-     * @param everyBorderRead whether every border of the computation was read against the rows;
-     *                        where not, a weight the rows leave unfixed is undecided and not
-     *                        unfixed
+     * @param border   the border, which says which weighing of the positions it cuts and where
+     * @param evidence what the rows on it say, made when asked: a border no row is on has nothing
+     *                 to walk
      */
-    static TiltOfADerivedValue of(DerivedValue.Replaced of, List<Reading> readings,
-                                  List<ObservedInputs> rows, boolean everyBorderRead) {
+    public record Reading(Border border, Supplier<Evidence> evidence) {
+
+        public Reading {
+            Objects.requireNonNull(border, "a reading is of a border");
+            Objects.requireNonNull(evidence, "and says what its rows are");
+        }
+    }
+
+    /**
+     * What the rows fix of each position of the computation {@code of}.
+     *
+     * @param byCopy the evidence of the borders of each call of it, for every call; a call none of
+     *               whose borders was read has no entry
+     */
+    static TiltOfADerivedValue of(DerivedValue.Replaced of,
+                                  Map<ModelOccurrence, List<Evidence>> byCopy) {
         List<NumericTerm> places = NumericTerms.inOrder(of.positions());
-        if (readings.isEmpty()) {
-            return undecided(of, places);
+        List<List<Evidence>> perCall = new ArrayList<>();
+        for (ModelOccurrence copy : of.value().copies()) {
+            perCall.add(byCopy.getOrDefault(copy, List.of()));
         }
-        ExactSpan span = new ExactSpan(places.size());
-        for (Reading reading : readings) {
-            Map<NumericTerm, ExactRatio> weights = formOf(reading).direction().coefs();
-            for (ObservedInputs row : rows) {
-                if (!reading.standsOn().test(List.of(row))) {
-                    continue;
-                }
-                for (Map<NumericTerm, Place> values : reading.valuesOf().apply(row)) {
-                    ExactRatio[] vector = vectorOf(places, weights, values);
-                    if (vector == null) {
-                        return undecided(of, places);
-                    }
-                    span.add(vector);
-                }
-            }
-        }
-        if (!span.known()) {
-            return undecided(of, places);
+        return new TiltOfADerivedValue(of.value(), standingsOf(places, perCall), of.forms(),
+                of.cited());
+    }
+
+    /**
+     * The standing of each place given what the borders of each call say, which is the whole of
+     * the decision and needs no border to be made.
+     *
+     * @param perCall for each call of the computation, the evidence of its borders
+     */
+    static SequencedMap<NumericTerm, Standing> standingsOf(List<NumericTerm> places,
+                                                           List<List<Evidence>> perCall) {
+        List<List<Standing>> each = new ArrayList<>();
+        for (List<Evidence> borders : perCall) {
+            each.add(standingsOfOneCall(places, borders));
         }
         SequencedMap<NumericTerm, Standing> out = new LinkedHashMap<>();
         for (int at = 0; at < places.size(); at++) {
-            // Rows fix a weight whatever else went unread, and a weight they leave unfixed is said
-            // so only where every border was read: a border nothing was read against is the one
-            // place the rest could have been fixed.
-            out.put(places.get(at), span.reaches(at) ? new Standing.Shown()
-                    : everyBorderRead ? new Standing.NotShown() : new Standing.Undecided());
+            List<Standing> ofOne = new ArrayList<>();
+            for (List<Standing> call : each) {
+                ofOne.add(call.get(at));
+            }
+            out.put(places.get(at), together(ofOne));
         }
-        return new TiltOfADerivedValue(of.value(), out, of.forms(), of.cited());
+        return out;
     }
 
-    private static TiltOfADerivedValue undecided(DerivedValue.Replaced of,
-                                                 List<NumericTerm> places) {
-        SequencedMap<NumericTerm, Standing> out = new LinkedHashMap<>();
-        places.forEach(each -> out.put(each, new Standing.Undecided()));
-        return new TiltOfADerivedValue(of.value(), out, of.forms(), of.cited());
+    /** What the borders of one call fix of each place. */
+    private static List<Standing> standingsOfOneCall(List<NumericTerm> places,
+                                                     List<Evidence> borders) {
+        if (borders.isEmpty()) {
+            return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
+        }
+        ExactSpan span = new ExactSpan(places.size());
+        boolean complete = true;
+        for (Evidence border : borders) {
+            complete &= border.complete();
+            for (Map<NumericTerm, Place> values : border.onTheBorder()) {
+                ExactRatio[] vector = vectorOf(places, border.weights(), values);
+                if (vector == null) {
+                    return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
+                }
+                span.add(vector);
+            }
+        }
+        if (!span.known()) {
+            return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
+        }
+        List<Standing> out = new ArrayList<>();
+        for (int at = 0; at < places.size(); at++) {
+            // Rows fix a weight whatever else went unread; one they leave unfixed is unfixed only
+            // where nothing was left unread.
+            out.add(span.reaches(at) ? new Standing.Shown()
+                    : complete ? new Standing.NotShown() : new Standing.Undecided());
+        }
+        return out;
+    }
+
+    /** What the calls say of one place together: fixed where every call fixes it, unfixed where
+     *  some call is shown not to, and undecided otherwise. */
+    private static Standing together(List<Standing> calls) {
+        if (calls.stream().anyMatch(each -> each instanceof Standing.NotShown)) {
+            return new Standing.NotShown();
+        }
+        return calls.stream().allMatch(each -> each instanceof Standing.Shown)
+                ? new Standing.Shown() : new Standing.Undecided();
     }
 
     /** What each position contributes at a row, each weighed by the model's own weight of it in
@@ -172,12 +219,6 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
             vector[at] = contributed;
         }
         return vector;
-    }
-
-    private static LinearQuantity formOf(Reading reading) {
-        return reading.border().cut().of().derivedFromSeveralPositions().orElseThrow(
-                () -> new IllegalArgumentException("a border of a derived value cuts a form of"
-                        + " several positions: " + reading.border()));
     }
 
     /**

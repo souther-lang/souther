@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -108,6 +109,102 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
                     | (N { v = 60 }, N { v = 20 }) -> 2
                 """);
         assertFalse(report.contains(SAID), report);
+    }
+
+    private static final String BRANCHES = """
+            module demo
+
+            data N = { v: Int }
+                invariant v >= 0
+            """ + TABLE + """
+
+            behavior f : (a: N, b: N, c: N) -> Int
+
+            let f (a, b, c) =
+                if c.v > 0 then gradeOf(a.v + b.v) else gradeOf(a.v + b.v)
+
+            example f
+                | (N { v = 1 }, N { v = 1 }, N { v = 1 }) -> 1
+                | (N { v = 100 }, N { v = 0 }, N { v = 1 }) -> 2
+                | (N { v = 0 }, N { v = 100 }, N { v = 1 }) -> 2
+            """;
+
+    /**
+     * Two calls on exclusive branches cut at the same places: the rows on the borders of the call
+     * the rows reach are on no border of the other, and a weight fixed for one is not fixed for the
+     * computation. Cut at the same places is no proof the two take their value from one place.
+     */
+    @Test
+    void callsOnExclusiveBranchesAreNotFixedByTheRowsOfOne() {
+        String report = reportOf(BRANCHES);
+        assertTrue(report.contains(SAID + " `a.v` weighs"), report);
+        assertTrue(report.contains(SAID + " `b.v` weighs"), report);
+    }
+
+    /** The control: rows that reach both branches fix both. */
+    @Test
+    void rowsThatReachBothBranchesFixTheWeightsOfBoth() {
+        String report = reportOf(BRANCHES + """
+                | (N { v = 100 }, N { v = 0 }, N { v = 0 }) -> 2
+                | (N { v = 0 }, N { v = 100 }, N { v = 0 }) -> 2
+                """);
+        assertFalse(report.contains(SAID), report);
+    }
+
+    /**
+     * One row with two readings, one on the border and one off it: the numbers of the reading off
+     * the border are no numbers at it, and fix nothing. The row writes a pair at each of two
+     * elements, and a reading is one element standing.
+     */
+    @Test
+    void aReadingOfARowAwayFromTheBorderIsNoEvidenceOfIt() {
+        String report = reportOf("""
+                module demo
+
+                data N = { v: Int }
+                    invariant v >= 0
+                data P = { a: N, b: N }
+                """ + TABLE + """
+
+                behavior f : (ps: List<P>) -> List<Int>
+
+                let f (ps) =
+                    List.map(p -> gradeOf(p.a.v + p.b.v), ps)
+
+                example f
+                    | ([P { a = N { v = 1 }, b = N { v = 1 } }]) -> [1]
+                    | ([P { a = N { v = 100 }, b = N { v = 0 } }, P { a = N { v = 0 }, b = N { v = 50 } }]) -> [2, 1]
+                """);
+        long said = report.lines().filter(line -> line.contains(SAID)).count();
+        assertEquals(1L, said, report);
+    }
+
+    /**
+     * A row that does not hold fixes no weight: its answer is not the model's, so what it stands on
+     * is not evidence of the model. The row at (100, 0) answers what the model does not, and the
+     * weight of `a.v`, which only it reaches, is not fixed.
+     */
+    @Test
+    void aRowThatDoesNotHoldFixesNoWeight() {
+        String report = reportOf("""
+                module demo
+
+                data N = { v: Int }
+                    invariant v >= 0
+                """ + TABLE + """
+
+                behavior f : (a: N, b: N) -> Int
+
+                let f (a, b) =
+                    gradeOf(a.v + b.v)
+
+                example f
+                    | (N { v = 1 }, N { v = 1 }) -> 1
+                    | (N { v = 100 }, N { v = 0 }) -> 3
+                    | (N { v = 0 }, N { v = 100 }) -> 2
+                """);
+        assertTrue(report.contains(SAID + " `a.v` weighs"), report);
+        assertFalse(report.contains(SAID + " `b.v` weighs"), report);
     }
 
     private static String reportOf(String source) {

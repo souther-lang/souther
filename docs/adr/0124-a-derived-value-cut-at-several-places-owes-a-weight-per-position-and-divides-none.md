@@ -29,15 +29,26 @@ Cohen, IEEE TSE SE-6(3), 1980).
 ### What is cut: a computation
 
 The weights of the positions are weights of the expression that computes the value, and an
-expression is what is written at a call. A computation is therefore the comparison as one call of it
-reads it (`DerivedValue`: the author's line and the copy of it a call made). One comparison inside a
-helper, read at two calls with two values — `gradeOf(a + b)` and `gradeOf(a + 3 * b)` — is two
-computations, each of which can weigh its positions wrongly on its own. Read at one call over the
-different windows of a table's input, it is one computation however many weighings of the positions
-those windows make. The comparison alone merges what is written at two calls; the weighing alone
-splits what one call writes.
+expression is what is written at a call. The comparison is read at each call of the helper that holds
+it, and what each call is cut at — which weighings of the positions, at which values — is what the
+rows on its borders can say of it. A computation (`DerivedValue`) is the author's comparison and the
+calls cut at the same places: it is how the obligation is named and counted, and one position owes
+one weight however many calls name it.
+
+That the borders agree is no proof that the calls take their value from one place. A value computed
+once and handed to two calls, two calls written alike, and two calls on exclusive branches all look
+the same to the borders. So naming them together is not evidence about them together: a weight is
+fixed for a computation only where it is fixed for every call of it, each by the rows on that call's
+own borders. A value handed to two calls puts the same rows on both, and both are fixed at once. Two
+calls on exclusive branches are put to different rows, and the one no row reaches leaves the weight
+unfixed. One comparison inside a helper read at two calls with two values — `gradeOf(a + b)` and
+`gradeOf(a + 3 * b)` — is cut at different places and is two computations outright.
 
 A derived value is a form over at least two positions: a total, a difference, any weighing of them.
+
+Only a comparison a body wrote draws a computation. What says which one it is, is the copy of the
+comparison a call made, and a comparison a clause of a declaration states has no call. Its lines are
+never held apart and its positions keep their classes.
 
 ### What is decided once
 
@@ -63,6 +74,11 @@ model wrote. A computation that weighs a position by more or less agrees with su
 the weighted difference sums to nought, so the weights are fixed where the vectors of weighted values
 the rows give span the space of the positions, and the weight of one position is fixed where its own
 axis is in the span. The span is worked out in exact arithmetic.
+
+Only the readings of a row that stand at the border's point are evidence of it. A row inside a
+container has a reading for each element, and one of them standing at the point is no reason to take
+the numbers of another: whether a reading stands and what it reads as are asked of one walk, so that
+the reading that was found to stand is the reading whose numbers are taken.
 
 This is a property of what the rows determine, not of how a row is shaped. A row that moves one
 position alone is one way to fix a weight and not the only one: three rows that each move two of three
@@ -97,5 +113,6 @@ obligation nothing can discharge from one nothing has yet discharged takes a sea
 declarations' region, which is the generation's to make, and is left to it.
 
 Two comparisons that happen to cut one direction are two computations and each keeps the classes of
-its positions where it is cut at one place. A comparison inside a helper called with the same value
-at two places is two computations, each owed its weights, and a row on a border of both fixes both.
+its positions where it is cut at one place. An obligation nothing can discharge is reported as
+unfixed like one nothing has yet discharged — two positions the declarations hold equal give rows in
+one direction, and no row tells their weights apart.

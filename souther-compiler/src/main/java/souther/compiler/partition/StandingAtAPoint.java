@@ -317,7 +317,23 @@ public final class StandingAtAPoint {
 
         /** {@link StandingAtAPoint#valuesOf}, of this line. */
         public RowsRead valuesOf(List<ObservedInputs> observed) {
-            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched);
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched,
+                    Optional.empty());
+        }
+
+        /**
+         * What the readings of the rows that stand at {@code criterion}'s point read as, and
+         * nothing of the readings that do not.
+         *
+         * <p>For a caller that holds the numbers of the rows at a point to the line: a row stands
+         * there by one of its readings, and the numbers of its other readings are not numbers at
+         * the point. {@link #valuesOf} reads every reading of the row that reached the rule and
+         * leaves it to the caller to know which of them stood, which is the same question asked a
+         * second time and answered by whatever the caller made of it.
+         */
+        public RowsRead valuesAt(List<ObservedInputs> observed, Criterion criterion) {
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched,
+                    Optional.of(criterion));
         }
     }
 
@@ -342,35 +358,10 @@ public final class StandingAtAPoint {
             Readings readings = readings(where, one, quantity, decides);
             List<BorderQuantity.Observation> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
-                switch (quantity.standsAt(criterion, tried.get(which))) {
-                    // A reading that could not look. What the row wrote nothing at is not among
-                    // these: the quantity answers for the row there, since it is the quantity that
-                    // knows whether a position it wrote nothing at leaves it a value.
-                    case BorderQuantity.Stands.CouldNotTell it -> stopped.addAll(it.why());
-                    case BorderQuantity.Stands.No _ -> { }
-                    // And for a line of a statement of several, only somewhere the statement turns
-                    // on it: a row the statement answers alike on both sides of the line stands at
-                    // the line and says nothing about it.
-                    case BorderQuantity.Stands.Yes _ -> {
-                        BorderQuantity.Observation reading = tried.get(which);
-                        switch (decides.map(asked -> asked.at(reading))
-                                .orElse(WhereAPartDecides.AtARow.DECIDES)) {
-                            // And only through an element a run compared anything on: the
-                            // run getting an answer out of the rule on another element says
-                            // nothing of this one.
-                            case WhereAPartDecides.AtARow.Decides _ -> {
-                                switch (reached.at(reading)) {
-                                    case AStatementAtARow.Answer.Holds _ -> stands = true;
-                                    case AStatementAtARow.Answer.Fails _ -> { }
-                                    case AStatementAtARow.Answer.CouldNotTell(var why) ->
-                                            stopped.addAll(why);
-                                }
-                            }
-                            case WhereAPartDecides.AtARow.DecidesNothing _ -> { }
-                            case WhereAPartDecides.AtARow.CouldNotTell(var why) ->
-                                    stopped.addAll(why);
-                        }
-                    }
+                switch (stoodAt(quantity, criterion, tried.get(which), decides, reached)) {
+                    case Stood.Yes _ -> stands = true;
+                    case Stood.No _ -> { }
+                    case Stood.CouldNotTell it -> stopped.addAll(it.why());
                 }
                 if (stands) {
                     break;
@@ -408,6 +399,64 @@ public final class StandingAtAPoint {
             return new Met.CouldNotTell(unreadable, readTo);
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
+    }
+
+    /**
+     * Whether one reading of a row stands at a point, which is the one definition both
+     * {@link #met} and {@link #valuesAt} ask: asked twice in two places, the reading that was found
+     * to stand and the reading whose numbers were taken could be two.
+     */
+    private sealed interface Stood {
+
+        /** The reading stands at the point, and the rule's comparison got an answer through it. */
+        record Yes() implements Stood {}
+
+        /** It does not. */
+        record No() implements Stood {}
+
+        /** Nothing could say, and why. */
+        record CouldNotTell(Set<ReadingGap> why) implements Stood {}
+    }
+
+    /**
+     * Whether a reading of a row stands at {@code criterion}'s point of the quantity and got an
+     * answer out of the line's rule there.
+     */
+    private static Stood stoodAt(BorderQuantity quantity, Criterion criterion,
+                                 BorderQuantity.Observation reading,
+                                 Optional<WhereAPartDecides.AskedOfRows> decides,
+                                 MetOnARow reached) {
+        return switch (quantity.standsAt(criterion, reading)) {
+            // A reading that could not look. What the row wrote nothing at is not among these: the
+            // quantity answers for the row there, since it is the quantity that knows whether a
+            // position it wrote nothing at leaves it a value.
+            case BorderQuantity.Stands.CouldNotTell it -> new Stood.CouldNotTell(it.why());
+            case BorderQuantity.Stands.No _ -> new Stood.No();
+            case BorderQuantity.Stands.Yes _ -> answersHere(reading, decides, reached);
+        };
+    }
+
+    /**
+     * Whether a reading of a row is one the line's rule got an answer on.
+     *
+     * <p>For a line of a statement of several, only somewhere the statement turns on it: a row the
+     * statement answers alike on both sides of the line stands at the line and says nothing about
+     * it. And only through an element a run compared anything on: the run getting an answer out of
+     * the rule on another element says nothing of this one.
+     */
+    private static Stood answersHere(BorderQuantity.Observation reading,
+                                     Optional<WhereAPartDecides.AskedOfRows> decides,
+                                     MetOnARow reached) {
+        return switch (decides.map(asked -> asked.at(reading))
+                .orElse(WhereAPartDecides.AtARow.DECIDES)) {
+            case WhereAPartDecides.AtARow.Decides _ -> switch (reached.at(reading)) {
+                case AStatementAtARow.Answer.Holds _ -> new Stood.Yes();
+                case AStatementAtARow.Answer.Fails _ -> new Stood.No();
+                case AStatementAtARow.Answer.CouldNotTell(var why) -> new Stood.CouldNotTell(why);
+            };
+            case WhereAPartDecides.AtARow.DecidesNothing _ -> new Stood.No();
+            case WhereAPartDecides.AtARow.CouldNotTell(var why) -> new Stood.CouldNotTell(why);
+        };
     }
 
     /**
@@ -450,7 +499,8 @@ public final class StandingAtAPoint {
     private static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                      Optional<WhereAPartDecides.AskedOfRows> decides,
                                      MetOnARow reached, List<ObservedInputs> observed,
-                                     List<ConditionOutcomeSite> watched) {
+                                     List<ConditionOutcomeSite> watched,
+                                     Optional<Criterion> at) {
         // A row's numbers are read position by position, and only a form has positions to read
         // them at. A line on any other quantity is not one another line is written beside, and
         // the reader that would hold one against the rows asks that first.
@@ -480,29 +530,22 @@ public final class StandingAtAPoint {
             }
             Readings readings = readings(where, one, quantity, decides);
             for (int which = 0; which < readings.tried().size(); which++) {
-                // Only where the statement turns on the line, for a line of a statement of several:
-                // a reading somewhere it does not says nothing about where this line falls.
+                // Only where the statement turns on the line, and only through an element the run
+                // met the rule on: a reading somewhere it does not says nothing about where this
+                // line falls, and its values there are no observation of this border. And, where
+                // the caller asks about one point, only a reading that stands at it — decided by
+                // the definition the walk for whether a row stands there uses.
                 BorderQuantity.Observation reading = readings.tried().get(which);
-                switch (decides.map(asked -> asked.at(reading))
-                        .orElse(WhereAPartDecides.AtARow.DECIDES)) {
-                    case WhereAPartDecides.AtARow.Decides _ -> { }
-                    case WhereAPartDecides.AtARow.DecidesNothing _ -> {
+                Stood stood = at.isPresent()
+                        ? stoodAt(quantity, at.get(), reading, decides, reached)
+                        : answersHere(reading, decides, reached);
+                switch (stood) {
+                    case Stood.Yes _ -> { }
+                    case Stood.No _ -> {
                         continue;
                     }
-                    case WhereAPartDecides.AtARow.CouldNotTell(var why) -> {
-                        unreadable.addAll(why);
-                        continue;
-                    }
-                }
-                // And only through an element the run met the rule on, for the reason a row that
-                // never met it is not read: its values there are no observation of this border.
-                switch (reached.at(reading)) {
-                    case AStatementAtARow.Answer.Holds _ -> { }
-                    case AStatementAtARow.Answer.Fails _ -> {
-                        continue;
-                    }
-                    case AStatementAtARow.Answer.CouldNotTell(var why) -> {
-                        unreadable.addAll(why);
+                    case Stood.CouldNotTell it -> {
+                        unreadable.addAll(it.why());
                         continue;
                     }
                 }
