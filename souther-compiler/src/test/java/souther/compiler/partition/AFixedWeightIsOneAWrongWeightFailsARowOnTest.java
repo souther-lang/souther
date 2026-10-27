@@ -58,11 +58,14 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
 
     private static final String SAID = "no row fixes how";
 
-    private static final IntBinaryOperator SUM = (a, b) -> a + b;
+    private static int sum(int a, int b) {
+        return a + b;
+    }
 
     private static String source(Written written, String total, boolean signed, int top,
                                  List<int[]> rows) {
-        return source(written, total, SUM, signed, top, rows);
+        return source(written, total, AFixedWeightIsOneAWrongWeightFailsARowOnTest::sum, signed,
+                top, rows);
     }
 
     /** The model's rows answer as {@code modelled} totals them, whatever {@code total} the source

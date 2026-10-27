@@ -55,8 +55,11 @@ class TiltOfADerivedValueTest {
     }
 
     /** The rule that holds where the weighed sum reaches {@code threshold}. */
-    private static Rule reaches(long threshold) {
-        return (weights, values) -> {
+    private record Reaches(long threshold) implements Rule {
+
+        @Override
+        public Optional<Boolean> holdsAt(Map<NumericTerm, ExactRatio> weights,
+                                         Map<NumericTerm, Place> values) {
             ExactRatio sum = ExactRatio.ZERO;
             for (Map.Entry<NumericTerm, ExactRatio> each : weights.entrySet()) {
                 ExactRatio part = each.getValue()
@@ -67,7 +70,11 @@ class TiltOfADerivedValueTest {
                 }
             }
             return Optional.of(sum.compareTo(ExactRatio.of(BigInteger.valueOf(threshold))) >= 0);
-        };
+        }
+    }
+
+    private static Rule reaches(long threshold) {
+        return new Reaches(threshold);
     }
 
     private static List<Map<NumericTerm, Place>> held(Row... readings) {
