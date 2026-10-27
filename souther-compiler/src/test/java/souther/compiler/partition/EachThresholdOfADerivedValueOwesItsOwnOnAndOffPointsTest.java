@@ -5,7 +5,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -78,6 +82,26 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         String report = reportOf(table(200) + AT_100 + AT_200);
         assertFalse(report.contains(MISSING_ON), report);
         assertFalse(report.contains(MISSING_OFF), report);
+    }
+
+    /** The rows offered stand at the threshold no row is at, and only there. */
+    @Test
+    void theRowsOfferedStandAtTheThresholdNoRowIsAt() {
+        Compilation compilation = measured(table(200) + AT_100);
+        String block = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+        assertTrue(block.contains("N { v = 200 }"), block);
+        assertTrue(block.contains("N { v = 199 }"), block);
+        assertFalse(block.contains("N { v = 100 }") || block.contains("N { v = 99 }"), block);
+    }
+
+    private static Compilation measured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
     }
 
     private static String reportOf(String source) {
