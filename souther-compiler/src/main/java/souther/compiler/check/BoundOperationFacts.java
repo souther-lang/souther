@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import net.unit8.notation199x.pattern.CodePoints;
+import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -40,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -336,15 +338,14 @@ public final class BoundOperationFacts {
 
     /** How many steps of the order its argument is counted on make one step of the order
      *  {@code operation} answers on, or empty where it counts no whole units. */
-    public java.util.OptionalLong wholeUnitsPerStep(ValueName operation) {
+    public OptionalLong wholeUnitsPerStep(ValueName operation) {
         BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
-        return counts == null ? java.util.OptionalLong.empty()
-                : java.util.OptionalLong.of(counts.perUnit());
+        return counts == null ? OptionalLong.empty() : OptionalLong.of(counts.perUnit());
     }
 
     /** What {@code applied} is handed to count the whole units of, or null where its operation
      *  counts none. */
-    public souther.compiler.core.Core wholeUnitsCountedIn(AnOperationApplied applied) {
+    public Core wholeUnitsCountedIn(AnOperationApplied applied) {
         BoundOperationFact.CountsTheWholeUnitsOf counts =
                 applied == null ? null : countsTheWholeUnitsOf(applied.operation());
         return counts == null ? null : applied.argument(counts.of());

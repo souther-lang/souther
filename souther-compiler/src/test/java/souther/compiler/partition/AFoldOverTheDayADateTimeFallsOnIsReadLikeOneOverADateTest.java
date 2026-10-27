@@ -146,7 +146,6 @@ class AFoldOverTheDayADateTimeFallsOnIsReadLikeOneOverADateTest {
      *  falls on, is read as completely as the same rule where both cases hold a date. */
     @Test
     void aDayChosenByCaseAmongDatesAndDaysOfDateTimesIsReadLikeOneAmongDates() {
-        String reports = "";
         for (String meetingAt : List.of("Date", "DateTime")) {
             String report = report(compiled("""
                     module example.stale
@@ -178,7 +177,6 @@ class AFoldOverTheDayADateTimeFallsOnIsReadLikeOneOverADateTest {
                         Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches, today))
                     """.formatted(meetingAt, meetingAt.equals("Date") ? "at"
                     : "DateTime.toDate(at)")));
-            reports += report;
             assertTrue(report.contains("measurement: complete"), report);
         }
     }

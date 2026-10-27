@@ -349,9 +349,9 @@ public final class Partitions {
                 // and no code point a string holds, so an edge at one is no edge any value stands
                 // at, and nothing here tells the two apart before a row is written.
                 case NumericTerm.CodePointAt _ -> false;
-                // Every day has a second of it, and the date-time at that second is a value of the
-                // position's type: an edge on the steps is one some value stands at.
-                case NumericTerm.WholeUnitsOf _ -> true;
+                // An edge on the steps is one some value of the position's type falls in, where the
+                // steps those values fall in are all of the answer's order.
+                case NumericTerm.WholeUnitsOf steps -> steps.stepsFillTheAnswersOrder();
                 // A number of an element read off the elements beside it is written by a container
                 // holding elements beside it, and which containers there are is the type's and its
                 // rules': a set never holds one value twice, and rules may keep elements apart or

@@ -121,9 +121,9 @@ final class TermReading {
         }
         return switch (ExactRatio.of(count.at()).dividedBy(ExactRatio.of(perUnit))
                 .flatMap(ExactRatio::floor)) {
-            case ExactAnswer.Unheld<java.math.BigInteger> unheld ->
+            case ExactAnswer.Unheld<BigInteger> unheld ->
                     new Reading.NotWorkedOut(unheld.why());
-            case ExactAnswer.Held<java.math.BigInteger> held -> {
+            case ExactAnswer.Held<BigInteger> held -> {
                 Place step = answered.onTheGrid(new Count(new BigDecimal(held.value())));
                 yield step == null ? new Reading.NotNumber() : new Reading.Number(step);
             }

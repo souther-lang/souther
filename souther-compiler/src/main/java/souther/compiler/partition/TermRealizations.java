@@ -394,11 +394,11 @@ final class TermRealizations {
                      NumericTerm.GatheredUnderAKey _ -> {
                     return nothingSolvesAGroup();
                 }
-                // Written by a value that falls in the step asked for, which beside another number
-                // of the same value is two questions of one value that nothing here solves together.
-                case NumericTerm.WholeUnitsOf _ -> {
-                    return nothingSolvesAGroup();
-                }
+                // A number read off a value the group asks for, as any number taken of the place is:
+                // the step a value falls in is what reading that value comes to. Asked beside the
+                // value itself, the candidates are the value's and the step is read off each of
+                // them; asked with no value beside it, nothing below writes one for it.
+                case NumericTerm.WholeUnitsOf _ -> takenOfIt.add(target);
                 case NumericTerm.ValueOf _ -> itself = target;
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.

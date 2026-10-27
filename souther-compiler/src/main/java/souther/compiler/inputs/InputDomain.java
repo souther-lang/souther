@@ -2110,9 +2110,12 @@ public final class InputDomain {
                     throw new IllegalStateException("how often the value at " + path + " equals "
                             + asked.key() + " was asked for by name, and no declaration names it");
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
-                NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(
-                        path, extremeOf.key(), extremeOf.extreme(),
-                        (ValueName.Stdlib) extremeOf.through());
+                NumericTerm.WholeUnitsOf steps = extremeOf.through() == null ? null
+                        : NumericTerm.WholeUnitsOf.of((ValueName.Stdlib) extremeOf.through(), path,
+                                type, source.inners(), source.declarations());
+                NumericTerm.ExtremeOfItsKey extreme = extremeOf.through() != null && steps == null
+                        ? null : NumericTerm.ExtremeOfItsKey.ofTheValueAt(path, extremeOf.key(),
+                                extremeOf.extreme(), steps);
                 if (extreme == null) {
                     throw new IllegalStateException(extremeOf.spelledAt(path.toString())
                             + " was asked for, and nothing holds `" + path + "` as an element");

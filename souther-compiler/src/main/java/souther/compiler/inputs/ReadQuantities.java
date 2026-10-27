@@ -2553,12 +2553,10 @@ final class ReadQuantities implements Quantities {
      * where the string does.
      */
     private NumericDomain.Bounds ownOf(NumericTerm.FromOnePosition term) {
-        // A step of the answer's order lies where that order does, whatever the value it is the
-        // step of is held to: the narrowing of the value is carried by the relation to it.
-        if (term instanceof NumericTerm.WholeUnitsOf) {
-            Carrier answered = ordersOf(term).answered();
-            return answered == null ? null
-                    : new NumericDomain.Bounds(answered.extent().low(), answered.extent().high());
+        // The steps some value of the position's type falls in, whatever the value is held to: the
+        // narrowing of the value is carried by the relation to it.
+        if (term instanceof NumericTerm.WholeUnitsOf steps) {
+            return steps.image();
         }
         Position at = byPath.get(term.position());
         PositionBounds bounds = at == null ? null : at.boundsFor(term);

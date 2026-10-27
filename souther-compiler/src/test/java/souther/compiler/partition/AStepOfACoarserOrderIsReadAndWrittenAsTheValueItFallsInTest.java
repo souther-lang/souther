@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Carrier;
+import souther.compiler.check.Extreme;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -17,6 +19,8 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
@@ -24,10 +28,12 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.AsACompilationAllows;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -47,8 +53,7 @@ class AStepOfACoarserOrderIsReadAndWrittenAsTheValueItFallsInTest {
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
-            souther.compiler.values.AsACompilationAllows.admittedValues(),
-            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
+            AsACompilationAllows.admittedValues(), AsACompilationAllows.whatARuleLeaves());
     private static final RuleReadingContext READING =
             RuleReadingContext.unshared(RULES, POLICY, TestDay.TODAY);
     private static final TermPath AT = TermPath.of("t");
@@ -152,6 +157,69 @@ class AStepOfACoarserOrderIsReadAndWrittenAsTheValueItFallsInTest {
                 "every position is a relation's and none is a stop: " + overDateTime);
         assertTrue(overDateTime.stream().anyMatch(line -> line.endsWith("`DateTime.toDate(t)`")),
                 "the line is on the day, not on the seconds: " + overDateTime);
+    }
+
+    /**
+     * Which steps the values of an order fall in is worked out of the two orders and the unit, and
+     * every step of the answer's order is one only where they do.
+     *
+     * <p>The declaration of a unit says what a step is and nothing of what the values reach: the
+     * seconds of a day, counted in hours, fall in twenty-four steps and not in every whole number.
+     * A reader that took the steps to be all there are would be shown rows at an hour that no
+     * second falls in.
+     */
+    @Test
+    void theStepsAreAllThereAreOnlyWhereTheValuesReachThemAll() {
+        Carrier seconds = Carrier.ofValue(Type.Prim.DATETIME, ScopedDeclarations.accessOf(SYMBOLS));
+        Carrier days = Carrier.ofValue(Type.Prim.DATE, ScopedDeclarations.accessOf(SYMBOLS));
+
+        assertTrue(NumericTerm.WholeUnitsOf.stepsFill(seconds, days, 86400),
+                "the seconds of every date-time fall in every day there is");
+        assertEquals(new NumericDomain.Bounds(days.extent().low(), days.extent().high()),
+                NumericTerm.WholeUnitsOf.stepsFallenInto(seconds, days, 86400));
+
+        NumericDomain.Bounds hours = NumericTerm.WholeUnitsOf.stepsFallenInto(Carrier.TIME,
+                Carrier.WHOLE, 3600);
+        assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                Endpoint.inclusive(Count.of(23))), hours,
+                "the seconds of a day fall in the hours nought to twenty-three");
+        assertFalse(NumericTerm.WholeUnitsOf.stepsFill(Carrier.TIME, Carrier.WHOLE, 3600),
+                "and the whole numbers are more than those");
+        assertTrue(NumericTerm.WholeUnitsOf.stepsFill(Carrier.TIME, Carrier.TIME, 1),
+                "while a step of one second is every second of the day there is");
+    }
+
+    /** The term for a real operation knows whether its steps fill the answer's order. */
+    @Test
+    void aTermKnowsWhetherItsStepsAreAllThereAre() {
+        assertTrue(theDay().stepsFillTheAnswersOrder());
+        assertEquals(new NumericDomain.Bounds(
+                        Carrier.ofValue(Type.Prim.DATE, ScopedDeclarations.accessOf(SYMBOLS))
+                                .extent().low(),
+                        Carrier.ofValue(Type.Prim.DATE, ScopedDeclarations.accessOf(SYMBOLS))
+                                .extent().high()),
+                theDay().image());
+    }
+
+    /**
+     * A term is made against the type of what stands at its position, by the one way there is.
+     * What stands there is a number or a date, never what the operation counts, and nothing meets
+     * the operation with it: neither the term nor the end of such terms under a key.
+     */
+    @Test
+    void anOperationAndAValueOfAnotherTypeNeverMakeATerm() {
+        assertNull(NumericTerm.WholeUnitsOf.of(TO_DATE, AT, Type.Prim.INT,
+                ScopedDeclarations.wrapsOf(SYMBOLS), ScopedDeclarations.accessOf(SYMBOLS)));
+        TermPath container = TermPath.of("ts");
+        TermPath key = container.element().then("account");
+        TermPath at = container.element().then("at");
+        NumericTerm.WholeUnitsOf steps = NumericTerm.WholeUnitsOf.of(TO_DATE, at,
+                Type.Prim.DATETIME, ScopedDeclarations.wrapsOf(SYMBOLS),
+                ScopedDeclarations.accessOf(SYMBOLS));
+        assertNotNull(NumericTerm.ExtremeOfItsKey.of(container, key, at, Extreme.GREATEST, steps));
+        assertNull(NumericTerm.ExtremeOfItsKey.of(container, key,
+                container.element().then("other"), Extreme.GREATEST, steps),
+                "the steps are of the value at another place");
     }
 
     /** The call may be named first, or handed to a helper: it is the same step wherever it is
