@@ -431,6 +431,58 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         assertEquals(List.of(), unreadAbout("staleAfter", shifted), shifted);
     }
 
+    private static final String BESIDE = """
+            module example.stale
+
+            data Touch = { account: String, days: Int }
+                invariant days >= 0 && days <= 100
+
+            let sinceOf (touches: List<Touch>, bonus: Int): Map<String, Int> =
+                List.fold((acc, p) -> Map.updateOrInsert(p.account, %1$s,
+                                                         seen -> %2$s(seen, %1$s), acc),
+                          Map.empty, touches)
+
+            behavior stale : (touches: List<Touch>, bonus: Int, staleAfter: Int)
+                -> Map<String, Int>
+
+            let stale (touches, bonus, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches, bonus))
+            """;
+
+    /** The relation of the end of a key with the threshold, as the report spells its form. */
+    private static List<String> formsRead(String report) {
+        return report.lines().filter(line -> line.contains("read as stale/")
+                        && line.contains("staleAfter: "))
+                .map(line -> line.substring(line.indexOf("read as stale/") + 14,
+                        line.indexOf(": ")))
+                .distinct().sorted().toList();
+    }
+
+    /**
+     * What stands beside every element is the same for every element, so it is added to the end
+     * once, whatever the element is weighed by: the least of {@code bonus - days} is {@code bonus}
+     * less the greatest of {@code days}, and of {@code 2 * days + bonus} twice the least of
+     * {@code days} with {@code bonus} added. The number beside is not multiplied with the element.
+     */
+    @Test
+    void theNumberBesideIsAddedToTheEndOnceWhateverTheElementIsWeighedBy() {
+        Map<String, List<String>> expected = Map.of(
+                "Int.min|bonus - p.days", List.of(
+                        "bonus - greatest(touches[*].days by account) - staleAfter"),
+                "Int.min|p.days + bonus", List.of(
+                        "bonus + least(touches[*].days by account) - staleAfter"),
+                "Int.min|2 * p.days + bonus", List.of(
+                        "bonus + 2 * least(touches[*].days by account) - staleAfter"),
+                "Int.max|bonus - 2 * p.days", List.of(
+                        "bonus - 2 * least(touches[*].days by account) - staleAfter"));
+        Map<String, List<String>> read = new java.util.TreeMap<>();
+        for (String key : expected.keySet()) {
+            String[] how = key.split("\\|");
+            read.put(key, formsRead(report(measured(BESIDE.formatted(how[1], how[0])))));
+        }
+        assertEquals(new java.util.TreeMap<>(expected), read);
+    }
+
     /**
      * Taken from a number, a place is turned over: the least of {@code today - on} is {@code today}
      * less the greatest of {@code on}. Read as the least of {@code on}, the line would be on the
