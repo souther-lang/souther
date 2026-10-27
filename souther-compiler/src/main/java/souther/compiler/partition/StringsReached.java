@@ -205,7 +205,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
             case NumericTerm.CodePointClassCount count -> countsReached.contains(count.position());
             case NumericTerm.CodePointValueSum sum -> countsReached.contains(sum.position());
             case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
-                 NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
+                 NumericTerm.WholeUnitsOf _, NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> true;
         };

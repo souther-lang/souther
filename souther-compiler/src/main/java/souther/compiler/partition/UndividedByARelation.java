@@ -1783,7 +1783,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             };
             case null -> CutDown.NOT;
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
-                 NumericTerm.CodePointAt _, NumericTerm.Multiplicity _,
+                 NumericTerm.CodePointAt _, NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderAKey _ -> CutDown.NOT;
         };
@@ -3992,6 +3992,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.TakenOf taken -> every && DefaultBoundOperationFacts.get()
                     .everyAnswerItCanGiveHasASourceValue(taken.operation())
                     ? region.wholeRunOf(taken) : null;
+            // Every step of the answer's order has a value of the position's order in it, so the
+            // steps the value falls in fill the answer's run wherever the value takes every value
+            // its type holds.
+            case NumericTerm.WholeUnitsOf units -> every ? region.wholeRunOf(units) : null;
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
@@ -4399,6 +4403,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.ValueOf value -> takes(value, read);
             case NumericTerm.TakenOf taken ->
                     takes(new NumericTerm.ValueOf(taken.position()), read);
+            case NumericTerm.WholeUnitsOf units ->
+                    takes(new NumericTerm.ValueOf(units.position()), read);
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };

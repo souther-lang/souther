@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Case;
@@ -121,6 +122,9 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                 NumericTerm.CodePointValueSum.of(TermPath.of("s"), Type.STRING,
                         NewtypeInners.NONE),
                 NumericTerm.CodePointAt.of(TermPath.of("s"), 3, Type.STRING, NewtypeInners.NONE),
+                NumericTerm.WholeUnitsOf.of(ValueName.Stdlib.operation("DateTime", "toDate"),
+                        TermPath.of("t"), Type.Prim.DATETIME, NewtypeInners.NONE,
+                        ScopedDeclarations.accessOf(SYMBOLS)),
                 NumericTerm.Multiplicity.of(XS, ELEMENT.then("k")),
                 NumericTerm.ExtremeOfItsKey.of(XS, ELEMENT.then("k"), ELEMENT.then("n"),
                         Extreme.LEAST),

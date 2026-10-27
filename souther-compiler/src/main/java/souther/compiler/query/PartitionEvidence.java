@@ -268,6 +268,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
                                         "List.get(" + point.index() + ", String.codePoints("
                                                 + at() + "))";
+                                case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                                        named(units.operation()) + "(" + at() + ")";
                                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
                                         "multiplicity(" + at() + ")";
                                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->

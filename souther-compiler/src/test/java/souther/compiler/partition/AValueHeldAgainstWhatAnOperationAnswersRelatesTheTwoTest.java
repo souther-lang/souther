@@ -148,17 +148,18 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
 
     @Test
     void anAnswerThatCountsToANumberIsReadWhereItIsOneValueAndNotWhereItIsHeldInOrder() {
-        assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "t")),
+        assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "DateTime.toDate(t)")),
                 Set.copyOf(said(measured("""
                         module w1
                         behavior m : (d: Date, t: DateTime) -> Bool
                         let m (d, t) = d == DateTime.toDate(t)
                         """))));
-        assertTrue(said(measured("""
-                module w1
-                behavior m : (d: Date, t: DateTime) -> Bool
-                let m (d, t) = d < DateTime.toDate(t)
-                """)).stream().allMatch(line -> line.startsWith("· not read")));
+        assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "DateTime.toDate(t)")),
+                Set.copyOf(said(measured("""
+                        module w1
+                        behavior m : (d: Date, t: DateTime) -> Bool
+                        let m (d, t) = d < DateTime.toDate(t)
+                        """))));
     }
 
     @Test

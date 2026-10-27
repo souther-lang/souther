@@ -145,6 +145,33 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the whole units of {@code of}: the value counted in a coarser order,
+     * where one step of that order is {@code perUnit} steps of the order {@code of} is counted on,
+     * and the answer is the step the value falls in, rounded toward the earlier one.
+     *
+     * <p>{@code DateTime.toDate} is this at {@code 86400}: a date counts days and a date-time counts
+     * seconds, and the day a second falls in is the second divided by a day's worth, floored. The
+     * flooring is toward the earlier step for a count below nought as well, so the second before the
+     * epoch is in the day before it, where {@link CountsWholeUnitsBetween} truncates toward zero.
+     *
+     * <p>The answer is no form of {@code of}, and what is stated of it is stated through what it
+     * falls in. With {@code k} for {@code perUnit}, the answer is at most {@code m} exactly where
+     * {@code of} is at most {@code k * m + k - 1}, and at least {@code m} exactly where {@code of} is
+     * at least {@code k * m}.
+     */
+    record CountsTheWholeUnitsOf(ArgumentRef of, long perUnit) implements OperationFact {
+
+        public CountsTheWholeUnitsOf {
+            Objects.requireNonNull(of, "a count of whole units is a count of something");
+            if (perUnit < 2) {
+                throw new IllegalArgumentException(
+                        "a unit is more than one step of the order, or the answer is the value and"
+                                + " states a form instead: " + perUnit);
+            }
+        }
+    }
+
+    /**
      * The operation answers the number at {@code value} rounded to a whole multiple of ten to the
      * minus {@code scale}, the way the rounding policy at {@code mode} says; with no scale, to a
      * whole number.

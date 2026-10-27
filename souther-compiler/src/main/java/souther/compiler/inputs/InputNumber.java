@@ -109,6 +109,10 @@ public final class InputNumber {
     private static LinearForm<NumericTerm> formAlone(Core e, InputDomain inputs, InputReads reads,
                                                      RuleReadingSource source) {
         Symbols symbols = source.symbols();
+        NumericTerm steps = wholeUnitsOf(e, inputs, reads, source);
+        if (steps != null) {
+            return LinearForm.atom(steps);
+        }
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
                 each -> reads.folded(each, symbols, source.newtypes()));
         if (measured != null) {
@@ -147,6 +151,27 @@ public final class InputNumber {
             // it would fall at a place the rule may say nothing about.
             case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
+    }
+
+    /**
+     * The step of a coarser order that the value at a location falls in, where {@code e} is a call
+     * of an operation counting whole units, or null where it is none.
+     *
+     * <p>Of a location only: the date of a date-time made of other arithmetic names no position a
+     * row could be asked to hold.
+     */
+    private static NumericTerm wholeUnitsOf(Core e, InputDomain inputs, InputReads reads,
+                                            RuleReadingSource source) {
+        Denotation standing = reads.standing(e, source.symbols(), source.newtypes());
+        AnOperationApplied applied = AnOperationApplied.of(standing.value());
+        Core counted = DefaultBoundOperationFacts.get().wholeUnitsCountedIn(applied);
+        if (counted == null || !(standing.at().pathOf(counted, source.newtypes())
+                instanceof PathResolution.At(var at))
+                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        return NumericTerm.WholeUnitsOf.of(operation, at, inputs.typeAt(at, source),
+                source.inners(), source.declarations());
     }
 
     /** {@code term} as a form of it alone, or null where there is none. */

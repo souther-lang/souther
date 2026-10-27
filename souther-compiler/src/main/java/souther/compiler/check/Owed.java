@@ -88,6 +88,8 @@ public sealed interface Owed {
                         "List.sum(String.codePoints(" + where + "))";
                 case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
                         "List.get(" + point.index() + ", String.codePoints(" + where + "))";
+                case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                        units.operation() + "(" + where + ")";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + where + ")";

@@ -97,6 +97,31 @@ final class TermReading {
                     codePointsOfAClass(count.counted(), count.through(), at);
             case NumericTerm.CodePointValueSum _ -> whatTheCodePointsComeTo(at);
             case NumericTerm.CodePointAt point -> theCodePointAt(point.index(), at);
+            case NumericTerm.WholeUnitsOf units -> wholeUnits(units.perUnit(), at, on);
+        };
+    }
+
+    /**
+     * The step of the answer's order that an observed value falls in: the count the value stands
+     * at, over the unit, floored. Floored and not truncated, so a count below nought falls in the
+     * step before it, as the run time's date of a date-time before the epoch is the day before.
+     */
+    private static Reading wholeUnits(long perUnit, ObservedValue at, TermOrders on) {
+        Carrier answered = on.answered();
+        if (on.observed() == null || answered == null) {
+            return new Reading.NotNumber();
+        }
+        if (!(on.observed().placeOf(at) instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        return switch (ExactRatio.of(count.at()).dividedBy(ExactRatio.of(perUnit))
+                .flatMap(ExactRatio::floor)) {
+            case ExactAnswer.Unheld<java.math.BigInteger> unheld ->
+                    new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<java.math.BigInteger> held -> {
+                Place step = answered.onTheGrid(new Count(new BigDecimal(held.value())));
+                yield step == null ? new Reading.NotNumber() : new Reading.Number(step);
+            }
         };
     }
 

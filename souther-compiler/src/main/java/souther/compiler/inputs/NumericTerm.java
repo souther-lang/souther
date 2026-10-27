@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.NumberAt;
@@ -110,7 +111,8 @@ public sealed interface NumericTerm
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
     sealed interface FromOnePosition extends NumericTerm
-            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum, CodePointAt {
+            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum, CodePointAt,
+                    WholeUnitsOf {
 
         /**
          * The single input position this term is read from.
@@ -608,6 +610,81 @@ public sealed interface NumericTerm
         @Override
         public String toString() {
             return "List.get(" + index + ", String.codePoints(" + position + "))";
+        }
+    }
+
+    /**
+     * The step of a coarser order that the value at {@code position} falls in, as the operation
+     * says: {@code DateTime.toDate} of a date-time is the day its second falls in.
+     *
+     * <p>A number of one value, counted on the order the operation answers: the step is
+     * {@code floor(count / perUnit)} of the count the value stands at, with {@code perUnit} the
+     * operation's own declaration ({@code CountsTheWholeUnitsOf}) and not a number kept here. What a
+     * comparison of it states of the value is stated through the steps the value falls in, which is
+     * the pullback the readers of a comparison take, and the term is no form of the value.
+     *
+     * <p>Keyed by the operation the call resolved to, so two operations declaring the same unit are
+     * two terms.
+     */
+    final class WholeUnitsOf implements FromOnePosition {
+
+        private final ValueName.Stdlib operation;
+        private final TermPath position;
+
+        private WholeUnitsOf(ValueName.Stdlib operation, TermPath position) {
+            this.operation = Objects.requireNonNull(operation, "taken by an operation");
+            this.position = Objects.requireNonNull(position, "of somewhere");
+        }
+
+        /**
+         * The steps of the order {@code operation} answers that the value at {@code position}
+         * falls in, or null where the operation declares no such count or what stands there is not
+         * counted.
+         */
+        public static WholeUnitsOf of(ValueName.Stdlib operation, TermPath position, Type at,
+                                      NewtypeInners inners, DeclarationAccess declarations) {
+            Type counted = DefaultBoundOperationFacts.get().wholeUnitsCountedOn(operation);
+            Type base = at == null ? null : TypeOps.base(at, inners);
+            Carrier carrier = base == null || counted == null ? null
+                    : Carrier.ofValue(base, declarations);
+            return carrier != null && carrier.counts() && counted.equals(base)
+                    ? new WholeUnitsOf(operation, position) : null;
+        }
+
+        /** The operation whose answer this term is. */
+        public ValueName.Stdlib operation() {
+            return operation;
+        }
+
+        /** How many steps of the value's order make one step of the answer's. */
+        public long perUnit() {
+            return DefaultBoundOperationFacts.get().wholeUnitsPerStep(operation).orElseThrow();
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        @Override
+        public WholeUnitsOf movedTo(PlacesMoved moved) {
+            return new WholeUnitsOf(operation, moved.put(position));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof WholeUnitsOf units && operation.equals(units.operation)
+                    && position.equals(units.position);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(WholeUnitsOf.class, operation, position);
+        }
+
+        @Override
+        public String toString() {
+            return operation + "(" + position + ")";
         }
     }
 
@@ -1744,6 +1821,8 @@ public sealed interface NumericTerm
                             count.through());
             case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
             case CodePointAt at -> new NumberAt.OfWhatNumber.OfTheCodePointAt(at.index());
+            case WholeUnitsOf units ->
+                    new NumberAt.OfWhatNumber.OfTheWholeUnitsOf(units.operation());
             case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
             case OccurrencesOfItsValue occurrences ->
                     new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
@@ -1799,6 +1878,11 @@ public sealed interface NumericTerm
                     CodePointClassCount.of(other, count.counted(), count.through(), at, inners);
             case CodePointValueSum _ -> CodePointValueSum.of(other, at, inners);
             case CodePointAt point -> CodePointAt.of(other, point.index(), at, inners);
+            // The value it counts is of the type the operation counts, which is all that moving
+            // asks: the order it is counted on was settled when the term was made.
+            case WholeUnitsOf units -> at != null && DefaultBoundOperationFacts.get()
+                    .wholeUnitsCountedOn(units.operation()).equals(TypeOps.base(at, inners))
+                    ? new WholeUnitsOf(units.operation(), other) : null;
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
@@ -1856,6 +1940,9 @@ public sealed interface NumericTerm
             // A scalar value, which is from nought to the last there is.
             case CodePointAt _ -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
                     Endpoint.inclusive(Count.of(Character.MAX_CODE_POINT)));
+            // A step of the answer's order, whose first and last the reading of the value's own
+            // bounds carries over; held open here, which is wider than the truth and never narrower.
+            case WholeUnitsOf _ -> NumericDomain.Bounds.OPEN;
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);

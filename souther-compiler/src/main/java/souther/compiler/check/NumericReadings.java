@@ -163,6 +163,7 @@ final class NumericReadings {
                      BoundOperationFact.StatesTheOrderOfItsArguments _,
                      BoundOperationFact.ShiftsBy _,
                      BoundOperationFact.CountsWholeUnitsBetween _,
+                     BoundOperationFact.CountsTheWholeUnitsOf _,
                      BoundOperationFact.RoundsToAStep _,
                      BoundOperationFact.BuildsItsResultFrom _,
                      BoundOperationFact.ElementsComeFrom _,

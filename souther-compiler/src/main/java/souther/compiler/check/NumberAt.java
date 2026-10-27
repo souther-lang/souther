@@ -103,6 +103,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheCodePointAt(index));
     }
 
+    /** The step of the order {@code operation} answers on that the value at {@code position} falls
+     *  in. */
+    public static <P> NumberAt<P> wholeUnitsOf(P position, ValueName operation) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheWholeUnitsOf(operation));
+    }
+
     /** How many elements of the container {@code position} stands inside hold there what the
      *  element under consideration holds. */
     public static <P> NumberAt<P> multiplicityOf(P position) {
@@ -216,6 +222,18 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         record OfTheCodePointAt(int index) implements OfWhatNumber {}
 
         /**
+         * The step of the coarser order {@code operation} answers on that the value standing there
+         * falls in: another number of the place than the value itself, and than the step another
+         * operation declaring another unit answers.
+         */
+        record OfTheWholeUnitsOf(ValueName operation) implements OfWhatNumber {
+
+            public OfTheWholeUnitsOf {
+                Objects.requireNonNull(operation, "this one names the operation");
+            }
+        }
+
+        /**
          * How many elements of the container the place stands inside hold at it what the element
          * under consideration holds there.
          *
@@ -312,6 +330,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     "List.sum(String.codePoints(" + position + "))";
             case OfWhatNumber.OfTheCodePointAt at ->
                     "List.get(" + at.index() + ", String.codePoints(" + position + "))";
+            case OfWhatNumber.OfTheWholeUnitsOf units -> units.operation() + "(" + position + ")";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
             case OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> kept.keptBy() == null
                     ? "occurrences(" + position + ")"

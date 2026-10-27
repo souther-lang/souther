@@ -238,6 +238,7 @@ final class Intervals {
                     : " in " + count.through().writtenAround("the string"));
             case NumericTerm.CodePointValueSum _ -> "sum of the code points";
             case NumericTerm.CodePointAt point -> "code point at " + point.index();
+            case NumericTerm.WholeUnitsOf units -> units.operation().qualified();
         };
     }
 

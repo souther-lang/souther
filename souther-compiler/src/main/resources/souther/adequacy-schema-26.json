@@ -1392,6 +1392,25 @@
               "minimum": 0
             }
           }
+        },
+        {
+          "description": "The step of a coarser order that the value a position holds falls in, as `operation` answers it: the day a date-time falls on. The step is the value's count over the operation's unit, floored toward the earlier step.",
+          "required": [
+            "operation",
+            "position"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "whole_units"
+            },
+            "operation": {
+              "$ref": "#/$defs/operationId"
+            },
+            "position": {
+              "type": "string"
+            }
+          }
         }
       ]
     },

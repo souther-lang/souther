@@ -29,6 +29,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -325,6 +326,41 @@ public final class BoundOperationFacts {
     /** The operations that count whole units between two values. */
     public Set<ValueName> countsWholeUnitsBetween() {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
+    }
+
+    /** How {@code operation} counts the whole units of its argument in a coarser order, or null
+     *  where it counts none. */
+    public BoundOperationFact.CountsTheWholeUnitsOf countsTheWholeUnitsOf(ValueName operation) {
+        return one(BoundOperationFact.CountsTheWholeUnitsOf.class, operation);
+    }
+
+    /** How many steps of the order its argument is counted on make one step of the order
+     *  {@code operation} answers on, or empty where it counts no whole units. */
+    public java.util.OptionalLong wholeUnitsPerStep(ValueName operation) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
+        return counts == null ? java.util.OptionalLong.empty()
+                : java.util.OptionalLong.of(counts.perUnit());
+    }
+
+    /** What {@code applied} is handed to count the whole units of, or null where its operation
+     *  counts none. */
+    public souther.compiler.core.Core wholeUnitsCountedIn(AnOperationApplied applied) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts =
+                applied == null ? null : countsTheWholeUnitsOf(applied.operation());
+        return counts == null ? null : applied.argument(counts.of());
+    }
+
+    /** The type of the step {@code operation} answers, or null where it counts no whole units. */
+    public Type wholeUnitsAnswered(ValueName operation) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
+        return counts == null ? null : counts.answers();
+    }
+
+    /** The type of the value {@code operation} counts the whole units of, or null where it counts
+     *  none. */
+    public Type wholeUnitsCountedOn(ValueName operation) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
+        return counts == null ? null : counts.of().stands();
     }
 
     /** How {@code operation} rounds a number to a whole one, or null where it rounds none to a

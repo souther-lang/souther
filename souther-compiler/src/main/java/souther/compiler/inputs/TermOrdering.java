@@ -6,6 +6,7 @@ import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -64,7 +65,7 @@ final class TermOrdering {
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                  NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
-                 NumericTerm.Multiplicity _,
+                 NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
         };
@@ -128,6 +129,11 @@ final class TermOrdering {
             case NumericTerm.CodePointValueSum _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // A code point is the whole number `String.codePoints` lists it as.
             case NumericTerm.CodePointAt _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // The step of the order the operation answers on, which is not the order of the value
+            // it is the step of: a date counts days where the date-time it falls on counts seconds.
+            case NumericTerm.WholeUnitsOf units -> Carrier.ofValue(
+                    DefaultBoundOperationFacts.get().wholeUnitsAnswered(units.operation()),
+                    declarations);
             // How often a value occurs is a whole number whatever the value is.
             case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
                  NumericTerm.OccurrencesOfAKey _ -> Carrier.ofValue(Type.Prim.INT, declarations);

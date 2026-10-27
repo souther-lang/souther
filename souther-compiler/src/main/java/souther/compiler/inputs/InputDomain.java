@@ -1887,6 +1887,10 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
                             + " about " + extreme.spelledAt(path.toString()));
+            // Nor which step of a coarser order the value falls in.
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                    throw new IllegalStateException("a clause of a declaration was read as a rule"
+                            + " about " + units.operation() + "(" + path + ")");
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1907,8 +1911,8 @@ public final class InputDomain {
         NarrowedBounds projected = switch (term) {
             case NumericTerm.ValueOf _ -> placed.at(path);
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _ ->
-                    NarrowedBounds.NOTHING;
+                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                 NumericTerm.WholeUnitsOf _ -> NarrowedBounds.NOTHING;
         };
         return new PositionBounds(term,
                 // Two questions of one pair of readings, and they do not have one answer. What the
@@ -1958,6 +1962,7 @@ public final class InputDomain {
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfTheCodePointAt _,
+                 NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
@@ -2065,6 +2070,16 @@ public final class InputDomain {
                             + " for, and what stands there is no string");
                 }
                 yield one;
+            }
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units -> {
+                NumericTerm.WholeUnitsOf steps = NumericTerm.WholeUnitsOf.of(
+                        (ValueName.Stdlib) units.operation(), path, type, source.inners(),
+                        source.declarations());
+                if (steps == null) {
+                    throw new IllegalStateException("the steps " + units.operation() + " counts of `"
+                            + path + "` were asked for, and what stands there is not what it counts");
+                }
+                yield steps;
             }
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> {
                 List<TermPath> holding = path.containersHoldingIt();
