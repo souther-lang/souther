@@ -4781,7 +4781,7 @@ public final class Adequacy {
             }
             out.addAll(Coverages.assessBetween(subject, observed, put,
                     partitioning.reaching()));
-            return Coverages.besideEachLine(out, put.all(), partitioning.replaced());
+            return Coverages.besideEachLine(out, partitioning.replaced());
         }
 
     }

@@ -1565,7 +1565,7 @@ final class Coverages {
      * along. Whether the points are met is the line's too: a point is met where a row is at it at
      * any reading ({@link #together}), which is what the readings put together say of it.
      */
-    static LineReadings besideEachLine(List<ReadingOfALine> readings, List<ObservedInputs> rows,
+    static LineReadings besideEachLine(List<ReadingOfALine> readings,
                                        List<DerivedValue.Replaced> replaced) {
         SequencedMap<BoundaryLine, List<ReadingOfALine>> byLine = new LinkedHashMap<>();
         for (ReadingOfALine each : readings) {
@@ -1579,7 +1579,7 @@ final class Coverages {
             out.add(new BorderAssessment(each.border(), each.items(),
                     beside.get(BoundaryLine.of(each.border()))));
         }
-        return new LineReadings(out, tiltsOfEachComputation(readings, rows, replaced));
+        return new LineReadings(out, tiltsOfEachComputation(readings, replaced));
     }
 
     /**
@@ -1592,8 +1592,7 @@ final class Coverages {
      * for it either, and what is owed is still owed.
      */
     private static List<TiltOfADerivedValue> tiltsOfEachComputation(
-            List<ReadingOfALine> readings, List<ObservedInputs> rows,
-            List<DerivedValue.Replaced> replaced) {
+            List<ReadingOfALine> readings, List<DerivedValue.Replaced> replaced) {
         List<TiltOfADerivedValue> out = new ArrayList<>();
         for (DerivedValue.Replaced each : replaced) {
             Map<ModelOccurrence, List<TiltOfADerivedValue.RowsOnABorder>> byCall = new LinkedHashMap<>();
