@@ -12,6 +12,7 @@ import souther.compiler.query.TiltOfADerivedValue.Rule;
 import souther.compiler.query.TiltOfADerivedValue.Standing;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,11 +74,14 @@ class TiltOfADerivedValueTest {
         return Arrays.stream(readings).map(Row::held).toList();
     }
 
-    /** A border at {@code threshold} with the rows nearest it on each side. */
+    /** A border at {@code threshold} with the rows nearest it, where the rule holds and where it
+     *  does not; which is which is the rule's to say. */
     private static RowsOnABorder border(long threshold, boolean complete, List<Row> holding,
                                         List<Row> notHolding) {
+        List<Row> nearest = new ArrayList<>(holding);
+        nearest.addAll(notHolding);
         return new RowsOnABorder(UNIT_WEIGHTS, reaches(threshold),
-                held(holding.toArray(Row[]::new)), held(notHolding.toArray(Row[]::new)), complete);
+                held(nearest.toArray(Row[]::new)), complete);
     }
 
     private static RowsOnABorder nothingOn(boolean complete) {
@@ -192,7 +196,7 @@ class TiltOfADerivedValueTest {
         Rule overflowsAtB = (weights, values) -> Count.number(values.get(B)).exactly().isZero()
                 ? reaches(100).holdsAt(weights, values) : Optional.empty();
         RowsOnABorder border = new RowsOnABorder(UNIT_WEIGHTS, overflowsAtB,
-                held(row(100, 0), row(0, 100)), held(row(99, 0), row(0, 99)), true);
+                held(row(100, 0), row(0, 100), row(99, 0), row(0, 99)), true);
         SequencedMap<NumericTerm, Standing> standings = oneCall(border);
         assertEquals(Standing.Shown.class, of(standings, A));
         assertEquals(Standing.Undecided.class, of(standings, B));
@@ -205,7 +209,7 @@ class TiltOfADerivedValueTest {
         ExactRatio two = ExactRatio.of(BigInteger.TWO);
         Map<NumericTerm, ExactRatio> twice = Map.of(A, two, B, two);
         RowsOnABorder first = new RowsOnABorder(twice, reaches(200),
-                held(row(100, 0)), held(row(99, 0)), true);
+                held(row(100, 0), row(99, 0)), true);
         RowsOnABorder second = border(100, true, List.of(row(0, 100)), List.of(row(0, 99)));
         SequencedMap<NumericTerm, Standing> standings = oneCall(first, second);
         assertEquals(Standing.Shown.class, of(standings, A));

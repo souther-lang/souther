@@ -112,28 +112,26 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
      * @param weights    the model's weight of each position the border's weighing names, in the
      *                   quantity's own units
      * @param rule       the border's rule, which answers for the weights a row is read under
-     * @param holding    what each position holds at each reading of a row that stands at a value
-     *                   nearest the border where the rule holds, and at no other reading
-     * @param notHolding the same where it does not
+     * @param readings   what each position holds at each reading of a row that stands at a value
+     *                   nearest the border, on either side of it, and at no other reading. Which
+     *                   side the model has a row on is the rule's answer under the model's own
+     *                   weights and is not carried here
      * @param complete   whether those are every reading of every row there is: the border was read
      *                   against every row, every reading of each was tried, and none was left out
      *                   for nothing having watched it run
      */
     public record RowsOnABorder(Map<NumericTerm, ExactRatio> weights, Rule rule,
-                                List<Map<NumericTerm, Place>> holding,
-                                List<Map<NumericTerm, Place>> notHolding, boolean complete) {
+                                List<Map<NumericTerm, Place>> readings, boolean complete) {
 
         public RowsOnABorder {
             weights = Map.copyOf(weights);
             Objects.requireNonNull(rule, "a border has a rule");
-            holding = List.copyOf(holding);
-            notHolding = List.copyOf(notHolding);
+            readings = List.copyOf(readings);
         }
 
         /** A border nothing was read against, which says nothing and is not left out. */
         static RowsOnABorder unread() {
-            return new RowsOnABorder(Map.of(), (_, _) -> Optional.empty(), List.of(), List.of(),
-                    false);
+            return new RowsOnABorder(Map.of(), (_, _) -> Optional.empty(), List.of(), false);
         }
     }
 
@@ -240,17 +238,13 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
             if (weighed.values().stream().allMatch(each -> each.signum() == 0)) {
                 continue;
             }
-            for (Map<NumericTerm, Place> values : border.holding()) {
-                Optional<Boolean> holds = border.rule().holdsAt(weighed, values);
-                tried &= holds.isPresent();
-                if (holds.isPresent() && !holds.get()) {
-                    return new Caught(true, tried);
-                }
-            }
-            for (Map<NumericTerm, Place> values : border.notHolding()) {
-                Optional<Boolean> holds = border.rule().holdsAt(weighed, values);
-                tried &= holds.isPresent();
-                if (holds.isPresent() && holds.get()) {
+            for (Map<NumericTerm, Place> values : border.readings()) {
+                // The side the model has the row on is what its own rule says of it, and the
+                // changed computation fails the row where its rule says otherwise.
+                Optional<Boolean> kept = border.rule().holdsAt(border.weights(), values);
+                Optional<Boolean> changed = border.rule().holdsAt(weighed, values);
+                tried &= kept.isPresent() && changed.isPresent();
+                if (kept.isPresent() && changed.isPresent() && !kept.equals(changed)) {
                     return new Caught(true, tried);
                 }
             }

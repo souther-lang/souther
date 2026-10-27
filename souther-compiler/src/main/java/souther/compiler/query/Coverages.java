@@ -52,7 +52,6 @@ import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
-import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -1470,21 +1469,19 @@ final class Coverages {
         if (form.isEmpty()) {
             return Optional.empty();
         }
-        List<Criterion> holding = new ArrayList<>();
-        List<Criterion> notHolding = new ArrayList<>();
+        List<Criterion> near = new ArrayList<>();
         boolean someRowIsOn = false;
         boolean pointsRead = true;
         boolean allWorkedOut = true;
         for (DomainPoint point : border.answers().keySet()) {
             // The values nearest the line on each side, which is where a row shows the line has not
             // moved; a run away from it shows nothing of that.
-            PointRole role = border.roleOf(point);
-            if (role != PointRole.ON && role != PointRole.OFF) {
+            if (!border.roleOf(point).againstTheLine()) {
                 continue;
             }
             switch (border.demand(point)) {
                 case Demand.Owed owed -> {
-                    (role == PointRole.ON ? holding : notHolding).add(owed.criterion());
+                    near.add(owed.criterion());
                     ItemAssessment.Owed measured = (ItemAssessment.Owed) items.get(point);
                     someRowIsOn |= measured.coverage().made()
                             .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
@@ -1513,18 +1510,19 @@ final class Coverages {
         }
         OrderedAffineBoundary rule = boundary.get();
         Map<NumericTerm, ExactRatio> weights = rule.direction().direction();
-        TiltOfADerivedValue.Rule weighed = (changed, values) ->
-                Optional.ofNullable(rule.satisfiesWeighing(changed, values).orNull());
+        // A reading that holds no number at one of the weighed positions says nothing of the rule.
+        TiltOfADerivedValue.Rule weighed = (changed, values) -> values.keySet()
+                .containsAll(changed.keySet())
+                ? Optional.ofNullable(rule.satisfiesWeighing(changed, values).orNull())
+                : Optional.empty();
         return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
             if (!rowsAreOn) {
                 return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, List.of(),
-                        List.of(), noRowIsOnAndTheyWereRead);
+                        noRowIsOnAndTheyWereRead);
             }
-            StandingsRead holdingRead = readAt(holding, shape, rows);
-            StandingsRead notHoldingRead = readAt(notHolding, shape, rows);
-            return new TiltOfADerivedValue.RowsOnABorder(weights, weighed,
-                    holdingRead.readings(), notHoldingRead.readings(),
-                    pointsWorkedOut && holdingRead.complete() && notHoldingRead.complete());
+            StandingsRead read = readAt(near, shape, rows);
+            return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, read.readings(),
+                    pointsWorkedOut && read.complete());
         }));
     }
 
