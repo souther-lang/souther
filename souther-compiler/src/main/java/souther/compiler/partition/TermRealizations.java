@@ -2304,19 +2304,28 @@ final class TermRealizations {
         // all do. A statement no region carries is one more thing each element would have to be
         // written to meet.
         SearchRegion region = within;
-        DemandsInside demanded = inside;
+        List<DemandsInside> demanded = List.of(inside);
         if (gathered.selection() != null) {
             List<TakenConstraint> kept = gathered.selection().heldTo().orElse(null);
             if (kept == null) {
                 // A statement that is only which cases the element is in is asked of the element
-                // as the cases it is written in.
-                Requirements cases = gathered.selection().casesRequired().orElse(null);
-                if (cases == null || !(inside.required().merge(cases)
-                        instanceof Requirements.Merge.Merged(Requirements both))) {
+                // as the cases it is written in, in each way it is met that stands beside what is
+                // already asked inside.
+                KeptOccurrences.CasesAsked ways = gathered.selection().casesAsked().orElse(null);
+                List<DemandsInside> beside = new ArrayList<>();
+                if (ways != null) {
+                    for (Requirements way : ways.ways()) {
+                        if (inside.required().merge(way)
+                                instanceof Requirements.Merge.Merged(Requirements both)) {
+                            beside.add(new DemandsInside(inside.among(), both));
+                        }
+                    }
+                }
+                if (beside.isEmpty()) {
                     return new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                 }
-                demanded = new DemandsInside(inside.among(), both);
+                demanded = beside;
             } else {
                 region = TakenConstraint.narrowedBy(kept, within);
                 if (TakenConstraint.nothingIsLeftFor(kept, region)) {
@@ -2339,11 +2348,10 @@ final class TermRealizations {
                         }
                     }
                 }
-                demanded = new DemandsInside(among, inside.required());
+                demanded = List.of(new DemandsInside(among, inside.required()));
             }
         }
         SearchRegion keptIn = region;
-        DemandsInside heldInside = demanded;
         // Some element, since a key is filed where one has it: a container of none comes to
         // nought added up and files no key at all. An end is one element, which is its own end
         // by either; and how many elements the key has is asked of them as well where a count of
@@ -2370,11 +2378,15 @@ final class TermRealizations {
         // of the counts in it is the size.
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
                 howMany == null || oneElement != null ? some : howMany, Carrier.WHOLE, 1);
-        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                onTheOrder(asked.walking(), orders, asked.named(), within,
-                        UsualPlaces.of(orders.term(), orders.answered(), reading.today())),
-                number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, keptIn,
-                        reading, elements, heldInside));
+        Tried tried = onTheOrder(asked.walking(), orders, asked.named(), within,
+                UsualPlaces.of(orders.term(), orders.answered(), reading.today()));
+        // Each way the statement is met is a row of its own, and one is no row of another: a way
+        // that builds nothing says nothing of the rest.
+        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion() && demanded.size() == 1,
+                demanded, CompositionShortfall.NONE,
+                heldInside -> firstThatBuilds(asked.walkIsOfTheWholeQuestion(), tried,
+                        number -> ContainersAddingUp.to(number, sourceType, keptApart, orders,
+                                keptIn, reading, elements, heldInside)));
         // And one that is not written is not one no row has: the container may be one its type
         // makes hold more of the key's elements than one, which it is made of.
         return oneElement != null ? someOf(made, oneElement) : made;

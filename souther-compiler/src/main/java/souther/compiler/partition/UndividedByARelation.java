@@ -19,6 +19,8 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.Admits;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.FilingCoordinate;
@@ -31,6 +33,8 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -39,7 +43,6 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.PositionsAStatementReads;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTranslation;
@@ -4227,36 +4230,58 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static List<PlaceOfAnEnd> placesOfOneElement(NumericTerm end) {
         return end instanceof NumericTerm.GatheredUnderItsKey gathered && gathered.selection() != null
-                && !inCasesOfFreePositions(gathered.selection().meeting(), new ArrayList<>())
-                ? List.of() : placesOfEnd(end);
+                && gathered.selection().casesAsked().isEmpty() ? List.of() : placesOfEnd(end);
     }
 
     /**
      * Whether the one element of a container is kept by {@code selection} wherever it stands at
      * one of {@code places} — so that the end over the kept elements is that element's number.
      *
-     * <p>True only where the selection is the case some position of the element is in, and no
-     * place of the end, and no rule of a value the positions sit in, reads or relates them: the
-     * element is then written at the case the selection asks and at the number the end is asked
+     * <p>True only where the selection is which cases positions of the element are in
+     * ({@link KeptOccurrences#casesAsked}), and the element can be written in some way of meeting
+     * it: every case of the way holds a value. Beside that, no place of the end sits at or under a
+     * position the selection reads, and no rule of a value those positions sit in names one: the
+     * element is then written at the cases the selection asks and at the number the end is asked
      * at, the one choice leaving the other free. A selection on a number, or one reading the
-     * element as a whole, or a place of the end at or under a position it reads, is not shown to
-     * be met together with it.
+     * element as a whole, is not shown to be met together with the end.
+     *
+     * <p>Which way a row is written in is the composer's, against what else the row asks of the
+     * same positions ({@code TermRealizations}); a place of the end never asks a case at a
+     * position the selection reads, since it would sit under it.
      */
     private static boolean aLoneElementMeetsTheSelectionBeside(KeptOccurrences selection,
                                                                List<PlaceOfAnEnd> places,
                                                                InputReading read) {
-        List<TermPath> subjects = new ArrayList<>();
-        if (places.isEmpty() || !inCasesOfFreePositions(selection.meeting(), subjects)) {
+        KeptOccurrences.CasesAsked asked = selection.casesAsked().orElse(null);
+        if (places.isEmpty() || asked == null) {
             return false;
         }
-        for (TermPath subject : subjects) {
-            TermPath at = subject.position();
-            if (namedDownTo(at, at.steps().size(), read, null) != Named.NOT) {
+        for (TermPath subject : asked.positions()) {
+            if (namedDownTo(subject, subject.steps().size(), read, null) != Named.NOT) {
                 return false;
             }
             for (PlaceOfAnEnd each : places) {
                 TermPath place = each.place().position();
-                if (place.isAtOrUnder(at) || at.isAtOrUnder(place)) {
+                if (place.isAtOrUnder(subject) || subject.isAtOrUnder(place)) {
+                    return false;
+                }
+            }
+        }
+        return asked.ways().stream().anyMatch(way -> everyCaseHoldsAValue(way, places, read));
+    }
+
+    /**
+     * Whether the rules, every one read, leave a value at every case {@code way} asks of a
+     * position, in an element at each of {@code places}. A case they refuse holds none, and one
+     * they were not read to the end of may hold none either: only an admission is a value that
+     * can be written.
+     */
+    private static boolean everyCaseHoldsAValue(Requirements way, List<PlaceOfAnEnd> places,
+                                                InputReading read) {
+        for (Map.Entry<TermPath, CasesLeft> each : way.refinements().entrySet()) {
+            for (PlaceOfAnEnd place : places) {
+                if (!admittedBeside(each.getKey(), each.getValue(), place.place().requirements(),
+                        read)) {
                     return false;
                 }
             }
@@ -4264,38 +4289,42 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return true;
     }
 
-    /** Whether {@code stated} says of positions of the input, each once, that they are in some of
-     *  their cases and nothing else; those positions are added to {@code out}. */
-    private static boolean inCasesOfFreePositions(Proposition stated, List<TermPath> out) {
-        return switch (stated) {
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), _, boolean holds, _)
-                    when holds -> out.add(at);
-            // Of several the element must meet, two on one position may leave it no case.
-            case Proposition.All all -> {
-                for (Proposition part : all.parts()) {
-                    List<TermPath> here = new ArrayList<>();
-                    if (!inCasesOfFreePositions(part, here)
-                            || here.stream().anyMatch(at -> out.stream()
-                                    .anyMatch(past -> past.position().equals(at.position())))) {
-                        yield false;
-                    }
-                    out.addAll(here);
+    /**
+     * Whether the rules, every one read, leave a value at {@code cases} of the sum at {@code at},
+     * in an element as {@code element} asks it to be. A name the cases of the element share
+     * stands at one position under each of them, and the element is as one of those asks.
+     */
+    private static boolean admittedBeside(TermPath at, CasesLeft cases, Requirements element,
+                                          InputReading read) {
+        Position there = read.domain().at(at.position());
+        if (there != null) {
+            return admits(there, cases);
+        }
+        if (!(read.domain().reach().standingOf(at)
+                instanceof NameReach.Standing.UnderTheCases(
+                        List<NameReach.CaseStanding> standings))) {
+            return false;
+        }
+        boolean any = false;
+        for (NameReach.CaseStanding standing : standings) {
+            if (element.merge(standing.assuming()) instanceof Requirements.Merge.Merged) {
+                Position under = read.domain().at(standing.position().position());
+                if (under == null || !admits(under, cases)) {
+                    return false;
                 }
-                yield true;
+                any = true;
             }
-            // Meeting any one is meeting it, so each may be asked of the same position.
-            case Proposition.Any any -> {
-                for (Proposition part : any.parts()) {
-                    List<TermPath> here = new ArrayList<>();
-                    if (!inCasesOfFreePositions(part, here)) {
-                        yield false;
-                    }
-                    here.stream().filter(at -> !out.contains(at)).forEach(out::add);
-                }
-                yield true;
+        }
+        return any;
+    }
+
+    private static boolean admits(Position there, CasesLeft cases) {
+        for (Refinement narrowing : cases.atoms()) {
+            if (!(there.admissionOf(narrowing) instanceof Admits.Admitted)) {
+                return false;
             }
-            default -> false;
-        };
+        }
+        return true;
     }
 
     private static List<PlaceOfAnEnd> placesOfEnd(NumericTerm end) {

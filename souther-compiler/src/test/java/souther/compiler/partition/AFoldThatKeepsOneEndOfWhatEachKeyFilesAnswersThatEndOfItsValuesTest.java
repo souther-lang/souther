@@ -718,6 +718,94 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         assertFalse(unreadAnywhere(report).isEmpty(), report);
     }
 
+    private static final String KEPT_BY_A_NAME_THE_CASES_SHARE = """
+            module example.stale
+
+            data ToAccount
+            data ToLead
+            data Related = ToAccount | ToLead
+            data Base = { account: String, related: Related }
+            data Call = { ...Base, a: Int }
+            data Email = { ...Base, b: Int }
+            data Touch = Call | Email
+
+            let onAnAccount (t: Touch): Bool =
+                match t.related with
+                    | ToAccount -> true
+                    | ToLead -> false
+
+            let daysOf (t: Touch): Int =
+                match t with
+                    | Call { a } -> a
+                    | Email { b } -> b
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, t) -> Map.updateOrInsert(t.account, daysOf(t),
+                                                         seen -> Int.min(seen, daysOf(t)), acc),
+                          Map.empty, List.filter(t -> onAnAccount(t), touches))
+
+            behavior stale : (touches: List<Touch>, staleAfter: Int) -> Map<String, Int>
+
+            let stale (touches, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches))
+            """;
+
+    /**
+     * The case that keeps a touch is read at a name both kinds of touch share, which stands at one
+     * position under each kind: the end is shown every value as it is where the name is the
+     * touch's own, with the position asked under the kind the number is read in.
+     */
+    @Test
+    void theEndOverASelectionOfANameTheCasesShareIsShownEveryValue() {
+        Compilation compilation = measured(KEPT_BY_A_NAME_THE_CASES_SHARE);
+        String report = report(compilation);
+        assertEquals(List.of(), unreadAnywhere(report), report);
+        assertTrue(json(compilation).contains("kept by touches meeting"), report);
+        assertEquals(List.of(), report.lines().filter(line -> line.contains("no row is at"))
+                .toList(), report);
+    }
+
+    /** A rule of the touch about its account does not relate the account to what keeps it. */
+    @Test
+    void aRuleOfTheTouchAboutAnotherFieldLeavesTheEndShown() {
+        String report = report(measured(
+                KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted("invariant String.length(account) >= 1")));
+        assertEquals(List.of(), unreadAnywhere(report), report);
+    }
+
+    /**
+     * The premise of showing the end beside the selection: no rule this compiler reads relates the
+     * case a touch is in to a number of it. The end is shown every value because the case that
+     * keeps the touch and its days are asked of one touch apart ({@code namedDownTo} on the
+     * positions the selection reads), and a rule tying them would leave the days of a kept touch
+     * only some values. The forms below are the ways to write such a rule, and none is read yet —
+     * so the reading that would make one readable is the one to revisit that check beside.
+     */
+    @Test
+    void noRuleRelatingTheCaseOfATouchToItsDaysIsReadYet() {
+        for (String tie : List.of(
+                "invariant match related with | ToAccount -> days >= 10 | ToLead -> true",
+                "invariant days >= 10 || (match related with | ToAccount -> false | ToLead -> true)",
+                "invariant if days >= 10 then true else (match related with"
+                        + " | ToAccount -> false | ToLead -> true)")) {
+            String report = report(measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted(tie)));
+            assertTrue(report.contains("invariant Touch #1 — which values may stand at"
+                    + " touches[*].related: written in a form this compiler does not read"),
+                    () -> "a rule tying the case to the days is read: " + tie + "\n" + report);
+        }
+    }
+
+    /**
+     * A rule leaving the touch none of the cases that keep it keeps no touch: the end is not shown
+     * a value because one touch alone would be a row, though the days are tied to nothing.
+     */
+    @Test
+    void aRuleLeavingNoValueAtTheCaseThatKeepsATouchLeavesTheEndUnshown() {
+        String report = report(measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted(
+                "invariant match related with | ToAccount -> false | ToLead -> true")));
+        assertFalse(unreadAnywhere(report).isEmpty(), report);
+    }
+
     private static final String KEPT_BY_THE_CASE_ITSELF = """
             module example.stale
 

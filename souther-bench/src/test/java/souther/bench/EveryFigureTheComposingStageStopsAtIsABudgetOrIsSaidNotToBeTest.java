@@ -151,6 +151,14 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many relations of those counts have their ways of standing taken"
                             + " together; past it the counts are composed as elsewhere"),
 
+            // How many ways a statement of cases is met in before it is not read as one. No search
+            // runs to it: a statement past it is read as anything else is that this takes no
+            // statement of, so nothing is claimed of the elements it keeps and no row is written
+            // for them.
+            Map.entry("souther.compiler.partition.KeptOccurrences.MOST_WAYS",
+                    "how many ways a statement of cases is met in for it to be read as one; past"
+                            + " it the statement claims nothing of the elements it keeps"),
+
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
