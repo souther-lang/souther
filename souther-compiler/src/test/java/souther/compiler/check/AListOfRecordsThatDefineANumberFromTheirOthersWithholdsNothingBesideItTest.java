@@ -118,6 +118,74 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
         assertFalse(lineHoldsAValue(source));
     }
 
+    private static final String NET = """
+            Decimal.compare(n.value,
+                Decimal.round(2, HALF_UP, Decimal.fromInt(q.value) * p.value)) == 0""";
+
+    /** A record {@code R} defining {@code n} as the rounded product, beside two numbers held at
+     *  the greatest whole number, whose product no run works out. */
+    private static String recordWith(String helper, String rule) {
+        return """
+                module demo
+
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                data Quantity = Int
+                    invariant value >= 1
+                data UnitPrice = Decimal
+                    invariant value >= 0.0m
+                data Greatest = Int
+                    invariant value >= 9223372036854775807
+                %s
+                data R = { q: Quantity, p: UnitPrice, n: Amount, a: Greatest, b: Greatest }
+                    invariant %s
+
+                data Ok
+                behavior take : (r: R) -> Ok
+                let take (r) = Ok
+                """.formatted(helper, rule);
+    }
+
+    private static boolean recordHoldsAValue(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        String module = compilation.modules().get(0);
+        TypeSymbol record = TypeSymbols.declared(new TypeKey(module, "R"));
+        return Rules.of(record, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).bounds().shownToHoldAValue();
+    }
+
+    /** The definition through a helper that only restates it is the same rule. */
+    @Test
+    void aHelperThatOnlyRestatesTheDefinitionIsTheDefinition() {
+        assertTrue(recordHoldsAValue(recordWith("""
+                let defines (n: Amount, q: Quantity, p: UnitPrice): Bool = %s
+                """.formatted(NET), "defines(n, q, p)")));
+    }
+
+    /**
+     * A value a binding is given is worked out whether or not the rule reads its name. The
+     * definition is met at any places, and the product of two numbers held at the greatest whole
+     * number is worked out by no run, so no record is.
+     */
+    @Test
+    void aBindingThatNoRunWorksOutLeavesNoRecordHoweverTheDefinitionHolds() {
+        assertFalse(recordHoldsAValue(recordWith("""
+                let defines (n: Amount, q: Quantity, p: UnitPrice, a: Greatest, b: Greatest): Bool = {
+                    let unused = a.value * b.value
+                    %s
+                }
+                """.formatted(NET), "defines(n, q, p, a, b)")));
+    }
+
+    /** The same product in the number the place is defined as: no step of it stays inside the
+     *  order it is worked out in, so the places are not free. */
+    @Test
+    void aProductNoRunWorksOutInsideTheNumberIsNoDefinitionOfFreePlaces() {
+        assertFalse(recordHoldsAValue(recordWith("", """
+                Decimal.compare(n.value, Decimal.round(2, HALF_UP,
+                    Decimal.fromInt(q.value) * p.value + Decimal.fromInt(a.value * b.value))) == 0""")));
+    }
+
     @Test
     void aNetThatTheDefinitionCanComeToPastItsEndIsNoLine() {
         String capped = quote("value >= 0.0m && value <= 1.0m");

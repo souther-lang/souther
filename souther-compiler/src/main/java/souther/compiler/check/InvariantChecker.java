@@ -965,7 +965,7 @@ public final class InvariantChecker {
                     ComputedNumbers.definingIn(origin, owed, orders);
             definitions.addAll(defining);
             if (defining.size() != owed.parts().size()) {
-                took.statesMoreThanDefinitions(origin);
+                took.notOnlyDefinitions(origin);
             }
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
@@ -1003,6 +1003,9 @@ public final class InvariantChecker {
             for (Clauses.StatedPart part : each.view().present()) {
                 WorkingOutNeeds asked = working.of(part.of(), at);
                 needs.put(part.id(), asked);
+                if (!asked.bindingsRead()) {
+                    took.notOnlyDefinitions(part.id().rule());
+                }
                 for (NumericConstraint one : asked.asked()) {
                     workedOut = workedOut.taking(one.form(), one.rel(), Known.Held.OF_THE_VALUE,
                             c.terms.spacesOf(one.form()));
@@ -1210,7 +1213,7 @@ public final class InvariantChecker {
                     && ComputedNumbers.leavesFree(each.definition(), k.numbers(), account)) {
                 took.freedByDefinition(each.rule(), each.definition().operands());
             } else {
-                took.statesMoreThanDefinitions(each.rule());
+                took.notOnlyDefinitions(each.rule());
             }
         }
         // And which of the clauses place an edge, asked once the positions have names to be
