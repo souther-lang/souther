@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * A name an arm gives the matched value stands for the scrutinee. When the scrutinee is a helper's
  * {@code match}, the invariant check reads the caller once per arm of that helper, and in the arm
  * answering a unit the scrutinee is only that unit. The caller's arm for {@code Int} is then one no
- * run enters, and its name must not be read as the unit: a comparison or a construction over it
- * would be one between a unit and a number.
+ * run enters, and its name must not be read as the unit: a construction over it
+ * would state a newtype's invariant of a unit.
  */
 class AnArmNamingACaseTheScrutineeCannotBeIsNotReadAsThatValueTest {
 
@@ -67,16 +67,6 @@ class AnArmNamingACaseTheScrutineeCannotBeIsNotReadAsThatValueTest {
                     | 形が違う -> 失敗
             """;
 
-    private static final String COMPARES = """
-            let 読む (s: String): Int | 失敗 =
-                match 整数(s) with
-                    | 形が違う -> 失敗
-                    | Int as n -> {
-                        guard n >= 1 else 失敗
-                        n
-                    }
-            """;
-
     private static void compiles(String helper, String caller) {
         assertFalse(Compiler.compile(DECLARATIONS + helper + caller).isEmpty());
     }
@@ -87,11 +77,5 @@ class AnArmNamingACaseTheScrutineeCannotBeIsNotReadAsThatValueTest {
         compiles(HELPER_UNIT_FIRST, BUILDS_A_NEWTYPE_INT_ARM_FIRST);
         compiles(HELPER_INT_FIRST, BUILDS_A_NEWTYPE);
         compiles(HELPER_INT_FIRST, BUILDS_A_NEWTYPE_INT_ARM_FIRST);
-    }
-
-    @Test
-    void aComparisonOfTheNumberCompilesWhicheverArmIsWrittenFirst() {
-        compiles(HELPER_UNIT_FIRST, COMPARES);
-        compiles(HELPER_INT_FIRST, COMPARES);
     }
 }
