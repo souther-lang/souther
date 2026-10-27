@@ -87,9 +87,25 @@ import java.util.stream.Stream;
  *               and a threshold outside where a quantity runs is one the rule draws no border at.
  *               Asked of every quantity alike, since what a quantity runs between is a question
  *               about the quantity
+ * @param written the number the comparison was written against, where one of its sides is a number
+ *               the same on every run and the other is not: the table bound of a lookup, before the
+ *               quantity it is held against was weighed and divided into the level above
  */
 record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
-               NumericDomain.Bounds within) {
+               NumericDomain.Bounds within, Optional<ExactRatio> written) {
+
+    Cutting {
+        Objects.requireNonNull(written, "a number is written against, or none is");
+    }
+
+    Cutting(BorderQuantity of, Level at, ComparisonClaim claim, NumericDomain.Bounds within) {
+        this(of, at, claim, within, Optional.empty());
+    }
+
+    /** This line as a comparison written against {@code level}. */
+    Cutting writtenAgainst(Optional<ExactRatio> level) {
+        return new Cutting(of, at, claim, within, level);
+    }
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -997,6 +1013,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                  InputReading read, InputReads reads, Arrivals answering,
                                  Pullback.OnTheInput onTheInput,
                                  Optional<ExpansionLineage> writtenIn) {
+        return writtenAgainst(
+                readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
+                        writtenIn),
+                Pullback.writtenAgainst(comparison, read, reads));
+    }
+
+    /** {@code drawn}, every line of it noted as the comparison written against {@code level}. */
+    private static Read writtenAgainst(Read drawn, Optional<ExactRatio> level) {
+        return switch (drawn) {
+            // Only a line on a value derived from several positions, which is what a bound is
+            // looked up against. A line on one position that the reading draws as well — a filter
+            // the value is made of — is cut where that filter put it, and the bound of the table
+            // is no bound of it.
+            case Read.Cuts cuts -> cuts.cutting().of().derivedFromSeveralPositions().isPresent()
+                    ? new Read.Cuts(cuts.cutting().writtenAgainst(level), cuts.authored())
+                    : cuts;
+            case Read.Several several -> new Read.Several(several.parts().stream()
+                    .map(part -> new Read.Several.Part(part.id(),
+                            writtenAgainst(part.line(), level), part.cases()))
+                    .toList());
+            default -> drawn;
+        };
+    }
+
+    private static Read readOnceAsDrawn(String behavior, StatedComparison comparison,
+                                        InputReading read, InputReads reads, Arrivals answering,
+                                        Pullback.OnTheInput onTheInput,
+                                        Optional<ExpansionLineage> writtenIn) {
         Pullback.Pulled stated = onTheInput.stated();
         Supplier<Optional<AuthorsLines>> lines =
                 new Pullback.Once<>(() -> writtenIn.map(at -> WrittenLines.of(
@@ -2082,7 +2126,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
         }
-        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()));
+        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()), written);
     }
 
     /**

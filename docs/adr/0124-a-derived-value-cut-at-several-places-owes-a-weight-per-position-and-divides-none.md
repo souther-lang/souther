@@ -116,6 +116,56 @@ It sits beside the lines one step from a border (E1938), which hold a border aga
 border in one weight, and replaces neither. Both are measures of what the rows show about the same
 computation, and a row can answer both.
 
+### What each threshold is owed
+
+A shifted threshold is the fault a border exists to show, and it needs an ON and an OFF point at each
+threshold of the table and not at one of them. The points against the line of a computation cut at
+several places are owed once for each threshold; the points in the runs beside it are owed once for
+the comparison, as before.
+
+A threshold is a threshold of one computation, and two computations never share one. A computation is
+the calls of a helper cut at the same places; calls cut at different places are two, and a row on a
+border of one is on no border of the other. The line the readings are folded under carries the
+threshold too, so that readings of two computations put at the same place are two lines and the rows
+beside one are not taken for the rows beside the other.
+
+Within a computation the threshold is the bound the comparison was written against, as the table
+holds it (`WrittenAt`). It is read from the comparison before the value it is held against is weighed
+and divided, so the bound 63000 held against an average of two months is one threshold with the bound
+63000 held against an average of three, though the total is cut at twice the bound in one and three
+times it in the other. A row at the points of one of them shows where the bound falls, because the
+fault is the bound written wrong. What differs from one place to the next is how the positions are
+weighed, which is the weights' to say.
+
+A number two bounds come to is no reason to join them. The bound 63 held twice over and the bound 126
+held once are cut at 126 alike, and when the two are read in the branches of one behavior a row
+through one branch exercises the bounds of that branch alone.
+
+Where no bound can be told — both sides of the comparison vary, or neither is a number the same on
+every run — the threshold is the place the computation is cut at (`CutAt`). Owing more than there is
+leaves a point asking for a row; joining what is not one would report a point answered that no row
+stands at.
+
+The runs beside a line are owed once for the comparison, whatever threshold drew them, so a point
+there does not tell two computations cut at one place apart. The readings of it do: a reading is of
+a line at a place and a threshold, and the later of two computations cut at one place does not
+replace the earlier.
+
+What tells two computations apart is the places they are cut at, and not the data they are handed.
+Two calls of one helper given two tables whose bounds are alike are one computation, as two calls of
+a helper holding one guard are one line wherever the guard is cut at one place: a row through one
+call is taken for a row through the other. That is the rule for every comparison a helper holds,
+and it is not changed here.
+
+The human report says the bound the table holds beside the place a reading is cut at.
+
+Only a line on a value derived from several positions carries the bound. A reading draws other lines
+as well — the filter an average is made of cuts one position at its own value — and the bound of the
+table is no bound of those.
+
+The document names the threshold under `threshold` in the obligation's id, so that two points of one
+line that differ only in it are two entries.
+
 ## Consequences
 
 The obligations a lookup owes grow with its thresholds and with its positions, and not with their

@@ -775,6 +775,81 @@
         }
       }
     },
+    "thresholdOfADerivedValue": {
+      "type": "object",
+      "description": "Which threshold of a computation cut at several places a point or a line is, for a total looked up in a table: it owes its ON and OFF points once for each threshold, and a threshold belongs to one computation, whatever number the bounds of two computations come to. `written_at` is the bound the comparison was written against, as the table holds it, and is one threshold however many places the computation is cut at. `cut_at` is the place the computation is cut at, for a comparison whose bound could not be told. `copies` names the computation. Absent for a comparison cut at one place.",
+      "required": [
+        "kind",
+        "copies"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "written_at",
+            "cut_at"
+          ]
+        },
+        "copies": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/constructOccurrence"
+          }
+        },
+        "bound": {
+          "type": "string",
+          "description": "The number the comparison was written against."
+        },
+        "quantity": {
+          "type": "string",
+          "description": "The weighing of the positions the computation is cut on."
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        }
+      },
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "written_at"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "bound"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "quantity"
+              ]
+            },
+            {
+              "required": [
+                "level"
+              ]
+            }
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "quantity",
+          "level"
+        ],
+        "not": {
+          "required": [
+            "bound"
+          ]
+        }
+      }
+    },
     "boundaryLineId": {
       "type": "object",
       "description": "One line a row can be written at: where it was drawn, and which line of the model was drawn there. Both, because either alone names more than one line. One line of a type is drawn at every position the type stands at, and those lines share `line`; one rule draws several lines at one place, and those share `target`. Which reading of the model drew the line is not part of it, so a line one helper draws once per call is one line here. A comparison written in a body carries `placement` as well, which is how the points of the line drawn here are the points of the line its author wrote: one comparison put at one place facing its author's sides two ways — `check(a, 10)` and `check(20 - a, 10)` — is two lines here, because the run on one side of the place is one of the author's points in one and another in the other. Two of these are one line exactly when they are equal as JSON values.",
@@ -864,6 +939,9 @@
         },
         "line": {
           "$ref": "#/$defs/authoredLineId"
+        },
+        "threshold": {
+          "$ref": "#/$defs/thresholdOfADerivedValue"
         }
       },
       "if": {
@@ -1795,6 +1873,9 @@
         },
         "location": {
           "$ref": "#/$defs/location"
+        },
+        "threshold": {
+          "$ref": "#/$defs/thresholdOfADerivedValue"
         },
         "stops": {
           "type": "object",
@@ -3939,6 +4020,9 @@
               },
               {
                 "$ref": "#/$defs/replacementObligationId"
+              },
+              {
+                "$ref": "#/$defs/tiltObligationId"
               }
             ]
           },

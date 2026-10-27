@@ -926,7 +926,8 @@ public final class GuardThresholds {
                 new LineOrigin.ComparisonOrigin.Read(
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
-                                .toList(), metOn, stopsBefore(at.observations())),
+                                .toList(), metOn, stopsBefore(at.observations()),
+                        cutting.written()),
                 part, new LineFacts(cutting.claim()), authored);
     }
 
