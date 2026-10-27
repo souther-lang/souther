@@ -1028,11 +1028,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                  InputReading read, InputReads reads, Arrivals answering,
                                  Pullback.OnTheInput onTheInput,
                                  Optional<ExpansionLineage> writtenIn) {
+        Pullback.TheBound bound = Pullback.boundOf(comparison, read, reads);
         return heldIn(writtenAgainst(
                 readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
                         writtenIn),
-                Pullback.writtenAgainst(comparison, read, reads)),
-                Pullback.heldIn(comparison, read, reads));
+                bound.written()), bound.heldIn());
     }
 
     /** {@code drawn}, every line of it noted as the comparison written against {@code level}. */

@@ -536,38 +536,39 @@ final class Pullback {
      * number by it: a table bound held against an average of three months is the bound where it was
      * written and three times it on the total. Nothing where both sides are numbers or neither is,
      * since neither is then the bound.
+     *
+     * <p>And the data that number is read out of ({@link TheBound#heldIn}).
      */
-    static Optional<ExactRatio> writtenAgainst(StatedComparison comparison, InputReading read,
-                                               InputReads reads) {
+    static TheBound boundOf(StatedComparison comparison, InputReading read, InputReads reads) {
         TheSignOfAnOrder.Sides<InputReads> sides =
                 new Pullback(read, Optional.empty()).sides();
         ExactRatio left = sides.constant(comparison.left(), reads);
         ExactRatio right = sides.constant(comparison.right(), reads);
-        return left == null == (right == null) ? Optional.empty()
-                : Optional.of(left == null ? right : left);
+        if (left == null == (right == null)) {
+            return TheBound.NONE;
+        }
+        Set<BoundHeldIn.Data> data = new LinkedHashSet<>();
+        readOutOf(left == null ? comparison.right() : comparison.left(), reads, read, data);
+        return new TheBound(Optional.of(left == null ? right : left),
+                data.isEmpty() ? Optional.empty() : Optional.of(new BoundHeldIn(data)));
     }
 
     /**
-     * The data the number {@code comparison} is held against is read out of, where it is: the
-     * field of an entry of a table, however the table was reached.
+     * What a comparison is held against, where one side is a number the same on every run.
      *
-     * <p>A number the comparison or a call writes outright is no data it is held in, so a helper
-     * applied to different values is not told apart by them; a field read is, because what it
-     * stands for is written once in the table, and the same table reached by two calls, or under
-     * another name, is the same data.
+     * <p>Both answers from one reading of the two sides, which is what asking for them one after
+     * the other would do twice.
+     *
+     * @param written the number, as it is read before the quantity it is held against is weighed
+     * @param heldIn  the data it is read out of, where it is read out of data: a number the
+     *                comparison or a call writes outright is none, so a helper applied to
+     *                different values is not told apart by them, while a field read is, because
+     *                what it stands for is written once in the table and the same table reached by
+     *                two calls, or under another name, is the same data
      */
-    static Optional<BoundHeldIn> heldIn(StatedComparison comparison, InputReading read,
-                                        InputReads reads) {
-        TheSignOfAnOrder.Sides<InputReads> sides =
-                new Pullback(read, Optional.empty()).sides();
-        boolean leftIsANumber = sides.constant(comparison.left(), reads) != null;
-        boolean rightIsANumber = sides.constant(comparison.right(), reads) != null;
-        if (leftIsANumber == rightIsANumber) {
-            return Optional.empty();
-        }
-        Set<BoundHeldIn.Data> data = new LinkedHashSet<>();
-        readOutOf(leftIsANumber ? comparison.left() : comparison.right(), reads, read, data);
-        return data.isEmpty() ? Optional.empty() : Optional.of(new BoundHeldIn(data));
+    record TheBound(Optional<ExactRatio> written, Optional<BoundHeldIn> heldIn) {
+
+        static final TheBound NONE = new TheBound(Optional.empty(), Optional.empty());
     }
 
     /** The values the numbers of {@code number} are fields of an element of, into {@code into}. */
