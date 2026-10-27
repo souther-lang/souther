@@ -48,7 +48,7 @@ public record DerivedValue(AuthoredLine line, List<ModelOccurrence> copies) {
     record Reading(AuthoredLine line, ModelOccurrence copy) {}
 
     /** Where a computation is cut: which weighing of the positions, and where on it. */
-    record Place(QuantityKey expression, QuantityCut at) {}
+    public record Place(QuantityKey expression, QuantityCut at) {}
 
     /**
      * One line cutting a comparison as one call reads it.

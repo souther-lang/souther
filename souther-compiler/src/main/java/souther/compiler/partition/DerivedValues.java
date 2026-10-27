@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -131,6 +132,30 @@ public final class DerivedValues {
             }
         }
         return new Decided(evidence, kept, replaced);
+    }
+
+    /**
+     * {@code border} as the place of a computation it is, where it is one of a computation cut at
+     * several places, and as it was otherwise.
+     *
+     * <p>Asked of the computations {@link #decide} returned and of no others, so that the borders
+     * owed their points once for each place are the ones whose classes were not drawn.
+     */
+    static Border placed(Border border, List<DerivedValue.Replaced> replaced) {
+        for (DerivedValue.Replaced each : replaced) {
+            for (ModelOccurrence copy : each.value().copies()) {
+                if (!each.value().isCutBy(border, copy)) {
+                    continue;
+                }
+                List<DerivedValue.Cut> cuts = DerivedValue.cutsBy(border.origin(),
+                        border.cut().of(), border.cut().cut().canonical());
+                if (!cuts.isEmpty()) {
+                    return border.atThreshold(new ThresholdOfADerivedValue(each.value(),
+                            cuts.getFirst().place()));
+                }
+            }
+        }
+        return border;
     }
 
     /** What the lines cutting one comparison as one call reads it come to. */

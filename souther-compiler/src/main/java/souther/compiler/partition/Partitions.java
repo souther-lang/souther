@@ -1160,13 +1160,20 @@ public final class Partitions {
         // reading, and an accounting over one of them says nothing about the other.
         LinesRead read = new LinesRead();
         BiPredicate<LineOrigin, LineOrigin> apart = reaching.apart();
-        Map<AxisId, List<Border>> lines = linesAlong(out, reading, read, apart);
+        Map<AxisId, List<Border>> drawnAlong = linesAlong(out, reading, read, apart);
         // Once per quantity: several lines on one quantity are held to one answer, and working it
         // out reads every value of the position again.
         Map<BorderQuantity, HeldValues> heldTo = new LinkedHashMap<>();
-        List<Border> across = Border.allOf(between, partedByQuantity(out), read, apart,
+        List<Border> drawnAcross = Border.allOf(between, partedByQuantity(out), read, apart,
                 quantity -> heldTo.computeIfAbsent(quantity,
                         each -> each.heldIn(reading.region())));
+        // Each line of a computation cut at several places is that place of it, which is what its
+        // ON and OFF points are owed for.
+        Map<AxisId, List<Border>> lines = new LinkedHashMap<>();
+        drawnAlong.forEach((axis, borders) -> lines.put(axis,
+                borders.stream().map(each -> DerivedValues.placed(each, replaced)).toList()));
+        List<Border> across = drawnAcross.stream()
+                .map(each -> DerivedValues.placed(each, replaced)).toList();
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
         // Drawn from the reading that was made, or said to be the absence of one. A body this

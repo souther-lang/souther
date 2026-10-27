@@ -64,9 +64,24 @@ import java.util.function.Supplier;
  *                    and a side is where it comes out one way. Neither where none is shown to be,
  *                    which is not a side shown to hold something — see
  *                    {@link #noValueStandsWhereItComesOut}
+ * @param threshold the place of a computation cut at several places that this line is, where the
+ *                  line cuts one ({@link DerivedValues}). Its ON and OFF points are owed once for
+ *                  each of those places and not once for the comparison, because a row at the
+ *                  points of one place says nothing about where another is
  */
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
-                     Sides leftNothing) {
+                     Sides leftNothing, Optional<ThresholdOfADerivedValue> threshold) {
+
+    /** A line that is no place of a computation cut at several places. */
+    public Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
+                  Sides leftNothing) {
+        this(cut, origin, answers, leftNothing, Optional.empty());
+    }
+
+    /** This line as the place of {@code computation} it is. */
+    Border atThreshold(ThresholdOfADerivedValue place) {
+        return new Border(cut, origin, answers, leftNothing, Optional.of(place));
+    }
 
     /**
      * Which of the two sides of a line something holds of.
@@ -85,9 +100,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     public Border {
-        if (leftNothing == null) {
+        if (leftNothing == null || threshold == null) {
             throw new IllegalArgumentException("a border says which sides it knows hold nothing,"
-                    + " neither among them");
+                    + " neither among them, and which place it is of a computation, if any");
         }
         if (answers == null || !answersEveryPoint(answers, pointsOf(origin))) {
             throw new IllegalArgumentException("a border that does not answer at every point its"
@@ -437,12 +452,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         Optional<DomainPoint> tied = placed.of(point);
         if (tied.isPresent()) {
-            return List.of(owedAt(line, tied.get(), settled, new ReadingSeat.At(point)));
+            return List.of(owedAt(line, tied.get(), settled, new ReadingSeat.At(point),
+                    threshold));
         }
         List<OwedPoint> out = new ArrayList<>();
         for (DomainPoint each : pointsOf(line.line().facts())) {
             if (sameKind(each, point)) {
-                out.add(owedAt(line, each, settled, new ReadingSeat.Untied(point)));
+                out.add(owedAt(line, each, settled, new ReadingSeat.Untied(point), threshold));
             }
         }
         return out;
@@ -502,9 +518,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     private static OwedPoint owedAt(BorderObligationId line, DomainPoint point,
-                                    PointContributions settled, ReadingSeat seat) {
+                                    PointContributions settled, ReadingSeat seat,
+                                    Optional<ThresholdOfADerivedValue> threshold) {
         return new OwedPoint(point.againstTheLine()
-                ? new BorderObligationPoint.AtLine(line, point)
+                ? new BorderObligationPoint.AtLine(line, point, threshold)
                 : new BorderObligationPoint.InRegion(line, point, Optional.empty()),
                 PointAttribution.of(settled), seat);
     }
@@ -704,7 +721,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             }
             for (DomainPoint each : pointsOf(line.line().facts())) {
                 if (sameKind(each, point)) {
-                    out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point)));
+                    out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point),
+                            threshold));
                 }
             }
         }
