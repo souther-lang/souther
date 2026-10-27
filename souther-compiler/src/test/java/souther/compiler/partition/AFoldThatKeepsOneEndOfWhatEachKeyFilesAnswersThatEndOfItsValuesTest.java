@@ -780,6 +780,11 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      * positions the selection reads), and a rule tying them would leave the days of a kept touch
      * only some values. The forms below are the ways to write such a rule, and none is read yet —
      * so the reading that would make one readable is the one to revisit that check beside.
+     *
+     * <p>The same premise is why no input makes the first way of meeting a statement of several
+     * cases build nothing while a later one builds: a way beside what the row asks is refused only
+     * by a rule tying the case to something, and so the composer's trying the ways in turn
+     * ({@code TermRealizations}) is held by the unit test of the ways and not by a model.
      */
     @Test
     void noRuleRelatingTheCaseOfATouchToItsDaysIsReadYet() {
