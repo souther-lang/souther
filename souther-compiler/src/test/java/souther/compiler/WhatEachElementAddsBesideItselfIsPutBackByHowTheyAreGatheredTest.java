@@ -60,17 +60,18 @@ class WhatEachElementAddsBesideItselfIsPutBackByHowTheyAreGatheredTest {
 
     @Test
     void theLeastOfEachKeyIsTheLeastOfWhatTheElementsComeToWithTheNumberBesideAddedOnce() {
-        assertEquals(List.of("bonus RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE",
-                        "least(nums[*].n by key) RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE"),
+        assertEquals(List.of("bonus RULE_RELATING_TWO_VALUES",
+                        "least(nums[*].n by key) RULE_RELATING_TWO_VALUES"),
                 notRead(leastOf("p.n + bonus")));
     }
 
     /** Taken away, the number beside is the same number the other way round, and the element is
-     *  what it comes to taken away from nought. */
+     *  what it comes to taken away from nought: the least of that is the greatest of the place
+     *  taken away, as the order is turned over. */
     @Test
     void theNumberBesideIsPutBackWhicheverWayTheElementIsWeighed() {
-        assertEquals(List.of("bonus RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE",
-                        "least({-1·n + 0 | nums[*]} by key) RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE"),
+        assertEquals(List.of("bonus RULE_RELATING_TWO_VALUES",
+                        "greatest(nums[*].n by key) RULE_RELATING_TWO_VALUES"),
                 notRead(leastOf("bonus - p.n")));
     }
 
