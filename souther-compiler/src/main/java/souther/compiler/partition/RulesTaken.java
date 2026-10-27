@@ -15,8 +15,11 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -227,7 +230,23 @@ public final class RulesTaken {
      * given, which are read at the positions the declared inputs name.
      */
     private record Run(AlignedObservation seen, List<ObservedValue> values,
-                       BehaviorInputs inputs) {}
+                       BehaviorInputs inputs, Map<ColumnWitness, ExecutionEvidence> shown) {
+
+        Run(AlignedObservation seen, List<ObservedValue> values, BehaviorInputs inputs) {
+            this(seen, values, inputs, new IdentityHashMap<>());
+        }
+
+        /** What this run shows of {@code witness}. Rules turning on one condition hold one witness
+         *  between them ({@link RulesTaken#shared}), so it is read off the run once. */
+        ExecutionEvidence showsOf(ColumnWitness witness) {
+            ExecutionEvidence known = shown.get(witness);
+            if (known == null) {
+                known = witness.in(this);
+                shown.put(witness, known);
+            }
+            return known;
+        }
+    }
 
     /** One rule and where each condition of its path is recorded. */
     private record Recognised(DecisionRule rule, List<ColumnWitness> conditions) {
@@ -236,9 +255,18 @@ public final class RulesTaken {
         List<ExecutionEvidence> in(Run run) {
             List<ExecutionEvidence> out = new ArrayList<>();
             for (ColumnWitness each : conditions) {
-                out.add(each.in(run));
+                out.add(run.showsOf(each));
             }
             return out;
+        }
+
+        /** The same rule, each condition being the one witness every equal condition is. */
+        Recognised sharing(Map<ColumnWitness, ColumnWitness> one) {
+            List<ColumnWitness> shared = new ArrayList<>();
+            for (ColumnWitness each : conditions) {
+                shared.add(one.computeIfAbsent(each, it -> it));
+            }
+            return new Recognised(rule, List.copyOf(shared));
         }
     }
 
@@ -292,7 +320,18 @@ public final class RulesTaken {
         for (DecisionReading.ImpossiblePath each : read.impossible()) {
             recognised(each.way(), comparisons, answers, arms, plan).ifPresent(proofs::add);
         }
-        return new RulesTaken(List.copyOf(recognisable), List.copyOf(proofs));
+        Map<ColumnWitness, ColumnWitness> one = new HashMap<>();
+        return new RulesTaken(shared(recognisable, one), shared(proofs, one));
+    }
+
+    /** {@code found} with every equal condition one witness, so that a run is read for it once. */
+    private static List<Recognised> shared(List<Recognised> found,
+                                           Map<ColumnWitness, ColumnWitness> one) {
+        List<Recognised> out = new ArrayList<>();
+        for (Recognised each : found) {
+            out.add(each.sharing(one));
+        }
+        return List.copyOf(out);
     }
 
     /** Where a run through each condition of {@code ruled} is recorded, or empty where a run
