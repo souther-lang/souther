@@ -134,6 +134,88 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
                 && report.contains("a.amount + b.amount + c.amount: = 300 in gradeOf"), report);
     }
 
+    private static String tableHeldAgainst(String comparison) {
+        return """
+                module demo
+
+                data N = { v: Int }
+                    invariant v >= 0
+                data Row = { grade: Int, lowerBound: Int }
+                let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
+                                         Row { grade = 2, lowerBound = 100 },
+                                         Row { grade = 3, lowerBound = 200 } ]
+                let gradeOf (m: Int): Int =
+                    List.fold((acc, r) -> if %s then r.grade else acc, 0, table)
+
+                behavior f : (a: N, b: N) -> Int
+
+                let f (a, b) =
+                    gradeOf(a.v + b.v)
+
+                """.formatted(comparison) + AT_100;
+    }
+
+    /** A comparison written with its sides the other way round is the same thresholds. */
+    @Test
+    void theSidesOfTheComparisonAreWrittenEitherWayRound() {
+        String bound = reportOf(tableHeldAgainst("r.lowerBound <= m"));
+        String reversed = reportOf(tableHeldAgainst("m >= r.lowerBound"));
+        assertEquals(count(bound, MISSING_ON), count(reversed, MISSING_ON), reversed);
+        assertEquals(count(bound, MISSING_OFF), count(reversed, MISSING_OFF), reversed);
+        assertTrue(reversed.contains("= 200 in gradeOf") && !reversed.contains("= 100 in gradeOf"),
+                reversed);
+    }
+
+    private static final String TWO_CALLS_REACHING_ONE_NUMBER = """
+            module demo
+
+            data N = { v: Int }
+                invariant v >= 0
+            data Row = { grade: Int, lowerBound: Int }
+            let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
+                                     Row { grade = 2, lowerBound = 63 },
+                                     Row { grade = 3, lowerBound = 126 } ]
+            let gradeOf (months: Int, m: Int): Int =
+                List.fold((acc, r) -> if r.lowerBound * months <= m then r.grade else acc, 0, table)
+
+            behavior f : (a: N, b: N, c: N) -> Int
+
+            let f (a, b, c) =
+                gradeOf(2, a.v + b.v) + gradeOf(1, c.v)
+
+            """;
+
+    /**
+     * The bound 63 held twice over against one total and the bound 126 held against another are
+     * two thresholds though both come to 126: each is a threshold of its own total.
+     */
+    @Test
+    void aNumberTwoBoundsComeToIsAThresholdOfEachTotal() {
+        String report = reportOf(TWO_CALLS_REACHING_ONE_NUMBER);
+        assertTrue(report.contains("a.v + b.v: = 126 in gradeOf")
+                || report.contains("= 126 in gradeOf"), report);
+        assertEquals(2, count(report, "= 126 in gradeOf"), report);
+    }
+
+    /** Where a total may be negative, the bound 0 owes its points like any other. */
+    @Test
+    void theBoundZeroOwesItsPointsWhereTheTotalCanBeBelowIt() {
+        String report = reportOf(table(200).replace("    invariant v >= 0\n", "") + AT_100);
+        assertTrue(report.contains("= 0 in gradeOf"), report);
+        assertTrue(report.contains("= -1 in gradeOf"), report);
+    }
+
+    /**
+     * The same bounds held against the one total are thresholds of that total: a row at 126 shows
+     * where either falls, so the number is owed once.
+     */
+    @Test
+    void aNumberTwoBoundsComeToIsOneThresholdOfOneTotal() {
+        String report = reportOf(TWO_CALLS_REACHING_ONE_NUMBER
+                .replace("gradeOf(1, c.v)", "gradeOf(1, a.v + b.v)"));
+        assertEquals(1, count(report, "= 126 in gradeOf"), report);
+    }
+
     /** Two points of one line that differ only in the threshold are two obligations in the
      *  document, and a finding names the one it is about. */
     @Test
