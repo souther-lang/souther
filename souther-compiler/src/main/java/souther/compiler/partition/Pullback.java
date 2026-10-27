@@ -6710,6 +6710,10 @@ final class Pullback {
                 && !read.beside().equals(LinearForm.constant(ExactRatio.ZERO))) {
             return null;
         }
+        LinearForm<Quantity> ofThePlace = endOfAMultipleOfAPlace(read, gathering);
+        if (ofThePlace != null) {
+            return ofThePlace;
+        }
         NumericTerm term = NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
                 read.number(), read.each(), gathering, read.selection());
         if (!readOnAnOrder(term)) {
@@ -6726,6 +6730,40 @@ final class Pullback {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         moved.coefs().forEach((each, by) -> coefs.put(new DecisionAtom.OfTheInput(each), by));
         return new LinearForm<>(moved.constant(), coefs);
+    }
+
+    /**
+     * The end of {@code w·p + c} over the elements of a key as {@code w} times the end of {@code p}
+     * and {@code c} beside it — or null where the number is not a multiple of one place and a
+     * constant, or no such multiple is read.
+     *
+     * <p>A multiple by a positive number keeps the order of the numbers, and by a negative one
+     * turns it over, so the least of {@code -p} is the negation of the greatest of {@code p}. The
+     * end then stands as the end of the place, which is the number the order of the place and what
+     * the declarations leave it speak of; the multiple of it is the weight of the term.
+     */
+    private LinearForm<Quantity> endOfAMultipleOfAPlace(
+            ElementsGathered read, NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        ElementValue.MultipleOfPlaces multiple = read.number().asAPlace() != null ? null
+                : ElementValue.asAMultipleOfPlaces(read.number());
+        if (!(gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme))
+                || multiple == null || (multiple.weight().equals(ExactRatio.ONE)
+                && multiple.constant().isZero())) {
+            return null;
+        }
+        ElementsGathered ofThePlaces = new ElementsGathered(read.elements(), read.key(),
+                multiple.ofPlaces(), read.beside(), read.each(), read.selection(), read.walked());
+        LinearForm<Quantity> end = gathered(ofThePlaces,
+                new NumericTerm.GatheredUnderItsKey.Gathering.End(
+                        multiple.weight().signum() < 0 ? extreme.other() : extreme));
+        if (end == null) {
+            return null;
+        }
+        return end.times(multiple.weight()) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                LinearForm<Quantity> scaled)
+                && scaled.plus(LinearForm.constant(multiple.constant()))
+                instanceof ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> shifted)
+                ? shifted : null;
     }
 
     /**

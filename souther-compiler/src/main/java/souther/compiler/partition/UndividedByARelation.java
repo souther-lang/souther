@@ -437,6 +437,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return atOnePosition() != null ? atOnePosition()
                     : kept() != null ? kept().ofEach() : null;
         }
+
+        /**
+         * The number as one position's, or as the position the end of a key's values is taken of:
+         * a container of one element has that element's value for its end, so what the
+         * declarations leave the position is what they leave the end. Null where it is neither.
+         */
+        NumericTerm.FromOnePosition placeOrItsEnd() {
+            return switch (number) {
+                case NumericTerm.ExtremeOfItsKey end -> new NumericTerm.ValueOf(end.value());
+                case NumericTerm.GatheredUnderItsKey end -> placesOfOneElement(end).stream()
+                        .findFirst().orElse(null);
+                case null, default -> atOnePosition();
+            };
+        }
     }
 
     /** {@code form} held against nought as {@code relation}. */
@@ -591,13 +605,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // lies between.
         List<Source> sources = new ArrayList<>();
         for (Side each : sides) {
-            sources.add(each.kept() == null ? sourceOf(each.atOnePosition(), read)
+            sources.add(each.kept() == null ? sourceOf(each.placeOrItsEnd(), read)
                     : keptSource(each.kept(), read));
         }
         // And the order each side's values are counted on, which says where its type ends.
         List<Carrier> carriers = new ArrayList<>();
         for (Side each : sides) {
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
+                    : each.placeOrItsEnd() != null ? each.placeOrItsEnd()
                     : summedAs(each.number());
             TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
             carriers.add(orders == null ? null : orders.answered());
@@ -2699,6 +2714,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : each.number() instanceof NumericTerm.CodePointAt at
                     ? asARelationReadsIt(codePointsTakenAt(at, read, stating.get(i)),
                             carriers.get(i))
+                    : isAnEndOfAKey(each.number())
+                    ? asARelationReadsIt(shownOfAnEnd(each.number(), read, region, conditions,
+                            heldWhole), carriers.get(i))
                     : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
@@ -3416,10 +3434,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i : List.of(pair.first(), pair.second())) {
             Side each = sides.get(i);
             Source source = sources.get(i);
-            if (each.atOnePosition() == null || source == null || !source.takes().every()) {
+            if (each.placeOrItsEnd() == null || source == null || !source.takes().every()
+                    || (isAnEndOfAKey(each.number())
+                    && shownOfAnEnd(each.number(), read, region, stating.get(i), true) == null)) {
                 return Set.of();
             }
-            NumericDomain.Bounds realizes = switch (each.atOnePosition()) {
+            NumericDomain.Bounds realizes = switch (each.placeOrItsEnd()) {
                 case NumericTerm.ValueOf _ -> on.asARelationReadsIt();
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                         .endsAreWhereTheRepresentationStops(taken.operation())
@@ -3431,8 +3451,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
                     on.asARelationReadsIt(), realizes, source.takes(),
-                    each.number() instanceof NumericTerm.ValueOf, on.spacingBetweenValues(),
-                    on.whereItStops()));
+                    each.number() instanceof NumericTerm.ValueOf
+                            || each.number() instanceof NumericTerm.ExtremeOfItsKey
+                            || each.number() instanceof NumericTerm.GatheredUnderItsKey,
+                    on.spacingBetweenValues(), on.whereItStops()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(
                 stating.get(pair.first()), stating.get(pair.second()));
@@ -3990,11 +4012,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (containers.size() != 1) {
             return null;
         }
-        // One element comes to the value at whichever place its case puts it, so a value is a
-        // total where the element may stand at it at each of them: the runs of the places are one
-        // run only where they are alike.
+        NumericDomain.Bounds each = shownOfAnElementAlone(elements, containers.getFirst(), read,
+                region, conditions);
+        if (each == null) {
+            return null;
+        }
+        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
+        return held.admits(Count.ZERO) ? withNought(each, carrier) : each;
+    }
+
+    /**
+     * A run every value of which one element is shown to take at whichever of {@code places} its
+     * case puts it, where {@code container} may hold one element — or null where none is shown.
+     *
+     * <p>One element comes to the value at whichever place its case puts it, so a value is taken
+     * where the element may stand at it at each of them: the runs of the places are one run only
+     * where they are alike. What each is shown to take is a run some row holds it at with every
+     * rule read ({@link #realized}), and a way touching it, or a rule over the elements together,
+     * leaves nothing shown.
+     */
+    private static NumericDomain.Bounds shownOfAnElementAlone(List<NumericTerm.ValueOf> places,
+                                                              TermPath container,
+                                                              InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions) {
         NumericDomain.Bounds each = null;
-        for (NumericTerm.ValueOf element : elements) {
+        for (NumericTerm.ValueOf element : places) {
             Source source = sourceOf(element, read);
             if (source == null
                     || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
@@ -4006,11 +4049,67 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             each = here;
         }
-        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
-        if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
-            return null;
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+        return each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))
+                ? null : each;
+    }
+
+    /** Whether {@code number} is an end of the numbers of the elements of one key. */
+    private static boolean isAnEndOfAKey(NumericTerm number) {
+        return number instanceof NumericTerm.ExtremeOfItsKey
+                || (number instanceof NumericTerm.GatheredUnderItsKey gathered
+                && gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End);
+    }
+
+    /**
+     * A run every value of which the end {@code end} of a key's numbers is shown to take — or null
+     * where none is shown: what the number of an element is shown to take, where the container may
+     * hold one element.
+     *
+     * <p>The end of the numbers of one key is, for a container holding one element, that
+     * element's number, whichever key it holds, and at whichever place its case puts it. So every
+     * value the element is shown to take is an end. Which ends a container of several reaches is
+     * not asked.
+     */
+    private static NumericDomain.Bounds shownOfAnEnd(NumericTerm end, InputReading read,
+                                                     SearchRegion region, List<OnAWay> conditions,
+                                                     boolean heldWhole) {
+        List<NumericTerm.ValueOf> places = placesOfOneElement(end);
+        List<TermPath> containers = places.isEmpty() ? List.of()
+                : places.getFirst().subjectPath().containersHoldingIt();
+        return !heldWhole || containers.size() != 1 ? null
+                : shownOfAnElementAlone(places, containers.getFirst(), read, region, conditions);
+    }
+
+    /**
+     * Where one element has the number {@code end} is an end of, at each of the places its case
+     * puts it — empty where {@code end} is the end of a selection of the elements, or of anything
+     * but places.
+     */
+    private static List<NumericTerm.ValueOf> placesOfOneElement(NumericTerm end) {
+        if (end instanceof NumericTerm.ExtremeOfItsKey extreme) {
+            return List.of(new NumericTerm.ValueOf(extreme.value()));
         }
-        return held.admits(Count.ZERO) ? withNought(each, carrier) : each;
+        if (!(end instanceof NumericTerm.GatheredUnderItsKey gathered)
+                || !(gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End)
+                || gathered.selection() != null) {
+            return List.of();
+        }
+        return switch (gathered.value()) {
+            case ElementValue.OfItsCase choice when choice.rest() == null -> {
+                List<NumericTerm.ValueOf> out = new ArrayList<>();
+                for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
+                    ElementProjection place = arm.value().asAPlace();
+                    if (place == null) {
+                        yield List.of();
+                    }
+                    out.add(new NumericTerm.ValueOf(place.from(gathered.elements())));
+                }
+                yield out;
+            }
+            default -> gathered.valuesTakenFrom() == null ? List.of()
+                    : List.of(gathered.valuesTakenFrom());
+        };
     }
 
     /**

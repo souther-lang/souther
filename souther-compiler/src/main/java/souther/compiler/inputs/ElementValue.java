@@ -1258,6 +1258,55 @@ public sealed interface ElementValue {
     }
 
     /**
+     * A number of the element that is {@code weight} times a number made of places alone, and
+     * {@code constant} beside it.
+     *
+     * @param ofPlaces what the number is without the weight and the constant: a place, or a choice
+     *                 by case among places
+     */
+    public record MultipleOfPlaces(ExactRatio weight, ExactRatio constant, ElementValue ofPlaces) {
+
+        public MultipleOfPlaces {
+            if (weight == null || constant == null || ofPlaces == null || weight.signum() == 0) {
+                throw new IllegalArgumentException("a multiple is by some weight of something");
+            }
+        }
+    }
+
+    /**
+     * {@code value} as a multiple of places and a constant, or null where it is not one: a form of
+     * one place, or a choice by case every arm of which is the same multiple of a place of its own.
+     * The weight and the constant are the same across the arms, which is what lets an end of the
+     * numbers be taken of the places and the multiple applied to it.
+     */
+    public static MultipleOfPlaces asAMultipleOfPlaces(ElementValue value) {
+        return switch (value) {
+            case Affine(LinearForm<ElementProjection> form) when form.coefs().size() == 1 -> {
+                Map.Entry<ElementProjection, ExactRatio> only =
+                        form.coefs().entrySet().iterator().next();
+                yield new MultipleOfPlaces(only.getValue(), form.constant(),
+                        new Affine(LinearForm.atom(only.getKey())));
+            }
+            case OfItsCase choice when choice.rest() == null -> {
+                MultipleOfPlaces first = null;
+                List<OfItsCase.Arm> arms = new ArrayList<>();
+                for (OfItsCase.Arm arm : choice.arms()) {
+                    MultipleOfPlaces each = asAMultipleOfPlaces(arm.value());
+                    if (each == null || (first != null && (!first.weight().equals(each.weight())
+                            || !first.constant().equals(each.constant())))) {
+                        yield null;
+                    }
+                    first = each;
+                    arms.add(new OfItsCase.Arm(arm.cases(), each.ofPlaces()));
+                }
+                yield new MultipleOfPlaces(first.weight(), first.constant(),
+                        choosingByCase(choice.subject(), arms, null));
+            }
+            default -> null;
+        };
+    }
+
+    /**
      * The choice by case of {@code arms} and {@code rest}, with a choice whose every answer is one
      * answer being that answer.
      *

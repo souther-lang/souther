@@ -235,8 +235,9 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      * The model the line was first missed in, as it was written: the map kept to its keys and
      * handed back inside a record. The comparison is read, and its line is on the least of a key's
      * values against the threshold. The least settles it whatever the threshold is only at the
-     * greatest {@code Int}, where the threshold's type stops, so it is read; the threshold is not
-     * shown every value.
+     * greatest {@code Int}, where the threshold's type stops, so it is read. A container holding
+     * one touch has the least of its key for that touch's days, so the least is shown every value
+     * the days take, and the threshold every value of its type: nothing is left unread.
      */
     @Test
     void theStaleAccountsModelReadsItsComparison() {
@@ -256,13 +257,8 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                     Report { stale = Map.keys(Map.filterEntries((k, days) -> days >= staleAfter, since)) }
                 }
                 """);
-        List<String> unread = report(compilation).lines()
-                .filter(line -> line.contains("not read")).toList();
-        assertTrue(unread.stream().allMatch(line -> line.contains(NOT_SHOWN_TO_REACH)),
-                () -> report(compilation));
-        assertEquals(Set.of("staleAfter"), unread.stream()
-                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
-                .collect(Collectors.toSet()), () -> report(compilation));
+        assertEquals(List.of(), report(compilation).lines()
+                .filter(line -> line.contains("not read")).toList(), () -> report(compilation));
         assertEquals(1, bordersOf(compilation).size(), () -> report(compilation));
         assertTrue(json(compilation).contains("least(touches[*].days by account)"),
                 () -> report(compilation));
@@ -372,13 +368,19 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     }
 
     /**
-     * A value worked out of what an element holds, alone or with another input, is no place of
-     * the element: the end the key keeps is the end of that value, read as a fold over the touches
-     * writing it of each touch reads it, and no end of what some place holds is said to be it.
+     * A value worked out of what an element holds, alone or with another input, is the end of that
+     * value, read as a fold over the touches writing it of each touch reads it. Where it is a
+     * multiple of one place and a number, the end is that multiple of the end of the place, turned
+     * over where the multiple is negative: the least of {@code today - on} is {@code today} less
+     * the greatest of {@code on}, and of {@code days + 1} the least of {@code days}, moved by one.
      */
     @Test
     void aValueWorkedOutOfWhatTheElementHoldsIsTheEndOfThatValue() {
-        for (String since : List.of("t.days + 1", "Date.daysBetween(t.on, today)")) {
+        Map<String, String> endOfThePlace = Map.of(
+                "t.days + 1", "least(touches[*].days by account)",
+                "Date.daysBetween(t.on, today)", "greatest(touches[*].on by account)");
+        for (Map.Entry<String, String> each : endOfThePlace.entrySet()) {
+            String since = each.getKey();
             Compilation built = read(OVER_WHAT_A_MAP_BUILT.formatted(
                     "Map.updateOrInsert(p.who, p.since, seen -> Int.min(seen, p.since), acc)",
                     "List.map(t -> Seen { who = t.account, since = " + since + " }, touches)"));
@@ -386,16 +388,172 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
             Compilation written = read(OVER_WHAT_A_MAP_BUILT.formatted(
                     "Map.updateOrInsert(p.account, " + direct + ", seen -> Int.min(seen, "
                             + direct + "), acc)", "touches"));
-            assertFalse(endsOf(built).isEmpty(), () -> since + ": " + report(built));
-            assertEquals(endsOf(written), endsOf(built), () -> since + ": " + report(built));
-            assertFalse(json(built).contains("least(touches[*].days"),
+            assertEquals(List.of(each.getValue()), endsOf(built),
                     () -> since + ": " + report(built));
+            assertEquals(endsOf(written), endsOf(built), () -> since + ": " + report(built));
         }
+    }
+
+    private static final String FILTERED = """
+            module example.stale
+
+            data Touch = { account: String, days: Int, on: Date }
+                invariant days >= 0 && days <= 100
+
+            let sinceOf (touches: List<Touch>, today: Date): Map<String, Int> =
+                List.fold((acc, p) -> Map.updateOrInsert(p.account, %1$s,
+                                                         seen -> Int.min(seen, %1$s), acc),
+                          Map.empty, touches)
+
+            behavior stale : (touches: List<Touch>, today: Date, staleAfter: Int)
+                -> Map<String, Int>
+
+            let stale (touches, today, staleAfter) =
+                Map.filterEntries((_, days) -> days %2$s staleAfter, sinceOf(touches, today))
+            """;
+
+    /**
+     * The end of a key's values, each a multiple of one place and a number, is that multiple of the
+     * end of the place: the comparison of it with a threshold is read, the threshold is shown every
+     * value, and the line is the plain one moved by the number.
+     */
+    @Test
+    void theEndOfAShiftedPlaceIsReadAcrossAndItsLineIsMovedByTheShift() {
+        String plain = report(measured(FILTERED.formatted("p.days", ">=")));
+        String shifted = report(measured(FILTERED.formatted("p.days + 1", ">=")));
+        assertEquals(List.of(), unreadAnywhere(plain), plain);
+        // The line of the plain end is on the threshold being the end (the ON point) and one above
+        // it (the OFF point): the shifted end is one more, so its line is one lower.
+        String on = "least(touches[*].days by account) - staleAfter: = ";
+        assertTrue(plain.contains(on + "0") && plain.contains(on + "-1"), plain);
+        assertTrue(shifted.contains(on + "-1") && shifted.contains(on + "-2"), shifted);
+        assertFalse(plain.contains(on + "-2") || shifted.contains(on + "0"), shifted);
+        assertEquals(List.of(), unreadAbout("staleAfter", shifted), shifted);
+    }
+
+    /**
+     * Taken from a number, a place is turned over: the least of {@code today - on} is {@code today}
+     * less the greatest of {@code on}. Read as the least of {@code on}, the line would be on the
+     * wrong end of the dates.
+     */
+    @Test
+    void theLeastOfWhatIsTakenAwayFromANumberIsTheGreatestOfThePlace() {
+        Compilation compilation = measured(
+                FILTERED.formatted("Date.daysBetween(p.on, today)", ">="));
+        assertEquals(List.of(), unreadAnywhere(report(compilation)), report(compilation));
+        assertEquals(List.of("greatest(touches[*].on by account)"), endsOf(compilation),
+                () -> report(compilation));
+    }
+
+    /**
+     * Twice a place takes the even values only: an equality of it with the threshold has no row
+     * at an odd threshold, and the threshold is not shown every value however the end is read.
+     */
+    @Test
+    void aMultipleOfAPlaceLeavesTheValuesBetweenItsMultiplesUnreached() {
+        String equal = report(measured(FILTERED.formatted("2 * p.days", "==")));
+        assertTrue(equal.contains("2 * least(touches[*].days by account)"), equal);
+        assertFalse(unreadAbout("staleAfter", equal).isEmpty(), equal);
+    }
+
+    private static final String ALONE_IN_A_LIST = """
+            module example.stale
+
+            data Touch = { account: String, days: Int }
+                %s
+
+            data Quote = { touches: List<Touch> }
+                %s
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, p) -> Map.updateOrInsert(p.account, p.days,
+                                                         seen -> Int.min(seen, p.days), acc),
+                          Map.empty, touches)
+
+            behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
+
+            let stale (quote, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(%s))
+            """;
+
+    /**
+     * The end of a key is every value one touch takes where the list may hold one touch; where it
+     * holds two at least, or keeps only some of its touches, one touch alone is not a row, and the
+     * end is not shown to take every value.
+     */
+    @Test
+    void theEndOfAKeyIsShownEveryValueOnlyWhereOneTouchAloneIsARow() {
+        String bounded = "invariant days >= 0 && days <= 100";
+        String two = "invariant List.length(touches) >= 2";
+        String alone = report(measured(ALONE_IN_A_LIST.formatted(bounded, "", "quote.touches")));
+        assertEquals(List.of(), unreadAnywhere(alone), alone);
+        String unboundedAlone = report(measured(ALONE_IN_A_LIST.formatted("", "",
+                "quote.touches")));
+        assertEquals(List.of(), unreadAnywhere(unboundedAlone), unboundedAlone);
+        assertFalse(unreadAnywhere(report(measured(ALONE_IN_A_LIST.formatted(bounded, two,
+                "quote.touches")))).isEmpty());
+        assertFalse(unreadAnywhere(report(measured(ALONE_IN_A_LIST.formatted("", two,
+                "quote.touches")))).isEmpty());
+        assertFalse(unreadAnywhere(report(measured(ALONE_IN_A_LIST.formatted(bounded, "",
+                "List.filter(p -> p.days > 3, quote.touches)")))).isEmpty());
+        assertFalse(unreadAnywhere(report(measured(ALONE_IN_A_LIST.formatted("", "",
+                "List.filter(p -> p.days > 3, quote.touches)")))).isEmpty());
+    }
+
+    private static final String BY_CASE = """
+            module example.stale
+
+            data Base = { account: String }
+            data Call = { ...Base, a: Int }
+                %s
+            data Email = { ...Base, b: Int }
+                %s
+            data Row = Call | Email
+
+            let daysOf (p: Row): Int =
+                match p with
+                    | Call { a } -> a
+                    | Email { b } -> b
+
+            let sinceOf (rows: List<Row>): Map<String, Int> =
+                List.fold((acc, p) -> Map.updateOrInsert(p.account, daysOf(p),
+                                                         seen -> Int.min(seen, daysOf(p)), acc),
+                          Map.empty, rows)
+
+            behavior stale : (rows: List<Row>, staleAfter: Int) -> Map<String, Int>
+
+            let stale (rows, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(rows))
+            """;
+
+    /**
+     * A number the element's case chooses among places is every value where each case's place is
+     * shown the same run, and not where the cases hold different runs: a value of one case's run
+     * past the other's is a value only that case's elements take.
+     */
+    @Test
+    void theEndOfANumberChosenByCaseIsShownEveryValueOnlyWhereTheCasesHoldTheSameRun() {
+        String alike = report(measured(BY_CASE.formatted("", "")));
+        assertEquals(List.of(), unreadAnywhere(alike), alike);
+        String apart = report(measured(BY_CASE.formatted("invariant a >= 0", "")));
+        assertFalse(unreadAnywhere(apart).isEmpty(), apart);
+    }
+
+    /** The lines saying a place is not read, of any comparison. */
+    private static List<String> unreadAnywhere(String report) {
+        return report.lines().filter(line -> line.contains("not read")).toList();
+    }
+
+    /** The lines saying the place {@code place} is not read. */
+    private static List<String> unreadAbout(String place, String report) {
+        return unreadAnywhere(report).stream()
+                .filter(line -> line.endsWith("about `" + place + "`")).toList();
     }
 
     /** Each end of a key a document names. */
     private static List<String> endsOf(Compilation compilation) {
-        return Pattern.compile("least\\([^\"]*?by account\\)").matcher(json(compilation))
+        return Pattern.compile("(?:least|greatest)\\([^\"]*?by account\\)")
+                .matcher(json(compilation))
                 .results().map(MatchResult::group).distinct().sorted().toList();
     }
 
@@ -420,15 +578,17 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     private static final Pattern AT_A_COMPARISON = Pattern.compile("comparison@(\\S+) ");
 
     /**
-     * The lines saying a place is not read, of every comparison but the one about
-     * {@code staleAfter}.
+     * The lines saying a place is not read, of every comparison but the one the filter makes of
+     * what was filed against {@code staleAfter}.
      *
-     * <p>That one relates what was filed to {@code staleAfter}, a number its reach is not shown
-     * against, whatever the step is; what is asked here is what the step's own comparison is.
+     * <p>That one is about the end of the key's values and about {@code staleAfter}, whatever the
+     * step is, and a run to it may stop on what the step looks up; what is asked here is what the
+     * step's own comparison is.
      */
     private static List<String> unreadBeside(String report) {
         Set<String> filtered = report.lines()
-                .filter(line -> line.contains("about `staleAfter`"))
+                .filter(line -> line.contains("about `staleAfter`")
+                        || line.contains("about `least(touches[*].days by account)`"))
                 .map(AT_A_COMPARISON::matcher).filter(Matcher::find)
                 .map(found -> found.group(0)).collect(Collectors.toSet());
         return report.lines().filter(line -> line.contains("not read")
