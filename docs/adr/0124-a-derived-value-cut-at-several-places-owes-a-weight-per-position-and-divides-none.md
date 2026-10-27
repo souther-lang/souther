@@ -67,12 +67,11 @@ axis is in the span. The span is worked out in exact arithmetic.
 This is a property of what the rows determine, not of how a row is shaped. A row that moves one
 position alone is one way to fix a weight and not the only one: three rows that each move two of three
 positions fix all three, and a position weighed by minus one has no row that moves it alone and can
-still be fixed. An earlier form of this measure asked for a row with one position alone away from its
-least; it could never be met where the declarations leave no such row, and it said nothing of
-positions that weigh against the others.
+still be fixed.
 
-Where nothing was read against the computation, or the exact arithmetic gave out on a row, no claim is
-made about its weights and the document says `undecided`. It is not a finding.
+Where nothing was read against the computation, where a border of it was not read and the rest leave
+a weight unfixed, or where the exact arithmetic gave out on a row, no claim is made about the weight
+and the document says `undecided`. It is not a finding.
 
 The obligation is keyed on the computation and the position, never on a threshold: where a row stands
 moves with every row written, and an obligation whose identity moved with them would be a new

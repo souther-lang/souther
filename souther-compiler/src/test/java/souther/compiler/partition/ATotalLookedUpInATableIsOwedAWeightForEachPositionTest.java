@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A total one comparison holds against every row of a table is owed, in place of the classes of
- * the positions it is made of, a row showing the weight of each position: a row on a border of the
- * total with that position alone away from the least it holds.
+ * the positions it is made of, rows that fix the weight of each position: rows on the borders of
+ * the total whose values span that position's axis.
  */
 class ATotalLookedUpInATableIsOwedAWeightForEachPositionTest {
 

@@ -71,8 +71,9 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
         record NotShown() implements Standing {}
 
         /**
-         * Nothing says: no row was read against the computation, or the exact arithmetic gave out
-         * on one. Not a claim that no row shows it, which is a claim about the rows.
+         * Nothing says: no row was read against the computation, a border of it was not read and
+         * the rest leave the weight unfixed, or the exact arithmetic gave out on a row. Not a claim
+         * that the rows fix nothing, which is a claim about the rows.
          */
         record Undecided() implements Standing {}
     }
@@ -104,9 +105,13 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
      * <p>Existential over the borders and over the ways a row reaches one, the way a point met at
      * one position of a behavior is met: a row on any border, at any reading of it, is a row that
      * fixes what it fixes. Undecided throughout where no border was read.
+     *
+     * @param everyBorderRead whether every border of the computation was read against the rows;
+     *                        where not, a weight the rows leave unfixed is undecided and not
+     *                        unfixed
      */
     static TiltOfADerivedValue of(DerivedValue.Replaced of, List<Reading> readings,
-                                  List<ObservedInputs> rows) {
+                                  List<ObservedInputs> rows, boolean everyBorderRead) {
         List<NumericTerm> places = NumericTerms.inOrder(of.positions());
         if (readings.isEmpty()) {
             return undecided(of, places);
@@ -132,8 +137,11 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
         }
         SequencedMap<NumericTerm, Standing> out = new LinkedHashMap<>();
         for (int at = 0; at < places.size(); at++) {
-            out.put(places.get(at),
-                    span.reaches(at) ? new Standing.Shown() : new Standing.NotShown());
+            // Rows fix a weight whatever else went unread, and a weight they leave unfixed is said
+            // so only where every border was read: a border nothing was read against is the one
+            // place the rest could have been fixed.
+            out.put(places.get(at), span.reaches(at) ? new Standing.Shown()
+                    : everyBorderRead ? new Standing.NotShown() : new Standing.Undecided());
         }
         return new TiltOfADerivedValue(of.value(), out, of.forms(), of.cited());
     }

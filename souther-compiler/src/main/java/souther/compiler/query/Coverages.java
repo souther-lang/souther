@@ -1534,12 +1534,16 @@ final class Coverages {
         List<TiltOfADerivedValue> out = new ArrayList<>();
         for (DerivedValue.Replaced each : replaced) {
             List<TiltOfADerivedValue.Reading> cutBy = new ArrayList<>();
+            boolean everyBorderRead = true;
             for (ReadingOfALine reading : readings) {
                 if (each.value().isCutBy(reading.border())) {
                     reading.tilt().ifPresent(cutBy::add);
+                    // A border nothing was read against may be where a weight is fixed, so what the
+                    // rest leave unfixed is not shown to be unfixed.
+                    everyBorderRead &= reading.tilt().isPresent();
                 }
             }
-            out.add(TiltOfADerivedValue.of(each, cutBy, rows));
+            out.add(TiltOfADerivedValue.of(each, cutBy, rows, everyBorderRead));
         }
         return out;
     }

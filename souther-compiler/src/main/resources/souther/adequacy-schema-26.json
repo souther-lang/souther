@@ -4465,176 +4465,7 @@
                 "description": "Which time a run evaluates the comparison, counted from zero, written only for a comparison a run evaluates more than once and absent otherwise. A comparison in a closure applied to each element of a list written in the body is one construct and as many decisions as there are elements, so two combinations that differ in which element came out which way name the same construct and the same outcomes; this is what tells them apart."
               },
               "construct": {
-                "type": "object",
-                "description": "Which construct of which body, and which copy of it. The same coordinates an arm is written under, so a consumer joining a decision to the arm it goes through joins on these. `construct` is the number the body counted its constructs by and `lowered` which fork a lowering made of it — neither is a place in a source, which `sources` answers for.",
-                "required": [
-                  "module",
-                  "definition",
-                  "construct",
-                  "lowered"
-                ],
-                "additionalProperties": false,
-                "properties": {
-                  "module": {
-                    "type": "string"
-                  },
-                  "definition": {
-                    "type": "string"
-                  },
-                  "construct": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "lowered": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "through": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "description": "One step the copy was made by, and `kind` says which. An `expansion` is a copy of what `expanded` names, made at one site: a call, by where it is written (`module`, `definition`, `call`, `lowered`); a name written where a value goes, by `name`; or a block handed to a parameter and applied, by `supplied`. Exactly one of the three. A `materialisation` is one build of a value's body, for the region `at` names.",
-                      "required": [
-                        "kind"
-                      ],
-                      "additionalProperties": false,
-                      "allOf": [
-                        {
-                          "if": {
-                            "properties": {
-                              "kind": {
-                                "const": "expansion"
-                              }
-                            },
-                            "required": [
-                              "kind"
-                            ]
-                          },
-                          "then": {
-                            "required": [
-                              "expanded"
-                            ],
-                            "allOf": [
-                              {
-                                "$ref": "#/$defs/copySite"
-                              }
-                            ],
-                            "not": {
-                              "anyOf": [
-                                {
-                                  "required": [
-                                    "materialised"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "at"
-                                  ]
-                                }
-                              ]
-                            }
-                          }
-                        },
-                        {
-                          "if": {
-                            "properties": {
-                              "kind": {
-                                "const": "materialisation"
-                              }
-                            },
-                            "required": [
-                              "kind"
-                            ]
-                          },
-                          "then": {
-                            "required": [
-                              "materialised",
-                              "at"
-                            ],
-                            "not": {
-                              "anyOf": [
-                                {
-                                  "required": [
-                                    "expanded"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "module"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "definition"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "call"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "lowered"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "name"
-                                  ]
-                                },
-                                {
-                                  "required": [
-                                    "supplied"
-                                  ]
-                                }
-                              ]
-                            }
-                          }
-                        }
-                      ],
-                      "properties": {
-                        "kind": {
-                          "enum": [
-                            "expansion",
-                            "materialisation"
-                          ]
-                        },
-                        "materialised": {
-                          "type": "string",
-                          "description": "Which value's body was built."
-                        },
-                        "at": {
-                          "$ref": "#/$defs/materialisationRegion"
-                        },
-                        "expanded": {
-                          "type": "string"
-                        },
-                        "module": {
-                          "type": "string"
-                        },
-                        "definition": {
-                          "type": "string"
-                        },
-                        "call": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "lowered": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "name": {
-                          "$ref": "#/$defs/namedReference"
-                        },
-                        "supplied": {
-                          "$ref": "#/$defs/suppliedBlock"
-                        }
-                      }
-                    },
-                    "description": "The calls and builds the copy was made through, in the order they were made. Absent where the construct is where it was written: a helper spliced into two calls holds one construct twice under one `construct` number, and a value built for two regions holds its constructs twice under the same calls; this is what tells the copies apart. A key within one compilation and no name to match two documents by, because which builds there are follows how the compiler shares them."
-                  }
-                }
+                "$ref": "#/$defs/constructOccurrence"
               },
               "part": {
                 "type": "integer",
@@ -5729,6 +5560,178 @@
         ]
       }
     },
+    "constructOccurrence": {
+      "type": "object",
+      "description": "Which construct of which body, and which copy of it. The same coordinates an arm is written under, so a consumer joining a decision to the arm it goes through joins on these. `construct` is the number the body counted its constructs by and `lowered` which fork a lowering made of it — neither is a place in a source, which `sources` answers for.",
+      "required": [
+        "module",
+        "definition",
+        "construct",
+        "lowered"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "construct": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lowered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "through": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "One step the copy was made by, and `kind` says which. An `expansion` is a copy of what `expanded` names, made at one site: a call, by where it is written (`module`, `definition`, `call`, `lowered`); a name written where a value goes, by `name`; or a block handed to a parameter and applied, by `supplied`. Exactly one of the three. A `materialisation` is one build of a value's body, for the region `at` names.",
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "expansion"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "expanded"
+                  ],
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/copySite"
+                    }
+                  ],
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "materialised"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "at"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "materialisation"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "materialised",
+                    "at"
+                  ],
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "expanded"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "module"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "definition"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "call"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "lowered"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "name"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "supplied"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "expansion",
+                  "materialisation"
+                ]
+              },
+              "materialised": {
+                "type": "string",
+                "description": "Which value's body was built."
+              },
+              "at": {
+                "$ref": "#/$defs/materialisationRegion"
+              },
+              "expanded": {
+                "type": "string"
+              },
+              "module": {
+                "type": "string"
+              },
+              "definition": {
+                "type": "string"
+              },
+              "call": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lowered": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "name": {
+                "$ref": "#/$defs/namedReference"
+              },
+              "supplied": {
+                "$ref": "#/$defs/suppliedBlock"
+              }
+            }
+          },
+          "description": "The calls and builds the copy was made through, in the order they were made. Absent where the construct is where it was written: a helper spliced into two calls holds one construct twice under one `construct` number, and a value built for two regions holds its constructs twice under the same calls; this is what tells the copies apart. A key within one compilation and no name to match two documents by, because which builds there are follows how the compiler shares them."
+        }
+      }
+    },
     "tiltObligationId": {
       "type": "object",
       "description": "What tells the weight of one position in a value a computation derives from several positions from every other thing a row is owed for. The computation — the comparison the author wrote and the copy of it a call of a helper made — and the position, and never a threshold: the value is computed once and every threshold of its table reads it, so rows on any border of it fix the weight for all of them, and where the rows stand moves with every row written while the obligation does not. The same comparison read at two calls is two computations, each of which can weigh its positions wrongly on its own.",
@@ -5747,7 +5750,7 @@
           "minItems": 1,
           "description": "Every copy of the comparison a call made that is cut at the same places, in the order they were read, each spelled the way a construct of a body and the calls it was made through are spelled everywhere else in the document. Calls cut at the same places are put to the same rows and are one computation.",
           "items": {
-            "$ref": "#/$defs/combinationObligationId/properties/decisions/items/properties/construct"
+            "$ref": "#/$defs/constructOccurrence"
           }
         },
         "position": {
@@ -7192,7 +7195,7 @@
                   "not_shown",
                   "undecided"
                 ],
-                "description": "`shown`: the rows on the borders of the computation fix the weight of this position, which is where its axis is in the space the rows span. `not_shown`: they do not, so rows that fix it are owed and a finding names it. `undecided`: nothing was read against the computation, or the exact arithmetic gave out on a row, which is no claim that the rows fix nothing and is no finding."
+                "description": "`shown`: the rows on the borders of the computation fix the weight of this position, which is where its axis is in the space the rows span. `not_shown`: they do not, so rows that fix it are owed and a finding names it. `undecided`: nothing was read against the computation, a border of it was not read and the rest leave the weight unfixed, or the exact arithmetic gave out on a row, which is no claim that the rows fix nothing and is no finding."
               }
             }
           }

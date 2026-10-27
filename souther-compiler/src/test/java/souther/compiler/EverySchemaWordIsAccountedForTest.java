@@ -417,8 +417,7 @@ class EverySchemaWordIsAccountedForTest {
             // What a construct's copy was made by, and how a build's region is named: which of the
             // two a step is, which way its region is told, and which of a construct's regions it is.
             new Vocabulary("through[].kind",
-                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
-                            "properties", "construct", "properties", "through", "items",
+                    List.of("$defs", "constructOccurrence", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
             // Which kind of place a proof that nothing arrives was about, where a row went there.
