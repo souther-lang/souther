@@ -1503,19 +1503,27 @@ final class Coverages {
         boolean rowsAreOn = someRowIsOn;
         boolean noRowIsOnAndTheyWereRead = pointsRead;
         boolean pointsWorkedOut = allWorkedOut;
-        Map<NumericTerm, ExactRatio> weights = form.get().direction().coefs();
+        // The rule is the border's own and is read against the model's weights in the quantity's own
+        // units, which is the family E1938 holds a border against. A border that reads as no rule
+        // of that kind has no rule to put a changed computation to, and says so by being incomplete.
+        Optional<OrderedAffineBoundary> boundary = OrderedAffineBoundary.of(border).orNull();
+        if (boundary == null || boundary.isEmpty()) {
+            return Optional.of(new TiltOfADerivedValue.Reading(border,
+                    TiltOfADerivedValue.RowsOnABorder::unread));
+        }
+        OrderedAffineBoundary rule = boundary.get();
+        Map<NumericTerm, ExactRatio> weights = rule.direction().direction();
+        TiltOfADerivedValue.Rule weighed = (changed, values) ->
+                Optional.ofNullable(rule.satisfiesWeighing(changed, values).orNull());
         return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
             if (!rowsAreOn) {
-                return new TiltOfADerivedValue.RowsOnABorder(weights,
-                        new TiltOfADerivedValue.Side(List.of(), !holding.isEmpty()),
-                        new TiltOfADerivedValue.Side(List.of(), !notHolding.isEmpty()),
-                        noRowIsOnAndTheyWereRead);
+                return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, List.of(),
+                        List.of(), noRowIsOnAndTheyWereRead);
             }
             StandingsRead holdingRead = readAt(holding, shape, rows);
             StandingsRead notHoldingRead = readAt(notHolding, shape, rows);
-            return new TiltOfADerivedValue.RowsOnABorder(weights,
-                    new TiltOfADerivedValue.Side(holdingRead.readings(), !holding.isEmpty()),
-                    new TiltOfADerivedValue.Side(notHoldingRead.readings(), !notHolding.isEmpty()),
+            return new TiltOfADerivedValue.RowsOnABorder(weights, weighed,
+                    holdingRead.readings(), notHoldingRead.readings(),
                     pointsWorkedOut && holdingRead.complete() && notHoldingRead.complete());
         }));
     }

@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
@@ -17,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.function.Supplier;
 
@@ -30,16 +30,19 @@ import java.util.function.Supplier;
  * is the border's ({@link BorderAssessment}); what is owed here is once for the computation and
  * once for each position (White and Cohen, IEEE TSE SE-6(3), 1980).
  *
- * <p><b>The weights are fixed where the rows beside the borders determine them.</b> A row at the
- * value nearest a border satisfies {@code Σ cₚ·xₚ = T} for a {@code T} the model wrote, with the
- * model's own weights {@code cₚ}. A computation that weighs the positions by {@code cₚ·λₚ} instead
- * moves such a row by {@code Σ cₚ·(λₚ − 1)·xₚ}, so the weights are fixed where the vectors
- * {@code (cₚ·xₚ)} the rows give span the space of the positions, and a position's own weight is
- * fixed where its axis is in the span. Which way a wrong weight moves a row decides which rows
- * catch it: one that moves it up is caught by a row where the rule does not hold and one that moves
- * it down by a row where it does, and a strict comparison holds one value further up than a
- * non-strict one. So the two sides are spanned apart, and a weight is fixed where its axis is in
- * both. A side the border has no value on, because the type ends there, is not asked.
+ * <p><b>A weight is fixed where a computation weighing it otherwise would fail a row.</b> The faults
+ * are the ones a border is held against beside its own line ({@link FaultFamily}): one position
+ * weighed one more or one less than the model weighs it, and nothing else. For each such
+ * computation, a row at the value nearest a border answers differently from the model where the
+ * border's rule, read against the threshold the model wrote and the value the changed computation
+ * works out, puts the row on the other side. A weight is fixed where both the computation weighing
+ * it one more and the one weighing it one less fail some row, on any border of the call. Which way a
+ * wrong weight moves a row is the row's own, and a row on each side of a border can still be moved
+ * to the side the model has it on, so the check is made against the rule and not against how the
+ * rows are spread.
+ *
+ * <p>What this establishes is what E1938 establishes and no more: no fault of one step in one
+ * weight is left, which is a fault domain stated and not the weights pinned down.
  *
  * <p><b>Evidence belongs to the call that reads it.</b> A computation names the calls cut at the
  * same places, and which of them is one computation is not something the borders can prove: two
@@ -89,48 +92,48 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
     }
 
     /**
-     * The rows that stand at the values nearest a border on one side of where its answer changes.
-     *
-     * @param readings what each position holds at each reading of a row that stands at the border's
-     *             point on this side, and at no other reading
-     * @param owed whether the border has a point on this side at all: a rule bounded by its type
-     *             has none past the bound, and there is nothing there for a row to show
+     * What a border's rule says of a row when the positions are weighed otherwise, with the
+     * threshold the model wrote.
      */
-    public record Side(List<Map<NumericTerm, Place>> readings, boolean owed) {
+    @FunctionalInterface
+    public interface Rule {
 
-        public Side {
-            readings = List.copyOf(readings);
-        }
+        /**
+         * Whether the rule holds at a row weighed {@code weights}, or empty where the exact
+         * arithmetic could not hold the sum.
+         */
+        Optional<Boolean> holdsAt(Map<NumericTerm, ExactRatio> weights,
+                                  Map<NumericTerm, Place> values);
     }
 
     /**
-     * What the rows on one border say of the weights, as numbers.
+     * What the rows on one border say of the weights.
      *
-     * <p>Both sides of the border are kept apart. A computation that weighs a position more than the
-     * model does moves a row across the border one way and one that weighs it less moves it the
-     * other, so rows on the side where the rule holds catch the one and rows on the side where it
-     * does not catch the other, and neither side says anything of the one it does not catch.
-     *
-     * @param weights    the model's weight of each position the border's weighing names
-     * @param holding    the rows at the value nearest the border where the rule holds
-     * @param notHolding the rows at the value nearest the border where it does not
+     * @param weights    the model's weight of each position the border's weighing names, in the
+     *                   quantity's own units
+     * @param rule       the border's rule, which answers for the weights a row is read under
+     * @param holding    what each position holds at each reading of a row that stands at a value
+     *                   nearest the border where the rule holds, and at no other reading
+     * @param notHolding the same where it does not
      * @param complete   whether those are every reading of every row there is: the border was read
      *                   against every row, every reading of each was tried, and none was left out
      *                   for nothing having watched it run
      */
-    public record RowsOnABorder(Map<NumericTerm, ExactRatio> weights, Side holding,
-                                Side notHolding, boolean complete) {
+    public record RowsOnABorder(Map<NumericTerm, ExactRatio> weights, Rule rule,
+                                List<Map<NumericTerm, Place>> holding,
+                                List<Map<NumericTerm, Place>> notHolding, boolean complete) {
 
         public RowsOnABorder {
             weights = Map.copyOf(weights);
-            Objects.requireNonNull(holding, "the rule holds on one side of the border");
-            Objects.requireNonNull(notHolding, "and does not on the other");
+            Objects.requireNonNull(rule, "a border has a rule");
+            holding = List.copyOf(holding);
+            notHolding = List.copyOf(notHolding);
         }
 
         /** A border nothing was read against, which says nothing and is not left out. */
         static RowsOnABorder unread() {
-            return new RowsOnABorder(Map.of(), new Side(List.of(), false),
-                    new Side(List.of(), false), false);
+            return new RowsOnABorder(Map.of(), (_, _) -> Optional.empty(), List.of(), List.of(),
+                    false);
         }
     }
 
@@ -195,45 +198,64 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
         if (borders.isEmpty()) {
             return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
         }
-        ExactSpan holding = new ExactSpan(places.size());
-        ExactSpan notHolding = new ExactSpan(places.size());
-        boolean holdingOwed = false;
-        boolean notHoldingOwed = false;
-        boolean complete = true;
-        for (RowsOnABorder border : borders) {
-            complete &= border.complete();
-            holdingOwed |= border.holding().owed();
-            notHoldingOwed |= border.notHolding().owed();
-            // A row the exact arithmetic gave out on is a row left out: what the rest reach is
-            // still reached, and what they leave unreached is no longer known to be unfixed.
-            complete &= takeIn(places, border, border.holding(), holding);
-            complete &= takeIn(places, border, border.notHolding(), notHolding);
-        }
-        if (!holdingOwed && !notHoldingOwed) {
-            return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
-        }
+        boolean complete = borders.stream().allMatch(RowsOnABorder::complete);
         List<Standing> out = new ArrayList<>();
-        for (int at = 0; at < places.size(); at++) {
-            // Rows fix a weight whatever else went unread; one they leave unfixed is unfixed only
-            // where nothing was left unread.
-            boolean fixed = (!holdingOwed || holding.reaches(at))
-                    && (!notHoldingOwed || notHolding.reaches(at));
-            out.add(fixed ? new Standing.Shown()
-                    : complete ? new Standing.NotShown() : new Standing.Undecided());
+        for (NumericTerm place : places) {
+            Caught more = caught(place, ExactRatio.ONE, borders);
+            Caught fewer = caught(place, ExactRatio.ONE.negated(), borders);
+            // A fault a row fails is caught whatever else went unread; one no row fails is
+            // uncaught only where nothing was left unread.
+            out.add(more.byARow() && fewer.byARow() ? new Standing.Shown()
+                    : complete && more.tried() && fewer.tried()
+                            ? new Standing.NotShown() : new Standing.Undecided());
         }
         return out;
     }
 
-    /** Takes the rows of one side of a border into the space of that side, or false where one was
-     *  left out because the exact arithmetic gave out. */
-    private static boolean takeIn(List<NumericTerm> places, RowsOnABorder border, Side side,
-                                  ExactSpan into) {
-        boolean all = true;
-        for (Map<NumericTerm, Place> values : side.readings()) {
-            ExactRatio[] vector = vectorOf(places, border.weights(), values);
-            all &= vector != null && into.add(vector);
+    /**
+     * Whether a row fails under the computation that weighs {@code place} {@code step} more.
+     *
+     * @param byARow whether some row on some border is put to the other side of it than the model
+     *               has it on
+     * @param tried  whether every row was worked out under it, and no sum was past the exact
+     *               arithmetic
+     */
+    private record Caught(boolean byARow, boolean tried) {}
+
+    private static Caught caught(NumericTerm place, ExactRatio step, List<RowsOnABorder> borders) {
+        boolean tried = true;
+        for (RowsOnABorder border : borders) {
+            ExactRatio weight = border.weights().get(place);
+            if (weight == null) {
+                continue;
+            }
+            ExactRatio moved = weight.plus(step).orNull();
+            if (moved == null) {
+                tried = false;
+                continue;
+            }
+            Map<NumericTerm, ExactRatio> weighed = new LinkedHashMap<>(border.weights());
+            weighed.put(place, moved);
+            // A computation weighing nothing at all is no computation, as it is no line beside one.
+            if (weighed.values().stream().allMatch(each -> each.signum() == 0)) {
+                continue;
+            }
+            for (Map<NumericTerm, Place> values : border.holding()) {
+                Optional<Boolean> holds = border.rule().holdsAt(weighed, values);
+                tried &= holds.isPresent();
+                if (holds.isPresent() && !holds.get()) {
+                    return new Caught(true, tried);
+                }
+            }
+            for (Map<NumericTerm, Place> values : border.notHolding()) {
+                Optional<Boolean> holds = border.rule().holdsAt(weighed, values);
+                tried &= holds.isPresent();
+                if (holds.isPresent() && holds.get()) {
+                    return new Caught(true, tried);
+                }
+            }
         }
-        return all;
+        return new Caught(false, tried);
     }
 
     /** What the calls say of one place together: fixed where every call fixes it, unfixed where
@@ -244,27 +266,6 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
         }
         return calls.stream().allMatch(each -> each instanceof Standing.Shown)
                 ? new Standing.Shown() : new Standing.Undecided();
-    }
-
-    /** What each position contributes at a row, each weighed by the model's own weight of it in
-     *  this border's weighing, or null where the exact arithmetic gave out. */
-    private static ExactRatio[] vectorOf(List<NumericTerm> places, Map<NumericTerm, ExactRatio> weights,
-                                         Map<NumericTerm, Place> values) {
-        ExactRatio[] vector = new ExactRatio[places.size()];
-        for (int at = 0; at < vector.length; at++) {
-            ExactRatio weight = weights.get(places.get(at));
-            Place held = values.get(places.get(at));
-            if (weight == null || held == null) {
-                vector[at] = ExactRatio.ZERO;
-                continue;
-            }
-            ExactRatio contributed = weight.times(Count.number(held).exactly()).orNull();
-            if (contributed == null) {
-                return null;
-            }
-            vector[at] = contributed;
-        }
-        return vector;
     }
 
     /**

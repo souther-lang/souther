@@ -67,34 +67,40 @@ count over a different set of lines — a comparison that draws no border, two r
 ### What is owed instead
 
 Each position of such a computation owes its weight, once for the computation however many
-thresholds the table has and however many positions a window of the table reads. The weights are
-fixed where the rows beside the borders determine them. A row at the value nearest a border
-satisfies the sum of the model's weights of the positions, each by the value the position holds,
-equal to a number the threshold fixes. A computation that weighs a position by more or less moves such
-a row by the weighted difference, so the weights are fixed where the vectors of weighted values the
-rows give span the space of the positions, and the weight of one position is fixed where its own axis
-is in the span. The span is worked out in exact arithmetic.
+thresholds the table has and however many positions a window of the table reads. A weight is fixed
+where a computation weighing the position otherwise would fail a row. The faults are the ones E1938
+holds a border against, one position weighed one more or one less than the model weighs it in the
+quantity's own weights, and nothing else. For each such computation the border's own rule is read
+against the threshold the model wrote and the value the changed computation works out at a row nearest
+the border, and the computation fails the row where that puts it on the other side of the rule than the
+model has it. A weight is fixed where both the computation weighing it one more and the one weighing it
+one less fail some row, on any border of the call.
 
-The two sides of a border are spanned apart. A position weighed more than the model weighs it moves a
-row across the border one way and one weighed less moves it the other, so a row where the rule holds
-catches the one and a row where it does not catches the other, and neither says anything of the one it
-does not catch. Which value is where the rule holds is the comparison's: a strict comparison holds one
-value further up than a non-strict one, so a rule that took the threshold itself for the evidence would
-fix weights that a computation weighing a position by less still agrees with. A weight is fixed where
-its axis is in both spans, and a side the border has no value on, because the type ends there, is not
-asked.
+This is asked of the rule and not of how the rows are spread. The alternative considered was that the
+vectors of weighted values the rows give span the space of the positions, on each side of the border
+apart. That is a statement about the rows' independence, and a wrong weight is caught by a row only
+where it moves the row across the border. With a position negative on the side where the rule does not hold,
+rows on both sides of two borders can be of full rank and still be passed by a computation weighing a
+position twice: it moves each of them away from the border on the side the model has it on. Which value
+is where the rule holds is the comparison's too, since a strict comparison holds one value further up
+than a non-strict one.
+
+What this establishes is what E1938 establishes and no more: no fault of one step in one weight is
+left, which is a fault domain stated and not the weights pinned down. A rule weighing a position by
+two and a half lies between the weights this tries.
 
 Only the readings of a row that stand at a border's point are evidence of it. A row inside a
 container has a reading for each element, and one of them standing at the point is no reason to take
 the numbers of another: whether a reading stands and what it reads as are asked of one walk, so that
 the reading that was found to stand is the reading whose numbers are taken. A row whose answer is
 not the model's is evidence of nothing, and a point that could not be worked out may have rows nobody
-can name, so a weight is not said to be unfixed past it.
+can name, so a weight is not said to be unfixed past it. A side the border has no value on, because
+the type ends there, has no rows and none are asked for; the weight is caught from the side that has
+them.
 
-This is a property of what the rows determine, not of how a row is shaped. A row that moves one
-position alone is one way to fix a weight and not the only one: three rows that each move two of three
-positions fix all three, and a position weighed by minus one has no row that moves it alone and can
-still be fixed.
+How a row is shaped decides nothing. A row that moves one position alone is one way to fail a changed
+computation and not the only one: three rows that each move two of three positions fail every one of
+them, and a position weighed by minus one has no row that moves it alone and can still be fixed.
 
 Where nothing was read against the computation, where a border of it was not read and the rest leave
 a weight unfixed, or where the exact arithmetic gave out on a row, no claim is made about the weight
