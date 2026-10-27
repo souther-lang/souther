@@ -142,6 +142,47 @@ class AFoldOverTheDayADateTimeFallsOnIsReadLikeOneOverADateTest {
         }
     }
 
+    /** A day chosen by the case of each element, one case a date and the other the day a date-time
+     *  falls on, is read as completely as the same rule where both cases hold a date. */
+    @Test
+    void aDayChosenByCaseAmongDatesAndDaysOfDateTimesIsReadLikeOneAmongDates() {
+        String reports = "";
+        for (String meetingAt : List.of("Date", "DateTime")) {
+            String report = report(compiled("""
+                    module example.stale
+
+                    data Call = { on: Date }
+
+                    data Meeting = { at: %1$s }
+
+                    data Act = Call | Meeting
+
+                    data Touch = { account: String, act: Act }
+
+                    let dayOf (a: Act): Date =
+                        match a with
+                            | Call { on }    -> on
+                            | Meeting { at } -> %2$s
+
+                    let sinceOf (touches: List<Touch>, today: Date): Map<String, Int> =
+                        List.fold((acc, p) -> Map.updateOrInsert(p.account,
+                                      Date.daysBetween(dayOf(p.act), today),
+                                      seen -> Int.min(seen, Date.daysBetween(dayOf(p.act), today)),
+                                      acc),
+                                  Map.empty, touches)
+
+                    behavior stale : (touches: List<Touch>, today: Date, staleAfter: Int)
+                        -> Map<String, Int>
+
+                    let stale (touches, today, staleAfter) =
+                        Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches, today))
+                    """.formatted(meetingAt, meetingAt.equals("Date") ? "at"
+                    : "DateTime.toDate(at)")));
+            reports += report;
+            assertTrue(report.contains("measurement: complete"), report);
+        }
+    }
+
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

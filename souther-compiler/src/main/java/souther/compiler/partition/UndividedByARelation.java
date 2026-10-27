@@ -4177,10 +4177,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 List<NumericTerm.FromOnePosition> out = new ArrayList<>();
                 for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
                     ElementProjection place = arm.value().asAPlace();
-                    if (place == null) {
+                    ElementValue.StepsOfAPlace steps = place == null
+                            ? ElementValue.asTheStepsOfAPlace(arm.value()) : null;
+                    if (steps != null && steps.weight().equals(ExactRatio.ONE)
+                            && steps.constant().isZero()) {
+                        // The steps one place of the arm falls in are a number of that place.
+                        NumericTerm.WholeUnitsOf each = NumericTerm.WholeUnitsOf.ofTheValueAt(
+                                steps.operation(), steps.place().from(gathered.elements()));
+                        if (each == null) {
+                            yield List.of();
+                        }
+                        out.add(each);
+                    } else if (place != null) {
+                        out.add(new NumericTerm.ValueOf(place.from(gathered.elements())));
+                    } else {
                         yield List.of();
                     }
-                    out.add(new NumericTerm.ValueOf(place.from(gathered.elements())));
                 }
                 yield out;
             }
