@@ -129,29 +129,29 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
 
     /**
      * Every way an element meets the statement, where it says no more than which cases positions
-     * of the element are in — or empty where it says anything else, or where no case meets it.
+     * of the element are in — or empty where it says anything else, or has more ways than are
+     * kept apart. A statement no case meets is read, and has no way.
      *
      * <p>A way is one case at each position it names, with the cases the way to that position
      * narrows to ({@link TermPath#requirements}), which is what a row is written in: a plan writes
-     * one case of a sum. Ways are counted once however many statements give them. Meeting any of several statements is a way of any of them, and
-     * meeting all of them a way that stands beside a way of each; a pair of ways asking two cases
-     * of one position is no way. Which of the ways a row is written in depends on what else the
-     * row asks of the same positions, so none is chosen here.
+     * one case of a sum. Ways are counted once however many statements give them. Meeting any of
+     * several statements is a way of any of them, and meeting all of them a way that stands beside
+     * a way of each; a pair of ways asking two cases of one position is no way. Which of the ways
+     * a row is written in depends on what else the row asks of the same positions, so none is
+     * chosen here.
      */
     Optional<CasesAsked> casesAsked() {
         return casesAsked(meeting);
     }
 
     /**
-     * @param ways      each a case at every position the statement names, any one of which meets it
+     * @param ways      each a case at every position the statement names, any one of which meets
+     *                  it; none where no case does, which is a statement read and met by nothing
      * @param positions where the statement reads a case, each once
      */
     record CasesAsked(List<Requirements> ways, List<TermPath> positions) {
 
         CasesAsked {
-            if (ways.isEmpty()) {
-                throw new IllegalArgumentException("a statement is met in some way or none");
-            }
             ways = List.copyOf(ways);
             positions = List.copyOf(positions);
         }
@@ -171,7 +171,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                         ways.add(way);
                     }
                 }
-                yield ways.isEmpty() ? Optional.empty()
+                yield ways.size() > MOST_WAYS ? Optional.empty()
                         : Optional.of(new CasesAsked(List.copyOf(ways), List.of(at.position())));
             }
             case Proposition.Any any -> {
@@ -185,7 +185,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                     ways.addAll(here.ways());
                     positions.addAll(here.positions());
                 }
-                yield ways.isEmpty() || ways.size() > MOST_WAYS ? Optional.empty()
+                yield ways.size() > MOST_WAYS ? Optional.empty()
                         : Optional.of(new CasesAsked(List.copyOf(ways), List.copyOf(positions)));
             }
             case Proposition.All all -> {
@@ -205,7 +205,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                             }
                         }
                     }
-                    if (together.isEmpty() || together.size() > MOST_WAYS) {
+                    if (together.size() > MOST_WAYS) {
                         yield Optional.empty();
                     }
                     ways = together;

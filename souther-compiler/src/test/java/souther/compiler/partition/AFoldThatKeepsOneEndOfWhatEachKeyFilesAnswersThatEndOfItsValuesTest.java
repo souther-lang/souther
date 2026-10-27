@@ -700,6 +700,31 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         }
     }
 
+    /**
+     * The premise of asking a case's declaration whether a value can be made of it: a position
+     * admitting a case does not say so, and a case no value can be made of would keep no touch.
+     * Every form of such a declaration written here is refused where it is declared, so the case
+     * that keeps a touch is always one with a value; a form that stops being refused is one that
+     * needs a model of its own beside the check.
+     */
+    @Test
+    void noDeclarationOfACaseThatKeepsATouchLeavesItNoValueYet() {
+        for (String declared : List.of(
+                "data ToAccount = { code: String }\n    invariant code == \"a\" && code == \"b\"\n",
+                "data ToAccount = { codes: List<Int> }\n"
+                        + "    invariant List.length(codes) > 1 && List.length(codes) < 1\n",
+                "data ToAccount = { code: String }\n"
+                        + "    invariant String.length(code) > 3 && String.length(code) < 2\n",
+                "data ToAccount = { code: Int }\n    invariant code * 2 == 1\n",
+                "data ToAccount = { code: Int, other: Int }\n"
+                        + "    invariant code + other == 1 && code + other == 2\n")) {
+            AssertionFailedError refused = assertThrows(AssertionFailedError.class,
+                    () -> measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted("")
+                            .replace("data ToAccount\n", declared)), declared);
+            assertTrue(refused.getMessage().contains("E1013"), refused.getMessage());
+        }
+    }
+
     private static final Pattern RELATED_TOUCH = Pattern.compile(
             "Touch \\{ account = \"((?:[^\"\\\\]|\\\\.)*)\", related = (ToAccount|ToLead)(?: \\{ \\})?,"
                     + " days = (-?\\d+) \\}");

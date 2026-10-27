@@ -4304,7 +4304,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                           InputReading read) {
         Position there = read.domain().at(at.position());
         if (there != null) {
-            return admits(there, cases);
+            return admits(there, cases, read);
         }
         if (!(read.domain().reach().standingOf(at)
                 instanceof NameReach.Standing.UnderTheCases(
@@ -4315,7 +4315,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (NameReach.CaseStanding standing : standings) {
             if (element.merge(standing.assuming()) instanceof Requirements.Merge.Merged) {
                 Position under = read.domain().at(standing.position().position());
-                if (under == null || !admits(under, cases)) {
+                if (under == null || !admits(under, cases, read)) {
                     return false;
                 }
                 any = true;
@@ -4324,9 +4324,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return any;
     }
 
-    private static boolean admits(Position there, CasesLeft cases) {
+    /**
+     * Whether the rules of the position leave every one of {@code cases} a value, and each case a
+     * sum has is one its declaration is shown to leave a value of: a position admits the case, and
+     * only the declaration says whether anything can be made of it.
+     */
+    private static boolean admits(Position there, CasesLeft cases, InputReading read) {
         for (Refinement narrowing : cases.atoms()) {
-            if (!(there.admissionOf(narrowing) instanceof Admits.Admitted)) {
+            if (!(there.admissionOf(narrowing) instanceof Admits.Admitted)
+                    || (narrowing instanceof Refinement.SumCase sum
+                            && !aValueIsShownToExist(Type.ref(sum.leaf()), read))) {
                 return false;
             }
         }

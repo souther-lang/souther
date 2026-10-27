@@ -13,6 +13,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -67,8 +68,32 @@ class EveryWayAKeptElementMeetsAStatementOfCasesIsAskedTest {
         Proposition stated = Proposition.all(List.of(inCases(RELATED, "Account", "Deal"),
                 inCases(RELATED, "Deal", "Lead")));
         assertEquals(List.of(only(RELATED, "Deal")), asked(stated).orElseThrow().ways());
-        assertTrue(asked(Proposition.all(List.of(inCases(RELATED, "Account"),
-                inCases(RELATED, "Deal")))).isEmpty());
+        assertEquals(List.of(), asked(Proposition.all(List.of(inCases(RELATED, "Account"),
+                inCases(RELATED, "Deal")))).orElseThrow().ways());
+    }
+
+    /** A statement that is read and that nothing meets has no ways, and gives the others none. */
+    @Test
+    void aStatementNoCaseMeetsLeavesTheOtherStatementsItIsAnyOfTheirWays() {
+        Proposition unmet = Proposition.all(List.of(inCases(RELATED, "Account"),
+                inCases(RELATED, "Deal")));
+        Proposition stated = Proposition.any(List.of(unmet, inCases(SIZE, "Big")));
+        KeptOccurrences.CasesAsked asked = asked(stated).orElseThrow();
+        assertEquals(List.of(only(SIZE, "Big")), asked.ways());
+        assertEquals(List.of(RELATED, SIZE), asked.positions());
+        assertEquals(List.of(), asked(Proposition.all(List.of(unmet, inCases(SIZE, "Big"))))
+                .orElseThrow().ways());
+    }
+
+    @Test
+    void aStatementOfMoreCasesThanAreKeptApartIsNotRead() {
+        String[] leaves = new String[65];
+        for (int at = 0; at < leaves.length; at++) {
+            leaves[at] = "Leaf" + at;
+        }
+        assertTrue(asked(inCases(RELATED, leaves)).isEmpty());
+        assertEquals(64, asked(inCases(RELATED, Arrays.copyOf(leaves, 64)))
+                .orElseThrow().ways().size());
     }
 
     @Test
@@ -120,8 +145,8 @@ class EveryWayAKeptElementMeetsAStatementOfCasesIsAskedTest {
         Requirements way = asked(inCases(callFlag, "Big")).orElseThrow().ways().getFirst();
         assertEquals(cases("Call"), way.at(LINES.element()), way::toString);
         assertEquals(cases("Big"), way.at(callFlag.position()), way::toString);
-        assertTrue(asked(Proposition.all(List.of(inCases(callFlag, "Big"),
-                inCases(emailFlag, "Big")))).isEmpty());
+        assertEquals(List.of(), asked(Proposition.all(List.of(inCases(callFlag, "Big"),
+                inCases(emailFlag, "Big")))).orElseThrow().ways());
         assertTrue(asked(Proposition.all(List.of(inCases(callFlag, "Big"),
                 inCases(callFlag, "Big")))).isPresent());
     }
