@@ -217,6 +217,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
         FieldDomains read = domainsOf("Decimal", "value + 1.5m > 0.0m");
         assertInstanceOf(ProjectionEvidence.NotCertified.class, read.projection(),
                 "a Decimal sum may stop a run for want of room, which nothing here says where");
-        assertFalse(read.shownToHoldAValue(), "and a value is not shown to get through it");
+        assertTrue(read.shownToHoldAValue(),
+                "yet a value is exhibited, nought, and the sum is worked out at it");
     }
 }
