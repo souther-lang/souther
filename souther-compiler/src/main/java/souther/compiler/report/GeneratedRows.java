@@ -331,7 +331,7 @@ public final class GeneratedRows {
                  THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART, MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
                  A_CONSTRUCTION_DECIDES_THIS_ARM, NO_AXIS_AT_THIS_POSITION ->
                     "nothing offers a row for";
-            case NO_STRATEGY_FOR_AN_OUTPUT_CASE -> "nothing aims a row at";
+            case NO_STRATEGY_FOR_AN_OUTPUT_CASE, NO_STRATEGY_FOR_A_WEIGHT -> "nothing aims a row at";
         };
     }
 
@@ -1189,6 +1189,11 @@ public final class GeneratedRows {
             // is offered above rather than said here.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
                     untold.line().border().label() + " against " + untold.allowed().label();
+            // The position and the total it weighs into, which is the whole of what the weight is
+            // of.
+            case About.ATiltOfATotalNoRowShows tilt ->
+                    "the weight of " + tilt.position() + " in "
+                            + tilt.line().border().cut().of().left();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.

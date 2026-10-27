@@ -114,7 +114,11 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationId;
 import souther.compiler.partition.HeldOutcome;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.partition.AuthoredLine;
+import souther.compiler.partition.DerivedFamily;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.LeftOutPoint;
 import souther.compiler.partition.NotOwedPoint;
@@ -4220,6 +4224,8 @@ public final class Adequacy {
                             .A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER);
             case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
+            case About.ATiltOfATotalNoRowShows _ -> new GenerationOutcome.NotSupported(
+                    GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_A_WEIGHT);
             // A row does answer this: one the model refuses within reach of the rows it keeps, or
             // one it keeps at or past the rows it refuses. What became of the search for one is the
             // reading's to say and is read where the lines are ({@link ARowTellingTheLinesApart}).
@@ -4751,7 +4757,7 @@ public final class Adequacy {
             }
             out.addAll(Coverages.assessBetween(subject, observed, put,
                     partitioning.reaching()));
-            return Coverages.besideEachLine(out);
+            return Coverages.besideEachLine(out, put.all());
         }
 
     }
@@ -5761,6 +5767,8 @@ public final class Adequacy {
                     // is not one of those. It is named beside the finding, and a row there is the
                     // row this cannot write.
                     case About.ALineTheRowsDoNotTellFromAnother _ -> { }
+                    // And a position of a total, whose weight nothing composes a row to show.
+                    case About.ATiltOfATotalNoRowShows _ -> { }
                     // A row is written here and what is left is its answer, which is the author's
                     // to write and nothing a search composes.
                     case About.AnUnansweredRow _, About.ARowAtAnArmAwaitsItsAnswer _ -> { }
@@ -6219,6 +6227,8 @@ public final class Adequacy {
                             // generation searched.
                             case About.ALineTheRowsDoNotTellFromAnother untold ->
                                     tellingApart(untold, edges);
+                            case About.ATiltOfATotalNoRowShows _ ->
+                                    throw new IllegalStateException(finding.about().toString());
                             // The ones above, which is what `none` was not null for.
                             // A line a declaration is owed is not one of this behavior's findings,
                             // so nothing reaches here with one.
@@ -7485,6 +7495,18 @@ public final class Adequacy {
          */
         BOUNDARY_NOT_TOLD_FROM_ANOTHER(DiagnosticCode.E1938),
         /**
+         * A position of a total a rule cuts at several places, whose weight no row shows.
+         *
+         * <p>Owed once for the total and once for each position, and never once for each
+         * threshold: a weight is a fault of the total, which every threshold of its table reads.
+         * It stands where the position's classes would have, and only where the total is cut at
+         * more than one place ({@link DerivedFamily}).
+         *
+         * <p>Not a measure of its own, for the reason the finding above is not: it comes off the
+         * same rows as the points of the borders it is a family of.
+         */
+        TILT_OF_A_TOTAL_NOT_SHOWN(DiagnosticCode.E1940),
+        /**
          * A position the model draws no line through.
          *
          * <p>A fact about the model, and only said where the derivation ran to the end and found
@@ -7615,7 +7637,7 @@ public final class Adequacy {
                     About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _,
                     About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
-                    About.APositionNoLineDivides _,
+                    About.ATiltOfATotalNoRowShows _, About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                     About.ARuleThatMayStopARun _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
@@ -7894,6 +7916,7 @@ public final class Adequacy {
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.ALineTheRowsDoNotTellFromAnother _ ->
                         Kind.BOUNDARY_NOT_TOLD_FROM_ANOTHER;
+                case About.ATiltOfATotalNoRowShows _ -> Kind.TILT_OF_A_TOTAL_NOT_SHOWN;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
                         Kind.PARTITION_NOT_READ;
@@ -9202,6 +9225,7 @@ public final class Adequacy {
                         new About.APointOfABorder(owed)));
             }
             linesNotToldApart(behavior.name(), lines, account, out);
+            weightsNotShown(behavior.name(), lines, out);
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
             //
@@ -9329,6 +9353,51 @@ public final class Adequacy {
                     }
                 }
             }
+        }
+
+        /**
+         * Each position of each total this behavior's rules cut at several places whose weight no
+         * row shows.
+         *
+         * <p>One finding per family and position, and never one per border: the total is computed
+         * once and every threshold of its table reads it, so a row at any border shows the weight
+         * for all of them. The lines of the module's declarations are owed once for the module and
+         * answered under the declaration, as the lines beside a border are.
+         */
+        private static void weightsNotShown(String behavior, List<BorderAssessment> lines,
+                                            List<Finding> out) {
+            Set<AuthoredLine> asked = new LinkedHashSet<>();
+            for (BorderAssessment line : lines) {
+                if (line.tilt().isEmpty()
+                        || !line.border().origin().owedToTheDeclaration().isEmpty()
+                        || !asked.add(line.tilt().get().line())) {
+                    continue;
+                }
+                TiltOfAFamily tilt = line.tilt().get();
+                tilt.positions().forEach((position, standing) -> {
+                    if (standing instanceof TiltOfAFamily.Standing.NotShown) {
+                        out.add(Finding.noticed(behavior, new About.ATiltOfATotalNoRowShows(
+                                widestTotalWith(position, tilt.line(), lines), position)));
+                    }
+                });
+            }
+        }
+
+        /** A border of the comparison's widest total the position is in, which is the total the
+         *  weight is said to be in. */
+        private static BorderAssessment widestTotalWith(NumericTerm position, AuthoredLine line,
+                                                        List<BorderAssessment> lines) {
+            BorderAssessment widest = null;
+            int terms = -1;
+            for (BorderAssessment each : lines) {
+                if (each.tilt().isPresent() && each.tilt().get().line().equals(line)
+                        && each.border().cut().of() instanceof LinearQuantity total
+                        && total.terms().contains(position) && total.terms().size() > terms) {
+                    widest = each;
+                    terms = total.terms().size();
+                }
+            }
+            return Objects.requireNonNull(widest, "a position of a total is in some total");
         }
 
         /**
@@ -9603,6 +9672,10 @@ public final class Adequacy {
                                 new ExampleMessage.NoRowTellsThatLineFromAnother(
                                         untold.line().border().label(),
                                         untold.allowed().label(), finding.named());
+                        case About.ATiltOfATotalNoRowShows tilt ->
+                                new ExampleMessage.NoRowShowsTheWeightOfThatPosition(
+                                        tilt.position().toString(),
+                                        tilt.line().border().cut().of().left(), finding.named());
                         case About.APointOfABorder(var point) ->
                                 switch (point.point().line().provenance()) {
                             case RuleRef.Named named ->
@@ -9737,6 +9810,10 @@ public final class Adequacy {
                         built.hint(new ExampleMessage.WriteARowAtThatInput(saw));
                     }
                 }
+                // The weight is shown by a row on a border of the total, the position away from
+                // where it starts and every other at it; the sentence names the position and the
+                // total, and there is no one input to write.
+                case About.ATiltOfATotalNoRowShows _ -> { }
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.
                 case About.APointOfADeclaredBorder(var owed) ->

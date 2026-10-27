@@ -107,6 +107,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.query.TiltOfAFamily;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Offering;
 import souther.compiler.query.InputOfARowForALine;
@@ -3585,6 +3586,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         untold.allowed().label(),
                         shown == null ? "" : ", and a row at `" + shown + "` would"));
             }
+            // And the weights of a total cut at several places, beside the count for the same
+            // reason: every point of every border can be stood at and a position's weight in the
+            // total still be shown by no row.
+            if (f.finding().about() instanceof About.ATiltOfATotalNoRowShows tilt) {
+                out.append(String.format("      %s no row shows how `%s` weighs into `%s`%n",
+                        mark(f.finding()), tilt.position(), tilt.line().border().cut().of().left()));
+            }
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
@@ -6135,6 +6143,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The obligations a total is owed beside the lines that cut it, one per position, and where
+     * each stands.
+     *
+     * <p>Every position of the total, and never only the ones a finding names: which positions a
+     * total weighs is the model's own answer and no row moves it, so what changes with the rows is
+     * the word beside each. Not written where the line cuts no total of several places.
+     */
+    private static void weightsOfTheTotal(ObjectNode into, BorderAssessment boundary,
+                                          DocumentSources sources) {
+        boundary.tilt().ifPresent(tilt -> {
+            ArrayNode weights = into.putArray("weights");
+            tilt.positions().forEach((position, standing) -> {
+                ObjectNode one = weights.addObject();
+                obligationId(one.putObject("obligationId"),
+                        new ObligationIdentity.OfATiltAtAPosition(tilt.line(), position), sources);
+                one.put("standing", switch (standing) {
+                    case TiltOfAFamily.Standing.Shown _ -> "shown";
+                    case TiltOfAFamily.Standing.NotShown _ -> "not_shown";
+                });
+            });
+        });
+    }
+
+    /**
      * What tells one thing a row is owed for from every other, written the way {@code ruleId} is:
      * every part of the identity and nothing that merely reads well.
      *
@@ -6165,6 +6197,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 authoredLineId(into.putObject("line"), line.line());
                 line.at().ifPresent(at -> level(into.putObject("level"), at));
                 into.put("direction", OrderedAffineBoundary.spelled(direction.direction()));
+            }
+            // The comparison and the position whose weight is owed: no threshold, which moves with
+            // the rows, and no level, which a body's comparison has none of.
+            case ObligationIdentity.OfATiltAtAPosition(var line, var position) -> {
+                authoredLineId(into.putObject("line"), line);
+                into.put("position", position.toString());
             }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
             // The axis and which class of it, which is what an axis of the document is keyed by.
@@ -8011,6 +8049,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // with where it stands. The four points under it are owed at places on it and carry
             // their own; these are the ids a finding about the line itself joins to.
             linesBeside(b.putArray("besides"), boundary, sources);
+            // And what the total this line cuts is owed beside it, where the rule cuts it at
+            // several places: one entry per position, the same under every border of the table.
+            weightsOfTheTotal(b, boundary, sources);
             // Which line this is, which the id above does not say. What a line is owed is the
             // same at every position it is read at, and this array has an entry per position, so
             // two entries can carry one obligation. This is what tells them apart, and it is what
@@ -9192,7 +9233,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
                     About.ALineTheRowsDoNotTellFromAnother _,
-                    About.APositionNoLineDivides _,
+                    About.ATiltOfATotalNoRowShows _, About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                     About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                     About.AQuestionNothingAnswered _,
@@ -9301,6 +9342,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // line that was written joins the `boundaries` entry it came from.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
                     words(untold.line().border().label() + " / " + untold.allowed().label());
+            // The total and the position whose weight in it is owed: the pair a weight is told
+            // apart by, spelled the way `obligationId` spells them.
+            case About.ATiltOfATotalNoRowShows tilt ->
+                    words(tilt.line().border().cut().of().left() + " / " + tilt.position());
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).

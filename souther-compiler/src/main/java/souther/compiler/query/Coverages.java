@@ -45,7 +45,10 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.Criterion;
+import souther.compiler.partition.DerivedFamily;
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
@@ -1079,7 +1082,8 @@ final class Coverages {
                     settled(border.border(), tellingApart(border, search), read);
             out.add(new BorderAssessment(border.border(), items,
                     shownArriving(border.beside(), toldApart), toldApart,
-                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
+                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin()),
+                    border.tilt()));
         }
         return new LineReadings(out);
     }
@@ -1306,6 +1310,10 @@ final class Coverages {
          *  through the same walk over them, and the way they took here. */
         AnotherLineTheRowsAllow.Reading beside(List<ObservedInputs> rows);
 
+        /** What the declarations of the positions leave each of them, which says the least a
+         *  position holds. */
+        SearchRegion declarations();
+
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
          *  question is not one whose rules failed to answer it. */
@@ -1427,7 +1435,36 @@ final class Coverages {
         // And what the lines beside it are asked of here: the same rows and the same reading of the
         // line as the points above. A row at each of the four shows the line has not moved, and
         // nothing about the four shows it has not turned.
-        return new ReadingOfALine(border, items, absent, shape.beside(rows));
+        // A total's weights are shown by the rows read against it, so a reading nothing was read
+        // against says nothing of them: a position there is not one no row shows.
+        return new ReadingOfALine(border, items, absent, shape.beside(rows),
+                absent == null ? tiltReading(border, shape) : Optional.empty());
+    }
+
+    /**
+     * The border as the rows are put to it for the weights of the total it cuts, or none where it
+     * cuts no total.
+     *
+     * <p>A row is on the border where it meets the point a row is owed at to show where the line
+     * falls, which the border says as it says it for every other reader of that point.
+     */
+    private static Optional<TiltOfAFamily.Reading> tiltReading(Border border,
+                                                                OneShapeOfBorder shape) {
+        if (DerivedFamily.of(border.origin(), border.cut().of()).isEmpty()) {
+            return Optional.empty();
+        }
+        List<Criterion> on = new ArrayList<>();
+        for (DomainPoint point : border.answers().keySet()) {
+            if (border.roleOf(point) == PointRole.ON
+                    && border.demand(point) instanceof Demand.Owed owed) {
+                on.add(owed.criterion());
+            }
+        }
+        return Optional.of(new TiltOfAFamily.Reading(border,
+                row -> on.stream().anyMatch(criterion ->
+                        shape.met(criterion, List.of(row)) instanceof StandingAtAPoint.Met.Reached),
+                row -> shape.beside(List.of(row)).read().get().each(),
+                shape.declarations()));
     }
 
     /**
@@ -1441,7 +1478,8 @@ final class Coverages {
      */
     record ReadingOfALine(Border border, Map<DomainPoint, ItemAssessment> items,
                           Measurement<ItemAssessment.Coverage> absent,
-                          AnotherLineTheRowsAllow.Reading beside) {}
+                          AnotherLineTheRowsAllow.Reading beside,
+                          Optional<TiltOfAFamily.Reading> tilt) {}
 
     /**
      * Every reading, with the lines beside its line answered once for the line.
@@ -1453,7 +1491,7 @@ final class Coverages {
      * along. Whether the points are met is the line's too: a point is met where a row is at it at
      * any reading ({@link #together}), which is what the readings put together say of it.
      */
-    static LineReadings besideEachLine(List<ReadingOfALine> readings) {
+    static LineReadings besideEachLine(List<ReadingOfALine> readings, List<ObservedInputs> rows) {
         SequencedMap<BoundaryLine, List<ReadingOfALine>> byLine = new LinkedHashMap<>();
         for (ReadingOfALine each : readings) {
             byLine.computeIfAbsent(BoundaryLine.of(each.border()), _ -> new ArrayList<>())
@@ -1461,12 +1499,43 @@ final class Coverages {
         }
         Map<BoundaryLine, AnotherLineTheRowsAllow> beside = new LinkedHashMap<>();
         byLine.forEach((line, ofOneLine) -> beside.put(line, besideOneLine(ofOneLine)));
+        Set<DerivedFamily> several = DerivedFamily.cutAtSeveralPlacesBy(
+                readings.stream().map(ReadingOfALine::border).toList());
+        Map<AuthoredLine, TiltOfAFamily> tilts = tiltsOfEachComparison(readings, several, rows);
         List<BorderAssessment> out = new ArrayList<>();
         for (ReadingOfALine each : readings) {
-            out.add(new BorderAssessment(each.border(), each.items(),
-                    beside.get(BoundaryLine.of(each.border()))));
+            BorderAssessment made = new BorderAssessment(each.border(), each.items(),
+                    beside.get(BoundaryLine.of(each.border())));
+            out.add(DerivedFamily.of(each.border()).filter(several::contains)
+                    .map(_ -> tilts.get(each.border().origin().authoredLine()))
+                    .map(made::showing).orElse(made));
         }
         return new LineReadings(out);
+    }
+
+    /**
+     * What the rows show of the weights of the totals each comparison cuts at several places, put
+     * to every border of those totals.
+     *
+     * <p>Once for the comparison, and not once for each total: a comparison read at several windows
+     * of a table's input cuts a total over each, and one computation weighs the positions into
+     * every one of them. A total cut at one place is no part of it — what its values settle is the
+     * same outcome throughout, and its positions are divided by it instead.
+     */
+    private static Map<AuthoredLine, TiltOfAFamily> tiltsOfEachComparison(
+            List<ReadingOfALine> readings, Set<DerivedFamily> several, List<ObservedInputs> rows) {
+        SequencedMap<AuthoredLine, List<TiltOfAFamily.Reading>> byComparison =
+                new LinkedHashMap<>();
+        for (ReadingOfALine each : readings) {
+            if (DerivedFamily.of(each.border()).filter(several::contains).isPresent()) {
+                each.tilt().ifPresent(tilt -> byComparison.computeIfAbsent(
+                        each.border().origin().authoredLine(), _ -> new ArrayList<>()).add(tilt));
+            }
+        }
+        Map<AuthoredLine, TiltOfAFamily> out = new LinkedHashMap<>();
+        byComparison.forEach((line, ofOneComparison) ->
+                out.put(line, TiltOfAFamily.of(line, ofOneComparison, rows)));
+        return out;
     }
 
     /** What every reading of one line says about the lines beside it, said once. */
@@ -1591,6 +1660,11 @@ final class Coverages {
                         () -> toRows.valuesOf(rows), elsewhere, way, refusedByTheDeclarations);
             }
 
+            @Override
+            public SearchRegion declarations() {
+                return declarations;
+            }
+
             // What the position's rules prove answers this border's points only where a row reaches
             // the border whatever it holds. Behind a condition the point asks whether a row arriving
             // here can hold the value, and the position's rules were never put that: `n > 10` and
@@ -1680,7 +1754,8 @@ final class Coverages {
         }
         return new BorderAssessment(kept.border(), kept.items(), kept.beside(), kept.toldApart(),
                 kept.readAt(), SaidOnTheWay.allOf(
-                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()));
+                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()),
+                kept.tilt());
     }
 
     /**
@@ -2102,7 +2177,7 @@ final class Coverages {
                 // And both readings' copies, which is what tells the calls of a helper that read
                 // one line apart. What put things on each one's way is put together once for every
                 // reading of the line, by whoever holds them all.
-                readAt, a.saidOnTheWay());
+                readAt, a.saidOnTheWay(), a.tilt());
     }
 
     /**

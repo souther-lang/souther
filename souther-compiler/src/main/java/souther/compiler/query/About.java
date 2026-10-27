@@ -350,6 +350,45 @@ public sealed interface About {
     }
 
     /**
+     * A position of the totals a comparison cuts at several places, that no row shows the weight
+     * of.
+     *
+     * <p>A total looked up in a table is computed once and cut at every row of it, so a position
+     * weighed wrongly or left out moves every border the same way. What shows a weight is a row on
+     * a border where that position alone is away from the least it holds ({@link TiltOfAFamily}),
+     * and one such row shows it for every border of the table: owed once for the comparison and
+     * once for each position, and never once for each threshold.
+     *
+     * <p>A border of a total the position is in, for the words the total is named in and the rule
+     * it is cited by. Which border carries nothing, since each of them is cut from the same
+     * computation; the one named is the widest total, which is the one the position is least a
+     * part of.
+     *
+     * @param line     a border of a total the position is in
+     * @param position the position of the total the weight is of
+     */
+    record ATiltOfATotalNoRowShows(BorderAssessment line, NumericTerm position)
+            implements OfAnObligation, RuleCitations {
+
+        public ATiltOfATotalNoRowShows {
+            Objects.requireNonNull(line, "a finding is about something");
+            Objects.requireNonNull(position, "a weight is a weight of some position");
+        }
+
+        /** Keyed on the comparison and the position, which no row written moves. */
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfATiltAtAPosition(
+                    line.border().origin().authoredLine(), position);
+        }
+
+        @Override
+        public Set<RuleCitation> ruleCitations() {
+            return line.ruleCitations();
+        }
+    }
+
+    /**
      * A point of a line a declaration drew, that no row anywhere in the module stands at.
      *
      * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is whose

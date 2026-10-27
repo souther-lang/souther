@@ -118,7 +118,7 @@ public final class EnsuresThresholds {
         InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()),
                 read.declared());
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new RulesWithNoLine.Gathered());
+                new ArrayList<>(), new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                 // A conjunct this compiler could not type is one it has not read. Nothing is
@@ -156,6 +156,12 @@ public final class EnsuresThresholds {
                 }
             }
         }
+        // Whether the values settling a total's comparison part a class of their position is whether
+        // the total is cut at one place, which no comparison read alone can say.
+        ComparisonGeometry settled = ComparisonGeometry.keepingThoseOfATotalCutAtOnePlace(
+                drawn.throughATotal(), drawn.between());
+        drawn.evidence().addAll(settled.evidence());
+        drawn.between().addAll(settled.between());
         return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found());
     }
 
@@ -163,6 +169,7 @@ public final class EnsuresThresholds {
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between,
+                         List<ComparisonGeometry.Settling> throughATotal,
                          RulesWithNoLine.Gathered noLine) {}
 
     /**
@@ -237,6 +244,7 @@ public final class EnsuresThresholds {
                 (cutting, _, _) -> originOf(said, cutting));
         out.evidence().addAll(geometry.evidence());
         out.between().addAll(geometry.between());
+        out.throughATotal().addAll(geometry.throughATotal());
     }
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other

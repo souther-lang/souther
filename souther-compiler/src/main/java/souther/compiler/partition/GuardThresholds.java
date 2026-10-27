@@ -205,6 +205,7 @@ public final class GuardThresholds {
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
+        List<ComparisonGeometry.Settling> throughATotal = new ArrayList<>();
         List<BehaviorSetStatements.Partnered> partnered = new ArrayList<>();
         // One reading of what the model states, and everything below is that reading asked
         // something. Where a comparison is written, what its names point at, what a row had
@@ -298,8 +299,8 @@ public final class GuardThresholds {
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, aRunStops, found, between, partnered,
-                                    withoutALine);
+                                    reaches, arrived, aRunStops, found, between, throughATotal,
+                                    partnered, withoutALine);
                         }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
@@ -349,6 +350,12 @@ public final class GuardThresholds {
                     new ReachingCuts.ConditionOnTheWay(each.assumed(), each.holding(),
                             each.failing())));
         }
+        // Whether the values settling a total's comparison part a class of their position is whether
+        // the total is cut at one place, which no comparison read alone can say.
+        ComparisonGeometry settled =
+                ComparisonGeometry.keepingThoseOfATotalCutAtOnePlace(throughATotal, between);
+        found.addAll(settled.evidence());
+        between.addAll(settled.between());
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet(),
                 comparisons.operationsStanding(), partnered);
@@ -802,6 +809,7 @@ public final class GuardThresholds {
                                ComparisonAssessment read, boolean aRunStops,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
+                               List<ComparisonGeometry.Settling> throughATotal,
                                List<BehaviorSetStatements.Partnered> partnered,
                                RulesWithNoLine.Gathered withoutALine) {
         // Which question places this comparison, asked once here. The two readers below say the
@@ -823,6 +831,7 @@ public final class GuardThresholds {
                         part, cutting, authored));
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
+        throughATotal.addAll(geometry.throughATotal());
     }
 
     /**

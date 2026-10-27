@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
@@ -30,7 +31,8 @@ import java.util.Set;
  * own — which is the parallel bookkeeping this is here to have none of.
  */
 public sealed interface ObligationIdentity
-        permits ObligationIdentity.OfALine, ObligationIdentity.OfABorder, ObligationIdentity.OfAnArm,
+        permits ObligationIdentity.OfALine, ObligationIdentity.OfABorder,
+                ObligationIdentity.OfATiltAtAPosition, ObligationIdentity.OfAnArm,
                 ObligationIdentity.OfARow, ObligationIdentity.OfAnOutputCase,
                 ObligationIdentity.OfADecisionRule, ObligationIdentity.OfACaseOfAStatement,
                 ObligationIdentity.OfACombinationOfDecisions,
@@ -88,6 +90,30 @@ public sealed interface ObligationIdentity
         public OfABorder {
             Objects.requireNonNull(line, "an obligation is told apart by something");
             Objects.requireNonNull(direction, "a line is held against some line beside it");
+        }
+    }
+
+    /**
+     * One position of the totals a comparison cuts at several places, which is what a row showing
+     * how the position weighs into them is owed for.
+     *
+     * <p>Beside {@link OfABorder} and on another grain again. That one holds one line against one
+     * line beside it; this holds the totals the comparison reads, which every threshold of its
+     * table cuts, against a weight of one of their positions. A weight is a fault of the
+     * computation and not of a threshold, so a row showing it shows it for every threshold, and
+     * the obligation is owed once for the comparison however many thresholds the table has and
+     * however many of its positions a window of the table reads.
+     *
+     * <p>The comparison and the position, and never a threshold: which threshold a row stands at
+     * moves with the rows an author writes, and an obligation whose identity moved with them would
+     * be a new obligation every run.
+     */
+    record OfATiltAtAPosition(AuthoredLine line, NumericTerm position)
+            implements ObligationIdentity {
+
+        public OfATiltAtAPosition {
+            Objects.requireNonNull(line, "an obligation is told apart by something");
+            Objects.requireNonNull(position, "a weight is a weight of some position");
         }
     }
 

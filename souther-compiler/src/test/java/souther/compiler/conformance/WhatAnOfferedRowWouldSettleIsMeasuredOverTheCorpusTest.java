@@ -129,6 +129,9 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
             // input two lines part company at, and rows here are composed at the points of one
             // line. Worded rather than refused, as the rules below are.
             case ObligationIdentity.OfABorder _ -> "border";
+            // Nor for the weight of a position of a total: nothing composes a row to show one, and
+            // the rows written already are what shows it.
+            case ObligationIdentity.OfATiltAtAPosition _ -> "weight";
             // Nothing offers a row for a rule of a decision yet, so nothing puts one in the
             // universe a run is asked about. Worded rather than refused, so that the day one is
             // offered the count below says so instead of this failing somewhere else.

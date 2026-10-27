@@ -2012,6 +2012,21 @@ public sealed interface BorderQuantity
     }
 
     /**
+     * The direction of the value this quantity is, where it is one value computed from several
+     * positions, as a total is; empty where it is one position, a distance, a count, a remainder or
+     * a product.
+     *
+     * <p>Asked of the quantity because only it knows which of these it is.
+     */
+    default Optional<QuantityKey> totalOfSeveralPositions() {
+        return switch (this) {
+            case OverAForm form -> Optional.of(QuantityKey.of(form.direction()));
+            case OfACoordinate _, Apart _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
+                 ProductOfAPair _ -> Optional.empty();
+        };
+    }
+
+    /**
      * Why a rule drawn on this quantity divides none of the positions it is made of, in the word
      * that is true of what the quantity is.
      *

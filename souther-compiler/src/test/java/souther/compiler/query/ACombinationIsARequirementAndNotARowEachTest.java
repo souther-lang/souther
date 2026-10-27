@@ -60,6 +60,10 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // border, and what a row shows at it is which of two lines the model draws rather
                 // than what two positions do at once.
                 "ALineTheRowsDoNotTellFromAnother",
+                // The weight of a position in a total one comparison cuts at several places. Not a
+                // combination: what a row shows is how one position weighs into the total, with
+                // every other position at its least.
+                "ATiltOfATotalNoRowShows",
                 // An arm and a row at it: what a row is owed at is the arm either way, and the
                 // second says the row is written and its answer is not.
                 "AnArmNoRowGoesThrough",
@@ -114,7 +118,10 @@ class ACombinationIsARequirementAndNotARowEachTest {
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfABorder", "OfAnArm", "OfARow", "OfAnOutputCase",
+                List.of("OfALine", "OfABorder",
+                        // The weight of one position in a total, which is the total's and not one
+                        // of its positions' combinations.
+                        "OfATiltAtAPosition", "OfAnArm", "OfARow", "OfAnOutputCase",
                         "OfADecisionRule",
                         // A case inside a statement a rule consults: asked where the rows leave
                         // one unseen, and raised by no finding.

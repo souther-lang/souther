@@ -20,6 +20,7 @@ import souther.compiler.types.ModelOccurrences;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -59,10 +60,14 @@ import java.util.Set;
  *               {@link #border} is the first copy's alone where two copies were read as one line
  * @param saidOnTheWay which copies put each entry on the way the line's points were searched along,
  *               of that way alone; nobody where no search was made
+ * @param tilt   what the rows show of the weights of the total this line cuts, where it cuts one
+ *               the rule cuts at several places. The family's, and the same for every border of
+ *               it: a weight is a fault of the total and not of one threshold
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                                AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
-                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay)
+                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay,
+                               Optional<TiltOfAFamily> tilt)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -70,6 +75,19 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside) {
         this(border, items, beside, ARowTellingTheLinesApart.notAsked());
+    }
+
+    /** One reading of a line that cuts no total of several places. */
+    public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                            AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
+                            ModelOccurrences readAt, SaidOnTheWay saidOnTheWay) {
+        this(border, items, beside, toldApart, readAt, saidOnTheWay, Optional.empty());
+    }
+
+    /** The same reading, with what the rows show of the weights of the total it cuts. */
+    public BorderAssessment showing(TiltOfAFamily tilt) {
+        return new BorderAssessment(border, items, beside, toldApart, readAt, saidOnTheWay,
+                Optional.of(tilt));
     }
 
     /**
@@ -219,6 +237,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         items = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(items));
         Objects.requireNonNull(readAt, "the copies it was read at, or none");
         Objects.requireNonNull(saidOnTheWay, "who put what on the way, or nobody");
+        Objects.requireNonNull(tilt, "what the rows show of a total's weights, or nothing");
     }
 
     /**
