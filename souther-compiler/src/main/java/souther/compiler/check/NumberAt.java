@@ -135,6 +135,14 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key));
     }
 
+    /** The same, of the steps {@code through} counts of the values: the day the latest second
+     *  falls on. */
+    public static <P> NumberAt<P> extremeOf(P position, Extreme extreme, List<String> key,
+                                            ValueName through) {
+        return new NumberAt<>(position,
+                new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key, through));
+    }
+
     /**
      * The same number with the place spelled {@code position}.
      *
@@ -278,7 +286,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * part of which number it is: the least of one place by one key and by another are two
          * numbers at one place.
          */
-        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key)
+        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key, ValueName through)
                 implements OfWhatNumber {
 
             public OfTheExtremeOfItsKey {
@@ -286,14 +294,22 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 key = List.copyOf(key);
             }
 
+            /** The end of the values themselves. */
+            public OfTheExtremeOfItsKey(Extreme extreme, List<String> key) {
+                this(extreme, key, null);
+            }
+
             /** This number of what stands at the place spelled {@code position}, in the words a
-             *  report and a diagnostic write it in. */
+             *  report and a diagnostic write it in. The end of the steps a value falls in, where
+             *  it is, names the operation that counts them. */
             public String spelledAt(String position) {
                 String end = switch (extreme) {
                     case Extreme.Least _ -> "least";
                     case Extreme.Greatest _ -> "greatest";
                 };
-                return end + "(" + position + " by " + keySpelled(key) + ")";
+                String values = through == null ? position
+                        : ((ValueName.Stdlib) through).qualified() + "(" + position + ")";
+                return end + "(" + values + " by " + keySpelled(key) + ")";
             }
 
             /**

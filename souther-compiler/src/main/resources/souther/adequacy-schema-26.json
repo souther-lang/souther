@@ -1243,6 +1243,10 @@
             },
             "key": {
               "type": "string"
+            },
+            "through": {
+              "$ref": "#/$defs/operationId",
+              "description": "The operation whose step of each value the end is taken of, as the day a date-time falls on is: the end is of those steps and not of the values."
             }
           }
         },

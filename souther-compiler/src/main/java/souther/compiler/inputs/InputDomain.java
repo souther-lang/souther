@@ -2111,7 +2111,8 @@ public final class InputDomain {
                             + asked.key() + " was asked for by name, and no declaration names it");
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
                 NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(
-                        path, extremeOf.key(), extremeOf.extreme());
+                        path, extremeOf.key(), extremeOf.extreme(),
+                        (ValueName.Stdlib) extremeOf.through());
                 if (extreme == null) {
                     throw new IllegalStateException(extremeOf.spelledAt(path.toString())
                             + " was asked for, and nothing holds `" + path + "` as an element");

@@ -6835,6 +6835,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 });
                 into.put("position", it.value().discriminated());
                 into.put("key", it.key().discriminated());
+                // The steps of the values the end is taken of, where it is not the values.
+                if (it.through() != null) {
+                    operationId(into.putObject("through"), it.through());
+                }
             }
             // What the elements of a run come to among those alike at a place of each: their
             // total or an end, of what each element is made to contribute.

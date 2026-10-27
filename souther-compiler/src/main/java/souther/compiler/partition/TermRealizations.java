@@ -1954,9 +1954,15 @@ final class TermRealizations {
             }
             // Written as the value it is the end of, at the place it is taken of, on the order the
             // values stand on ({@link RealizationTarget.AtItsKey}).
-            case NumericTerm.ExtremeOfItsKey _ -> {
+            case NumericTerm.ExtremeOfItsKey end -> {
                 nothingInside(inside);
-                yield standing(sourceType, orders, asked, within, reading);
+                // The end of the steps the values fall in is written as the end that falls in the
+                // step asked for: the first value of the step, as a step of one value is.
+                yield end.through() == null
+                        ? standing(sourceType, orders, asked, within, reading)
+                        : multipliedBackAt(BigDecimal.valueOf(end.perUnit()),
+                                UsualPlaces.of(orders.term(), orders.answered(), reading.today()),
+                                sourceType, orders, asked, within, reading.source());
             }
             // Written as the container of the elements, holding elements of one key that come to
             // the number ({@link RealizationTarget.UnderItsKey}).

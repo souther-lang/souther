@@ -61,8 +61,12 @@ final class TermOrdering {
         Carrier answered = switch (term) {
             // The end of a key's values is one of the values, so it is measured where they are;
             // and what a key's numbers come to is measured on what each of them stands as.
-            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> observed;
+            case NumericTerm.ValueOf _, NumericTerm.GatheredUnderItsKey _,
+                 NumericTerm.GatheredUnderAKey _ -> observed;
+            // Unless it is the end of the steps the values fall in, which are counted on the order
+            // of the steps and not of the values.
+            case NumericTerm.ExtremeOfItsKey extreme -> extreme.through() == null ? observed
+                    : answeredOn(term, positionType, symbols, declarations);
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                  NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
                  NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
@@ -113,10 +117,14 @@ final class TermOrdering {
                                       DeclarationAccess declarations) {
         NewtypeInners inners = declarations.inners();
         return switch (term) {
-            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
+            case NumericTerm.ValueOf _, NumericTerm.GatheredUnderItsKey _,
+                 NumericTerm.GatheredUnderAKey _ ->
                     positionType == null ? null
                     : Carrier.ofValue(positionType, declarations);
+            case NumericTerm.ExtremeOfItsKey extreme -> extreme.through() != null
+                    ? Carrier.ofValue(DefaultBoundOperationFacts.get()
+                            .wholeUnitsAnswered(extreme.through()), declarations)
+                    : positionType == null ? null : Carrier.ofValue(positionType, declarations);
             case NumericTerm.TakenOf taken -> {
                 Type answers =
                         NumericAnswers.typeOf(taken.operation(), positionType, inners, symbols);

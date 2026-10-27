@@ -13,6 +13,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
@@ -651,6 +652,16 @@ public sealed interface NumericTerm
                     ? new WholeUnitsOf(operation, position) : null;
         }
 
+        /**
+         * The steps {@code operation} counts of the value at {@code position}, for a caller that
+         * holds the value as one the operation was already put to — the end of such steps — and
+         * has no type to put it to again; null where the operation counts no whole units.
+         */
+        public static WholeUnitsOf ofTheValueAt(ValueName.Stdlib operation, TermPath position) {
+            return DefaultBoundOperationFacts.get().wholeUnitsPerStep(operation).isPresent()
+                    ? new WholeUnitsOf(operation, position) : null;
+        }
+
         /** The operation whose answer this term is. */
         public ValueName.Stdlib operation() {
             return operation;
@@ -800,13 +811,34 @@ public sealed interface NumericTerm
         private final TermPath key;
         private final TermPath value;
         private final Extreme extreme;
+        private final ValueName.Stdlib through;
 
         private ExtremeOfItsKey(TermPath container, TermPath key, TermPath value,
-                                Extreme extreme) {
+                                Extreme extreme, ValueName.Stdlib through) {
             this.container = Objects.requireNonNull(container, "taken among a container's elements");
             this.key = Objects.requireNonNull(key, "of the elements alike at one place");
             this.value = Objects.requireNonNull(value, "of what they hold at another");
             this.extreme = Objects.requireNonNull(extreme, "and one end of it");
+            this.through = through;
+        }
+
+        /**
+         * The same, of the steps {@code through} counts of the values — the day the latest second
+         * falls on — or null where that is no operation counting whole units.
+         *
+         * <p>A step keeps the order of what it is the step of, so the end of the steps is the step
+         * of the end, and this is one number however many elements an end is taken among.
+         */
+        public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
+                                         Extreme extreme, ValueName.Stdlib through) {
+            if (through != null
+                    && DefaultBoundOperationFacts.get().wholeUnitsPerStep(through).isEmpty()) {
+                return null;
+            }
+            return container != null && key != null && value != null && extreme != null
+                    && fieldsBelowAnElement(container, key)
+                    && fieldsBelowAnElement(container, value)
+                    ? new ExtremeOfItsKey(container, key, value, extreme, through) : null;
         }
 
         /**
@@ -817,10 +849,7 @@ public sealed interface NumericTerm
          */
         public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
                                          Extreme extreme) {
-            return container != null && key != null && value != null && extreme != null
-                    && fieldsBelowAnElement(container, key)
-                    && fieldsBelowAnElement(container, value)
-                    ? new ExtremeOfItsKey(container, key, value, extreme) : null;
+            return of(container, key, value, extreme, null);
         }
 
         /**
@@ -829,13 +858,30 @@ public sealed interface NumericTerm
          */
         public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
                                                    Extreme extreme) {
+            return ofTheValueAt(value, key, extreme, null);
+        }
+
+        /** The same, of the steps {@code through} counts of the values. */
+        public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
+                                                   Extreme extreme, ValueName.Stdlib through) {
             List<TermPath> holding = value.containersHoldingIt();
             if (holding.isEmpty()) {
                 return null;
             }
             TermPath container = holding.getLast();
             return of(container, ElementProjection.ofFields(key).from(container.element()), value,
-                    extreme);
+                    extreme, through);
+        }
+
+        /** The operation whose steps of the values this is the end of, or null where it is the end
+         *  of the values themselves. */
+        public ValueName.Stdlib through() {
+            return through;
+        }
+
+        /** How many steps of the values' order make one of the steps this is the end of. */
+        public long perUnit() {
+            return DefaultBoundOperationFacts.get().wholeUnitsPerStep(through).orElseThrow();
         }
 
         /** The way from an element of the container to {@link #key()}. */
@@ -897,25 +943,25 @@ public sealed interface NumericTerm
          *  are no longer one value of each element of the container moved. */
         @Override
         public ExtremeOfItsKey movedTo(PlacesMoved moved) {
-            return of(moved.put(container), moved.put(key), moved.put(value), extreme);
+            return of(moved.put(container), moved.put(key), moved.put(value), extreme, through);
         }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof ExtremeOfItsKey that && container.equals(that.container)
                     && key.equals(that.key) && value.equals(that.value)
-                    && extreme.equals(that.extreme);
+                    && extreme.equals(that.extreme) && Objects.equals(through, that.through);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(container, key, value, extreme);
+            return Objects.hash(container, key, value, extreme, through);
         }
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields())
-                    .spelledAt(value.toString());
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields(),
+                    through).spelledAt(value.toString());
         }
     }
 
@@ -1242,6 +1288,20 @@ public sealed interface NumericTerm
                     && one.fields() != null) {
                 TermPath at = place.from(elements);
                 return at == null ? null : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme);
+            }
+            // The end of the steps one place falls in is the step of the end of the place, so it
+            // is the end of the place through the operation that counts them.
+            ElementValue.StepsOfAPlace steps = value == null ? null
+                    : ElementValue.asTheStepsOfAPlace(value);
+            if (selection == null && gathering instanceof Gathering.End(Extreme extreme)
+                    && steps != null && steps.weight().equals(ExactRatio.ONE)
+                    && steps.constant().isZero() && elements != null
+                    && elements.containersHoldingIt().size() == 1
+                    && key instanceof ElementKey.At(ElementProjection one)
+                    && one.fields() != null) {
+                TermPath at = steps.place().from(elements);
+                return at == null ? null : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme,
+                        steps.operation());
             }
             return of(elements, key, value, each, gathering, selection);
         }
@@ -1833,7 +1893,7 @@ public sealed interface NumericTerm
             case OccurrencesOfAKey asked ->
                     new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(asked.key().discriminated());
             case ExtremeOfItsKey extreme -> new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(
-                    extreme.extreme(), extreme.keyField().fields());
+                    extreme.extreme(), extreme.keyField().fields(), extreme.through());
             // The operation and the values at the place, where the values are what stands there.
             // What a walk computed of each element, and which nodes of a tree a container is read
             // in, are not said by the place the run is read from.

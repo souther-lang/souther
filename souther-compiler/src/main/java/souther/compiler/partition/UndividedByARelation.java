@@ -455,7 +455,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * case puts it, so what the declarations leave the places is what they leave the end.
          * Empty where it is no end, or the end of anything but places.
          */
-        List<NumericTerm.ValueOf> placesOfItsEnd() {
+        List<NumericTerm.FromOnePosition> placesOfItsEnd() {
             return number == null ? List.of() : placesOfOneElement(number);
         }
 
@@ -467,12 +467,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * them differently. No one place stands for the others.
      */
     private static Source sourceOfSide(Side each, InputReading read) {
-        List<NumericTerm.ValueOf> places = each.placesOfItsEnd();
+        List<NumericTerm.FromOnePosition> places = each.placesOfItsEnd();
         if (places.isEmpty()) {
             return sourceOf(each.atOnePosition(), read);
         }
         Source first = sourceOf(places.getFirst(), read);
-        for (NumericTerm.ValueOf place : places) {
+        for (NumericTerm.FromOnePosition place : places) {
             if (!Objects.equals(first, sourceOf(place, read))) {
                 return null;
             }
@@ -486,7 +486,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * different ones.
      */
     private static Carrier carrierOfSide(Side each, InputReading read) {
-        List<NumericTerm.ValueOf> places = each.placesOfItsEnd();
+        List<NumericTerm.FromOnePosition> places = each.placesOfItsEnd();
         if (places.isEmpty()) {
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
                     : summedAs(each.number());
@@ -494,7 +494,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return orders == null ? null : orders.answered();
         }
         Carrier first = null;
-        for (NumericTerm.ValueOf place : places) {
+        for (NumericTerm.FromOnePosition place : places) {
             TermOrders orders = read.quantities().ordersOf(place);
             if (orders == null || (first != null && !first.equals(orders.answered()))) {
                 return null;
@@ -3995,7 +3995,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // Every step of the answer's order has a value of the position's order in it, so the
             // steps the value falls in fill the answer's run wherever the value takes every value
             // its type holds.
-            case NumericTerm.WholeUnitsOf units -> every ? region.wholeRunOf(units) : null;
+            case NumericTerm.WholeUnitsOf units -> every
+                    ? way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN : region.wholeRunOf(units)
+                    : null;
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
@@ -4095,14 +4097,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param nought the carrier of a total, which is nought where the container may hold nothing;
      *               null for a number that is one of the elements'
      */
-    private static NumericDomain.Bounds shownOfAnElementAlone(List<NumericTerm.ValueOf> places,
-                                                              TermPath container,
+    private static NumericDomain.Bounds shownOfAnElementAlone(
+            List<? extends NumericTerm.FromOnePosition> places, TermPath container,
                                                               InputReading read,
                                                               SearchRegion region,
                                                               List<OnAWay> conditions,
                                                               Carrier nought) {
         NumericDomain.Bounds each = null;
-        for (NumericTerm.ValueOf element : places) {
+        for (NumericTerm.FromOnePosition element : places) {
             Source source = sourceOf(element, read);
             if (source == null
                     || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
@@ -4141,7 +4143,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static NumericDomain.Bounds shownOfAnEnd(NumericTerm end, InputReading read,
                                                      SearchRegion region, List<OnAWay> conditions,
                                                      boolean heldWhole) {
-        List<NumericTerm.ValueOf> places = placesOfOneElement(end);
+        List<NumericTerm.FromOnePosition> places = placesOfOneElement(end);
         List<TermPath> containers = places.isEmpty() ? List.of()
                 : places.getFirst().subjectPath().containersHoldingIt();
         return !heldWhole || containers.size() != 1 ? null
@@ -4154,8 +4156,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * puts it — empty where {@code end} is the end of a selection of the elements, or of anything
      * but places.
      */
-    private static List<NumericTerm.ValueOf> placesOfOneElement(NumericTerm end) {
+    private static List<NumericTerm.FromOnePosition> placesOfOneElement(NumericTerm end) {
         if (end instanceof NumericTerm.ExtremeOfItsKey extreme) {
+            // The end of the steps the values fall in is the end of one element's steps, which is
+            // the number of its value that counts them.
+            if (extreme.through() != null) {
+                NumericTerm.WholeUnitsOf steps = NumericTerm.WholeUnitsOf.ofTheValueAt(
+                        extreme.through(), extreme.value());
+                return steps == null ? List.of() : List.of(steps);
+            }
             return List.of(new NumericTerm.ValueOf(extreme.value()));
         }
         if (!(end instanceof NumericTerm.GatheredUnderItsKey gathered)
@@ -4165,7 +4174,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return switch (gathered.value()) {
             case ElementValue.OfItsCase choice when choice.rest() == null -> {
-                List<NumericTerm.ValueOf> out = new ArrayList<>();
+                List<NumericTerm.FromOnePosition> out = new ArrayList<>();
                 for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
                     ElementProjection place = arm.value().asAPlace();
                     if (place == null) {
@@ -4403,8 +4412,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.ValueOf value -> takes(value, read);
             case NumericTerm.TakenOf taken ->
                     takes(new NumericTerm.ValueOf(taken.position()), read);
-            case NumericTerm.WholeUnitsOf units ->
-                    takes(new NumericTerm.ValueOf(units.position()), read);
+            // Every value of the value's type falls in some step, so every step of the answer's
+            // type is one; any narrowing of the value is no narrowing of the steps it is shown to
+            // leave.
+            case NumericTerm.WholeUnitsOf units -> {
+                Source of = takes(new NumericTerm.ValueOf(units.position()), read);
+                yield of == null || !of.takes().every() ? null
+                        : new Source(new Takes.Every(DefaultBoundOperationFacts.get()
+                                .wholeUnitsAnswered(units.operation())), of.onlyItsEnds(),
+                                of.named(), of.relaxed());
+            }
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
