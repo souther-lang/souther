@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
@@ -123,15 +124,16 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
         };
     }
 
-    /** The most ways of meeting a statement that is only cases this keeps apart. */
+    /** The most distinct ways of meeting a statement that is only cases this keeps apart. */
     private static final int MOST_WAYS = 64;
 
     /**
      * Every way an element meets the statement, where it says no more than which cases positions
      * of the element are in — or empty where it says anything else, or where no case meets it.
      *
-     * <p>A way is one case at each position it names, which is what a row is written in: a plan
-     * writes one case of a sum. Meeting any of several statements is a way of any of them, and
+     * <p>A way is one case at each position it names, with the cases the way to that position
+     * narrows to ({@link TermPath#requirements}), which is what a row is written in: a plan writes
+     * one case of a sum. Ways are counted once however many statements give them. Meeting any of several statements is a way of any of them, and
      * meeting all of them a way that stands beside a way of each; a pair of ways asking two cases
      * of one position is no way. Which of the ways a row is written in depends on what else the
      * row asks of the same positions, so none is chosen here.
@@ -158,11 +160,22 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
     private static Optional<CasesAsked> casesAsked(Proposition stated) {
         return switch (stated) {
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                    boolean holds, String _) when holds -> Optional.of(new CasesAsked(
-                    cases.atoms().stream().map(atom -> Requirements.NONE.and(at.position(),
-                            CasesLeft.of(atom))).toList(), List.of(at.position())));
+                    boolean holds, String _) when holds -> {
+                // The position exists only in the cases the way to it narrows to, so each way
+                // is those cases and the case asked beside them.
+                Set<Requirements> ways = new LinkedHashSet<>();
+                for (Refinement atom : cases.atoms()) {
+                    if (at.requirements().merge(Requirements.NONE.and(at.position(),
+                            CasesLeft.of(atom))) instanceof Requirements.Merge.Merged(
+                            Requirements way)) {
+                        ways.add(way);
+                    }
+                }
+                yield ways.isEmpty() ? Optional.empty()
+                        : Optional.of(new CasesAsked(List.copyOf(ways), List.of(at.position())));
+            }
             case Proposition.Any any -> {
-                List<Requirements> ways = new ArrayList<>();
+                Set<Requirements> ways = new LinkedHashSet<>();
                 Set<TermPath> positions = new LinkedHashSet<>();
                 for (Proposition part : any.parts()) {
                     CasesAsked here = casesAsked(part).orElse(null);
@@ -173,17 +186,17 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                     positions.addAll(here.positions());
                 }
                 yield ways.isEmpty() || ways.size() > MOST_WAYS ? Optional.empty()
-                        : Optional.of(new CasesAsked(ways, List.copyOf(positions)));
+                        : Optional.of(new CasesAsked(List.copyOf(ways), List.copyOf(positions)));
             }
             case Proposition.All all -> {
-                List<Requirements> ways = List.of(Requirements.NONE);
+                Set<Requirements> ways = new LinkedHashSet<>(List.of(Requirements.NONE));
                 Set<TermPath> positions = new LinkedHashSet<>();
                 for (Proposition part : all.parts()) {
                     CasesAsked here = casesAsked(part).orElse(null);
                     if (here == null) {
                         yield Optional.empty();
                     }
-                    List<Requirements> together = new ArrayList<>();
+                    Set<Requirements> together = new LinkedHashSet<>();
                     for (Requirements one : ways) {
                         for (Requirements other : here.ways()) {
                             if (one.merge(other) instanceof Requirements.Merge.Merged(
@@ -198,7 +211,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                     ways = together;
                     positions.addAll(here.positions());
                 }
-                yield Optional.of(new CasesAsked(ways, List.copyOf(positions)));
+                yield Optional.of(new CasesAsked(List.copyOf(ways), List.copyOf(positions)));
             }
             default -> Optional.empty();
         };

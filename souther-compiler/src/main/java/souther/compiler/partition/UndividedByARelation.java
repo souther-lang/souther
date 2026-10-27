@@ -4271,13 +4271,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether the rules, every one read, leave a value at every case {@code way} asks of a
-     * position, in an element at each of {@code places}. A case they refuse holds none, and one
-     * they were not read to the end of may hold none either: only an admission is a value that
-     * can be written.
+     * Whether one element can stand at each of {@code places} and meet the statement in {@code way}
+     * — the cases the way asks stand beside the cases each place is in — and the rules, every one
+     * read, leave a value at every case the way asks of a position. A case they refuse holds none,
+     * and one they were not read to the end of may hold none either: only an admission is a value
+     * that can be written.
      */
     private static boolean everyCaseHoldsAValue(Requirements way, List<PlaceOfAnEnd> places,
                                                 InputReading read) {
+        for (PlaceOfAnEnd place : places) {
+            if (!(way.merge(place.place().requirements()) instanceof Requirements.Merge.Merged)) {
+                return false;
+            }
+        }
         for (Map.Entry<TermPath, CasesLeft> each : way.refinements().entrySet()) {
             for (PlaceOfAnEnd place : places) {
                 if (!admittedBeside(each.getKey(), each.getValue(), place.place().requirements(),

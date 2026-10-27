@@ -700,6 +700,57 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         }
     }
 
+    private static final Pattern RELATED_TOUCH = Pattern.compile(
+            "Touch \\{ account = \"((?:[^\"\\\\]|\\\\.)*)\", related = (ToAccount|ToLead)(?: \\{ \\})?,"
+                    + " days = (-?\\d+) \\}");
+
+    /**
+     * The rows offered for the end over the touches related to an account are rows: written back
+     * with the answer the model gives them, they meet the points on both sides of the line, which
+     * a row offered where no touch is kept, or where the kept ones are all above the line, would
+     * not.
+     */
+    @Test
+    void theRowsOfferedOverASelectionMeetTheLineWhenWrittenBack() {
+        String examples = """
+
+                example stale
+                    | "none" : ([], 2) -> []
+                """;
+        Compilation before = measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted("") + examples);
+        List<String> owed = unmetOf(before);
+        assertTrue(owed.containsAll(List.of("OFF", "IN")), () -> owed + "\n" + report(before));
+        StringBuilder written = new StringBuilder(examples);
+        int named = 0;
+        for (String input : offeredInputs(before)) {
+            Matcher row = Pattern.compile("^\\[(.*)\\], (-?\\d+)$").matcher(input);
+            assertTrue(row.matches(), input);
+            int staleAfter = Integer.parseInt(row.group(2));
+            Map<String, Integer> least = new LinkedHashMap<>();
+            Matcher touch = RELATED_TOUCH.matcher(row.group(1));
+            int read = 0;
+            while (touch.find()) {
+                read = touch.end();
+                if (touch.group(2).equals("ToAccount")) {
+                    least.merge(touch.group(1), Integer.parseInt(touch.group(3)), Math::min);
+                }
+            }
+            assertTrue(row.group(1).isEmpty() || read > 0, input);
+            Map<String, Integer> kept = new LinkedHashMap<>();
+            least.forEach((account, days) -> {
+                if (days >= staleAfter) {
+                    kept.put(account, days);
+                }
+            });
+            written.append("    | \"offered ").append(named++).append("\" : (").append(input)
+                    .append(") -> ").append(entries(kept)).append("\n");
+        }
+        Compilation after = measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted("") + written);
+        List<String> unmet = unmetOf(after);
+        assertFalse(unmet.contains("OFF") || unmet.contains("IN"),
+                () -> "the rows offered meet the points: " + unmet + "\n" + written + report(after));
+    }
+
     /**
      * A rule of the touch that reads what it is related to leaves it only some cases, and may
      * leave it none of the cases that keep it: no touch is then kept, and the end is not shown
@@ -852,6 +903,54 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     @Test
     void theEndOverASelectionOfTheCaseTheNumberIsReadInIsNotShownEveryValue() {
         String report = report(measured(KEPT_BY_THE_CASE_ITSELF));
+        assertFalse(unreadAnywhere(report).isEmpty(), report);
+    }
+
+    private static final String KEPT_BY_A_FIELD_OF_ONE_CASE = """
+            module example.stale
+
+            data ToAccount
+            data ToLead
+            data Related = ToAccount | ToLead
+            data Call = { account: String, related: Related, days: Int }
+            data Email = { account: String, related: Related, days: Int }
+            data Touch = Call | Email
+
+            let onACallToAnAccount (t: Touch): Bool =
+                match t with
+                    | Call { related } -> (match related with
+                        | ToAccount -> true
+                        | ToLead -> false)
+                    | Email -> false
+
+            let daysOf (t: Touch): Int =
+                match t with
+                    | Call { days } -> days
+                    | Email { days } -> days
+
+            let accountOf (t: Touch): String =
+                match t with
+                    | Call { account } -> account
+                    | Email { account } -> account
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, t) -> Map.updateOrInsert(accountOf(t), daysOf(t),
+                                                         seen -> Int.min(seen, daysOf(t)), acc),
+                          Map.empty, List.filter(t -> onACallToAnAccount(t), touches))
+
+            behavior stale : (touches: List<Touch>, staleAfter: Int) -> Map<String, Int>
+
+            let stale (touches, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches))
+            """;
+
+    /**
+     * What keeps a touch is read in one case of it and the number in both: one touch alone is
+     * kept only where it is that case, and so is not a row at the other case's number.
+     */
+    @Test
+    void theEndOverASelectionReadInOneCaseIsNotShownEveryValueOfTheOtherCasesNumber() {
+        String report = report(measured(KEPT_BY_A_FIELD_OF_ONE_CASE));
         assertFalse(unreadAnywhere(report).isEmpty(), report);
     }
 

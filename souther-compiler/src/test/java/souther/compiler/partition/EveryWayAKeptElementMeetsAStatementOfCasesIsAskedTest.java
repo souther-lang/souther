@@ -100,6 +100,37 @@ class EveryWayAKeptElementMeetsAStatementOfCasesIsAskedTest {
                 instanceof Requirements.Merge.Merged), "no way stands beside a case it does not name");
     }
 
+    /** A case of the position's own, whatever else says the same, is one way and is counted once. */
+    @Test
+    void aWayTwoStatementsGiveIsCountedOnce() {
+        Proposition stated = Proposition.any(List.of(inCases(RELATED, "Account", "Deal"),
+                inCases(RELATED, "Deal", "Lead")));
+        assertEquals(List.of(only(RELATED, "Account"), only(RELATED, "Deal"),
+                only(RELATED, "Lead")), asked(stated).orElseThrow().ways());
+    }
+
+    /**
+     * A field of one case of the element is there only where the element is that case, so a way
+     * reading it says so, and no way reads it beside a field of another case.
+     */
+    @Test
+    void aFieldOfOneCaseIsAskedWhereTheElementIsThatCase() {
+        TermPath callFlag = LINES.element().refine(refinement("Call")).then("flag");
+        TermPath emailFlag = LINES.element().refine(refinement("Email")).then("flag");
+        Requirements way = asked(inCases(callFlag, "Big")).orElseThrow().ways().getFirst();
+        assertEquals(cases("Call"), way.at(LINES.element()), way::toString);
+        assertEquals(cases("Big"), way.at(callFlag.position()), way::toString);
+        assertTrue(asked(Proposition.all(List.of(inCases(callFlag, "Big"),
+                inCases(emailFlag, "Big")))).isEmpty());
+        assertTrue(asked(Proposition.all(List.of(inCases(callFlag, "Big"),
+                inCases(callFlag, "Big")))).isPresent());
+    }
+
+    private static Refinement refinement(String leaf) {
+        return Refinement.of(new Case.SumCase(
+                TypeSymbols.declared(new TypeKey("probe", leaf)), true));
+    }
+
     private static Optional<KeptOccurrences.CasesAsked> asked(Proposition stated) {
         return new KeptOccurrences(new DecisionSubject.AnInput(LINES), stated,
                 AStatementAtARow.of(stated, "f", null)).casesAsked();
