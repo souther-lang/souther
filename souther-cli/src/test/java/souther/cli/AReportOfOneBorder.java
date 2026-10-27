@@ -140,7 +140,8 @@ final class AReportOfOneBorder {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY),
+                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY,
+                        Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
@@ -318,7 +319,7 @@ final class AReportOfOneBorder {
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
                 java.util.Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE,
-                Map.of(), List.of(), Map.of());
+                Map.of(), List.of(), Map.of(), List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),

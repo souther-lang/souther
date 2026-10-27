@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleRef;
 
+import java.util.Objects;
+import java.util.Optional;
+
 /**
  * One line a row can be written at, told from another.
  *
@@ -46,14 +49,32 @@ import souther.compiler.check.RuleRef;
  * in the other. Merged point by point, what a row showed about the one would be counted for the
  * other. Readings that face the author's line alike are merged, however many calls made them.
  *
+ * <p><b>And which threshold of which computation.</b> Two calls of a helper cut at different places
+ * are two computations, and the bound each is held against is that computation's own: readings
+ * of them put at the same place are not one line, whatever number their bounds come to, since the
+ * rows that stand beside one are not the rows beside the other. This is the same threshold a
+ * point of the line is owed at ({@link BorderObligationPoint.AtLine}).
+ *
  * @param target    where the line is
  * @param line      which line of the model was drawn there
  * @param placement how the points of the line drawn there are the points of the author's
+ * @param threshold which threshold of a derived value the line is, where it is one
  */
-public record BoundaryLine(BoundaryTarget target, AuthoredLine line, AuthoredPlacement placement) {
+public record BoundaryLine(BoundaryTarget target, AuthoredLine line, AuthoredPlacement placement,
+                           Optional<ThresholdOfADerivedValue> threshold) {
+
+    public BoundaryLine {
+        Objects.requireNonNull(threshold, "no threshold is Optional.empty()");
+    }
+
+    /** A line that is no threshold of a derived value. */
+    public BoundaryLine(BoundaryTarget target, AuthoredLine line, AuthoredPlacement placement) {
+        this(target, line, placement, Optional.empty());
+    }
 
     /** The line {@code border} is the coverage items of. */
     public static BoundaryLine of(Border border) {
-        return new BoundaryLine(border.cut(), border.origin().authoredLine(), border.placement());
+        return new BoundaryLine(border.cut(), border.origin().authoredLine(), border.placement(),
+                border.threshold());
     }
 }

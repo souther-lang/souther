@@ -352,6 +352,127 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 "one of the alternatives is a value the rule says nothing of");
     }
 
+    // --- which value an arm's name is, when the scrutinee is only some of what it could be --------
+
+    /**
+     * A scrutinee read as one leaf — the value a split in it was replaced by — still has an arm
+     * naming a sum that leaf is under, and that arm's name is the scrutinee.
+     */
+    @Test
+    void anArmOverASumTheScrutineesLeafIsUnderNamesTheScrutinee() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core station = answerOf(Type.ref(named(symbols, "Station")));
+
+        assertTrue(opensTheScrutinee(symbols, station,
+                new Core.ResolvedPattern.Single(resolved(symbols, "OnceKind"))));
+    }
+
+    @Test
+    void anArmOverSeveralLeavesNamesTheScrutineeThatIsOneOfThem() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core station = answerOf(Type.ref(named(symbols, "Station")));
+
+        assertTrue(opensTheScrutinee(symbols, station, stationOrHospital(symbols)));
+    }
+
+    @Test
+    void anArmOverSeveralLeavesDoesNotNameAScrutineeThatIsNoneOfThem() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core renkei = answerOf(Type.ref(named(symbols, "Renkei")));
+
+        assertFalse(opensTheScrutinee(symbols, renkei, stationOrHospital(symbols)),
+                "no run takes this arm with a Renkei, so its name is not that value");
+    }
+
+    @Test
+    void anArmOverACaseTheScrutineeIsNotDoesNotNameIt() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core missing = answerOf(Type.ref(MISSING));
+
+        assertFalse(opensTheScrutinee(symbols, missing, single(AN_INT)));
+    }
+
+    @Test
+    void anArmOverACaseOfAUnionTheScrutineeIsStillNamesIt() {
+        Symbols symbols = symbolsOf(NESTED);
+
+        assertTrue(opensTheScrutinee(symbols, numericAnswer(), single(AN_INT)));
+    }
+
+    /** A type naming no leaf says nothing against an arm, so the arm opens the scrutinee and is
+     * reached. */
+    @Test
+    void aScrutineeOfATypeNamingNoLeafSaysNothingAgainstTheArm() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core optional = optionalAnswer();
+
+        assertTrue(opensTheScrutinee(symbols, optional, single(AN_INT)));
+        assertTrue(reached(symbols, optional, single(AN_INT)));
+    }
+
+    /** An arm no run enters is read as reaching nothing, so what is built inside it owes nothing. */
+    @Test
+    void anArmTakingNoLeafTheScrutineeCanBeIsNotReached() {
+        Symbols symbols = symbolsOf(NESTED);
+
+        assertFalse(reached(symbols, answerOf(Type.ref(named(symbols, "Renkei"))),
+                stationOrHospital(symbols)));
+        assertFalse(reached(symbols, answerOf(Type.ref(MISSING)), single(AN_INT)));
+    }
+
+    @Test
+    void anArmTakingALeafTheScrutineeCanBeIsReached() {
+        Symbols symbols = symbolsOf(NESTED);
+        Core station = answerOf(Type.ref(named(symbols, "Station")));
+
+        assertTrue(reached(symbols, station,
+                new Core.ResolvedPattern.Single(resolved(symbols, "OnceKind"))));
+        assertTrue(reached(symbols, station, stationOrHospital(symbols)));
+        assertTrue(reached(symbols, numericAnswer(), single(AN_INT)));
+    }
+
+    private PathEngine readingOver(Symbols symbols) {
+        return new PathEngine(
+                RuleReadingContext.unshared(RuleReadings.ofNoClauseFiled(symbols),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                Terms.Of.THE_DISCHARGE_TREE);
+    }
+
+    private boolean reached(Symbols symbols, Core scrutinee, Core.ResolvedPattern pattern) {
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
+        return !readingOver(symbols).enteringArm(arm(pattern, x), scrutinee, Known.top(),
+                Denotations.none()).known().reachesNothing();
+    }
+
+    private boolean opensTheScrutinee(Symbols symbols, Core scrutinee, Core.ResolvedPattern pattern) {
+        PathEngine reading = readingOver(symbols);
+        Core.Binder x = CoreBinders.of(binders.binder("x", POS));
+
+        FactSubject opened = reading.enteringArm(arm(pattern, x), scrutinee, Known.top(),
+                Denotations.none()).at().subject(x.binding());
+
+        assertNotNull(opened, "an arm binds something to be known about");
+        return reading.terms().subjectOf(scrutinee, Denotations.none()).equals(opened);
+    }
+
+    private static Core.ResolvedPattern stationOrHospital(Symbols symbols) {
+        return new Core.ResolvedPattern.AnyOf(
+                List.of(resolved(symbols, "Station"), resolved(symbols, "Hospital")),
+                Type.ref(named(symbols, "VisitKind")));
+    }
+
+    /** A case as the checker resolves it, so what it covers is this compile's answer. */
+    private static ResolvedCase resolved(Symbols symbols, String name) {
+        return CaseSpace.resolve(CaseSelector.direct(named(symbols, name)),
+                ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.sumsOf(symbols));
+    }
+
+    private static Core answerOf(Type type) {
+        return new Core.Call(new Core.Reached.OfDeclaration(
+                new ReachName.Own(FIND)), List.of(),
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE, type, POS);
+    }
+
     private static Core.ResolvedPattern single(TypeSymbol name) {
         return new Core.ResolvedPattern.Single(aLeaf(name));
     }

@@ -2012,6 +2012,22 @@ public sealed interface BorderQuantity
     }
 
     /**
+     * This quantity as the one value a rule computes from several positions, which is a form of
+     * them — a total, a difference, any weighing of them — or empty where it is one position, a
+     * distance, a count, a remainder or a product.
+     *
+     * <p>Asked of the quantity because only it knows which of these it is. A form that names one
+     * position is that position's own values weighed, and is not computed from several.
+     */
+    default Optional<LinearQuantity> derivedFromSeveralPositions() {
+        return switch (this) {
+            case OverAForm form -> form.terms().size() > 1 ? Optional.of(form) : Optional.empty();
+            case OfACoordinate _, Apart _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
+                 ProductOfAPair _ -> Optional.empty();
+        };
+    }
+
+    /**
      * Why a rule drawn on this quantity divides none of the positions it is made of, in the word
      * that is true of what the quantity is.
      *

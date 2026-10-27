@@ -42,6 +42,7 @@ import souther.compiler.partition.ChoicePattern;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
@@ -107,6 +108,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.query.TiltOfADerivedValue;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Offering;
 import souther.compiler.query.InputOfARowForALine;
@@ -658,8 +660,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<ObligationIdentity.OfACombinationOfDecisions,
                                          List<List<ShownCondition>>> combinationReadings,
                                  List<UnobservedGroup> unobserved,
-                                 Map<RowRef, WhereARowIs.Shown> rowPlaces) {
+                                 Map<RowRef, WhereARowIs.Shown> rowPlaces,
+                                 List<TiltOfADerivedValue> weights) {
         public BehaviorReport {
+            weights = List.copyOf(weights);
             Objects.requireNonNull(reachShownWrong,
                     "what the rows showed of the reading of reach, or that they showed nothing");
             reported = List.copyOf(reported);
@@ -1097,7 +1101,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     combinationReadings(compilation, name, behavior.name(),
                             evidence.combinations(), unobserved),
                     unobserved,
-                    rowPlaces));
+                    rowPlaces,
+                    // What the rows fix of the weights of each computation the partition left
+                    // owing them, asked of the one answer the findings read.
+                    Optional.ofNullable(compilation.db()
+                            .ask(new Adequacy.Weights(name, behavior.name())).value())
+                            .orElse(List.of())));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -3585,6 +3594,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         untold.allowed().label(),
                         shown == null ? "" : ", and a row at `" + shown + "` would"));
             }
+            // And the weights of a value derived from several positions and cut at several places,
+            // beside the count for the same reason: every point of every border can be stood at
+            // and a position's weight in the value still be fixed by no rows.
+            if (f.finding().about() instanceof About.ATiltOfADerivedValueNoRowShows tilt) {
+                out.append(String.format("      %s no row fixes how `%s` weighs into `%s`%n",
+                        mark(f.finding()), tilt.position(), tilt.into().left()));
+            }
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
@@ -3760,13 +3776,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And which calls of a helper the line was read at, after what it asks. The comparison
             // that drew it is one place for every call, so two readings of a helper's line read
             // alike but for the calls.
-            out.append(String.format("          · read as %s: %s%s%s%n", each.at(), each.asks(),
+            BorderAssessment reading = point.met().get(each.where());
+            out.append(String.format("          · read as %s: %s%s%s%s%n", each.at(), each.asks(),
                     inCopies(each.readAt(), copies, rendering, declaredIn),
-                    beside.apply(point.met().get(each.where()))));
+                    beside.apply(reading), boundWritten(reading)));
         }
         if (said.size() > say) {
             out.append(String.format("          · %d more readings%n", said.size() - say));
         }
+    }
+
+    /**
+     * The bound a table holds, where the reading is a threshold of one: the number the reading is
+     * cut at is the bound weighed by the positions it was made of, and it is the bound a reader
+     * changes in the table.
+     */
+    private static String boundWritten(BorderAssessment reading) {
+        return reading.border().threshold().map(each -> switch (each) {
+            case ThresholdOfADerivedValue.WrittenAt written ->
+                    ", the bound written is " + written.level().spelled();
+            case ThresholdOfADerivedValue.CutAt _ -> "";
+        }).orElse("");
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
@@ -6135,6 +6165,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The obligations each computation is owed, one per position, and where each stands.
+     *
+     * <p>Every position of the computation, and never only the ones a finding names: which
+     * positions it weighs is the model's own answer and no row moves it, so what changes with the
+     * rows is the word beside each. Not written where the rules cut no computation at several
+     * places.
+     */
+    private static void weightsOfTheComputations(ObjectNode into, List<TiltOfADerivedValue> weights,
+                                                 DocumentSources sources) {
+        if (weights.isEmpty()) {
+            return;
+        }
+        ArrayNode written = into.putArray("weights");
+        for (TiltOfADerivedValue each : weights) {
+            each.positions().forEach((position, standing) -> {
+                ObjectNode one = written.addObject();
+                obligationId(one.putObject("obligationId"),
+                        new ObligationIdentity.OfATiltAtAPosition(each.value(), position),
+                        sources);
+                one.put("standing", switch (standing) {
+                    case TiltOfADerivedValue.Standing.Shown _ -> "shown";
+                    case TiltOfADerivedValue.Standing.NotShown _ -> "not_shown";
+                    case TiltOfADerivedValue.Standing.Undecided _ -> "undecided";
+                });
+            });
+        }
+    }
+
+    /**
      * What tells one thing a row is owed for from every other, written the way {@code ruleId} is:
      * every part of the identity and nothing that merely reads well.
      *
@@ -6165,6 +6224,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 authoredLineId(into.putObject("line"), line.line());
                 line.at().ifPresent(at -> level(into.putObject("level"), at));
                 into.put("direction", OrderedAffineBoundary.spelled(direction.direction()));
+            }
+            // The computation — the comparison and every copy of it a call made that is cut at the
+            // same places — and the position whose weight is owed: no threshold, which moves with
+            // the rows, and no level, which a body's comparison has none of.
+            case ObligationIdentity.OfATiltAtAPosition(var value, var position) -> {
+                authoredLineId(into.putObject("line"), value.line());
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("position", position.toString());
             }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
             // The axis and which class of it, which is what an axis of the document is keyed by.
@@ -6569,13 +6637,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     static void constructId(ObjectNode into,
                             souther.compiler.types.ConstructOccurrence occurrence) {
-        into.put("module", occurrence.origin().owner().module());
+        constructId(into, occurrence.origin(), StepOfACopy.of(occurrence.lineage()));
+    }
+
+    /** The same of a copy of a construct of the model, which is the construct and the calls it was
+     *  made through. */
+    static void copyId(ObjectNode into, ModelOccurrence copy) {
+        constructId(into, copy.origin(), StepOfACopy.of(copy.lineage()));
+    }
+
+    private static void constructId(ObjectNode into,
+                                    souther.compiler.types.SourceConstructOrigin origin,
+                                    List<StepOfACopy> steps) {
+        into.put("module", origin.owner().module());
         // The definition whose body wrote it, asked of the owner the way an arm's identity asks:
         // two definitions' first constructs are one identity under the module alone.
         into.put("definition", souther.compiler.types.WrittenOwner
-                .theBodyThatWrote(occurrence.origin().owner()).definition());
-        into.put("construct", occurrence.origin().ordinal());
-        into.put("lowered", occurrence.origin().lowered());
+                .theBodyThatWrote(origin.owner()).definition());
+        into.put("construct", origin.ordinal());
+        into.put("lowered", origin.lowered());
         // Everything the copy was made through, calls and builds together, in the order they were
         // made, and absent where the construct is where it was written. An empty array and an absent one read
         // alike to a person and not to a consumer that asks whether the field is there.
@@ -6586,7 +6666,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // follows how the compiler shares them.
         //
         // The steps a page names a copy by, read off the same list.
-        List<StepOfACopy> steps = StepOfACopy.of(occurrence.lineage());
         if (steps.isEmpty()) {
             return;
         }
@@ -6609,10 +6688,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Absent for a comparison a body wrote, which is at whatever value a call put it at.
         point.line().at().ifPresent(at -> level(into.putObject("level"), at));
         location(into.putObject("location"), point.point());
+        // Absent for a point of a comparison cut at one place. A computation cut at several owes
+        // these points once for each threshold, and the threshold is what tells two of them apart.
+        if (point instanceof BorderObligationPoint.AtLine(var _, var _, var threshold)) {
+            threshold.ifPresent(each -> thresholdId(into.putObject("threshold"), each));
+        }
         // Absent for a point at a value of the quantity, which has no run to be stopped, and for a
         // comparison a body wrote, whose run stops wherever each call's values stop it.
         if (point instanceof BorderObligationPoint.InRegion(var _, var _, var region)) {
             region.ifPresent(stops -> farEnd(into.putObject("stops"), stops));
+        }
+    }
+
+    /**
+     * Which threshold of a computation cut at several places a point is owed at: the bound the
+     * comparison was written against where there is one, and the computation with the place it is
+     * cut at where there is not.
+     */
+    private static void thresholdId(ObjectNode into, ThresholdOfADerivedValue threshold) {
+        switch (threshold) {
+            case ThresholdOfADerivedValue.WrittenAt(var value, var level) -> {
+                into.put("kind", "written_at");
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("bound", level.spelled());
+            }
+            case ThresholdOfADerivedValue.CutAt(var value, var place) -> {
+                into.put("kind", "cut_at");
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("quantity", OrderedAffineBoundary.spelled(place.expression().direction()));
+                level(into.putObject("level"), place.at().at());
+            }
         }
     }
 
@@ -6678,6 +6785,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case AuthoredPlacement.NotShown _ ->
                     into.putObject("placement").put("kind", "not_shown");
         }
+        line.threshold().ifPresent(each -> thresholdId(into.putObject("threshold"), each));
     }
 
     /** Every point a line can have, in the order the technique names them. */
@@ -7573,7 +7681,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.name(), behavior.signature(), sources);
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
-                        behavior.account(), behavior.claimed(), sources,
+                        behavior.weights(), behavior.account(), behavior.claimed(), sources,
                         behavior.rulePlace(), behavior.partPlace(),
                         behavior.evidence().combinations(), behavior.rowPlace());
                 branch(b, behavior, sources);
@@ -7871,6 +7979,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   Measure<List<BorderAssessment>> lines,
+                                  List<TiltOfADerivedValue> weights,
                                   List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts,
@@ -8104,6 +8213,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
+        // What each computation of a value derived from several positions is owed, where the rule
+        // cuts it at several places: a weight for each position, in place of the classes the
+        // thresholds would have divided it into. Beside the borders and not under them, because a
+        // computation is owed its weights whether or not a border of it was drawn.
+        weightsOfTheComputations(out, weights, sources);
         // What this behavior is owed, once per point, with every reading of it. A second layer
         // and not a rewrite of `boundaries`: that array is the lines at coordinates, which is what
         // a border is, and this is the account — a guard on a name every case of a sum spreads is
@@ -9202,7 +9316,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
                     About.ALineTheRowsDoNotTellFromAnother _,
-                    About.APositionNoLineDivides _,
+                    About.ATiltOfADerivedValueNoRowShows _, About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                     About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
                     About.AQuestionNothingAnswered _,
@@ -9311,6 +9425,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // line that was written joins the `boundaries` entry it came from.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
                     words(untold.line().border().label() + " / " + untold.allowed().label());
+            // The total and the position whose weight in it is owed: the pair a weight is told
+            // apart by, spelled the way `obligationId` spells them.
+            case About.ATiltOfADerivedValueNoRowShows tilt ->
+                    words(tilt.into().left() + " / " + tilt.position());
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).

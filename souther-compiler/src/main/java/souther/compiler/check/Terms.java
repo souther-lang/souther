@@ -1554,10 +1554,39 @@ final class Terms {
             return null;
         }
         return switch (arm.binding()) {
-            case Core.ArmBinding.Selected selected -> arithmetic(selected.type(), scrutinee, at);
+            case Core.ArmBinding.Selected selected ->
+                    mayTake(arm, scrutinee, at)
+                            ? arithmetic(selected.type(), scrutinee, at)
+                            : null;
             case Core.ArmBinding.Payload _ -> new Opens(heldValue(scrutinee, at), heldBy(of), null);
             case Core.ArmBinding.Unbound _ -> null;
         };
+    }
+
+    /**
+     * Whether some leaf the scrutinee, read as the value it comes to, can be is one the arm takes.
+     *
+     * <p>A tree read with a split replaced by one of its arms has a scrutinee that is only that
+     * arm's value. An arm taking none of the leaves that value can be is one no run enters in that
+     * reading: {@link PathEngine#takingItsCases} reads it as reaching nothing, and the name it binds
+     * stands for nothing the scrutinee says — a place of its own type, which is all that can be said
+     * of it where this is asked on its own.
+     *
+     * <p>An intersection and not an inclusion. An arm over a sum the scrutinee's leaf is under, or
+     * over several leaves one of which it is, takes it although neither is assignable from it. What
+     * the arm takes is the pattern's ({@link Core.ResolvedPattern#takes}) and not the type its name
+     * is given, which for several alternatives is the whole of what was matched.
+     *
+     * <p>Answered as taking it wherever the type names no leaf, which is what no reading of the
+     * scrutinee has said anything against.
+     */
+    boolean mayTake(Core.Case arm, Core scrutinee, Denotations at) {
+        if (arm.pattern() == null) {
+            return true;
+        }
+        List<TypeSymbol> leaves =
+                AtomSpace.subjectAtoms(given(scrutinee, at).value().type(), kinds(), sums());
+        return leaves.isEmpty() || leaves.stream().anyMatch(arm.pattern()::takes);
     }
 
     /**

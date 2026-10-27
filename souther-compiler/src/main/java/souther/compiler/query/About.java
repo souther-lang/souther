@@ -9,6 +9,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.DerivedValue;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
@@ -17,6 +19,8 @@ import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -346,6 +350,46 @@ public sealed interface About {
         @Override
         public Set<RuleCitation> ruleCitations() {
             return line.ruleCitations();
+        }
+    }
+
+    /**
+     * A position of a value a computation derives from several positions and cuts at several
+     * places, whose weight no row fixes.
+     *
+     * <p>A value looked up in a table is computed once and cut at every row of it, so a position
+     * weighed wrongly or left out moves every border the same way. What fixes a weight is the rows
+     * on the borders ({@link TiltOfADerivedValue}), and a row there fixes it for every border of
+     * the table: owed once for the computation and once for each position, and never once for each
+     * threshold.
+     *
+     * @param value    the computation, which is one comparison as one call of it reads it
+     * @param position the position whose weight is owed
+     * @param into     the weighing of the positions the weight is said to be a weight in: the
+     *                 widest of the ones the position is in, which is the one it is least a part
+     *                 of
+     * @param cited    the rule the weight is owed under
+     */
+    record ATiltOfADerivedValueNoRowShows(DerivedValue value, NumericTerm position,
+                                          LinearQuantity into, List<RuleCitation> cited)
+            implements OfAnObligation, RuleCitations {
+
+        public ATiltOfADerivedValueNoRowShows {
+            Objects.requireNonNull(value, "a weight is a weight in some computation");
+            Objects.requireNonNull(position, "a weight is a weight of some position");
+            Objects.requireNonNull(into, "in some weighing of the positions");
+            cited = List.copyOf(cited);
+        }
+
+        /** Keyed on the computation and the position, which no row written moves. */
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfATiltAtAPosition(value, position);
+        }
+
+        @Override
+        public Set<RuleCitation> ruleCitations() {
+            return new LinkedHashSet<>(cited);
         }
     }
 

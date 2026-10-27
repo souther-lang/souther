@@ -417,8 +417,7 @@ class EverySchemaWordIsAccountedForTest {
             // What a construct's copy was made by, and how a build's region is named: which of the
             // two a step is, which way its region is told, and which of a construct's regions it is.
             new Vocabulary("through[].kind",
-                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
-                            "properties", "construct", "properties", "through", "items",
+                    List.of("$defs", "constructOccurrence", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
             // Which kind of place a proof that nothing arrives was about, where a row went there.
@@ -1580,6 +1579,9 @@ class EverySchemaWordIsAccountedForTest {
         // about it for the same reason.
         held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
                 + "/properties/standing");
+        // And where a position's weight in a derived value stands, written by a switch over the
+        // sealed standings.
+        held.add("/$defs/partition/properties/weights/items/properties/standing");
         // Which code points a count of a string is of, which end of a key's values a number
         // takes, and how the numbers of a key are gathered: each written by a switch over a
         // sealed type's arms for the same reason.
@@ -1604,6 +1606,9 @@ class EverySchemaWordIsAccountedForTest {
         // And which use of a function fell short, by kind. Written by a switch over the sealed
         // shortfalls, for the reason the one above is.
         held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
+        // Which threshold a point of a computation cut at several places is owed at, by kind.
+        // Written by a switch over the sealed thresholds, for the reason the ones above are.
+        held.add("/$defs/thresholdOfADerivedValue/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

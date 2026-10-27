@@ -355,6 +355,18 @@ public sealed interface ExampleMessage extends Message {
     record NoRowTellsThatLineFromAnother(String line, String another, String behavior)
             implements ExampleMessage, Reported {}
 
+    /**
+     * No rows of the behavior fix how one position weighs into a value a rule derives from several
+     * positions and cuts at several places.
+     *
+     * <p>The position and the value, because the value is cut by every threshold of a table and a
+     * weight is owed once for it: a sentence naming a threshold would send an author to a row for
+     * one border when rows on any of them answer.
+     */
+    @Code(DiagnosticCode.E1940)
+    record NoRowFixesTheWeightOfThatPosition(String position, String value, String behavior)
+            implements ExampleMessage, Reported {}
+
     /** What to write for it: an input the two answer differently at. */
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
