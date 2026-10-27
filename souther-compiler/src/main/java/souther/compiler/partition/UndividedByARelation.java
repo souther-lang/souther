@@ -440,6 +440,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
+         * The number a statement of the way can be about, as the statement names it: the number
+         * of one position, or the end of a key's numbers. The term the sides are weighed in is the
+         * term a statement is weighed in, so it is looked up by the number itself and not by the
+         * position it is read off, which an end has none of. Null for any other number.
+         */
+        NumericTerm statedTerm() {
+            return atOnePosition() != null || !placesOfItsEnd().isEmpty() ? number : null;
+        }
+
+        /**
          * The places the end of a key's numbers is taken of, where this is such an end: a
          * container of one element has that element's number for its end, at whichever place its
          * case puts it, so what the declarations leave the places is what they leave the end.
@@ -2447,8 +2457,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Side each : sides) {
-            if (each.atOnePosition() == null || each.kept() != null
-                    || coefs.merge(each.atOnePosition(), each.weight(),
+            if (each.statedTerm() == null || each.kept() != null
+                    || coefs.merge(each.statedTerm(), each.weight(),
                             (one, other) -> one.plus(other).orNull()) == null) {
                 return null;
             }
@@ -2688,10 +2698,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Side each = sides.get(i);
             // A value a rule names moves with the places the rule names beside it, so what the
             // way states of any place of its parameter is stated of it.
-            out.add(each.readOff() == null || !heldWhole ? List.of()
-                    : sources.get(i) != null && sources.get(i).named()
-                    ? statingAnythingOfItsParameter(each.readOff(), conditions)
-                    : statingAnythingOf(each.readOff(), conditions));
+            // The end of a key's numbers is read off the places its elements stand at, so what the
+            // way states of one of them is stated of it.
+            List<NumericTerm.FromOnePosition> readOff = each.readOff() != null
+                    ? List.of(each.readOff()) : List.copyOf(each.placesOfItsEnd());
+            Set<OnAWay> stated = new LinkedHashSet<>();
+            for (NumericTerm.FromOnePosition term : heldWhole ? readOff : List.<
+                    NumericTerm.FromOnePosition>of()) {
+                stated.addAll(sources.get(i) != null && sources.get(i).named()
+                        ? statingAnythingOfItsParameter(term, conditions)
+                        : statingAnythingOf(term, conditions));
+            }
+            out.add(List.copyOf(stated));
         }
         return out;
     }
@@ -3715,8 +3733,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatARelationLeavesUndivided.OnTheDifference onTheDifference(
             LinearForm<NumericTerm> form, Rel rel) {
-        ExactRatio first = form.coefs().get(sides.get(0).atOnePosition());
-        ExactRatio second = form.coefs().get(sides.get(1).atOnePosition());
+        ExactRatio first = form.coefs().get(sides.get(0).statedTerm());
+        ExactRatio second = form.coefs().get(sides.get(1).statedTerm());
         if (form.coefs().size() != 2 || first == null || second == null) {
             return null;
         }

@@ -483,6 +483,39 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         assertEquals(new java.util.TreeMap<>(expected), read);
     }
 
+    private static final String UNBOUNDED = """
+            module example.stale
+
+            data Touch = { account: String, days: Int }
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, p) -> Map.updateOrInsert(p.account, %1$s,
+                                                         seen -> Int.min(seen, %1$s), acc),
+                          Map.empty, touches)
+
+            behavior stale : (touches: List<Touch>, staleAfter: Int) -> Map<String, Int>
+
+            let stale (touches, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches))
+            """;
+
+    /**
+     * The end of a multiple of a place is the multiple of the end of the place, but the program
+     * still works out the multiple of each element, and that stops a run at the greatest {@code
+     * Int}: a value the arithmetic cannot hold is not one some row reaches. So the comparison is
+     * not shown to get every value the end takes, and is read only where the elements' own numbers
+     * are what is filed.
+     */
+    @Test
+    void theEndOfAMultipleIsNotShownReachedWhereWorkingOutTheMultipleCanStopARun() {
+        assertEquals(List.of(), unreadAnywhere(report(measured(UNBOUNDED.formatted("p.days")))));
+        for (String since : List.of("p.days + 1", "p.days - 1", "2 * p.days", "0 - p.days")) {
+            String report = report(measured(UNBOUNDED.formatted(since)));
+            assertTrue(unreadAnywhere(report).stream()
+                    .anyMatch(line -> line.contains("a run may stop")), since + "\n" + report);
+        }
+    }
+
     /**
      * Taken from a number, a place is turned over: the least of {@code today - on} is {@code today}
      * less the greatest of {@code on}. Read as the least of {@code on}, the line would be on the
