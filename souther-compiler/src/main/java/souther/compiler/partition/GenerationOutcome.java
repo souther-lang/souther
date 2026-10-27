@@ -273,6 +273,12 @@ public sealed interface GenerationOutcome {
                             + " the case they answer with, so which of them answers with it is what"
                             + " their runs say"),
 
+            /** What fixes a weight is rows on the borders of a computation taken together, and
+             *  nothing composes them. */
+            NO_STRATEGY_FOR_A_WEIGHT(
+                    "rows here are composed at the points of a line and beside it, and nothing aims"
+                            + " them at the weight of a position of the value the line cuts"),
+
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
                     + " no classes were derived there to compose a row from");

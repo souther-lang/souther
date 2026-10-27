@@ -24,7 +24,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ConditionOutcomeSite;
@@ -46,6 +48,7 @@ import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
+import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
@@ -231,11 +234,22 @@ final class Coverages {
         // matched against an axis. A field every case of a sum spreads is named at the sum and
         // written under a case, so one line there is one line per case — on the same number and from
         // the same rule.
+        // And which computations of a value derived from several positions are cut at several
+        // places, which is whether their positions are divided by the lines that settle one of the
+        // comparisons. Decided here, once, over every line every reader drew: the classes dropped
+        // and the weights owed in their place are the one answer, carried to whoever measures the
+        // weights.
+        List<souther.compiler.partition.LineDrawn> drawnBetween =
+                both(declared, both(clauses.between(), guards.between()));
+        souther.compiler.partition.DerivedValues.Decided derived =
+                souther.compiler.partition.DerivedValues.decide(
+                        both(clauses.throughADerivedValue(), guards.throughADerivedValue()),
+                        drawnBetween);
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
-                        both(clauses.evidence(), guards.evidence()),
+                        both(both(clauses.evidence(), guards.evidence()), derived.evidence()),
                         sets.statements(), sets.blocked(),
-                        both(declared, both(clauses.between(), guards.between())));
+                        both(drawnBetween, derived.between()));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), filed.blocked(), distinctions, ruleReading,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
@@ -260,7 +274,7 @@ final class Coverages {
                 // turn on, and which forks are within one application of the closures around
                 // them, which the walk of the comparisons reads where the reading of the runs may
                 // not.
-                guards.operationsStanding()), quantities,
+                guards.operationsStanding(), derived.replaced()), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.
@@ -1081,7 +1095,7 @@ final class Coverages {
                     shownArriving(border.beside(), toldApart), toldApart,
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
         }
-        return new LineReadings(out);
+        return new LineReadings(out, measured.tilts());
     }
 
     /**
@@ -1306,6 +1320,9 @@ final class Coverages {
          *  through the same walk over them, and the way they took here. */
         AnotherLineTheRowsAllow.Reading beside(List<ObservedInputs> rows);
 
+        /** What the readings of {@code rows} that stand at {@code criterion}'s point read as. */
+        StandingAtAPoint.RowsRead valuesAt(Criterion criterion, List<ObservedInputs> rows);
+
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
          *  question is not one whose rules failed to answer it. */
@@ -1427,7 +1444,107 @@ final class Coverages {
         // And what the lines beside it are asked of here: the same rows and the same reading of the
         // line as the points above. A row at each of the four shows the line has not moved, and
         // nothing about the four shows it has not turned.
-        return new ReadingOfALine(border, items, absent, shape.beside(rows));
+        // The weights of a derived value are fixed by the rows read against it, so a reading
+        // nothing was read against says nothing of them.
+        return new ReadingOfALine(border, items, absent, shape.beside(rows),
+                // Only the rows that hold: one whose answer is not the model's says nothing of the
+                // model, and a weight is not fixed by what is not evidence of it.
+                absent == null ? tiltReading(border, items, shape, put.others())
+                        : Optional.empty());
+    }
+
+    /**
+     * The border as the rows are put to it for the weights of the value it cuts, or none where it
+     * cuts no value derived from several positions.
+     *
+     * <p>A row is on the border where it meets the point a row is owed at to show where the line
+     * falls, which the border says as it says it for every other reader of that point. Whether
+     * some row does is already the answer the points above came to, so a border no row is on is
+     * not put to the rows again: only a border some row is on is asked which.
+     */
+    private static Optional<TiltOfADerivedValue.Reading> tiltReading(
+            Border border, Map<DomainPoint, ItemAssessment> items, OneShapeOfBorder shape,
+            List<ObservedInputs> rows) {
+        Optional<LinearQuantity> form = border.cut().of().derivedFromSeveralPositions();
+        if (form.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Criterion> near = new ArrayList<>();
+        boolean someRowIsOn = false;
+        boolean pointsRead = true;
+        boolean allWorkedOut = true;
+        for (DomainPoint point : border.answers().keySet()) {
+            // The values nearest the line on each side, which is where a row shows the line has not
+            // moved; a run away from it shows nothing of that.
+            if (!border.roleOf(point).againstTheLine()) {
+                continue;
+            }
+            switch (border.demand(point)) {
+                case Demand.Owed owed -> {
+                    near.add(owed.criterion());
+                    ItemAssessment.Owed measured = (ItemAssessment.Owed) items.get(point);
+                    someRowIsOn |= measured.coverage().made()
+                            .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
+                    // That no row is at the point is the whole of what there is to say only where
+                    // the rows were all read, which the point's own measurement says.
+                    pointsRead &= measured.coverage() instanceof Measurement.Complete;
+                }
+                // A point that could not be worked out may have rows nobody can name.
+                case Demand.NotWorkedOut _ -> {
+                    pointsRead = false;
+                    allWorkedOut = false;
+                }
+                case Demand.NotOwed _ -> { }
+            }
+        }
+        boolean rowsAreOn = someRowIsOn;
+        boolean noRowIsOnAndTheyWereRead = pointsRead;
+        boolean pointsWorkedOut = allWorkedOut;
+        // The rule is the border's own and is read against the model's weights in the quantity's own
+        // units, which is the family E1938 holds a border against. A border that reads as no rule
+        // of that kind has no rule to put a changed computation to, and says so by being incomplete.
+        Optional<OrderedAffineBoundary> boundary = OrderedAffineBoundary.of(border).orNull();
+        if (boundary == null || boundary.isEmpty()) {
+            return Optional.of(new TiltOfADerivedValue.Reading(border,
+                    TiltOfADerivedValue.RowsOnABorder::unread));
+        }
+        OrderedAffineBoundary rule = boundary.get();
+        Map<NumericTerm, ExactRatio> weights = rule.direction().direction();
+        // A reading that holds no number at one of the weighed positions says nothing of the rule.
+        TiltOfADerivedValue.Rule weighed = (changed, values) -> values.keySet()
+                .containsAll(changed.keySet())
+                ? Optional.ofNullable(rule.satisfiesWeighing(changed, values).orNull())
+                : Optional.empty();
+        return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
+            if (!rowsAreOn) {
+                return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, List.of(),
+                        noRowIsOnAndTheyWereRead);
+            }
+            StandingsRead read = readAt(near, shape, rows);
+            return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, read.readings(),
+                    pointsWorkedOut && read.complete());
+        }));
+    }
+
+    /** The readings of the rows that stand at the points {@code at}, and whether they are all. */
+    private record StandingsRead(List<Map<NumericTerm, Place>> readings, boolean complete) {}
+
+    /**
+     * The readings of the rows that stand at a point, asked of the walk that says whether a row
+     * does, and no others: a reading of the same row away from the point holds numbers that are
+     * not at it.
+     */
+    private static StandingsRead readAt(List<Criterion> at, OneShapeOfBorder shape,
+                                        List<ObservedInputs> rows) {
+        List<Map<NumericTerm, Place>> each = new ArrayList<>();
+        boolean complete = true;
+        for (Criterion criterion : at) {
+            StandingAtAPoint.RowsRead read = shape.valuesAt(criterion, rows);
+            each.addAll(read.each());
+            complete &= read.why().isEmpty() && !read.unwatched()
+                    && read.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne;
+        }
+        return new StandingsRead(each, complete);
     }
 
     /**
@@ -1441,7 +1558,8 @@ final class Coverages {
      */
     record ReadingOfALine(Border border, Map<DomainPoint, ItemAssessment> items,
                           Measurement<ItemAssessment.Coverage> absent,
-                          AnotherLineTheRowsAllow.Reading beside) {}
+                          AnotherLineTheRowsAllow.Reading beside,
+                          Optional<TiltOfADerivedValue.Reading> tilt) {}
 
     /**
      * Every reading, with the lines beside its line answered once for the line.
@@ -1453,7 +1571,8 @@ final class Coverages {
      * along. Whether the points are met is the line's too: a point is met where a row is at it at
      * any reading ({@link #together}), which is what the readings put together say of it.
      */
-    static LineReadings besideEachLine(List<ReadingOfALine> readings) {
+    static LineReadings besideEachLine(List<ReadingOfALine> readings,
+                                       List<DerivedValue.Replaced> replaced) {
         SequencedMap<BoundaryLine, List<ReadingOfALine>> byLine = new LinkedHashMap<>();
         for (ReadingOfALine each : readings) {
             byLine.computeIfAbsent(BoundaryLine.of(each.border()), _ -> new ArrayList<>())
@@ -1466,7 +1585,39 @@ final class Coverages {
             out.add(new BorderAssessment(each.border(), each.items(),
                     beside.get(BoundaryLine.of(each.border()))));
         }
-        return new LineReadings(out);
+        return new LineReadings(out, tiltsOfEachComputation(readings, replaced));
+    }
+
+    /**
+     * What the rows fix of the weights of each computation the partition left owing them, put to
+     * every border that computation is cut by.
+     *
+     * <p>Asked of the computations the partition decided and of no others, so that a position
+     * whose classes were not drawn is owed a weight and one whose classes were is not. A
+     * computation none of whose borders was read says so, and no more: the classes are not drawn
+     * for it either, and what is owed is still owed.
+     */
+    private static List<TiltOfADerivedValue> tiltsOfEachComputation(
+            List<ReadingOfALine> readings, List<DerivedValue.Replaced> replaced) {
+        List<TiltOfADerivedValue> out = new ArrayList<>();
+        for (DerivedValue.Replaced each : replaced) {
+            Map<ModelOccurrence, List<TiltOfADerivedValue.RowsOnABorder>> byCall = new LinkedHashMap<>();
+            for (ModelOccurrence copy : each.value().copies()) {
+                List<TiltOfADerivedValue.RowsOnABorder> ofOneCall = new ArrayList<>();
+                for (ReadingOfALine reading : readings) {
+                    if (each.value().isCutBy(reading.border(), copy)) {
+                        // A border nothing was read against says nothing, and is not left out of
+                        // the call: the call's weights are fixed by the rows on every border of it,
+                        // and not by the ones that happened to be read.
+                        ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
+                                .orElseGet(TiltOfADerivedValue.RowsOnABorder::unread));
+                    }
+                }
+                byCall.put(copy, ofOneCall);
+            }
+            out.add(TiltOfADerivedValue.of(each, byCall));
+        }
+        return out;
     }
 
     /** What every reading of one line says about the lines beside it, said once. */
@@ -1583,6 +1734,12 @@ final class Coverages {
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
                 return toRows.met(rows, criterion);
+            }
+
+            @Override
+            public StandingAtAPoint.RowsRead valuesAt(Criterion criterion,
+                                                      List<ObservedInputs> rows) {
+                return toRows.valuesAt(rows, criterion);
             }
 
             @Override

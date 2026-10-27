@@ -38,7 +38,7 @@ public final class AxesATestWrote {
                 List.of(), List.of(), List.of(), Map.of(along, List.copyOf(lines)),
                 ReachingCuts.NONE,
                 over.partitionClosure(), over.borderClosure(), null,
-                WhereTheOperationsStand.NONE, StringsReached.NONE);
+                WhereTheOperationsStand.NONE, StringsReached.NONE, List.of());
     }
 
     /** A measurement of {@code behavior} that divides its positions by exactly {@code axes}. */
@@ -58,6 +58,6 @@ public final class AxesATestWrote {
         return new Partitions.Partitioning(measurements, List.of(), Set.of(), List.of(), List.of(),
                 List.of(), List.of(), Map.of(), ReachingCuts.NONE,
                 closed.partition(), closed.border(), null, WhereTheOperationsStand.NONE,
-                StringsReached.NONE);
+                StringsReached.NONE, List.of());
     }
 }
