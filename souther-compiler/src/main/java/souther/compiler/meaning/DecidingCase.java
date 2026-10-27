@@ -4,6 +4,7 @@ import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -180,6 +181,19 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             public EachOf {
                 alternatives = List.copyOf(alternatives);
             }
+
+            /** Cases share what follows from a choice, so a hash walking them is as long as they
+             *  are many: what is shared here is the number of alternatives. */
+            @Override
+            public int hashCode() {
+                return 31 * alternatives.size() + 1;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other
+                        || (other instanceof EachOf that && alternatives.equals(that.alternatives));
+            }
         }
 
         /** One case of each of these, holding together. None is the case where nothing is asked. */
@@ -187,6 +201,18 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
 
             public Together {
                 factors = List.copyOf(factors);
+            }
+
+            /** As {@link EachOf#hashCode}: what is shared here is the number of factors. */
+            @Override
+            public int hashCode() {
+                return 37 * factors.size() + 2;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other
+                        || (other instanceof Together that && factors.equals(that.factors));
             }
         }
 
@@ -232,18 +258,30 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * condition is said as one part.
          */
         default Optional<Proposition> holdingInSome() {
-            return switch (this) {
-                case One(var condition) -> Optional.of(condition);
-                case EachOf(var alternatives) -> joined(alternatives, false);
-                case Together(var factors) -> joined(factors, true);
-                case NotTakenApart _ -> Optional.empty();
-            };
+            return holdingInSome(new IdentityHashMap<>());
         }
 
-        private static Optional<Proposition> joined(List<Cases> each, boolean every) {
+        /** The same, where the cases share what follows from a choice: each is worked out once. */
+        private Optional<Proposition> holdingInSome(Map<Cases, Optional<Proposition>> worked) {
+            Optional<Proposition> known = worked.get(this);
+            if (known != null) {
+                return known;
+            }
+            Optional<Proposition> holding = switch (this) {
+                case One(var condition) -> Optional.of(condition);
+                case EachOf(var alternatives) -> joined(alternatives, false, worked);
+                case Together(var factors) -> joined(factors, true, worked);
+                case NotTakenApart _ -> Optional.empty();
+            };
+            worked.put(this, holding);
+            return holding;
+        }
+
+        private static Optional<Proposition> joined(List<Cases> each, boolean every,
+                                                    Map<Cases, Optional<Proposition>> worked) {
             List<Proposition> parts = new ArrayList<>();
             for (Cases one : each) {
-                Optional<Proposition> holding = one.holdingInSome();
+                Optional<Proposition> holding = one.holdingInSome(worked);
                 if (holding.isEmpty()) {
                     return Optional.empty();
                 }
@@ -261,40 +299,63 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * as many as theirs multiplied. Cases nobody took apart are one way, which ends there.
          */
         default long waysOfChoosing(long past) {
-            return switch (this) {
+            return waysOfChoosing(past, new IdentityHashMap<>());
+        }
+
+        /** The same, where the cases share what follows from a choice: each is counted once. */
+        private long waysOfChoosing(long past, Map<Cases, Long> counted) {
+            Long known = counted.get(this);
+            if (known != null) {
+                return known;
+            }
+            long counts = switch (this) {
                 case One _, NotTakenApart _ -> 1;
                 case EachOf(var alternatives) -> {
                     long ways = 0;
                     for (Cases one : alternatives) {
-                        ways = Math.min(past + 1, ways + one.waysOfChoosing(past));
+                        ways = Math.min(past + 1, ways + one.waysOfChoosing(past, counted));
                     }
                     yield ways;
                 }
                 case Together(var factors) -> {
                     long ways = 1;
                     for (Cases one : factors) {
-                        long these = one.waysOfChoosing(past);
+                        long these = one.waysOfChoosing(past, counted);
                         if (these == 0) {
-                            yield 0;
+                            ways = 0;
+                            break;
                         }
                         ways = Math.min(past + 1, ways * these);
                     }
                     yield ways;
                 }
             };
+            counted.put(this, counts);
+            return counts;
         }
 
         /** These, each one case of them said as {@code each} says it — no case at all where it
          *  says none. */
         default Cases eachSaid(Function<Proposition, Cases> each) {
-            return switch (this) {
+            return eachSaid(each, new IdentityHashMap<>());
+        }
+
+        /** The same, where the cases share what follows from a choice: each is said once. */
+        private Cases eachSaid(Function<Proposition, Cases> each, Map<Cases, Cases> said) {
+            Cases known = said.get(this);
+            if (known != null) {
+                return known;
+            }
+            Cases out = switch (this) {
                 case One(var condition) -> each.apply(condition);
-                case EachOf(var alternatives) ->
-                        new EachOf(alternatives.stream().map(one -> one.eachSaid(each)).toList());
-                case Together(var factors) ->
-                        new Together(factors.stream().map(one -> one.eachSaid(each)).toList());
+                case EachOf(var alternatives) -> new EachOf(alternatives.stream()
+                        .map(one -> one.eachSaid(each, said)).toList());
+                case Together(var factors) -> new Together(factors.stream()
+                        .map(one -> one.eachSaid(each, said)).toList());
                 case NotTakenApart notTakenApart -> notTakenApart;
             };
+            said.put(this, out);
+            return out;
         }
     }
 }
