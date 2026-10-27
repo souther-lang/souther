@@ -72,6 +72,10 @@ final class PlanOrder {
             case AdmittedPlan.Of it -> it.isFree() ? 0
                     : ((ValueSet.Matching) it.set()).language().size();
             case AdmittedPlan.Pattern it -> it.plan().states();
+            // The complement of a machine is a machine made deterministic, so it costs what the
+            // machine it is of is, at least.
+            case AdmittedPlan.Without it -> it.set() instanceof ValueSet.Matching matching
+                    ? matching.language().size() : 0;
             case AdmittedPlan.Both it -> parts(it.parts());
             case AdmittedPlan.Either it -> parts(it.parts());
         };
@@ -100,6 +104,10 @@ final class PlanOrder {
                 out.append("3;");
                 it.plan().writtenInto(out);
                 out.append(';');
+            }
+            case AdmittedPlan.Without it -> {
+                out.append("6;");
+                write(it.set(), out);
             }
             case AdmittedPlan.Both it -> {
                 out.append("4;");

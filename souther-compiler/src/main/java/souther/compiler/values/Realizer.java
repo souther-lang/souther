@@ -102,8 +102,32 @@ final class Realizer {
             case AdmittedPlan.Nothing _ -> new Realization.Exact(ValueSet.NONE);
             case AdmittedPlan.Of it -> new Realization.Exact(it.set());
             case AdmittedPlan.Pattern it -> pattern(it);
+            case AdmittedPlan.Without it -> without(it);
             case AdmittedPlan.Both it -> met(it.parts());
             case AdmittedPlan.Either it -> joined(it.parts());
+        };
+    }
+
+    /**
+     * Every value a set already worked out does not hold: the other side of a finite set is a
+     * cofinite one at no cost, and the other side of a language is its complement, which is a
+     * machine made deterministic and is paid for out of this position's allowance.
+     */
+    private Realization without(AdmittedPlan.Without plan) {
+        return switch (plan.set()) {
+            case ValueSet.Finite finite ->
+                    new Realization.Exact(new ValueSet.Cofinite(finite.values()));
+            case ValueSet.Cofinite cofinite ->
+                    new Realization.Exact(new ValueSet.Finite(cofinite.excluded()));
+            case ValueSet.Matching matching -> {
+                meter.starting();
+                Language not = matching.language().not(meter);
+                yield not != null ? new Realization.Exact(ValueSet.matching(not))
+                        : new Realization.OverTheAnswerLimit(budget.refusedBy(meter));
+            }
+            case ValueSet.WholeRuns _ -> throw new IllegalArgumentException(
+                    "the other side of a run of numbers is a run of numbers, and not a plan of"
+                            + " strings: " + plan);
         };
     }
 

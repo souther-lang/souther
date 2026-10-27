@@ -114,7 +114,7 @@ public final class GuardThresholds {
                          List<ComparisonReadings.ForkMet> forks,
                          Map<ConditionOccurrence, Citation> conditionsMet,
                          WhereTheOperationsStand operationsStanding,
-                         List<RuleEvidence> partnered) {
+                         List<BehaviorSetStatements.Partnered> partnered) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
@@ -205,7 +205,7 @@ public final class GuardThresholds {
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
-        List<RuleEvidence> partnered = new ArrayList<>();
+        List<BehaviorSetStatements.Partnered> partnered = new ArrayList<>();
         // One reading of what the model states, and everything below is that reading asked
         // something. Where a comparison is written, what its names point at, what a row had
         // satisfied to get there, whether a line may be drawn on it and what it came to are five
@@ -802,7 +802,7 @@ public final class GuardThresholds {
                                ComparisonAssessment read, boolean aRunStops,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
-                               List<RuleEvidence> partnered,
+                               List<BehaviorSetStatements.Partnered> partnered,
                                RulesWithNoLine.Gathered withoutALine) {
         // Which question places this comparison, asked once here. The two readers below say the
         // same thing about one rule, and asking apiece would let them come to say two.
@@ -837,22 +837,22 @@ public final class GuardThresholds {
      * @param first how many readings of this kind are already filed, which makes the occurrence
      *              of each new one its own
      */
-    private static List<RuleEvidence> stringsPartnersCanHold(
+    private static List<BehaviorSetStatements.Partnered> stringsPartnersCanHold(
             String behavior, ModelOccurrence stated, SourceConstructOrigin wrote,
             RuleReportAnchor anchor, ComparisonAssessment read, int first) {
         if (!(read instanceof ComparisonAssessment.AcrossPositions across)) {
             return List.of();
         }
-        List<RuleEvidence> out = new ArrayList<>();
+        List<BehaviorSetStatements.Partnered> out = new ArrayList<>();
         for (Map.Entry<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>
                 each : across.left().partnered().entrySet()) {
             UndividedByARelation.StringsAPartnerCanHold strings = each.getValue();
             PredicateOrigin origin = new PredicateOrigin(
                     new PredicateOccurrence(first + out.size()),
                     new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
-            out.add(new RuleEvidence.BySet(new SetStatement(each.getKey(), strings.canBe(),
-                    strings.cannotBe(),
-                    new PredicateStatement.CanBeTheValueOf(strings.partner()), origin)));
+            out.add(new BehaviorSetStatements.Partnered(origin,
+                    new PredicateStatement.CanBeTheValueOf(strings.partner()), each.getKey(),
+                    strings.canBe()));
         }
         return out;
     }

@@ -52,7 +52,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.StringsHeldAsWritten;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.TakenAs;
@@ -355,14 +354,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * The strings the other side of an equality can hold, which are the only ones of this side that
      * some row can have the equality come out true at.
      *
-     * @param canBe   the strings some value of the partner is
-     * @param cannotBe the strings no value of the partner is
+     * @param canBe   the strings some value of the partner is; the rest are the strings no value
+     *                of it is, which whoever builds the classes asks for as a plan
      * @param partner what the model calls the partner
      */
-    record StringsAPartnerCanHold(ValueSet canBe, ValueSet cannotBe, String partner) {
+    record StringsAPartnerCanHold(ValueSet canBe, String partner) {
 
         StringsAPartnerCanHold {
-            if (canBe == null || cannotBe == null || partner == null) {
+            if (canBe == null || partner == null) {
                 throw new IllegalArgumentException("strings a partner can hold are some strings");
             }
         }
@@ -1350,28 +1349,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             ValueSet canBe = partner.admitted().approximation();
-            ValueSet cannotBe = complementOf(canBe);
-            if (cannotBe == null || canBe.isEmpty() || cannotBe.isEmpty()) {
+            if (canBe.isAny() || canBe.isEmpty() || canBe instanceof ValueSet.WholeRuns) {
                 continue;
             }
-            out.put(mine, new StringsAPartnerCanHold(canBe, cannotBe,
-                    theirs.subjectPath().toString()));
+            out.put(mine, new StringsAPartnerCanHold(canBe, theirs.subjectPath().toString()));
         }
         return out;
-    }
-
-    /** The strings {@code set} does not hold, or null where making them ran past the allowance. */
-    private static ValueSet complementOf(ValueSet set) {
-        return switch (set) {
-            case ValueSet.Finite finite -> new ValueSet.Cofinite(finite.values());
-            case ValueSet.Cofinite cofinite -> new ValueSet.Finite(cofinite.excluded());
-            case ValueSet.Matching matching -> {
-                Language not = matching.language()
-                        .not(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS.meter());
-                yield not == null ? null : ValueSet.matching(not);
-            }
-            case ValueSet.WholeRuns _ -> null;
-        };
     }
 
     /**
