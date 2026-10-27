@@ -4012,13 +4012,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (containers.size() != 1) {
             return null;
         }
-        NumericDomain.Bounds each = shownOfAnElementAlone(elements, containers.getFirst(), read,
-                region, conditions);
-        if (each == null) {
-            return null;
-        }
-        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
-        return held.admits(Count.ZERO) ? withNought(each, carrier) : each;
+        return shownOfAnElementAlone(elements, containers.getFirst(), read, region, conditions,
+                carrier);
     }
 
     /**
@@ -4030,12 +4025,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where they are alike. What each is shown to take is a run some row holds it at with every
      * rule read ({@link #realized}), and a way touching it, or a rule over the elements together,
      * leaves nothing shown.
+     *
+     * @param nought the carrier of a total, which is nought where the container may hold nothing;
+     *               null for a number that is one of the elements'
      */
     private static NumericDomain.Bounds shownOfAnElementAlone(List<NumericTerm.ValueOf> places,
                                                               TermPath container,
                                                               InputReading read,
                                                               SearchRegion region,
-                                                              List<OnAWay> conditions) {
+                                                              List<OnAWay> conditions,
+                                                              Carrier nought) {
         NumericDomain.Bounds each = null;
         for (NumericTerm.ValueOf element : places) {
             Source source = sourceOf(element, read);
@@ -4050,8 +4049,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             each = here;
         }
         NumericDomain.Bounds held = howManyAreHeld(container, read, region);
-        return each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))
-                ? null : each;
+        if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
+            return null;
+        }
+        return nought != null && held.admits(Count.ZERO) ? withNought(each, nought) : each;
     }
 
     /** Whether {@code number} is an end of the numbers of the elements of one key. */
@@ -4078,7 +4079,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TermPath> containers = places.isEmpty() ? List.of()
                 : places.getFirst().subjectPath().containersHoldingIt();
         return !heldWhole || containers.size() != 1 ? null
-                : shownOfAnElementAlone(places, containers.getFirst(), read, region, conditions);
+                : shownOfAnElementAlone(places, containers.getFirst(), read, region, conditions,
+                        null);
     }
 
     /**
