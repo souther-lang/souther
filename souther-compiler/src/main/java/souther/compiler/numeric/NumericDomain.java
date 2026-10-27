@@ -398,8 +398,33 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
+        RulesRead<A> known = readLent();
+        if (known != null && alreadyAmong(known.rules(), rule)) {
+            return this;
+        }
         return new NumericDomain<>(stated.and(StatedRules.of(rule)), spaces, false, order,
                 closedStates, lent(), readLent());
+    }
+
+    /**
+     * Whether {@code rule} says nothing the rules already read say: a sum held below a bound that
+     * one of them holds as low or lower, or any other rule that is one of them.
+     *
+     * <p>Asked of rules read from a prefix of the ones this domain states, so that a rule found here
+     * is one every reading of the whole holds as well, and a rule not found settles nothing.
+     */
+    private static <A> boolean alreadyAmong(List<AffineConstraint<A>> read,
+                                            AffineConstraint<A> rule) {
+        if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
+            return read.contains(rule);
+        }
+        for (AffineConstraint<A> each : read) {
+            if (each instanceof AffineConstraint.HalfSpace<A> held
+                    && held.form().equals(half.form())) {
+                return ExactCut.tighterUpper(held.bound(), half.bound()).equals(held.bound());
+            }
+        }
+        return false;
     }
 
     /**
