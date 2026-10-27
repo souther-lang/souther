@@ -6152,7 +6152,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     family.forEach(each -> standing.put(each, "not_due"));
             case AnotherLineTheRowsAllow.NotApplicable(var family, var _) ->
                     family.forEach(each -> standing.put(each, "not_applicable"));
-            case AnotherLineTheRowsAllow.NoSuchQuestion _, AnotherLineTheRowsAllow.CouldNotTell _ -> {
+            case AnotherLineTheRowsAllow.NoSuchQuestion _, AnotherLineTheRowsAllow.CouldNotTell _,
+                 AnotherLineTheRowsAllow.OwedByTheComputation _ -> {
             }
         }
         standing.forEach((direction, word) -> {

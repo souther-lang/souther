@@ -113,8 +113,17 @@ obligation every run. It is a warning, E1940, and it appears in the document und
 beside the borders, each entry with the word `shown`, `not_shown` or `undecided`.
 
 It sits beside the lines one step from a border (E1938), which hold a border against a fault of one
-border in one weight, and replaces neither. Both are measures of what the rows show about the same
-computation, and a row can answer both.
+step in one weight. For a value cut at one place the two are measures of what the rows show about the
+same computation, and a row can answer both, so E1938 stays as it is.
+
+For a value cut at several places E1938 is not asked of the thresholds. The weight is a fault of the
+computation, which every threshold reads, so it is owed once, here. A line beside a threshold that
+weighs a position otherwise and moves the constant with it is two faults at once: the weight is owed
+here, and the constant at the ON and OFF points of each threshold. Rows that fix both leave no
+single fault standing, and a fault made of both together is not among the faults either measure
+states. A threshold is recognised by the partition having placed it (`Border.threshold`), and the
+answer is `OwedByTheComputation` whatever the weights came to: an unfixed weight is said under E1940
+and does not bring the lines beside the threshold back.
 
 ### What each threshold is owed
 

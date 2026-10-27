@@ -1622,6 +1622,13 @@ final class Coverages {
 
     /** What every reading of one line says about the lines beside it, said once. */
     private static AnotherLineTheRowsAllow besideOneLine(List<ReadingOfALine> ofOneLine) {
+        // A threshold of a computation cut at several places was decided once, where the partition
+        // placed it. The weights of that computation are owed once for it, so this border is asked
+        // nothing about them, and that comes before whether the rows were read: what is owed
+        // elsewhere cannot be left unsettled here.
+        if (ofOneLine.getFirst().border().threshold().isPresent()) {
+            return new AnotherLineTheRowsAllow.OwedByTheComputation();
+        }
         // Nothing was read against the line, which is the line's and not one reading's: what says
         // so is whether the comparison's runs were watched, and the readings share the comparison.
         for (ReadingOfALine each : ofOneLine) {

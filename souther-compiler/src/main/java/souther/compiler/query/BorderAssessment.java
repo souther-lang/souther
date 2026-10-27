@@ -147,7 +147,8 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                 yield out;
             }
             case AnotherLineTheRowsAllow.NotDueYet _, AnotherLineTheRowsAllow.NoSuchQuestion _,
-                 AnotherLineTheRowsAllow.NotApplicable _ -> WeakeningSet.none();
+                 AnotherLineTheRowsAllow.NotApplicable _,
+                 AnotherLineTheRowsAllow.OwedByTheComputation _ -> WeakeningSet.none();
         };
     }
 
