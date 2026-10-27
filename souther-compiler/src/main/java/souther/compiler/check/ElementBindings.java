@@ -589,7 +589,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         };
     }
 
-    /** The element the arms agree on, ignoring those that answer no list written with one. */
+    /** The element the arms agree on, ignoring those that answer no list written with one. Arms
+     *  agree where they write one value ({@link Core#sameValue}): the same name, or the same field
+     *  of one value, whichever node each is written as. */
     private static Core sharedElement(List<Core> arms) {
         Core agreed = null;
         for (Core arm : arms) {
@@ -598,7 +600,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 continue;
             }
             Core element = theOneElementWritten(arm);
-            if (element == null || (agreed != null && agreed != element)) {
+            if (element == null || (agreed != null && !Core.sameValue(agreed, element))) {
                 return null;
             }
             agreed = element;

@@ -119,6 +119,41 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """));
     }
 
+    /** The arms write the one name each, and two writings of one name are one element: it is the
+     *  value they read that agrees, and not the node it was written as. */
+    @Test
+    void anElementTwoArmsWriteAsOneNameIsOneElement() {
+        assertEquals(List.of("cs[*] = 0", "cs[*] = atLeast"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast,
+                        List.flatMap(x -> if x > 0 then [ x ] else [ x ], cs))
+                """));
+    }
+
+    /** The same name written through a field of one value: one element as well. */
+    @Test
+    void anElementTwoArmsWriteAsOneFieldOfOneValueIsOneElement() {
+        assertEquals(List.of("ps[*].n = 0", "ps[*].n = atLeast"), linesOf("""
+                data P = { n: Int }
+                behavior busy : (ps: List<P>, atLeast: Int) -> List<Int>
+                let busy (ps, atLeast) =
+                    List.filter(c -> c >= atLeast,
+                        List.flatMap(p -> if p.n > 0 then [ p.n ] else [ p.n ], ps))
+                """));
+    }
+
+    /** Two names that are not one value are two elements, however alike they are written. */
+    @Test
+    void anElementTwoArmsWriteAsTwoNamesIsNotOneElement() {
+        assertEquals(List.of("cs[*] = 0"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast,
+                        List.flatMap(x -> if x > 0 then [ atLeast ] else [ x ], cs))
+                """));
+    }
+
     @Test
     void aValueOfAMapsMappedValuesIsTheStepOnTheValueFiledThere() {
         assertEquals(List.of("m[*] = atLeast - 1"), linesOf("""

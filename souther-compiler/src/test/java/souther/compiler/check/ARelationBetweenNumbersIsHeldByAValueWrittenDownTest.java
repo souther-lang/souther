@@ -113,16 +113,32 @@ class ARelationBetweenNumbersIsHeldByAValueWrittenDownTest {
     void aValueTheOuterRuleHoldsAndAFieldsOwnDeclarationRefusesIsNotAValue() {
         assertFalse(holdsAValue(POSITIVE, "a: Positive, b: Int",
                 "invariant impossible = a.value * b == 0 && b > 0"));
+        assertFalse(holdsAValue(POSITIVE, "a: Positive, b: Int",
+                "invariant atTheEnd = a.value * b == 100 && b > 0"),
+                "100 meets the product and is where the declaration stops: nothing past it is");
+    }
+
+    /** The same rule over a number the declaration does hold is a value: it is the pair of these
+     *  that says the declaration inside is asked, and neither the one that refuses everything nor
+     *  the one that never asks. */
+    @Test
+    void aValueTheOuterRuleHoldsAndEveryDeclarationInsideHoldsIsAValue() {
+        assertTrue(holdsAValue(POSITIVE, "a: Positive, b: Int",
+                "invariant atTheEnd = a.value * b == 101 && b > 0"));
     }
 
     /** The same inside a record inside the record. */
     @Test
     void aFieldsOwnDeclarationIsHeldWhereverTheFieldSits() {
-        assertFalse(holdsAValue(POSITIVE + """
+        String inner = POSITIVE + """
 
                 data Inner = { p: Positive }
                     invariant restates = p.value >= 0
-                """, "i: Inner, b: Int", "invariant impossible = i.p.value * b == 0 && b > 0"));
+                """;
+        assertFalse(holdsAValue(inner, "i: Inner, b: Int",
+                "invariant impossible = i.p.value * b == 100 && b > 0"));
+        assertTrue(holdsAValue(inner, "i: Inner, b: Int",
+                "invariant held = i.p.value * b == 101 && b > 0"));
     }
 
     /** A list is written empty, and a declaration that wears the list says it holds one. */

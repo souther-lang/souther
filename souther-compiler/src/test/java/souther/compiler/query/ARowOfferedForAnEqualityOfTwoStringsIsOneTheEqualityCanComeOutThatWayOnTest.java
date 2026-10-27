@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
@@ -87,9 +88,76 @@ class ARowOfferedForAnEqualityOfTwoStringsIsOneTheEqualityCanComeOutThatWayOnTes
     private static void everyRowIsAnswered(List<RowOutcome> rows) {
         assertFalse(rows.isEmpty(), "the classes have rows offered");
         for (RowOutcome row : rows) {
-            assertEquals(Stage.ANSWERED, row.stage(),
-                    "a row offered meets the rule of both positions: " + row);
+            assertEquals(FailurePhase.NONE, row.failurePhase(),
+                    "a row offered meets the rule of both positions and is answered: " + row);
+            assertTrue(row.stage() == Stage.ANSWERED || row.stage() == Stage.COMPARED,
+                    "the behavior answered it: " + row);
         }
+    }
+
+    /**
+     * The same two positions where the equality chooses between two answers, and a row that is not
+     * equal is written: what is owed is a row that is, and it is built out of the strings both
+     * positions hold.
+     */
+    private static String choosing(String first, String second, String apartA, String apartB) {
+        return """
+                module demo
+
+                data L = String
+                    invariant String.matches("%s", value)
+                data M = String
+                    invariant String.matches("%s", value)
+
+                data Same
+                data Apart
+
+                behavior pick : (a: L, b: M) -> Same | Apart
+                let pick (a, b) = if a.value == b.value then Same else Apart
+
+                example pick
+                    | "apart" : (L("%s"), M("%s")) -> Apart
+                """.formatted(first, second, apartA, apartB);
+    }
+
+    private static boolean answeredSame(RowOutcome row) {
+        AnswerObservation.Answered answered =
+                assertInstanceOf(AnswerObservation.Answered.class, row.answer());
+        return assertInstanceOf(ObservedValue.Unit.class, answered.value())
+                .type().toString().endsWith("Same");
+    }
+
+    @Test
+    void whereTwoLanguagesOverlapTheRowOwedForTheEqualAnswerIsBuiltOfAStringBothHold() {
+        List<RowOutcome> rows = ran(choosing("[a-c]+", "[b-d]+", "a", "b"));
+
+        everyRowIsAnswered(rows);
+        List<RowOutcome> same = rows.stream().filter(row -> answeredSame(row)).toList();
+        assertFalse(same.isEmpty(), "a row that answers Same is offered, and it is a row");
+        for (RowOutcome row : same) {
+            assertEquals(textAt(row, 0), textAt(row, 1), "the strings are one string: " + row);
+            assertTrue(textAt(row, 0).matches("[bc]+"), "one both positions hold: " + row);
+        }
+    }
+
+    @Test
+    void whereOneLanguageHoldsTheOtherTheRowOwedForTheEqualAnswerIsBuiltToo() {
+        List<RowOutcome> rows = ran(choosing("[a-z]+", "[a-z0-9]+", "a", "0"));
+
+        everyRowIsAnswered(rows);
+        assertTrue(rows.stream().anyMatch(row -> answeredSame(row)),
+                "a row that answers Same is offered");
+        assertTrue(rows.stream().anyMatch(row -> !answeredSame(row)),
+                "and one that answers Apart is the one written");
+    }
+
+    @Test
+    void whereTwoLanguagesShareNothingNoRowIsOwedOrOfferedForTheEqualAnswer() {
+        List<RowOutcome> rows = ran(choosing("[x-z]+", "[a-c]+", "x", "a"));
+
+        everyRowIsAnswered(rows);
+        assertTrue(rows.stream().noneMatch(row -> answeredSame(row)),
+                "no string is held by both, so none is built to be equal");
     }
 
     @Test
