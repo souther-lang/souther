@@ -146,6 +146,17 @@ every run — the threshold is the place the computation is cut at (`CutAt`). Ow
 leaves a point asking for a row; joining what is not one would report a point answered that no row
 stands at.
 
+The runs beside a line are owed once for the comparison, whatever threshold drew them, so a point
+there does not tell two computations cut at one place apart. The readings of it do: a reading is of
+a line at a place and a threshold, and the later of two computations cut at one place does not
+replace the earlier.
+
+What tells two computations apart is the places they are cut at, and not the data they are handed.
+Two calls of one helper given two tables whose bounds are alike are one computation, as two calls of
+a helper holding one guard are one line wherever the guard is cut at one place: a row through one
+call is taken for a row through the other. That is the rule for every comparison a helper holds,
+and it is not changed here.
+
 The human report says the bound the table holds beside the place a reading is cut at.
 
 Only a line on a value derived from several positions carries the bound. A reading draws other lines

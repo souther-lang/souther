@@ -124,6 +124,11 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * the pair, and neither is what tells two of them apart; keyed on one, two readings of one line
      * arrived as one and {@link #across} refused a model the compiler can read.
      *
+     * <p><b>And which threshold of which computation.</b> The points in the runs beside a line are
+     * owed once for the comparison, whatever threshold drew them, so a point does not tell two
+     * computations cut at one place apart; the readings of it must, or the later of two replaces
+     * the earlier and what a search of the earlier found is gone.
+     *
      * <p><b>And how its points stand to the author's.</b> One comparison put at one place facing
      * its author's sides two ways is two readings there ({@link AuthoredPlacement}): what a row
      * showed about the run on one side is about one of the author's points in the one and another in
@@ -139,18 +144,25 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * and every call faces the author's line one way.
      */
     public record Reading(souther.compiler.partition.BoundaryTarget target,
-                          AuthoredPlacement placement) {
+                          AuthoredPlacement placement,
+                          Optional<souther.compiler.partition.ThresholdOfADerivedValue> threshold) {
 
         public Reading {
-            if (target == null || placement == null) {
+            if (target == null || placement == null || threshold == null) {
                 throw new IllegalArgumentException("a reading is of some line, somewhere, facing"
-                        + " it some way");
+                        + " it some way, and is a threshold of a derived value or is not");
             }
+        }
+
+        /** A reading of a line that is no threshold of a derived value. */
+        public Reading(souther.compiler.partition.BoundaryTarget target,
+                       AuthoredPlacement placement) {
+            this(target, placement, Optional.empty());
         }
 
         /** The reading made where {@code line} was met. */
         public static Reading of(souther.compiler.partition.Border line) {
-            return new Reading(line.cut(), line.placement());
+            return new Reading(line.cut(), line.placement(), line.threshold());
         }
 
         /**

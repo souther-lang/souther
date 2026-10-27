@@ -237,6 +237,29 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         assertTrue(report.contains("= 126 in gradeOf@15:47"), report);
     }
 
+    /**
+     * The runs beside a line are owed once for the comparison, and every computation cut at the
+     * line is a reading of them: the run between 126 and 252 of the one and the run above 126 of the
+     * other are both read, whichever branch is written first.
+     */
+    @Test
+    void theRunsBesideALineKeepTheReadingOfEveryComputationCutAtIt() {
+        String report = reportOf(TWO_BRANCHES_REACHING_ONE_NUMBER);
+        // The same model with the branches written the other way round, and its rows with them.
+        String swapped = reportOf(TWO_BRANCHES_REACHING_ONE_NUMBER
+                .replace("if useTwo then gradeOf(2, a.v + b.v) else gradeOf(1, a.v + b.v)",
+                        "if useTwo then gradeOf(1, a.v + b.v) else gradeOf(2, a.v + b.v)")
+                .replace(", true) ->", ", false) ->"));
+        assertTrue(report.contains("in 126 < a.v + b.v < 252 in gradeOf"), report);
+        assertTrue(report.contains("in 126 < a.v + b.v in gradeOf"), report);
+        assertEquals(readingsWithoutPlaces(report), readingsWithoutPlaces(swapped), swapped);
+    }
+
+    private static List<String> readingsWithoutPlaces(String report) {
+        return report.lines().filter(each -> each.contains("· read as"))
+                .map(each -> each.replaceAll("@\\d+:\\d+", "")).sorted().toList();
+    }
+
     /** Where a total may be negative, the bound 0 owes its points like any other. */
     @Test
     void theBoundZeroOwesItsPointsWhereTheTotalCanBeBelowIt() {

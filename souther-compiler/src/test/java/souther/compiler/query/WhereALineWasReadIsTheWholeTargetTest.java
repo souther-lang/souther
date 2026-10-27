@@ -10,6 +10,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a behavior read a line is the whole of what the line was drawn at, and not a word off it.
@@ -86,10 +87,65 @@ class WhereALineWasReadIsTheWholeTargetTest {
         for (BorderObligationPointAssessment point : pointsOf(TWO_CASES)) {
             point.met().forEach((reading, assessment) -> assertEquals(
                     BoundaryLine.of(assessment.border()),
-                    new BoundaryLine(reading.target(), point.id().line(), reading.placement()),
+                    new BoundaryLine(reading.target(), point.id().line(), reading.placement(),
+                            reading.threshold()),
                     () -> "the point holds the authored line and the reading holds where it was"
                             + " read: " + point.point() + " at " + reading));
         }
+    }
+
+    /**
+     * Two computations of one table, the bounds of one held twice over, both cut at 126 and read in
+     * the two branches of one behavior.
+     */
+    private static final String TWO_COMPUTATIONS_CUT_AT_ONE_PLACE = """
+            module probe.twice
+
+            data N = { v: Int }
+                invariant v >= 0
+            data Row = { grade: Int, lowerBound: Int }
+            let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
+                                     Row { grade = 2, lowerBound = 63 },
+                                     Row { grade = 3, lowerBound = 126 } ]
+            let gradeOf (months: Int, m: Int): Int =
+                List.fold((acc, r) -> if r.lowerBound * months <= m then r.grade else acc, 0, table)
+
+            behavior f : (a: N, b: N, useTwo: Bool) -> Int
+
+            let f (a, b, useTwo) =
+                if useTwo then gradeOf(2, a.v + b.v) else gradeOf(1, a.v + b.v)
+
+            example f
+                | (N { v = 126 }, N { v = 0 }, true) -> 2
+            """;
+
+    /**
+     * Readings of one point that differ in the threshold alone are two readings of it, and they put
+     * back together into the line the merge kept apart.
+     *
+     * <p>The runs beside a line are owed once for the comparison, so the point does not tell the
+     * computations apart and the readings must: otherwise the later of two replaces the earlier.
+     */
+    @Test
+    void readingsOfOnePointThatDifferInTheThresholdAloneAreTwoReadings() {
+        boolean told = false;
+        for (BorderObligationPointAssessment point : pointsOf(TWO_COMPUTATIONS_CUT_AT_ONE_PLACE)) {
+            List<BorderObligationPointAssessment.Reading> readings =
+                    List.copyOf(point.met().keySet());
+            for (int one = 0; one < readings.size(); one++) {
+                for (int other = one + 1; other < readings.size(); other++) {
+                    told |= readings.get(one).target().equals(readings.get(other).target())
+                            && readings.get(one).placement().equals(readings.get(other).placement())
+                            && !readings.get(one).threshold().equals(readings.get(other).threshold());
+                }
+            }
+            point.met().forEach((reading, assessment) -> assertEquals(
+                    BoundaryLine.of(assessment.border()),
+                    new BoundaryLine(reading.target(), point.id().line(), reading.placement(),
+                            reading.threshold()),
+                    () -> "the reading holds where and which threshold: " + point.point()));
+        }
+        assertTrue(told, "a point has two readings at one target, told apart by the threshold");
     }
 
     /** Every point the module's lines are owed a row at. */
