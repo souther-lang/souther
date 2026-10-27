@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * What is known of the names in a tree, as answers to the questions a walk over them asks.
@@ -125,9 +126,9 @@ final class BindingEnvironment {
      * names alone, every application of a closure over the values written out is one hash, and
      * telling them apart walks the values each time two of them meet.
      */
-    private record Handed(Map<BindingId, Core> values, int hash) {
+    private record Handed(Map<BindingId, Core> values, int hash, Handed parent, BindingId step) {
 
-        static final Handed NONE = new Handed(Map.of(), 0);
+        static final Handed NONE = new Handed(Map.of(), 0, null, null);
 
         /** This, with {@code binding} handed {@code value} in place of whatever it held. */
         Handed with(BindingId binding, Core value) {
@@ -135,19 +136,121 @@ final class BindingEnvironment {
             Core was = wider.put(binding, value);
             int entry = binding.hashCode() ^ value.hashCode();
             return new Handed(Map.copyOf(wider),
-                    hash - (was == null ? 0 : binding.hashCode() ^ was.hashCode()) + entry);
+                    hash - (was == null ? 0 : binding.hashCode() ^ was.hashCode()) + entry,
+                    this, binding);
         }
 
         @Override
         public boolean equals(Object other) {
-            return this == other || (other instanceof Handed that && hash == that.hash
-                    && values.equals(that.values));
+            if (this == other) {
+                return true;
+            }
+            Watch.compared();
+            return other instanceof Handed that && hash == that.hash
+                    && values.equals(that.values);
         }
 
         @Override
         public int hashCode() {
             return hash;
         }
+    }
+
+    /**
+     * A reading that is asking which of the values an application handed matter to it.
+     *
+     * <p>Environments made while it runs are made from the one it started on, and a name handed a
+     * value in one of them is either handed it by a step made since, which the reading decides for
+     * itself, or by the environment it started on, which is what it asks after and what another
+     * environment is asked to agree with. A hand comparing environments as wholes, or one that
+     * cannot be placed, says the reading is not one to be told apart by those answers alone.
+     */
+    static final class Watch {
+
+        private static final ThreadLocal<Watch> RUNNING = new ThreadLocal<>();
+
+        private final Handed started;
+        private final Map<BindingId, Core> asked = new LinkedHashMap<>();
+        private boolean unsure;
+
+        private Watch(Handed started) {
+            this.started = started;
+        }
+
+        /** What {@code reading} comes to, and what it asked of {@code on}'s handed values, which
+         *  is {@link HandedAnswers#UNTOLD} where it cannot be told by those alone (or another is
+         *  already watching). */
+        static <T> Watched<T> over(BindingEnvironment on, Supplier<T> reading) {
+            if (RUNNING.get() != null) {
+                return new Watched<>(reading.get(), HandedAnswers.UNTOLD);
+            }
+            Watch watch = new Watch(on.handed);
+            RUNNING.set(watch);
+            try {
+                T result = reading.get();
+                return new Watched<>(result,
+                        watch.unsure ? HandedAnswers.UNTOLD : new HandedAnswers(watch.asked));
+            } finally {
+                RUNNING.remove();
+            }
+        }
+
+        static boolean running() {
+            return RUNNING.get() != null;
+        }
+
+        static void compared() {
+            Watch watch = RUNNING.get();
+            if (watch != null) {
+                watch.unsure = true;
+            }
+        }
+
+        static void asked(Handed in, BindingId binding, Core answer) {
+            Watch watch = RUNNING.get();
+            if (watch == null) {
+                return;
+            }
+            for (Handed each = in; each != null; each = each.parent()) {
+                if (each == watch.started) {
+                    watch.asked.putIfAbsent(binding, answer);
+                    return;
+                }
+                if (binding.equals(each.step())) {
+                    return;
+                }
+            }
+        }
+    }
+
+    /** What {@code binding} was handed on the way here, or null. */
+    private Core handedTo(BindingId binding) {
+        Core value = handed.values().get(binding);
+        Watch.asked(handed, binding, value);
+        return value;
+    }
+
+    /** What {@code binding} is handed here, unwatched: the question {@link HandedAnswers} asks. */
+    Core handedUnwatched(BindingId binding) {
+        return handed.values().get(binding);
+    }
+
+    /** Whether {@code that} is this but for what was handed. */
+    boolean sameButForWhatIsHanded(BindingEnvironment that) {
+        return this == that || (callsStand == that.callsStand
+                && roots.equals(that.roots)
+                && bound().equals(that.bound())
+                && selected.equals(that.selected)
+                && opened.equals(that.opened)
+                && answered.equals(that.answered)
+                && (elements == that.elements || elements.equals(that.elements))
+                && (values == that.values || values.equals(that.values)));
+    }
+
+    /** {@link #hashCode} but for what was handed. */
+    int hashButForWhatIsHanded() {
+        return Objects.hash(roots, bound().keySet(), heldHash.get(), callsStand,
+                selected.keySet(), opened.keySet(), answered.keySet());
     }
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
@@ -235,7 +338,7 @@ final class BindingEnvironment {
         }
         // The element an application handed it, before the container it is an element of: on this
         // application the name is that one value.
-        Core given = handed.values().get(binding);
+        Core given = handedTo(binding);
         if (given != null) {
             return new BindingRole.Alias(given);
         }
@@ -256,7 +359,7 @@ final class BindingEnvironment {
      * was given nothing.
      */
     Core given(BindingId binding) {
-        return !handed.values().containsKey(binding)
+        return handedTo(binding) == null
                 && roleOf(binding) instanceof BindingRole.Alias(Core value) ? value : null;
     }
 
@@ -485,6 +588,7 @@ final class BindingEnvironment {
 
     @Override
     public String toString() {
+        Watch.compared();
         return "BindingEnvironment[roots=" + roots + ", handed=" + handed.values() + ", bound="
                 + bound()
                 + ", elements=" + elements + ", callsStand=" + callsStand
