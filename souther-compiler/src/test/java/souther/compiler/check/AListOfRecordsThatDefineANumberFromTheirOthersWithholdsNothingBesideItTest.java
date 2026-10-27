@@ -104,15 +104,15 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
         assertTrue(certified(quote("value >= 0.0m"), "q.total"));
     }
 
-    /** A net that stops at one is no number the product comes to: the definition restricts the
-     *  places it is made of, and no line is shown. */
+    /** A rule that says more than the definition, and that no price meets, is not the definition:
+     *  no line is shown. */
     @Test
     void aRuleThatSaysMoreThanTheDefinitionIsNotTakenForOne() {
         String source = quote("value >= 0.0m").replace("""
                                       * (1.0m - discount.value))) == 0
                 """, """
                                       * (1.0m - discount.value))) == 0
-                        && Decimal.compare(listPrice.value + 1.0m, 0.0m) > 0
+                        && Decimal.compare(listPrice.value, 0.0m) < 0
                 """);
 
         assertFalse(lineHoldsAValue(source));
@@ -186,11 +186,15 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
                     Decimal.fromInt(q.value) * p.value + Decimal.fromInt(a.value * b.value))) == 0""")));
     }
 
+    /** The definition comes to a net past the end for other places, so it restricts them; what
+     *  leaves a line is one written down, a unit at no price, which comes to nothing. So the
+     *  fields beside the list are not withheld, though the line is no value of the definition
+     *  alone. */
     @Test
-    void aNetThatTheDefinitionCanComeToPastItsEndIsNoLine() {
+    void aNetThatTheDefinitionCanComeToPastItsEndLeavesALineByOneWrittenDown() {
         String capped = quote("value >= 0.0m && value <= 1.0m");
 
-        assertFalse(lineHoldsAValue(capped));
-        assertFalse(certified(capped, "q.subtotal"));
+        assertTrue(lineHoldsAValue(capped));
+        assertTrue(certified(capped, "q.subtotal"));
     }
 }

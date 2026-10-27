@@ -24,6 +24,7 @@ import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
+import souther.compiler.values.ValueSet;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -200,10 +201,45 @@ public final class BehaviorSetStatements {
                           Map<BindingId, String> parameters, ElementBindings elements,
                           Allowance<NumericTerm.FromOnePosition> allowance,
                           List<ComparisonReadings.ForkMet> forks,
-                          RuleReachNumbering reaches) {
+                          RuleReachNumbering reaches, List<Partnered> partnered) {
         return of(behavior,
                 PredicateReadings.of(behavior, body, stated, read, parameters, elements, reaches),
-                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read));
+                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read), partnered);
+    }
+
+    /** The same, of a behavior no equality of whose strings states anything. */
+    public static Read of(String behavior, AnalysisBody body, StatedContract stated,
+                          InputReading read,
+                          Map<BindingId, String> parameters, ElementBindings elements,
+                          Allowance<NumericTerm.FromOnePosition> allowance,
+                          List<ComparisonReadings.ForkMet> forks,
+                          RuleReachNumbering reaches) {
+        return of(behavior, body, stated, read, parameters, elements, allowance, forks, reaches,
+                List.of());
+    }
+
+    /**
+     * What an equality between the strings at two positions states of one of them: the strings the
+     * other can hold, which are the only ones the equality can come out true at.
+     *
+     * <p>A rule of a comparison read as a set told from the rest, so it is built here with the
+     * rest and under the same allowance. Whether the position holds values on both sides of it is
+     * settled where its values are known ({@link Classing}), as for any rule that states a set.
+     *
+     * @param by     which reading of which comparison this is
+     * @param states what it states, called by the partner it is relative to
+     * @param term   the position it is about
+     * @param canBe  the strings the partner can hold
+     */
+    public record Partnered(PredicateOrigin by, PredicateStatement states,
+                            NumericTerm.FromOnePosition term, ValueSet canBe) {
+
+        public Partnered {
+            if (by == null || states == null || term == null || canBe == null) {
+                throw new IllegalArgumentException(
+                        "an equality states of a position the strings its partner can hold");
+            }
+        }
     }
 
     /**
@@ -218,9 +254,22 @@ public final class BehaviorSetStatements {
                    Allowance<NumericTerm.FromOnePosition> allowance,
                    List<ComparisonReadings.ForkMet> forks,
                    RuleReachNumbering reaches, WhatAnAnswerTakesUp dependencies) {
+        return of(behavior, read, reading, allowance, forks, reaches, dependencies, List.of());
+    }
+
+    /** The same, with the strings the partners of equalities can hold. */
+    static Read of(String behavior, PredicateReadings read, InputReading reading,
+                   Allowance<NumericTerm.FromOnePosition> allowance,
+                   List<ComparisonReadings.ForkMet> forks,
+                   RuleReachNumbering reaches, WhatAnAnswerTakesUp dependencies,
+                   List<Partnered> partnered) {
         Symbols symbols = reading.symbols();
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
+        for (Partnered each : partnered) {
+            asked.add(new Asked(each.by(), each.states(), each.term(),
+                    AdmittedPlan.of(each.canBe()), AdmittedPlan.without(each.canBe())));
+        }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
         for (PredicateReadings.Reading each : read.predicates()) {

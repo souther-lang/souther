@@ -781,13 +781,25 @@ final class DemandReading {
                     term instanceof NumericTerm.ValueOf value
                             && !value.position().insideAContainer())) {
                 narrowing.add(constraint);
-            } else {
+            } else if (!heldByTheRunsOfTheDeclarations(constraint, read)) {
                 Set<TermPath> places = new LinkedHashSet<>();
                 constraint.terms().forEach(term -> places.add(term.subjectPath()));
                 tied.add(places);
             }
         }
         return new Answered(narrowing, tied, false);
+    }
+
+    /**
+     * Whether every row the declarations leave meets {@code constraint}, shown by the form's
+     * least and greatest value over the runs the declarations hold its numbers to: what an
+     * operator over {@code Date.year} of two dates answers wherever it cannot pass the ends of an
+     * {@code Int}, which no row is narrowed by and no run is stopped on.
+     */
+    private static boolean heldByTheRunsOfTheDeclarations(TakenConstraint constraint,
+                                                          InputReading read) {
+        return constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel)
+                && TakenConstraint.holdsOverTheRunsOf(form, rel, read.quantities().region());
     }
 
     /**

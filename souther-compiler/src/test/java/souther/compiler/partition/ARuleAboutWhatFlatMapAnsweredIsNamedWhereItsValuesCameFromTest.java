@@ -70,12 +70,16 @@ class ARuleAboutWhatFlatMapAnsweredIsNamedWhereItsValuesCameFromTest {
                 .map(PartitionEvidence.NotRead::at).toList();
     }
 
+    /** A step that writes the one value of a position is that value: the rule is about it, and
+     *  is named at no derived value. */
     @Test
-    void theRuleIsNamedAtThePositionItsValuesCameFrom() {
+    void aValueTheStepWritesAloneIsTheValueOfItsPosition() {
         PartitionEvidence evidence = measured(BARE);
 
-        assertEquals(List.of("people[*]"), namedAsDerived(evidence),
-                () -> "said once, where the values came from: " + evidence.notRead());
+        assertEquals(List.of(), namedAsDerived(evidence),
+                () -> "the rule is about the age itself: " + evidence.notRead());
+        assertEquals(List.of("people[*].age"), evidence.axes().stream()
+                .map(PartitionEvidence.AxisCoverage::path).toList());
     }
 
     /** A value made from a position is not the position's value, however many it is made of. */

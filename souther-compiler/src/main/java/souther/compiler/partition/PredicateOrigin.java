@@ -39,7 +39,7 @@ import java.util.Optional;
  * @param copy       the copy of the model's code the application stands in, read off the
  *                   application when it was met. Empty where the model states nothing there
  */
-public record PredicateOrigin(PredicateOccurrence occurrence, RuleRef.Predicate rule,
+public record PredicateOrigin(PredicateOccurrence occurrence, RuleRef.Written rule,
                               RuleReportAnchor anchor, Optional<ModelOccurrence> copy)
         implements RuleEvidenceOrigin {
 

@@ -4160,8 +4160,37 @@ public final class InputReads {
                                                    DeclarationNewtypes newtypes,
                                                    Set<BindingId> met) {
         AnsweredByAWalk answered = answeredByAWalk(standing, symbols, newtypes, met);
-        return answered != null ? answered.meaning()
-                : componentOfAnAnsweredElement(standing, symbols, newtypes, met);
+        if (answered != null) {
+            return answered.meaning();
+        }
+        ReadMeaning component = componentOfAnAnsweredElement(standing, symbols, newtypes, met);
+        return component != null ? component
+                : insideTheListsAnswered(standing, symbols, newtypes, met);
+    }
+
+    /**
+     * What a container put together of the lists a step answered holds at each element, where
+     * every list the step answers is written with the one element — or null where it is not so
+     * put together.
+     *
+     * <p>{@code List.flatMap(x -> if keep(x) then [f(x)] else [], xs)} holds {@code f(x)} for the
+     * elements of {@code xs} it keeps, so a rule about one of its elements is a rule about
+     * {@code f(x)}, as for a {@code List.map} that answers {@code f(x)} for each. Which elements
+     * are kept is not said, and a rule about the element holds of the kept ones only.
+     */
+    private static ReadMeaning insideTheListsAnswered(Denotation standing, Symbols symbols,
+                                                      DeclarationNewtypes newtypes,
+                                                      Set<BindingId> met) {
+        InputReads at = standing.at();
+        ElementBindings.PiecesOfEachElement pieces = ElementBindings.piecesOfEachElement(
+                standing.value(), closure -> Core.withoutStanding(
+                        standing(new Denotation(closure, at), symbols, newtypes, met).value())
+                        instanceof Core.Block block ? block : null);
+        if (pieces == null || pieces.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            return null;
+        }
+        Core element = ElementBindings.theOneElementWritten(pieces.step().body());
+        return element == null ? null : new ReadMeaning.Through(new Denotation(element, at));
     }
 
     /** What a walk's answers are read as, and the walk that answered them. */

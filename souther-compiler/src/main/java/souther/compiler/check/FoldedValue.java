@@ -2,10 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -152,9 +155,54 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         return ConstantAlgebra.binary(b.op(), left.get(), right.get());
     }
 
+    /** The furthest from nought a scale is folded at, which no rounding a model writes is past. */
+    private static final int MOST_SCALE = 1000;
+
+    /**
+     * What a rounding to a step comes to, for an operation the library says rounds: the number
+     * taken to the scale, rounded the way the policy written there rounds, and written at it.
+     *
+     * <p>Which operations round, which of their arguments are the scale, the policy and the number,
+     * and what each way of rounding does are the library's to say ({@link ARounding}), asked here as
+     * every other reader of a rounding asks. Folded with a way of the compiler's own, a rounding
+     * would be one thing where it is discharged and another where its bounds are read.
+     */
+    private Optional<Object> rounded(Core.PreservedCall call, E at) {
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        ARounding rounds = applied == null ? null
+                : DefaultBoundOperationFacts.get().rounding(applied);
+        if (rounds == null) {
+            return Optional.empty();
+        }
+        Object scale = rounds.scale() == null ? Long.valueOf(0)
+                : eval(rounds.scale(), at).orElse(null);
+        WholeRounding way = rounds.wayOf(Core.withoutStanding(rounds.policy()));
+        Object folded = eval(rounds.rounded(), at).orElse(null);
+        ExactRatio number = folded == null ? null : ConstantAlgebra.exactly(folded);
+        if (!(scale instanceof Long places) || way == null || number == null
+                || Math.abs(places) > MOST_SCALE
+                || !ARounding.answersAtAScale(BigInteger.valueOf(places))) {
+            return Optional.empty();
+        }
+        ExactRatio ten = ExactRatio.of(BigInteger.TEN.pow((int) Math.abs(places)));
+        ExactRatio scaled = (places >= 0 ? number.times(ten) : number.dividedBy(ten)).orNull();
+        BigInteger whole = scaled == null ? null : way.of(scaled);
+        if (whole == null) {
+            return Optional.empty();
+        }
+        if (call.type() == Type.DECIMAL) {
+            return Optional.of(new BigDecimal(whole, (int) (long) places));
+        }
+        return whole.bitLength() < Long.SIZE ? Optional.of(whole.longValue()) : Optional.empty();
+    }
+
     private Optional<Object> call(Core.PreservedCall call, E at) {
         if (!(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return Optional.empty();
+        }
+        Optional<Object> rounding = rounded(call, at);
+        if (rounding.isPresent()) {
+            return rounding;
         }
         Kernel kernel = symbols.kernelOf(operation);
         if (kernel == null) {

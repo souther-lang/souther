@@ -199,8 +199,8 @@ public final class StringMachineAnswers {
                 boolean machine = switch (plan) {
                     case AdmittedPlan.Everything _, AdmittedPlan.Nothing _, AdmittedPlan.Of _ ->
                             false;
-                    case AdmittedPlan.Pattern _, AdmittedPlan.Both _, AdmittedPlan.Either _ ->
-                            true;
+                    case AdmittedPlan.Pattern _, AdmittedPlan.Without _, AdmittedPlan.Both _,
+                         AdmittedPlan.Either _ -> true;
                 };
                 if (machine && made instanceof Realization.Exact it) {
                     MADE.incrementAndGet();

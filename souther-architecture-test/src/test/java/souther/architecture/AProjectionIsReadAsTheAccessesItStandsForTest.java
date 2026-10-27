@@ -319,6 +319,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/AnalysisBody", "visit", "(" + core + "L" + c
                 + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V",
                 Reading.STRUCTURE, "finds the builds of values, which no name read is");
+        row(out, c + "check/ADeclarationsWitness$Pools", "mention", "(" + core
+                + "Ljava/util/List;Ljava/util/List;Ljava/util/List;)V", Reading.STRUCTURE,
+                "collects the numbers and the text a rule writes, which stand at its leaves"
+                        + " and not among the names read off a value");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/Clauses$ReadsOfAClause", "walk", "(" + core + ")V",

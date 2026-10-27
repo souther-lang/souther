@@ -360,8 +360,8 @@ public sealed interface PlannedValues<A> {
             case AdmittedPlan.Nothing _ -> Emptiness.EMPTY;
             case AdmittedPlan.Everything _ -> asked.of(block, ValueSet.ANY);
             case AdmittedPlan.Of it -> asked.of(block, it.set());
-            case AdmittedPlan.Pattern _, AdmittedPlan.Both _, AdmittedPlan.Either _ ->
-                    Emptiness.UNDECIDED;
+            case AdmittedPlan.Pattern _, AdmittedPlan.Without _, AdmittedPlan.Both _,
+                 AdmittedPlan.Either _ -> Emptiness.UNDECIDED;
         };
     }
 
