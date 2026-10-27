@@ -61,7 +61,7 @@
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
         <raoh.version>0.9.0</raoh.version>
         <!-- Raoh takes Jackson as provided, so the version on every classpath is this one. -->
-        <jackson.version>3.2.3</jackson.version>
+        <jackson.version>3.2.4</jackson.version>
         <!-- The text rules the language shares with Raoh: case conversion, normalization, white
              space, the temporal grammar and the pattern language. Which strings these accept is a
              rule of the specification, so a version that changes an answer is a change to the
