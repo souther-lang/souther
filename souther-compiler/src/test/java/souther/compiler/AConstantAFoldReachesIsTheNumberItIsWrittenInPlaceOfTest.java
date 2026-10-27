@@ -91,14 +91,20 @@ class AConstantAFoldReachesIsTheNumberItIsWrittenInPlaceOfTest {
      * An operation over written numbers that the fold does not compute leaves the rule unread, and
      * the rule states what it always stated.
      *
-     * <p>Beside the same number written out, so the two differ in the operation alone: a rounding to
-     * the place a number already sits at is that number, and what leaves the rule unread is that
-     * nothing here computes the rounding.
+     * <p>Beside the same number written out, so the two differ in the operation alone: what leaves
+     * the rule unread is that nothing here computes the remainder.
      */
     @Test
     void anOperationTheFoldDoesNotComputeLeavesTheRuleUnread() {
-        unread(overOne("Decimal", "x < Decimal.round(1, HALF_UP, 3.5m)"));
-        assertEquals(List.of("3.5"), lines(overOne("Decimal", "x < 3.5m")));
+        unread(overOne("Int", "x < Int.floorMod(7, 3)"));
+        assertEquals(List.of("1"), lines(overOne("Int", "x < 1")));
+    }
+
+    /** And a rounding the library declares is computed, the way its policy rounds. */
+    @Test
+    void aRoundingTheLibraryDeclaresIsTheNumberItRoundsTo() {
+        assertEquals(List.of("3.5"), lines(overOne("Decimal", "x < Decimal.round(1, HALF_UP, 3.45m)")));
+        assertEquals(List.of("3.4"), lines(overOne("Decimal", "x < Decimal.round(1, HALF_EVEN, 3.45m)")));
     }
 
     /**

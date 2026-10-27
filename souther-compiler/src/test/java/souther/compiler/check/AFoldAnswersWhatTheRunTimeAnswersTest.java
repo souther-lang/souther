@@ -9,10 +9,12 @@ import net.unit8.notation199x.pattern.PatternMeaning;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.types.BinOp;
+import souther.runtime.DecimalMath;
 import souther.runtime.Patterns;
 import souther.runtime.Strings;
 
 import java.lang.invoke.MethodHandles;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,8 +27,8 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * What the compiler folds of text at compile time is what the program computes of the same text
- * when it runs.
+ * What the compiler folds of text and of decimals at compile time is what the program computes of
+ * the same operands when it runs.
  *
  * <p>A fold is the operation written a second time, in the compiler, where the language's own
  * definition is not at hand — and a {@code java.lang.String} method is: {@code length} counts UTF-16
@@ -38,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a witness here fails {@link #everyKernelAFoldAnswersIsOneThisHolds}, rather than being right for
  * as long as nobody writes a character past the basic plane.
  */
-class AFoldOfTextAnswersWhatTheRunTimeAnswersTest {
+class AFoldAnswersWhatTheRunTimeAnswersTest {
 
     private static String text(int... codePoints) {
         return new String(codePoints, 0, codePoints.length);
@@ -56,6 +58,15 @@ class AFoldOfTextAnswersWhatTheRunTimeAnswersTest {
      * lowered to, which is what a compiled call loads.
      */
     private static final Map<Kernel, Function<List<Object>, Object>> RUN_TIME = Map.of(
+            Kernel.DECIMAL_ADD, args -> DecimalMath.add((BigDecimal) args.get(0),
+                    (BigDecimal) args.get(1)),
+            Kernel.DECIMAL_SUBTRACT, args -> DecimalMath.subtract((BigDecimal) args.get(0),
+                    (BigDecimal) args.get(1)),
+            Kernel.DECIMAL_MULTIPLY, args -> DecimalMath.multiply((BigDecimal) args.get(0),
+                    (BigDecimal) args.get(1)),
+            Kernel.DECIMAL_COMPARE, args -> DecimalMath.compare((BigDecimal) args.get(0),
+                    (BigDecimal) args.get(1)),
+            Kernel.DECIMAL_FROM_INT, args -> DecimalMath.fromInt((Long) args.get(0)),
             Kernel.STRING_LENGTH, args -> Strings.length((String) args.get(0)),
             Kernel.STRING_CONTAINS, args -> ((String) args.get(1)).contains((String) args.get(0)),
             Kernel.STRING_MATCHES, args -> machine(
@@ -127,6 +138,8 @@ class AFoldOfTextAnswersWhatTheRunTimeAnswersTest {
     private static List<List<Object>> arguments() {
         List<Object> values = new ArrayList<>(TEXTS);
         values.addAll(List.of(0L, 1L, 2L));
+        values.addAll(List.of(new BigDecimal("0.25"), new BigDecimal("1.50"), new BigDecimal("-3"),
+                new BigDecimal("1E+3")));
         List<List<Object>> out = new ArrayList<>();
         for (Object a : values) {
             out.add(List.of(a));
