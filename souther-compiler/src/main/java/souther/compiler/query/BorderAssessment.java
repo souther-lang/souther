@@ -72,6 +72,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         this(border, items, beside, ARowTellingTheLinesApart.notAsked());
     }
 
+
     /**
      * One reading of a line, read at the copy of the comparison {@code border} was drawn by.
      *

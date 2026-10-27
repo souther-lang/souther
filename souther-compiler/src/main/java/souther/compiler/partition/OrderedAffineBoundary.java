@@ -147,6 +147,20 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     }
 
     /**
+     * Whether a row would satisfy this rule if its positions were weighed {@code weights} in the
+     * quantity's own units and the rule parted the values where it does — or why the sum could not
+     * be worked out.
+     *
+     * <p>The line the model drew with a computation weighing a position otherwise, read against the
+     * threshold the model wrote: a table of thresholds is looked up by a value that is worked out
+     * wrongly, and not by one with a threshold of its own.
+     */
+    public ExactAnswer<Boolean> satisfiesWeighing(Map<NumericTerm, ExactRatio> weights,
+                                                  Map<NumericTerm, Place> values) {
+        return summed(weights, values, ExactRatio.ZERO).map(at -> seam.sideOf(at) == satisfiedOn);
+    }
+
+    /**
      * What a direction comes to at a row, which is what each position holds weighed by what the
      * direction weighs it — or which way the exact arithmetic could not hold the sum.
      *

@@ -74,16 +74,21 @@ public final class EnsuresThresholds {
      *                reading that answered with its lines alone would have that said of it — which
      *                is a sentence about the model, and the model says otherwise in its own
      *                declaration
+     * @param throughADerivedValue the lines on single positions that part the values settling a
+     *                comparison of a value derived from several positions, held apart for
+     *                {@link DerivedValues#decide}
      */
     public record Clauses(List<LineEvidence> evidence,
-                          List<LineDrawn> between, RulesWithNoLine noLine) {
+                          List<LineDrawn> between, RulesWithNoLine noLine,
+                          List<DerivedValues.Settling> throughADerivedValue) {
 
         public static final Clauses NONE =
-                new Clauses(List.of(), List.of(), RulesWithNoLine.NONE);
+                new Clauses(List.of(), List.of(), RulesWithNoLine.NONE, List.of());
 
         public Clauses {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
+            throughADerivedValue = List.copyOf(throughADerivedValue);
         }
 
         /** The lines, read off what the walk said. Not a list of their own, for the reason
@@ -118,7 +123,7 @@ public final class EnsuresThresholds {
         InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()),
                 read.declared());
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new RulesWithNoLine.Gathered());
+                new ArrayList<>(), new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                 // A conjunct this compiler could not type is one it has not read. Nothing is
@@ -156,13 +161,15 @@ public final class EnsuresThresholds {
                 }
             }
         }
-        return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found());
+        return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found(),
+                drawn.throughADerivedValue());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between,
+                         List<DerivedValues.Settling> throughADerivedValue,
                          RulesWithNoLine.Gathered noLine) {}
 
     /**
@@ -237,6 +244,7 @@ public final class EnsuresThresholds {
                 (cutting, _, _) -> originOf(said, cutting));
         out.evidence().addAll(geometry.evidence());
         out.between().addAll(geometry.between());
+        out.throughADerivedValue().addAll(geometry.throughADerivedValue());
     }
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other
