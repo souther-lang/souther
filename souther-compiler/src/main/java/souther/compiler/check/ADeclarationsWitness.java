@@ -33,6 +33,12 @@ import java.util.Set;
  * in the order of how far each is from its first, so a value found is one of the least that the
  * values tried could be, and what is tried is bounded by {@link #MOST_TRIED} whatever the rules say.
  *
+ * <p>What is found is a value of the declaration in full and what is not found is nothing more
+ * than that. {@link #MOST_TRIED}, {@link #MOST_UNFOLDED} and {@link #MOST_DEEP} bound the search
+ * and are no part of what a declaration means: a rule that folded to nothing at the values tried,
+ * a search that reached its bound and values of which none held every rule all leave the
+ * declaration not shown, and none of them says that no value exists.
+ *
  * <p>A place holding something this does not write down — a sum, a date, a container with elements
  * a rule reads — is a place no value is written for, and the declaration then is not shown to hold
  * one. An optional is written as none and a list as an empty one, which the rules of the places

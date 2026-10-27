@@ -99,6 +99,42 @@ class ARelationBetweenNumbersIsHeldByAValueWrittenDownTest {
                 """, "code: Code, a: Int, b: Int", "invariant product = a * b == 6"));
     }
 
+    private static final String POSITIVE = """
+            data Positive = Int
+                invariant value > 100
+            """;
+
+    /**
+     * A value is a value of the declaration only where the declarations inside it hold it too. A
+     * product is no bound, so it is the written-down value that is asked, and a zero meets the
+     * rule; the rule of the number the place is says no zero is one.
+     */
+    @Test
+    void aValueTheOuterRuleHoldsAndAFieldsOwnDeclarationRefusesIsNotAValue() {
+        assertFalse(holdsAValue(POSITIVE, "a: Positive, b: Int",
+                "invariant impossible = a.value * b == 0 && b > 0"));
+    }
+
+    /** The same inside a record inside the record. */
+    @Test
+    void aFieldsOwnDeclarationIsHeldWhereverTheFieldSits() {
+        assertFalse(holdsAValue(POSITIVE + """
+
+                data Inner = { p: Positive }
+                    invariant restates = p.value >= 0
+                """, "i: Inner, b: Int", "invariant impossible = i.p.value * b == 0 && b > 0"));
+    }
+
+    /** A list is written empty, and a declaration that wears the list says it holds one. */
+    @Test
+    void anEmptyListIsNoValueWhereTheDeclarationItIsWornByRefusesIt() {
+        assertFalse(holdsAValue("""
+                data Lines = List<Int>
+                    invariant nonEmpty = List.length(value) >= 1
+                """, "l: Lines, b: Int",
+                "invariant bare = List.length(l.value) * b == 0 && b > 0"));
+    }
+
     /** A date is a place no value is written for. */
     @Test
     void aPlaceNoValueIsWrittenForLeavesTheDeclarationNotShown() {

@@ -109,9 +109,10 @@ final class Realizer {
     }
 
     /**
-     * Every value a set already worked out does not hold: the other side of a finite set is a
-     * cofinite one at no cost, and the other side of a language is its complement, which is a
-     * machine made deterministic and is paid for out of this position's allowance.
+     * Every value a set already worked out does not hold, within the values the set is over: the
+     * other side of a finite set is a cofinite one at no cost, and so is the other side of runs of
+     * numbers, and the other side of a language is its complement, which is a machine made
+     * deterministic and is paid for out of this position's allowance.
      */
     private Realization without(AdmittedPlan.Without plan) {
         return switch (plan.set()) {
@@ -125,9 +126,9 @@ final class Realizer {
                 yield not != null ? new Realization.Exact(ValueSet.matching(not))
                         : new Realization.OverTheAnswerLimit(budget.refusedBy(meter));
             }
-            case ValueSet.WholeRuns _ -> throw new IllegalArgumentException(
-                    "the other side of a run of numbers is a run of numbers, and not a plan of"
-                            + " strings: " + plan);
+            // The numbers it leaves out, which cost nothing either: the runs between its runs.
+            case ValueSet.WholeRuns runs -> new Realization.Exact(
+                    ValueSet.wholeNumbers(runs.numbers().others()));
         };
     }
 

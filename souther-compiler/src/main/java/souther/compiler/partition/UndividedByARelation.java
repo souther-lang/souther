@@ -250,7 +250,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   claiming the place undivided over every value needs as well
      * @param partnered  each string position the relation is shown to part by the strings its
      *                   partner can hold, and those strings: the values there some value of the
-     *                   partner equals, and the rest, which no value of it does
+     *                   partner equals, and the rest, which no value of it does. In the order of
+     *                   the relation's sides
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
@@ -263,7 +264,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
             mayStopBefore = Set.copyOf(mayStopBefore);
-            partnered = Map.copyOf(partnered);
+            // In the order the sides were said in: whoever files a reading for each numbers them
+            // as it goes, and an order the keys' hashes decide numbers them differently each run.
+            partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
             if (!undivided.containsAll(mayStopBefore)) {
                 throw new IllegalArgumentException("a run stopping before the relation is said of"
                         + " a place the relation is shown to leave undivided");
@@ -3403,8 +3406,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          SearchRegion region,
                                                          WhatARelationLeavesUndivided.Independence
                                                                  independent) {
-        TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, read,
-                region, independent) : null;
+        TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
+                independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
             return Set.of();
         }
@@ -3463,7 +3466,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
             boolean heldWhole, InputReading read, SearchRegion along,
             WhatARelationLeavesUndivided.Independence independent) {
-        TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, read, along,
+        TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
             return List.of();
@@ -3529,8 +3532,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private TwoSides twoSidesStandingApart(
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
-            InputReading read, SearchRegion region,
-            WhatARelationLeavesUndivided.Independence independent) {
+            SearchRegion region, WhatARelationLeavesUndivided.Independence independent) {
         if (sides.size() == 2) {
             return carriers.get(0) != null && carriers.get(0).equals(carriers.get(1))
                     ? new TwoSides(0, 1, constant) : null;
@@ -4953,8 +4955,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** Whether the container at {@code at} is a list, whose elements may be one value as many
      *  times as it holds them. */
     private static boolean elementsMayRepeat(TermPath at, InputReading read) {
-        Type type = read.domain().typeAt(at, read.rules());
-        return type != null && TypeOps.base(type, read.rules().inners()) instanceof Type.ListOf;
+        Position container = read.domain().at(at.position());
+        return container != null && container.view().shape()
+                instanceof Shape.Sequence(Shape.Sequence.Kind kind, var _)
+                && kind == Shape.Sequence.Kind.LIST;
     }
 
     /**
