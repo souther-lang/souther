@@ -6710,6 +6710,10 @@ final class Pullback {
                 && !read.beside().equals(LinearForm.constant(ExactRatio.ZERO))) {
             return null;
         }
+        LinearForm<Quantity> ofThePlace = endOfAMultipleOfAPlace(read, gathering);
+        if (ofThePlace != null) {
+            return ofThePlace;
+        }
         NumericTerm term = NumericTerm.GatheredUnderItsKey.spelled(read.elements(), read.key(),
                 read.number(), read.each(), gathering, read.selection());
         if (!readOnAnOrder(term)) {
@@ -6723,9 +6727,52 @@ final class Pullback {
         if (moved == null) {
             return null;
         }
+        return ofTheInput(moved);
+    }
+
+    /** {@code form}, each number of which is a number of the input, as a form of quantities. */
+    private static LinearForm<Quantity> ofTheInput(LinearForm<NumericTerm> form) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-        moved.coefs().forEach((each, by) -> coefs.put(new DecisionAtom.OfTheInput(each), by));
-        return new LinearForm<>(moved.constant(), coefs);
+        form.coefs().forEach((each, by) -> coefs.put(new DecisionAtom.OfTheInput(each), by));
+        return new LinearForm<>(form.constant(), coefs);
+    }
+
+    /**
+     * The end of {@code w·p + c} over the elements of a key as {@code w} times the end of {@code p}
+     * and {@code c} beside it — or null where the number is not a multiple of one place and a
+     * constant, or no such multiple is read.
+     *
+     * <p>A multiple by a positive number keeps the order of the numbers, and by a negative one
+     * turns it over, so the least of {@code -p} is the negation of the greatest of {@code p}. The
+     * end then stands as the end of the place, which is the number the order of the place and what
+     * the declarations leave it speak of; the multiple of it is the weight of the term.
+     *
+     * <p>What stands beside every element is no part of what the element is weighed: it is the
+     * same for every element and is added to the end once, as it is. So the end of the place is
+     * read with nothing beside it, weighed, and the constant and the number beside are added to
+     * that.
+     */
+    private LinearForm<Quantity> endOfAMultipleOfAPlace(
+            ElementsGathered read, NumericTerm.GatheredUnderItsKey.Gathering gathering) {
+        ElementValue.MultipleOfPlaces multiple = read.number().asAPlace() != null ? null
+                : ElementValue.asAMultipleOfPlaces(read.number());
+        if (!(gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme))
+                || multiple == null || (multiple.weight().equals(ExactRatio.ONE)
+                && multiple.constant().isZero())) {
+            return null;
+        }
+        ElementsGathered ofThePlaces = new ElementsGathered(read.elements(), read.key(),
+                multiple.ofPlaces(), LinearForm.constant(ExactRatio.ZERO), read.each(),
+                read.selection(), read.walked());
+        LinearForm<Quantity> end = gathered(ofThePlaces,
+                new NumericTerm.GatheredUnderItsKey.Gathering.End(
+                        multiple.weight().signum() < 0 ? extreme.other() : extreme));
+        if (end == null || !(end.times(multiple.weight())
+                instanceof ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> scaled))) {
+            return null;
+        }
+        return LinearForm.sum(List.of(scaled, LinearForm.constant(multiple.constant()),
+                ofTheInput(read.beside()))).orNull();
     }
 
     /**

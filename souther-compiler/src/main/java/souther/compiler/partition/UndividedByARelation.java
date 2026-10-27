@@ -77,6 +77,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -437,6 +438,70 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return atOnePosition() != null ? atOnePosition()
                     : kept() != null ? kept().ofEach() : null;
         }
+
+        /**
+         * The number a statement of the way can be about, as the statement names it: the number
+         * of one position, or the end of a key's numbers. The term the sides are weighed in is the
+         * term a statement is weighed in, so it is looked up by the number itself and not by the
+         * position it is read off, which an end has none of. Null for any other number.
+         */
+        NumericTerm statedTerm() {
+            return atOnePosition() != null || !placesOfItsEnd().isEmpty() ? number : null;
+        }
+
+        /**
+         * The places the end of a key's numbers is taken of, where this is such an end: a
+         * container of one element has that element's number for its end, at whichever place its
+         * case puts it, so what the declarations leave the places is what they leave the end.
+         * Empty where it is no end, or the end of anything but places.
+         */
+        List<NumericTerm.ValueOf> placesOfItsEnd() {
+            return number == null ? List.of() : placesOfOneElement(number);
+        }
+
+    }
+
+    /**
+     * What the declarations leave the value {@code each} is, or is taken of — and where it is the
+     * end of a key's numbers, what they leave every place it is taken of, or null where they leave
+     * them differently. No one place stands for the others.
+     */
+    private static Source sourceOfSide(Side each, InputReading read) {
+        List<NumericTerm.ValueOf> places = each.placesOfItsEnd();
+        if (places.isEmpty()) {
+            return sourceOf(each.atOnePosition(), read);
+        }
+        Source first = sourceOf(places.getFirst(), read);
+        for (NumericTerm.ValueOf place : places) {
+            if (!Objects.equals(first, sourceOf(place, read))) {
+                return null;
+            }
+        }
+        return first;
+    }
+
+    /**
+     * The order the numbers of {@code each} are counted on — and where it is the end of a key's
+     * numbers, the order every place it is taken of stands on, or null where they stand on
+     * different ones.
+     */
+    private static Carrier carrierOfSide(Side each, InputReading read) {
+        List<NumericTerm.ValueOf> places = each.placesOfItsEnd();
+        if (places.isEmpty()) {
+            NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
+                    : summedAs(each.number());
+            TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
+            return orders == null ? null : orders.answered();
+        }
+        Carrier first = null;
+        for (NumericTerm.ValueOf place : places) {
+            TermOrders orders = read.quantities().ordersOf(place);
+            if (orders == null || (first != null && !first.equals(orders.answered()))) {
+                return null;
+            }
+            first = orders.answered();
+        }
+        return first;
     }
 
     /** {@code form} held against nought as {@code relation}. */
@@ -591,16 +656,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // lies between.
         List<Source> sources = new ArrayList<>();
         for (Side each : sides) {
-            sources.add(each.kept() == null ? sourceOf(each.atOnePosition(), read)
+            sources.add(each.kept() == null ? sourceOfSide(each, read)
                     : keptSource(each.kept(), read));
         }
         // And the order each side's values are counted on, which says where its type ends.
         List<Carrier> carriers = new ArrayList<>();
         for (Side each : sides) {
-            NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
-                    : summedAs(each.number());
-            TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
-            carriers.add(orders == null ? null : orders.answered());
+            carriers.add(carrierOfSide(each, read));
         }
         // Where each side stands is compared with where the others do, which says something only
         // where they stand on one order: a case of one enumeration has no place on another's.
@@ -2385,8 +2447,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Side each : sides) {
-            if (each.atOnePosition() == null || each.kept() != null
-                    || coefs.merge(each.atOnePosition(), each.weight(),
+            if (each.statedTerm() == null || each.kept() != null
+                    || coefs.merge(each.statedTerm(), each.weight(),
                             (one, other) -> one.plus(other).orNull()) == null) {
                 return null;
             }
@@ -2626,10 +2688,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Side each = sides.get(i);
             // A value a rule names moves with the places the rule names beside it, so what the
             // way states of any place of its parameter is stated of it.
-            out.add(each.readOff() == null || !heldWhole ? List.of()
-                    : sources.get(i) != null && sources.get(i).named()
-                    ? statingAnythingOfItsParameter(each.readOff(), conditions)
-                    : statingAnythingOf(each.readOff(), conditions));
+            // The end of a key's numbers is read off the places its elements stand at, so what the
+            // way states of one of them is stated of it.
+            List<NumericTerm.FromOnePosition> readOff = !heldWhole ? List.of()
+                    : each.readOff() != null ? List.of(each.readOff())
+                    : List.copyOf(each.placesOfItsEnd());
+            Set<OnAWay> stated = new LinkedHashSet<>();
+            for (NumericTerm.FromOnePosition term : readOff) {
+                stated.addAll(sources.get(i) != null && sources.get(i).named()
+                        ? statingAnythingOfItsParameter(term, conditions)
+                        : statingAnythingOf(term, conditions));
+            }
+            out.add(List.copyOf(stated));
         }
         return out;
     }
@@ -2699,6 +2769,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : each.number() instanceof NumericTerm.CodePointAt at
                     ? asARelationReadsIt(codePointsTakenAt(at, read, stating.get(i)),
                             carriers.get(i))
+                    : isAnEndOfAKey(each.number())
+                    ? asARelationReadsIt(shownOfAnEnd(each.number(), read, region, conditions,
+                            heldWhole), carriers.get(i))
                     : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
@@ -3416,26 +3489,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i : List.of(pair.first(), pair.second())) {
             Side each = sides.get(i);
             Source source = sources.get(i);
-            if (each.atOnePosition() == null || source == null || !source.takes().every()) {
+            boolean anEnd = !each.placesOfItsEnd().isEmpty();
+            if ((each.atOnePosition() == null && !anEnd) || source == null
+                    || !source.takes().every()
+                    || (anEnd
+                    && shownOfAnEnd(each.number(), read, region, stating.get(i), true) == null)) {
                 return Set.of();
             }
-            NumericDomain.Bounds realizes = switch (each.atOnePosition()) {
-                case NumericTerm.ValueOf _ -> on.asARelationReadsIt();
-                case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
-                        .endsAreWhereTheRepresentationStops(taken.operation())
-                        ? realized(taken, source, region, Way.TIES) : null;
-                default -> null;
-            };
+            // An end is shown every value the carrier holds: that is what the places it is taken
+            // of leave it, and what {@link #shownOfAnEnd} asked.
+            NumericDomain.Bounds realizes = anEnd ? on.asARelationReadsIt()
+                    : switch (each.atOnePosition()) {
+                        case NumericTerm.ValueOf _ -> on.asARelationReadsIt();
+                        case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
+                                .endsAreWhereTheRepresentationStops(taken.operation())
+                                ? realized(taken, source, region, Way.TIES) : null;
+                        default -> null;
+                    };
             if (realizes == null) {
                 return Set.of();
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
                     on.asARelationReadsIt(), realizes, source.takes(),
-                    each.number() instanceof NumericTerm.ValueOf, on.spacingBetweenValues(),
-                    on.whereItStops()));
+                    each.number() instanceof NumericTerm.ValueOf
+                            || each.number() instanceof NumericTerm.ExtremeOfItsKey
+                            || each.number() instanceof NumericTerm.GatheredUnderItsKey,
+                    on.spacingBetweenValues(), on.whereItStops()));
         }
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(
-                stating.get(pair.first()), stating.get(pair.second()));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
+                stating);
         if (held == null) {
             return Set.of();
         }
@@ -3490,8 +3572,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, null, true, on.spacingBetweenValues(), on.whereItStops()));
         }
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(
-                stating.get(pair.first()), stating.get(pair.second()));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
+                stating);
         if (held == null) {
             return List.of();
         }
@@ -3566,17 +3648,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return null;
     }
 
-    /** Everything {@code first} and {@code second}, what a way states of each of two sides, hold
-     *  of them as statements about their difference — or null where something it holds is not. A
-     *  statement about both sides is in each side's list; it is one statement. */
+    /** Everything a way states of each of the two sides {@code pair} asks about, held of them as
+     *  statements about their difference — or null where something it holds is not. A statement
+     *  about both sides is in each side's list; it is one statement. */
     private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
-            List<OnAWay> first, List<OnAWay> second) {
-        Set<OnAWay> aboutEither = new LinkedHashSet<>(first);
-        aboutEither.addAll(second);
+            TwoSides pair, List<List<OnAWay>> stating) {
+        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
+        aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
         for (OnAWay each : aboutEither) {
             WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
-                    : onTheDifference(each.affine().form(), each.affine().rel());
+                    : onTheDifference(each.affine().form(), each.affine().rel(), pair);
             if (statement == null) {
                 return null;
             }
@@ -3642,14 +3724,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * over anything else, or weighs them other than the relation does.
      */
     private WhatARelationLeavesUndivided.OnTheDifference onTheDifference(
-            LinearForm<NumericTerm> form, Rel rel) {
-        ExactRatio first = form.coefs().get(sides.get(0).atOnePosition());
-        ExactRatio second = form.coefs().get(sides.get(1).atOnePosition());
+            LinearForm<NumericTerm> form, Rel rel, TwoSides pair) {
+        Side one = sides.get(pair.first());
+        Side other = sides.get(pair.second());
+        ExactRatio first = form.coefs().get(one.statedTerm());
+        ExactRatio second = form.coefs().get(other.statedTerm());
         if (form.coefs().size() != 2 || first == null || second == null) {
             return null;
         }
         // A statement is about the combination the relation is about: a sum is not a difference.
-        boolean asked = sides.get(0).weight().equals(sides.get(1).weight());
+        boolean asked = one.weight().equals(other.weight());
         boolean alike = first.equals(second);
         boolean opposed = first.plus(second) instanceof ExactAnswer.Held<ExactRatio>(
                 ExactRatio sum) && sum.signum() == 0;
@@ -3990,11 +4074,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (containers.size() != 1) {
             return null;
         }
-        // One element comes to the value at whichever place its case puts it, so a value is a
-        // total where the element may stand at it at each of them: the runs of the places are one
-        // run only where they are alike.
+        return shownOfAnElementAlone(elements, containers.getFirst(), read, region, conditions,
+                carrier);
+    }
+
+    /**
+     * A run every value of which one element is shown to take at whichever of {@code places} its
+     * case puts it, where {@code container} may hold one element — or null where none is shown.
+     *
+     * <p>One element comes to the value at whichever place its case puts it, so a value is taken
+     * where the element may stand at it at each of them: the runs of the places are one run only
+     * where they are alike. What each is shown to take is a run some row holds it at with every
+     * rule read ({@link #realized}), and a way touching it, or a rule over the elements together,
+     * leaves nothing shown.
+     *
+     * @param nought the carrier of a total, which is nought where the container may hold nothing;
+     *               null for a number that is one of the elements'
+     */
+    private static NumericDomain.Bounds shownOfAnElementAlone(List<NumericTerm.ValueOf> places,
+                                                              TermPath container,
+                                                              InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions,
+                                                              Carrier nought) {
         NumericDomain.Bounds each = null;
-        for (NumericTerm.ValueOf element : elements) {
+        for (NumericTerm.ValueOf element : places) {
             Source source = sourceOf(element, read);
             if (source == null
                     || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
@@ -4006,11 +4110,70 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             each = here;
         }
-        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
         if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
             return null;
         }
-        return held.admits(Count.ZERO) ? withNought(each, carrier) : each;
+        return nought != null && held.admits(Count.ZERO) ? withNought(each, nought) : each;
+    }
+
+    /** Whether {@code number} is an end of the numbers of the elements of one key. */
+    private static boolean isAnEndOfAKey(NumericTerm number) {
+        return number instanceof NumericTerm.ExtremeOfItsKey
+                || (number instanceof NumericTerm.GatheredUnderItsKey gathered
+                && gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End);
+    }
+
+    /**
+     * A run every value of which the end {@code end} of a key's numbers is shown to take — or null
+     * where none is shown: what the number of an element is shown to take, where the container may
+     * hold one element.
+     *
+     * <p>The end of the numbers of one key is, for a container holding one element, that
+     * element's number, whichever key it holds, and at whichever place its case puts it. So every
+     * value the element is shown to take is an end. Which ends a container of several reaches is
+     * not asked.
+     */
+    private static NumericDomain.Bounds shownOfAnEnd(NumericTerm end, InputReading read,
+                                                     SearchRegion region, List<OnAWay> conditions,
+                                                     boolean heldWhole) {
+        List<NumericTerm.ValueOf> places = placesOfOneElement(end);
+        List<TermPath> containers = places.isEmpty() ? List.of()
+                : places.getFirst().subjectPath().containersHoldingIt();
+        return !heldWhole || containers.size() != 1 ? null
+                : shownOfAnElementAlone(places, containers.getFirst(), read, region, conditions,
+                        null);
+    }
+
+    /**
+     * Where one element has the number {@code end} is an end of, at each of the places its case
+     * puts it — empty where {@code end} is the end of a selection of the elements, or of anything
+     * but places.
+     */
+    private static List<NumericTerm.ValueOf> placesOfOneElement(NumericTerm end) {
+        if (end instanceof NumericTerm.ExtremeOfItsKey extreme) {
+            return List.of(new NumericTerm.ValueOf(extreme.value()));
+        }
+        if (!(end instanceof NumericTerm.GatheredUnderItsKey gathered)
+                || !(gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End)
+                || gathered.selection() != null) {
+            return List.of();
+        }
+        return switch (gathered.value()) {
+            case ElementValue.OfItsCase choice when choice.rest() == null -> {
+                List<NumericTerm.ValueOf> out = new ArrayList<>();
+                for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
+                    ElementProjection place = arm.value().asAPlace();
+                    if (place == null) {
+                        yield List.of();
+                    }
+                    out.add(new NumericTerm.ValueOf(place.from(gathered.elements())));
+                }
+                yield out;
+            }
+            default -> gathered.valuesTakenFrom() == null ? List.of()
+                    : List.of(gathered.valuesTakenFrom());
+        };
     }
 
     /**
