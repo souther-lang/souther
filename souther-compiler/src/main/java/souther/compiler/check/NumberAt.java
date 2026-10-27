@@ -135,14 +135,6 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key));
     }
 
-    /** The same, of the steps {@code through} counts of the values: the day the latest second
-     *  falls on. */
-    public static <P> NumberAt<P> extremeOf(P position, Extreme extreme, List<String> key,
-                                            ValueName through) {
-        return new NumberAt<>(position,
-                new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key, through));
-    }
-
     /**
      * The same number with the place spelled {@code position}.
      *
