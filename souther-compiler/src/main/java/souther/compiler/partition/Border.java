@@ -64,10 +64,10 @@ import java.util.function.Supplier;
  *                    and a side is where it comes out one way. Neither where none is shown to be,
  *                    which is not a side shown to hold something — see
  *                    {@link #noValueStandsWhereItComesOut}
- * @param threshold the place of a computation cut at several places that this line is, where the
- *                  line cuts one ({@link DerivedValues}). Its ON and OFF points are owed once for
- *                  each of those places and not once for the comparison, because a row at the
- *                  points of one place says nothing about where another is
+ * @param threshold which threshold of a computation cut at several places this line is, where it
+ *                  cuts one ({@link DerivedValues}). Its ON and OFF points are owed once for each
+ *                  threshold and not once for the comparison, because a row at the points of one
+ *                  threshold says nothing about where another is
  */
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
                      Sides leftNothing, Optional<ThresholdOfADerivedValue> threshold) {
@@ -78,7 +78,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         this(cut, origin, answers, leftNothing, Optional.empty());
     }
 
-    /** This line as the place of {@code computation} it is. */
+    /** This line as the threshold {@code place} names. */
     Border atThreshold(ThresholdOfADerivedValue place) {
         return new Border(cut, origin, answers, leftNothing, Optional.of(place));
     }

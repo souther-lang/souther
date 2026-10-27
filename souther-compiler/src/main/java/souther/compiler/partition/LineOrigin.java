@@ -253,24 +253,6 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                            CanonicalSelection<WhatMayStopARun> stopsBefore,
                            Optional<ExactRatio> writtenAgainst) {
 
-            /**
-             * Which reading this is, which the number it was written against is no part of: that
-             * is what the reading says of the line, and two readings of one comparison at one
-             * place are one reading whatever bound each held.
-             */
-            @Override
-            public boolean equals(Object other) {
-                return other instanceof Read read && rule.equals(read.rule)
-                        && states.equals(read.states) && anchor.equals(read.anchor)
-                        && recordedAt.equals(read.recordedAt) && metOn.equals(read.metOn)
-                        && stopsBefore.equals(read.stopsBefore);
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(rule, states, anchor, recordedAt, metOn, stopsBefore);
-            }
-
             public Read {
                 if (rule == null || states == null || anchor == null || metOn == null
                         || stopsBefore == null || writtenAgainst == null) {

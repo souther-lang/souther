@@ -108,23 +108,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * Which line this is, which the number it was written against is no part of: two readings that
-     * cut one quantity at one place are one line, and the table bound each was written against is
-     * what each says of it.
-     */
-    @Override
-    public boolean equals(Object other) {
-        return other instanceof Cutting cutting && Objects.equals(of, cutting.of)
-                && Objects.equals(at, cutting.at) && Objects.equals(claim, cutting.claim)
-                && Objects.equals(within, cutting.within);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(of, at, claim, within);
-    }
-
-    /**
      * What reading {@code comparison} as a line came to.
      *
      * <p>Four answers, and the three that are not a line are not one absence. A comparison whose
@@ -1039,8 +1022,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** {@code drawn}, every line of it noted as the comparison written against {@code level}. */
     private static Read writtenAgainst(Read drawn, Optional<ExactRatio> level) {
         return switch (drawn) {
-            case Read.Cuts cuts -> new Read.Cuts(cuts.cutting().writtenAgainst(level),
-                    cuts.authored());
+            // Only a line on a value derived from several positions, which is what a bound is
+            // looked up against. A line on one position that the reading draws as well — a filter
+            // the value is made of — is cut where that filter put it, and the bound of the table
+            // is no bound of it.
+            case Read.Cuts cuts -> cuts.cutting().of().derivedFromSeveralPositions().isPresent()
+                    ? new Read.Cuts(cuts.cutting().writtenAgainst(level), cuts.authored())
+                    : cuts;
             case Read.Several several -> new Read.Several(several.parts().stream()
                     .map(part -> new Read.Several.Part(part.id(),
                             writtenAgainst(part.line(), level), part.cases()))
@@ -2138,7 +2126,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
         }
-        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()));
+        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()), written);
     }
 
     /**

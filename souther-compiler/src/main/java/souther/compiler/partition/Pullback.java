@@ -542,7 +542,9 @@ final class Pullback {
         TheSignOfAnOrder.Sides<InputReads> sides =
                 new Pullback(read, Optional.empty()).sides();
         ExactRatio left = sides.constant(comparison.left(), reads);
-        return left == null ? Optional.empty() : Optional.of(left);
+        ExactRatio right = sides.constant(comparison.right(), reads);
+        return left == null == (right == null) ? Optional.empty()
+                : Optional.of(left == null ? right : left);
     }
 
     /**

@@ -91,42 +91,47 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         assertFalse(report.contains(MISSING_OFF), report);
     }
 
-    private static final String AVERAGED_AND_PLAIN = """
+    private static final String AVERAGE_OF_THE_PAYABLE = """
             module demo
 
-            data N = { v: Int }
-                invariant v >= 0
+            data Pay = { amount: Int, days: Int }
+                invariant amount >= 0
             data Row = { grade: Int, lowerBound: Int }
             let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
                                      Row { grade = 2, lowerBound = 100 },
                                      Row { grade = 3, lowerBound = 300 } ]
             let gradeOf (m: Int): Int =
                 List.fold((acc, r) -> if r.lowerBound <= m then r.grade else acc, 0, table)
+            let payable (records: List<Pay>): List<Pay> =
+                List.filter(r -> r.days >= 17, records)
+            let average (records: List<Pay>): Int =
+                Rational.toInt(DOWN, List.sum(List.map(r -> r.amount, records))
+                                     / List.length(records))
 
-            behavior f : (a: N, b: N) -> Int
+            behavior f : (a: Pay, b: Pay, c: Pay) -> Int
 
-            let f (a, b) =
-                gradeOf(Rational.toInt(DOWN, (a.v + b.v) / 2)) + gradeOf(a.v + b.v)
+            let f (a, b, c) = gradeOf(average(payable([a, b, c])))
 
             example f
-                | (N { v = 100 }, N { v = 0 }) -> 3
-                | (N { v = 99 }, N { v = 0 }) -> 2
-                | (N { v = 200 }, N { v = 0 }) -> 4
-                | (N { v = 199 }, N { v = 0 }) -> 3
+                | (Pay { amount = 100, days = 20 }, Pay { amount = 0, days = 0 },
+                   Pay { amount = 0, days = 0 }) -> 2
+                | (Pay { amount = 99, days = 20 }, Pay { amount = 0, days = 0 },
+                   Pay { amount = 0, days = 0 }) -> 1
             """;
 
     /**
-     * A bound of the table is one threshold however many computations read it: the average of two
-     * and the plain sum are cut at the bound 300 at 600 and at 300, and a row at either shows where
-     * the bound falls. The bound 100 is stood at by rows of both.
+     * The same bound held against an average over one kept month and over two is one threshold,
+     * though the total of two is cut at twice the bound: a row at the bound of either shows where
+     * it falls.
      */
     @Test
-    void aBoundTheTableWritesIsOneThresholdForEveryComputationReadingIt() {
-        String report = reportOf(AVERAGED_AND_PLAIN);
-        assertEquals(1, count(report, MISSING_ON), report);
-        assertEquals(1, count(report, MISSING_OFF), report);
-        assertTrue(report.contains("0.5 * a.v + 0.5 * b.v: = 300 in gradeOf")
-                && report.contains("a.v + b.v: = 300 in gradeOf"), report);
+    void aBoundIsOneThresholdWhateverNumberOfPositionsTheAverageIsOver() {
+        String report = reportOf(AVERAGE_OF_THE_PAYABLE);
+        // The bounds 100 and 300, each once for the pairs and the three together.
+        assertEquals(2, count(report, MISSING_ON + " (comparison@10"), report);
+        assertEquals(2, count(report, MISSING_OFF + " (comparison@10"), report);
+        assertTrue(report.contains("a.amount + b.amount: = 200 in gradeOf")
+                && report.contains("a.amount + b.amount + c.amount: = 300 in gradeOf"), report);
     }
 
     /** Two points of one line that differ only in the threshold are two obligations in the

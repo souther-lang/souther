@@ -137,10 +137,9 @@ every run — the threshold is the place the computation is cut at (`CutAt`), wh
 computation's own. Owing more than there is leaves a point asking for a row; joining what is not one
 would report a point answered that no row stands at.
 
-The bound is a fact about a reading and no part of which line it is. Two readings that cut one
-quantity at one place are one line, and the equality of a line and of the origin that drew it leaves
-the bound out; read into it, lines that are one split, and the computation they make is no longer
-found to be cut at several places.
+Only a line on a value derived from several positions carries the bound. A reading draws other lines
+as well — the filter an average is made of cuts one position at its own value — and the bound of the
+table is no bound of those.
 
 The document names the threshold under `threshold` in the obligation's id, so that two points of one
 line that differ only in it are two entries.
