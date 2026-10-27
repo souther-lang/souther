@@ -154,6 +154,37 @@ class AStepOfACoarserOrderIsReadAndWrittenAsTheValueItFallsInTest {
                 "the line is on the day, not on the seconds: " + overDateTime);
     }
 
+    /** The call may be named first, or handed to a helper: it is the same step wherever it is
+     *  written. */
+    @Test
+    void theStepIsTheSameWhenTheCallIsNamedOrHandedToAHelper() {
+        String direct = measured("""
+                module w1
+                behavior m : (t: DateTime, today: Date, after: Int) -> Bool
+                let m (t, today, after) = Date.daysBetween(DateTime.toDate(t), today) >= after
+                """);
+        String named = measured("""
+                module w1
+                behavior m : (t: DateTime, today: Date, after: Int) -> Bool
+                let m (t, today, after) = {
+                    let day = DateTime.toDate(t)
+                    Date.daysBetween(day, today) >= after
+                }
+                """);
+        String helped = measured("""
+                module w1
+                behavior m : (t: DateTime, today: Date, after: Int) -> Bool
+                let dayOf (t: DateTime): Date = DateTime.toDate(t)
+                let m (t, today, after) = Date.daysBetween(dayOf(t), today) >= after
+                """);
+        for (String each : List.of(named, helped)) {
+            assertEquals(List.of(), said(each).stream()
+                    .filter(line -> line.startsWith("· not read")).toList(), each);
+            assertTrue(each.contains("DateTime.toDate(t)"), each);
+        }
+        assertTrue(direct.contains("DateTime.toDate(t)"), direct);
+    }
+
     private static String measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
