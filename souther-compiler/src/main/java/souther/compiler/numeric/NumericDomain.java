@@ -120,6 +120,7 @@ public final class NumericDomain<A> {
     private RulesRead<A> read;
     private ClosedStates.Parted<A> closed;
     private Systems<A> systems;
+    private ProjectionCertification certification;
     private Boolean noRow;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
@@ -626,6 +627,15 @@ public final class NumericDomain<A> {
      * which is the only thing a caller may act on — see {@link ProjectionCertification}.
      */
     public ProjectionCertification projectionCertification() {
+        ProjectionCertification had = certification;
+        if (had == null) {
+            had = certificationWorkedOut();
+            certification = had;
+        }
+        return had;
+    }
+
+    private ProjectionCertification certificationWorkedOut() {
         if (isBottom()) {
             return new ProjectionCertification.NothingIsLeft();
         }
