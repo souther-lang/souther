@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BinaryOperator;
 import java.util.regex.MatchResult;
@@ -475,12 +476,12 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         "bonus + 2 * least(touches[*].days by account) - staleAfter"),
                 "Int.max|bonus - 2 * p.days", List.of(
                         "bonus - 2 * least(touches[*].days by account) - staleAfter"));
-        Map<String, List<String>> read = new java.util.TreeMap<>();
+        Map<String, List<String>> read = new TreeMap<>();
         for (String key : expected.keySet()) {
             String[] how = key.split("\\|");
             read.put(key, formsRead(report(measured(BESIDE.formatted(how[1], how[0])))));
         }
-        assertEquals(new java.util.TreeMap<>(expected), read);
+        assertEquals(new TreeMap<>(expected), read);
     }
 
     /**
