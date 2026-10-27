@@ -201,11 +201,10 @@ public final class ClosedStates {
             questions.add(asked);
             closed.add(of(asked));
         }
-        if (everyPartLent && lent.state != null) {
+        if (everyPartLent && lent.complete) {
             return lent;
         }
-        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf,
-                ClosedState.product(closed));
+        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf, null, true);
     }
 
     /**
@@ -233,12 +232,18 @@ public final class ClosedStates {
 
         /** Which part weighs each position. */
         private final Map<A, Integer> partOf;
-        private final ClosedState<A> state;
+
+        /** The closures of the parts put together: worked out when asked for, since a question
+         *  about the positions of one part is answered by that part's closure alone. */
+        private volatile ClosedState<A> state;
+
+        /** Whether every part has its closure, which is what a closure of all the rules is. */
+        private final boolean complete;
 
         private Parted(ClosedStates owner, List<AffineConstraint<A>> rules,
                        List<List<AffineConstraint<A>>> parts, List<ClosureQuestion<A>> questions,
                        List<ClosedState<A>> closed, Map<A, Integer> partOf,
-                       ClosedState<A> state) {
+                       ClosedState<A> state, boolean complete) {
             this.owner = owner;
             this.rules = rules;
             this.parts = parts;
@@ -246,11 +251,13 @@ public final class ClosedStates {
             this.closed = closed;
             this.partOf = partOf;
             this.state = state;
+            this.complete = complete;
         }
 
         /** A closure worked out in one piece, with no parts to lend. */
         private static <A> Parted<A> whole(ClosedState<A> state) {
-            return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state);
+            return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state,
+                    true);
         }
 
         /** {@code parts} of {@code rules}, none of them asked yet. */
@@ -266,12 +273,67 @@ public final class ClosedStates {
                 unasked.add(null);
                 unclosed.add(null);
             }
-            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null);
+            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false);
         }
 
         /** What the rules leave. */
         public ClosedState<A> state() {
-            return state;
+            ClosedState<A> had = state;
+            if (had == null) {
+                had = ClosedState.product(closed);
+                state = had;
+            }
+            return had;
+        }
+
+        /**
+         * Whether the rules leave nothing, which is whether any part does: parts share no position,
+         * so one that leaves nothing leaves the rules together nothing, and none that does leaves
+         * them a value apiece.
+         */
+        public boolean holdsNothing() {
+            ClosedState<A> put = state;
+            if (put != null) {
+                return put.holdsNothing();
+            }
+            for (ClosedState<A> each : closed) {
+                if (each.holdsNothing()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** Whether every part composed every bound it tried to, which is what the parts put
+         *  together do — and nothing is left to compose where a part holds nothing. */
+        public boolean everyBoundWasComposed() {
+            ClosedState<A> put = state;
+            if (put != null) {
+                return put.everyBoundWasComposed();
+            }
+            boolean composed = true;
+            for (ClosedState<A> each : closed) {
+                if (each.holdsNothing()) {
+                    return true;
+                }
+                composed &= each.everyBoundWasComposed();
+            }
+            return composed;
+        }
+
+        /**
+         * What the part weighing {@code position} leaves, or null where no part does — which
+         * includes a closure worked out in one piece, whose state is the only one there is.
+         */
+        public ClosedState<A> partWeighing(A position) {
+            Integer at = partOf.get(position);
+            return at == null || !complete ? null : closed.get(at);
+        }
+
+        /** The rules of the part weighing {@code position}; null where {@link #partWeighing} is. */
+        public List<AffineConstraint<A>> rulesOfThePartWeighing(A position) {
+            Integer at = partOf.get(position);
+            return at == null || !complete ? null : parts.get(at);
         }
 
         /**
@@ -333,7 +395,7 @@ public final class ClosedStates {
             while (kept.size() < asked.size()) {
                 kept.add(null);
             }
-            return new Parted<>(owner, more, parted, asked, kept, into, null);
+            return new Parted<>(owner, more, parted, asked, kept, into, null, false);
         }
 
         /** What {@link #partWeighedBy} answers for a rule weighing no position of any part. */
