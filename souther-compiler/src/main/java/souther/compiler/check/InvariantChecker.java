@@ -961,7 +961,12 @@ public final class InvariantChecker {
             // position itself; `value * value >= 4` comes back about an atom standing for the
             // product, which is not the position and is not a reading of it.
             Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
-            definitions.addAll(ComputedNumbers.definingIn(origin, owed, orders));
+            List<ComputedNumbers.Defining> defining =
+                    ComputedNumbers.definingIn(origin, owed, orders);
+            definitions.addAll(defining);
+            if (defining.size() != owed.parts().size()) {
+                took.statesMoreThanDefinitions(origin);
+            }
             read &= !owed.unreadable();
             k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
         }
@@ -1204,6 +1209,8 @@ public final class InvariantChecker {
             if (read && notGathered.isEmpty()
                     && ComputedNumbers.leavesFree(each.definition(), k.numbers(), account)) {
                 took.freedByDefinition(each.rule(), each.definition().operands());
+            } else {
+                took.statesMoreThanDefinitions(each.rule());
             }
         }
         // And which of the clauses place an edge, asked once the positions have names to be

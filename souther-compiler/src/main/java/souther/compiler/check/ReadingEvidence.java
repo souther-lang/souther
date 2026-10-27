@@ -112,6 +112,8 @@ final class ReadingEvidence {
 
     /** The places each rule defines a number from and so leaves as free as they were. */
     private final Map<RuleRef.Invariant, Set<FactSubject>> freed = new LinkedHashMap<>();
+    /** The rules that say something besides what places are defined as. */
+    private final Set<RuleRef.Invariant> statingMore = new HashSet<>();
 
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef.Invariant rule, FactSubject position) {
@@ -129,6 +131,18 @@ final class ReadingEvidence {
         freed.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
         positions.forEach(position -> record(rule, position));
     }
+
+    /** {@code rule} says something besides the places it defines as numbers. */
+    void statesMoreThanDefinitions(RuleRef.Invariant rule) {
+        statingMore.add(rule);
+    }
+
+    /** Whether {@code rule} says nothing but that places are defined as numbers made of places it
+     *  leaves free ({@link #freedByDefinition}). */
+    boolean isOnlyDefining(RuleRef rule) {
+        return freed.containsKey(rule) && !statingMore.contains(rule);
+    }
+
 
     /** Whether {@code rule} leaves {@code position} as free as it was, being a place its
      *  definition of another is made of ({@link #freedByDefinition}). */
