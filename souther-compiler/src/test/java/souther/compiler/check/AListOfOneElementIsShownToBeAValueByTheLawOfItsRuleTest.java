@@ -47,9 +47,8 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
 
             data Line = { product: Code, net: Amount }
 
-            data Tangled = { product: Code, alt: Code }
-                invariant String.matches("[a-z]+", product.value)
-                    || String.matches("[0-9]+", alt.value)
+            data Tangled = { product: Code, n: Int }
+                invariant n * n == 2401
 
             data Lines = List<Line>
                 invariant nonEmpty = List.length(value) >= 1
@@ -104,8 +103,8 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
     @Test
     void anElementNoValueOfWhichIsShownShowsNoListOfIt() {
         assertFalse(readingOf("TangledQuote").projectionAt(RuleKey.of("total")).isCertified(),
-                "a list of one needs one element, and `Tangled`'s choice over two fields is not"
-                        + " shown to leave one");
+                "a list of one needs one element, and a number whose square is 2401 is none of"
+                        + " the values written down for `Tangled`");
     }
 
     @Test

@@ -186,6 +186,7 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                     NumberAt.countOf(it.position(), it.counted(), it.through());
             case NumericTerm.CodePointValueSum it -> NumberAt.codePointSumOf(it.position());
             case NumericTerm.CodePointAt it -> NumberAt.codePointAt(it.position(), it.index());
+            case NumericTerm.WholeUnitsOf it -> NumberAt.wholeUnitsOf(it.position(), it.operation());
         };
     }
 

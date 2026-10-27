@@ -210,6 +210,31 @@ final class ConstantAlgebra {
                     return Optional.of(s.contains(sub));
                 }
             }
+            // The decimal operations, on the account of the arithmetic below: a sum, a difference and
+            // a product are the operators', and a comparison is by amount and not by how a decimal
+            // was written. A rounding is not here: which operations round, and what each way of
+            // rounding does, are the library's to say ({@link FoldedValue#rounded}).
+            case DECIMAL_ADD, DECIMAL_SUBTRACT, DECIMAL_MULTIPLY -> {
+                if (args.size() == 2 && args.get(0) instanceof BigDecimal a
+                        && args.get(1) instanceof BigDecimal b) {
+                    return arith(switch (kernel) {
+                        case DECIMAL_ADD -> BinOp.ADD;
+                        case DECIMAL_SUBTRACT -> BinOp.SUB;
+                        default -> BinOp.MUL;
+                    }, a, b);
+                }
+            }
+            case DECIMAL_COMPARE -> {
+                if (args.size() == 2 && args.get(0) instanceof BigDecimal a
+                        && args.get(1) instanceof BigDecimal b) {
+                    return Optional.of((long) a.compareTo(b));
+                }
+            }
+            case DECIMAL_FROM_INT -> {
+                if (args.size() == 1 && args.get(0) instanceof Long n) {
+                    return Optional.of(BigDecimal.valueOf(n));
+                }
+            }
             default -> { }
         }
         return Optional.empty();
@@ -249,7 +274,7 @@ final class ConstantAlgebra {
      * {@code Decimal} and an {@code Int} together, and the callers ask only where one side already
      * holds a ratio.
      */
-    private static ExactRatio exactly(Object constant) {
+    static ExactRatio exactly(Object constant) {
         return switch (constant) {
             case ExactRatio r -> r;
             case Long whole -> ExactRatio.of(whole);

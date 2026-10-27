@@ -103,6 +103,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheCodePointAt(index));
     }
 
+    /** The step of the order {@code operation} answers on that the value at {@code position} falls
+     *  in. */
+    public static <P> NumberAt<P> wholeUnitsOf(P position, ValueName operation) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheWholeUnitsOf(operation));
+    }
+
     /** How many elements of the container {@code position} stands inside hold there what the
      *  element under consideration holds. */
     public static <P> NumberAt<P> multiplicityOf(P position) {
@@ -216,6 +222,18 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         record OfTheCodePointAt(int index) implements OfWhatNumber {}
 
         /**
+         * The step of the coarser order {@code operation} answers on that the value standing there
+         * falls in: another number of the place than the value itself, and than the step another
+         * operation declaring another unit answers.
+         */
+        record OfTheWholeUnitsOf(ValueName operation) implements OfWhatNumber {
+
+            public OfTheWholeUnitsOf {
+                Objects.requireNonNull(operation, "this one names the operation");
+            }
+        }
+
+        /**
          * How many elements of the container the place stands inside hold at it what the element
          * under consideration holds there.
          *
@@ -260,7 +278,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * part of which number it is: the least of one place by one key and by another are two
          * numbers at one place.
          */
-        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key)
+        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key, ValueName through)
                 implements OfWhatNumber {
 
             public OfTheExtremeOfItsKey {
@@ -268,14 +286,22 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 key = List.copyOf(key);
             }
 
+            /** The end of the values themselves. */
+            public OfTheExtremeOfItsKey(Extreme extreme, List<String> key) {
+                this(extreme, key, null);
+            }
+
             /** This number of what stands at the place spelled {@code position}, in the words a
-             *  report and a diagnostic write it in. */
+             *  report and a diagnostic write it in. The end of the steps a value falls in, where
+             *  it is, names the operation that counts them. */
             public String spelledAt(String position) {
                 String end = switch (extreme) {
                     case Extreme.Least _ -> "least";
                     case Extreme.Greatest _ -> "greatest";
                 };
-                return end + "(" + position + " by " + keySpelled(key) + ")";
+                String values = through == null ? position
+                        : ((ValueName.Stdlib) through).qualified() + "(" + position + ")";
+                return end + "(" + values + " by " + keySpelled(key) + ")";
             }
 
             /**
@@ -312,6 +338,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     "List.sum(String.codePoints(" + position + "))";
             case OfWhatNumber.OfTheCodePointAt at ->
                     "List.get(" + at.index() + ", String.codePoints(" + position + "))";
+            case OfWhatNumber.OfTheWholeUnitsOf units -> units.operation() + "(" + position + ")";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
             case OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> kept.keptBy() == null
                     ? "occurrences(" + position + ")"

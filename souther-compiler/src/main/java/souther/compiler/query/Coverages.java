@@ -220,7 +220,7 @@ final class Coverages {
         souther.compiler.partition.BehaviorSetStatements.Read sets =
                 souther.compiler.partition.BehaviorSetStatements.of(behavior.name(), analysis, stated, read,
                         read.domain().parameterReads(), standing, distinctions, guards.forks(),
-                        reaches);
+                        reaches, guards.partnered());
         List<souther.compiler.partition.LineDrawn> declared =
                 souther.compiler.partition.DeclaredThresholds.between(behavior.name(), read);
         // Every producer of one kind of line, put together before the position is divided. Two
@@ -233,8 +233,8 @@ final class Coverages {
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
-                        both(clauses.evidence(), guards.evidence()), sets.statements(),
-                        sets.blocked(),
+                        both(clauses.evidence(), guards.evidence()),
+                        sets.statements(), sets.blocked(),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), filed.blocked(), distinctions, ruleReading,

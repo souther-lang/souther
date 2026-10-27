@@ -159,6 +159,8 @@ sealed interface InputAtom {
                         "List.sum(String.codePoints(" + at + "))";
                 case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
                         "List.get(" + point.index() + ", String.codePoints(" + at + "))";
+                case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                        units.operation() + "(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + at + ")";

@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.NumberAt;
@@ -12,6 +14,8 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
@@ -27,6 +31,8 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -110,7 +116,8 @@ public sealed interface NumericTerm
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
     sealed interface FromOnePosition extends NumericTerm
-            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum, CodePointAt {
+            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum, CodePointAt,
+                    WholeUnitsOf {
 
         /**
          * The single input position this term is read from.
@@ -612,6 +619,198 @@ public sealed interface NumericTerm
     }
 
     /**
+     * How the steps an operation counts of the value at a position are made: against the type of
+     * what stands there, which only the reading of the input knows — or null where they are not of
+     * it.
+     */
+    @FunctionalInterface
+    interface StepsAt {
+
+        WholeUnitsOf of(ValueName.Stdlib operation, TermPath position);
+    }
+
+    /**
+     * The step of a coarser order that the value at {@code position} falls in, as the operation
+     * says: {@code DateTime.toDate} of a date-time is the day its second falls in.
+     *
+     * <p>A number of one value, counted on the order the operation answers: the step is
+     * {@code floor(count / perUnit)} of the count the value stands at, with {@code perUnit} the
+     * operation's own declaration ({@code CountsTheWholeUnitsOf}) and not a number kept here. What a
+     * comparison of it states of the value is stated through the steps the value falls in, which is
+     * the pullback the readers of a comparison take, and the term is no form of the value.
+     *
+     * <p>Keyed by the operation the call resolved to, so two operations declaring the same unit are
+     * two terms.
+     */
+    final class WholeUnitsOf implements FromOnePosition {
+
+        private final ValueName.Stdlib operation;
+        private final TermPath position;
+        /** The steps some value of the position's type falls in, or null where that is not worked
+         *  out. Not part of which number this is: it follows from the operation and the type of
+         *  what stands at the position, which a position has one of. */
+        private final NumericDomain.Bounds image;
+        /** Whether every step of the answer's order is one of them. */
+        private final boolean fills;
+
+        private WholeUnitsOf(ValueName.Stdlib operation, TermPath position,
+                             NumericDomain.Bounds image, boolean fills) {
+            this.operation = Objects.requireNonNull(operation, "taken by an operation");
+            this.position = Objects.requireNonNull(position, "of somewhere");
+            this.image = image;
+            this.fills = fills;
+        }
+
+        /**
+         * The steps of the order {@code operation} answers that the value at {@code position}
+         * falls in, or null where the operation declares no such count or what stands there is not
+         * what it counts.
+         *
+         * <p>The one way one is made: the operation and the type of the value go together here and
+         * nowhere else, and what the steps reach is worked out from the two orders at the same
+         * time ({@link #stepsFallenInto}), so a term that exists has an answer to whether its
+         * steps are all there are.
+         */
+        public static WholeUnitsOf of(ValueName.Stdlib operation, TermPath position, Type at,
+                                      NewtypeInners inners, DeclarationAccess declarations) {
+            BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+            Type counted = facts.wholeUnitsCountedOn(operation);
+            Type answers = facts.wholeUnitsAnswered(operation);
+            Type base = at == null ? null : TypeOps.base(at, inners);
+            Carrier observed = base == null || counted == null ? null
+                    : Carrier.ofValue(base, declarations);
+            Carrier answered = answers == null ? null : Carrier.ofValue(answers, declarations);
+            if (observed == null || answered == null || !observed.counts()
+                    || !counted.equals(base)) {
+                return null;
+            }
+            long perUnit = facts.wholeUnitsPerStep(operation).orElseThrow();
+            return new WholeUnitsOf(operation, position,
+                    stepsFallenInto(observed, answered, perUnit),
+                    stepsFill(observed, answered, perUnit));
+        }
+
+        /** The steps some value of the position's type falls in, or null where that is not worked
+         *  out. */
+        public NumericDomain.Bounds image() {
+            return image;
+        }
+
+        /** Whether every step of the answer's order is one some value of the position's type falls
+         *  in: whether a reader may take a row to stand at any of them. */
+        public boolean stepsFillTheAnswersOrder() {
+            return fills;
+        }
+
+        /**
+         * The steps of the order {@code answered} that some value of the order {@code observed}
+         * falls in, when {@code perUnit} steps of the second make one of the first — or null where
+         * an end of {@code observed} is not a value it holds, so that what it reaches is not
+         * worked out.
+         *
+         * <p>The one place that says which steps a value falls in, and so the one place a reader
+         * learns whether they are all of the steps there are. A declaration of the unit says what a
+         * step is and nothing of what the values reach: the seconds of a day fall in one step, and
+         * counted in hours they fill twenty-four of the integers and not the integers.
+         *
+         * <p>Worked out of the ends of the two orders. A step keeps the order of the count it is
+         * the step of, and consecutive counts fall in consecutive steps or the same one, so the
+         * steps are every whole number from the step of the first count to the step of the last.
+         */
+        public static NumericDomain.Bounds stepsFallenInto(Carrier observed, Carrier answered,
+                                                           long perUnit) {
+            Endpoint low = stepOfTheEnd(observed.extent().low(), perUnit);
+            Endpoint high = stepOfTheEnd(observed.extent().high(), perUnit);
+            boolean unknown = (observed.extent().low() != null && low == null)
+                    || (observed.extent().high() != null && high == null);
+            return unknown ? null : new NumericDomain.Bounds(low, high).meet(
+                    new NumericDomain.Bounds(answered.extent().low(), answered.extent().high()));
+        }
+
+        /**
+         * Whether every step of the order {@code answered} is one some value of {@code observed}
+         * falls in: what a reader may take for a run every value of which some row stands at.
+         */
+        public static boolean stepsFill(Carrier observed, Carrier answered, long perUnit) {
+            NumericDomain.Bounds fallenInto = stepsFallenInto(observed, answered, perUnit);
+            return fallenInto != null && new NumericDomain.Bounds(answered.extent().low(),
+                    answered.extent().high()).liesWithin(fallenInto);
+        }
+
+        /**
+         * The steps the values fall in where the rules hold them to {@code values}: each end taken
+         * to the step it falls in, which keeps the order, so every value of the run falls in a step
+         * of the one it is taken to. An end a run leaves out is taken as one it holds, so the steps
+         * are the ones the run could fall in and never fewer — or null where an end is not a count.
+         *
+         * <p>What the rules hold the end of some steps to is this and the steps' own image
+         * ({@link #image}) together: a lower bound on the seconds is a lower bound on the days.
+         */
+        public NumericDomain.Bounds stepsFallenIntoBy(NumericDomain.Bounds values) {
+            if (values == null) {
+                return null;
+            }
+            Endpoint low = stepOfAnEnd(values.min(), perUnit(), true);
+            Endpoint high = stepOfAnEnd(values.max(), perUnit(), true);
+            boolean unknown = (values.min() != null && low == null)
+                    || (values.max() != null && high == null);
+            return unknown ? null : new NumericDomain.Bounds(low, high);
+        }
+
+        private static Endpoint stepOfTheEnd(Endpoint end, long perUnit) {
+            return stepOfAnEnd(end, perUnit, false);
+        }
+
+        /** The step the count at {@code end} falls in, as an end; null where there is no end or it
+         *  is not a count the value holds, or — unless {@code widening} — it is left out. */
+        private static Endpoint stepOfAnEnd(Endpoint end, long perUnit, boolean widening) {
+            if (end == null || (!widening && !end.inclusive())
+                    || !(end.at() instanceof Count count)) {
+                return null;
+            }
+            return ExactRatio.of(count.at()).dividedBy(ExactRatio.of(perUnit))
+                    .flatMap(ExactRatio::floor) instanceof ExactAnswer.Held<BigInteger>(var step)
+                    ? Endpoint.inclusive(new Count(new BigDecimal(step))) : null;
+        }
+
+        /** The operation whose answer this term is. */
+        public ValueName.Stdlib operation() {
+            return operation;
+        }
+
+        /** How many steps of the value's order make one step of the answer's. */
+        public long perUnit() {
+            return DefaultBoundOperationFacts.get().wholeUnitsPerStep(operation).orElseThrow();
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        @Override
+        public WholeUnitsOf movedTo(PlacesMoved moved) {
+            return new WholeUnitsOf(operation, moved.put(position), image, fills);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof WholeUnitsOf units && operation.equals(units.operation)
+                    && position.equals(units.position);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(WholeUnitsOf.class, operation, position);
+        }
+
+        @Override
+        public String toString() {
+            return operation + "(" + position + ")";
+        }
+    }
+
+    /**
      * How many elements of a container hold, at one place inside the element, the value the
      * element under consideration holds there.
      *
@@ -723,13 +922,35 @@ public sealed interface NumericTerm
         private final TermPath key;
         private final TermPath value;
         private final Extreme extreme;
+        private final WholeUnitsOf steps;
 
         private ExtremeOfItsKey(TermPath container, TermPath key, TermPath value,
-                                Extreme extreme) {
+                                Extreme extreme, WholeUnitsOf steps) {
             this.container = Objects.requireNonNull(container, "taken among a container's elements");
             this.key = Objects.requireNonNull(key, "of the elements alike at one place");
             this.value = Objects.requireNonNull(value, "of what they hold at another");
             this.extreme = Objects.requireNonNull(extreme, "and one end of it");
+            this.steps = steps;
+        }
+
+        /**
+         * The same, of the steps {@code steps} counts of the values — the day the latest second
+         * falls on — or null where {@code steps} is not of the value at {@code value}.
+         *
+         * <p>A step keeps the order of what it is the step of, so the end of the steps is the step
+         * of the end, and this is one number however many elements an end is taken among. The
+         * steps are a term that was made against the type of the value, so an operation and a value
+         * of another type are never met here.
+         */
+        public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
+                                         Extreme extreme, WholeUnitsOf steps) {
+            if (steps != null && !steps.position().equals(value)) {
+                return null;
+            }
+            return container != null && key != null && value != null && extreme != null
+                    && fieldsBelowAnElement(container, key)
+                    && fieldsBelowAnElement(container, value)
+                    ? new ExtremeOfItsKey(container, key, value, extreme, steps) : null;
         }
 
         /**
@@ -740,10 +961,7 @@ public sealed interface NumericTerm
          */
         public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
                                          Extreme extreme) {
-            return container != null && key != null && value != null && extreme != null
-                    && fieldsBelowAnElement(container, key)
-                    && fieldsBelowAnElement(container, value)
-                    ? new ExtremeOfItsKey(container, key, value, extreme) : null;
+            return of(container, key, value, extreme, null);
         }
 
         /**
@@ -752,13 +970,36 @@ public sealed interface NumericTerm
          */
         public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
                                                    Extreme extreme) {
+            return ofTheValueAt(value, key, extreme, null);
+        }
+
+        /** The same, of the steps {@code steps} counts of the values. */
+        public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
+                                                   Extreme extreme, WholeUnitsOf steps) {
             List<TermPath> holding = value.containersHoldingIt();
             if (holding.isEmpty()) {
                 return null;
             }
             TermPath container = holding.getLast();
             return of(container, ElementProjection.ofFields(key).from(container.element()), value,
-                    extreme);
+                    extreme, steps);
+        }
+
+        /** The steps of the values this is the end of, or null where it is the end of the values
+         *  themselves. */
+        public WholeUnitsOf steps() {
+            return steps;
+        }
+
+        /** The operation whose steps of the values this is the end of, or null where it is the end
+         *  of the values themselves. */
+        public ValueName.Stdlib through() {
+            return steps == null ? null : steps.operation();
+        }
+
+        /** How many steps of the values' order make one of the steps this is the end of. */
+        public long perUnit() {
+            return steps.perUnit();
         }
 
         /** The way from an element of the container to {@link #key()}. */
@@ -798,15 +1039,20 @@ public sealed interface NumericTerm
         }
 
         /**
-         * The number this one is always one of the values of: what stands at {@link #value()}.
+         * The number this one is always one of the values of: what stands at {@link #value()}, or
+         * the steps those values fall in where this is the end of the steps.
          *
          * <p>Which values this number can take — the run the rules leave it, the set a place
          * admits — is that number's question, since an end of some of the values is one of them.
          * Whether a row exists holding one at it is not: that takes a container holding the
          * elements, which no answer about the values says exists.
+         *
+         * <p>In the order this number is counted on, which is the answer's for the steps. Handed
+         * the value itself, a reader asking what the end can be would be answered in the units of
+         * the seconds for a number of days.
          */
-        public ValueOf valuesTakenFrom() {
-            return new ValueOf(value);
+        public FromOnePosition valuesTakenFrom() {
+            return steps != null ? steps : new ValueOf(value);
         }
 
         /** Where the values one end of which is taken stand, which is where a reader is sent and no
@@ -820,25 +1066,26 @@ public sealed interface NumericTerm
          *  are no longer one value of each element of the container moved. */
         @Override
         public ExtremeOfItsKey movedTo(PlacesMoved moved) {
-            return of(moved.put(container), moved.put(key), moved.put(value), extreme);
+            return of(moved.put(container), moved.put(key), moved.put(value), extreme,
+                    steps == null ? null : steps.movedTo(moved));
         }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof ExtremeOfItsKey that && container.equals(that.container)
                     && key.equals(that.key) && value.equals(that.value)
-                    && extreme.equals(that.extreme);
+                    && extreme.equals(that.extreme) && Objects.equals(steps, that.steps);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(container, key, value, extreme);
+            return Objects.hash(container, key, value, extreme, steps);
         }
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields())
-                    .spelledAt(value.toString());
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields(),
+                    through()).spelledAt(value.toString());
         }
     }
 
@@ -1156,7 +1403,7 @@ public sealed interface NumericTerm
          */
         public static NumericTerm spelled(TermPath elements, ElementKey key,
                                           ElementValue value, Type each, Gathering gathering,
-                                          KeptOccurrences selection) {
+                                          KeptOccurrences selection, StepsAt stepsAt) {
             if (selection == null && gathering instanceof Gathering.End(Extreme extreme)
                     && value != null
                     && value.asAPlace() instanceof ElementProjection place && elements != null
@@ -1165,6 +1412,21 @@ public sealed interface NumericTerm
                     && one.fields() != null) {
                 TermPath at = place.from(elements);
                 return at == null ? null : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme);
+            }
+            // The end of the steps one place falls in is the step of the end of the place, so it
+            // is the end of the place through the operation that counts them.
+            ElementValue.StepsOfAPlace steps = value == null ? null
+                    : ElementValue.asTheStepsOfAPlace(value);
+            if (selection == null && gathering instanceof Gathering.End(Extreme extreme)
+                    && steps != null && steps.weight().equals(ExactRatio.ONE)
+                    && steps.constant().isZero() && elements != null
+                    && elements.containersHoldingIt().size() == 1
+                    && key instanceof ElementKey.At(ElementProjection one)
+                    && one.fields() != null) {
+                TermPath at = steps.place().from(elements);
+                WholeUnitsOf made = at == null ? null : stepsAt.of(steps.operation(), at);
+                return made == null ? null
+                        : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme, made);
             }
             return of(elements, key, value, each, gathering, selection);
         }
@@ -1744,6 +2006,8 @@ public sealed interface NumericTerm
                             count.through());
             case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
             case CodePointAt at -> new NumberAt.OfWhatNumber.OfTheCodePointAt(at.index());
+            case WholeUnitsOf units ->
+                    new NumberAt.OfWhatNumber.OfTheWholeUnitsOf(units.operation());
             case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
             case OccurrencesOfItsValue occurrences ->
                     new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
@@ -1754,7 +2018,7 @@ public sealed interface NumericTerm
             case OccurrencesOfAKey asked ->
                     new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(asked.key().discriminated());
             case ExtremeOfItsKey extreme -> new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(
-                    extreme.extreme(), extreme.keyField().fields());
+                    extreme.extreme(), extreme.keyField().fields(), extreme.through());
             // The operation and the values at the place, where the values are what stands there.
             // What a walk computed of each element, and which nodes of a tree a container is read
             // in, are not said by the place the run is read from.
@@ -1799,6 +2063,11 @@ public sealed interface NumericTerm
                     CodePointClassCount.of(other, count.counted(), count.through(), at, inners);
             case CodePointValueSum _ -> CodePointValueSum.of(other, at, inners);
             case CodePointAt point -> CodePointAt.of(other, point.index(), at, inners);
+            // The value it counts is of the type the operation counts, which is all that moving
+            // asks: the order it is counted on was settled when the term was made.
+            case WholeUnitsOf units -> at != null && DefaultBoundOperationFacts.get()
+                    .wholeUnitsCountedOn(units.operation()).equals(TypeOps.base(at, inners))
+                    ? new WholeUnitsOf(units.operation(), other, units.image, units.fills) : null;
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
@@ -1856,6 +2125,10 @@ public sealed interface NumericTerm
             // A scalar value, which is from nought to the last there is.
             case CodePointAt _ -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
                     Endpoint.inclusive(Count.of(Character.MAX_CODE_POINT)));
+            // The steps some value of the position's type falls in, which is all of the answer's
+            // order or a part of it, and open where that was not worked out.
+            case WholeUnitsOf steps -> steps.image == null ? NumericDomain.Bounds.OPEN
+                    : steps.image;
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);

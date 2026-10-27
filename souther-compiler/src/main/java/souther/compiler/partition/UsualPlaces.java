@@ -32,6 +32,9 @@ final class UsualPlaces {
             // position's own order.
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ ->
                     carrier.usualPlace(today);
+            // A step of a coarser order is a place on that order, so it is near where that order is:
+            // the day a date-time falls on is near today.
+            case NumericTerm.WholeUnitsOf _ -> carrier.usualPlace(today);
             case NumericTerm.TakenOf taken -> ofWhatIsTaken(taken.takenAs(), today);
             // Counts and totals of what a value holds, which start at nought.
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,

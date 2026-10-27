@@ -9,6 +9,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.UnreadComparison;
@@ -112,17 +113,19 @@ public final class GuardThresholds {
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
                          Map<ConditionOccurrence, Citation> conditionsMet,
-                         WhereTheOperationsStand operationsStanding) {
+                         WhereTheOperationsStand operationsStanding,
+                         List<BehaviorSetStatements.Partnered> partnered) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of(), WhereTheOperationsStand.NONE);
+                        List.of(), Map.of(), WhereTheOperationsStand.NONE, List.of());
 
         public Guards {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             forks = List.copyOf(forks);
             conditionsMet = Map.copyOf(conditionsMet);
+            partnered = List.copyOf(partnered);
         }
 
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
@@ -202,6 +205,7 @@ public final class GuardThresholds {
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
+        List<BehaviorSetStatements.Partnered> partnered = new ArrayList<>();
         // One reading of what the model states, and everything below is that reading asked
         // something. Where a comparison is written, what its names point at, what a row had
         // satisfied to get there, whether a line may be drawn on it and what it came to are five
@@ -294,7 +298,8 @@ public final class GuardThresholds {
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, aRunStops, found, between, withoutALine);
+                                    reaches, arrived, aRunStops, found, between, partnered,
+                                    withoutALine);
                         }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
@@ -346,7 +351,7 @@ public final class GuardThresholds {
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet(),
-                comparisons.operationsStanding());
+                comparisons.operationsStanding(), partnered);
     }
 
     /**
@@ -797,10 +802,13 @@ public final class GuardThresholds {
                                ComparisonAssessment read, boolean aRunStops,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
+                               List<BehaviorSetStatements.Partnered> partnered,
                                RulesWithNoLine.Gathered withoutALine) {
         // Which question places this comparison, asked once here. The two readers below say the
         // same thing about one rule, and asking apiece would let them come to say two.
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
+        partnered.addAll(stringsPartnersCanHold(behavior, stated, wrote, anchor, read,
+                partnered.size()));
         publish(behavior, stated, wrote, anchor, read, withoutALine);
         if (aRunStops) {
             withoutALine.mayStopARun(
@@ -815,6 +823,38 @@ public final class GuardThresholds {
                         part, cutting, authored));
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
+    }
+
+    /**
+     * What a comparison of two strings says of each, as the strings its partner can hold.
+     *
+     * <p>A statement about a position's own values, though the rule is a relation: where the two
+     * are free of one another the equality can come out true at a string exactly when the partner
+     * can hold it, so the strings the partner cannot hold are a class of this position the rule
+     * parts from the rest. It is not a predicate the string meets, and is said as what the
+     * partner can be.
+     *
+     * @param first how many readings of this kind are already filed, which makes the occurrence
+     *              of each new one its own
+     */
+    private static List<BehaviorSetStatements.Partnered> stringsPartnersCanHold(
+            String behavior, ModelOccurrence stated, SourceConstructOrigin wrote,
+            RuleReportAnchor anchor, ComparisonAssessment read, int first) {
+        if (!(read instanceof ComparisonAssessment.AcrossPositions across)) {
+            return List.of();
+        }
+        List<BehaviorSetStatements.Partnered> out = new ArrayList<>();
+        for (Map.Entry<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>
+                each : across.left().partnered().entrySet()) {
+            UndividedByARelation.StringsAPartnerCanHold strings = each.getValue();
+            PredicateOrigin origin = new PredicateOrigin(
+                    new PredicateOccurrence(first + out.size()),
+                    new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
+            out.add(new BehaviorSetStatements.Partnered(origin,
+                    new PredicateStatement.CanBeTheValueOf(strings.partner()), each.getKey(),
+                    strings.canBe()));
+        }
+        return out;
     }
 
     /**

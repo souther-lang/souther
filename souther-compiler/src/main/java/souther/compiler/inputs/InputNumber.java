@@ -141,12 +141,36 @@ public final class InputNumber {
         // no number here.
         return switch (reads.pathOf(e, source.newtypes())) {
             case PathResolution.At(var at) -> LinearForm.atom(new NumericTerm.ValueOf(at));
-            case PathResolution.NotAPosition _ -> null;
+            // Asked only of what stands at no position, which is what a call is: following what an
+            // expression stands as is a walk of its own, and every value of the input would pay it.
+            case PathResolution.NotAPosition _ -> atomOf(wholeUnitsOf(e, inputs, reads, source));
             // And a number of the input is the value at one position. A name standing at one of
             // several would be a number at whichever of them a reader picked, and a line drawn on
             // it would fall at a place the rule may say nothing about.
             case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
         };
+    }
+
+    /**
+     * The step of a coarser order that the value at a location falls in, where {@code e} is a call
+     * of an operation counting whole units, or null where it is none.
+     *
+     * <p>Of a location only: the date of a date-time made of other arithmetic names no position a
+     * row could be asked to hold.
+     */
+    private static NumericTerm wholeUnitsOf(Core e, InputDomain inputs, InputReads reads,
+                                            RuleReadingSource source) {
+        // The call itself, as a taking is read: the walk that reads the arithmetic has followed the
+        // names already, so what reaches here as a name is one standing for no call.
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        Core counted = DefaultBoundOperationFacts.get().wholeUnitsCountedIn(applied);
+        if (counted == null || !(reads.pathOf(counted, source.newtypes())
+                instanceof PathResolution.At(var at))
+                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        return NumericTerm.WholeUnitsOf.of(operation, at, inputs.typeAt(at, source),
+                source.inners(), source.declarations());
     }
 
     /** {@code term} as a form of it alone, or null where there is none. */

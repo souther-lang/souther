@@ -20,8 +20,11 @@ import java.util.List;
  * @param asked the relations the operands must hold for every operator read to answer, less what
  *              was already held where they were read
  * @param read  whether every operator the clause may work out is among them
+ * @param bindingsRead whether every operator in the value a binding of the clause is given is
+ *              among them. A binding's value is worked out whether or not the clause reads its
+ *              name, so an operator there is one the clause's statements do not account for
  */
-record WorkingOutNeeds(List<NumericConstraint> asked, boolean read) {
+record WorkingOutNeeds(List<NumericConstraint> asked, boolean read, boolean bindingsRead) {
 
     /** A clause working nothing out that can stop a run. */
     static final WorkingOutNeeds NONE = new WorkingOutNeeds(List.of(), true);
@@ -33,11 +36,27 @@ record WorkingOutNeeds(List<NumericConstraint> asked, boolean read) {
         asked = List.copyOf(asked);
     }
 
+    /** What a clause needs where every binding's value it holds, if any, was read. */
+    WorkingOutNeeds(List<NumericConstraint> asked, boolean read) {
+        this(asked, read, true);
+    }
+
     /** What both of two clauses need, which a run working one out then the other needs together. */
     WorkingOutNeeds and(WorkingOutNeeds other) {
         List<NumericConstraint> both = new ArrayList<>(asked);
         both.addAll(other.asked);
-        return new WorkingOutNeeds(both, read && other.read);
+        return new WorkingOutNeeds(both, read && other.read, bindingsRead && other.bindingsRead);
+    }
+
+    /**
+     * This, under a binding whose value was worked out and was {@code valueRead} or was not.
+     *
+     * <p>What the value needs is in {@link #asked} by {@link #and}; this says where an operator
+     * the value holds that was not read stands, so that a caller attributing {@code read} to the
+     * statements of the clause can tell the two apart.
+     */
+    WorkingOutNeeds underABindingWhoseValue(boolean valueRead) {
+        return new WorkingOutNeeds(asked, read, bindingsRead && valueRead);
     }
 
     /**
@@ -49,6 +68,7 @@ record WorkingOutNeeds(List<NumericConstraint> asked, boolean read) {
      * all of it.
      */
     WorkingOutNeeds onlyOnSomeRuns() {
-        return asked.isEmpty() && read ? this : UNREAD;
+        return asked.isEmpty() && read ? this
+                : new WorkingOutNeeds(List.of(), false, bindingsRead);
     }
 }

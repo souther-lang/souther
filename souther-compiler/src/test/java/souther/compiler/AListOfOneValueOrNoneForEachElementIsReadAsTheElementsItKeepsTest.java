@@ -279,8 +279,9 @@ class AListOfOneValueOrNoneForEachElementIsReadAsTheElementsItKeepsTest {
                         + "constant=-3, coefs={nums[*].n=1}], proposition=GT] by key)"
                         + " RULE_ABOUT_A_RUN"),
                 notRead(leastOfKept("p.n", "List.filter(p -> p.n > 3, nums)")));
-        assertEquals(List.of("least({1·n + 1 | nums[*]} kept by nums meeting Affine[form="
-                        + "LinearForm[constant=-3, coefs={nums[*].n=1}], proposition=GT] by key)"
+        // A constant added to every element is added to the end, which is the end of the place.
+        assertEquals(List.of("least(nums[*].n kept by nums meeting Affine[form=LinearForm["
+                        + "constant=-3, coefs={nums[*].n=1}], proposition=GT] by key)"
                         + " RULE_ABOUT_A_RUN"),
                 notRead(leastOfKept("p.n + 1", "List.filter(p -> p.n > 3, nums)")));
         // Kept by two statements one after the other is kept by both, which is no one statement

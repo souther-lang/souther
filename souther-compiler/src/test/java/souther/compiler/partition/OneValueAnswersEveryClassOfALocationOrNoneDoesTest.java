@@ -28,6 +28,8 @@ import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -414,6 +416,78 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 assertInstanceOf(TermRealizations.Realization.None.class, picked,
                         picked::toString).why());
+    }
+
+    /**
+     * A date-time asked for beside the day it falls on, each held to a line of its own.
+     *
+     * <p>The day is a number read off the value, as an hour is: the value's candidates are the
+     * ones its own demand leaves, and the day is read off each of them.
+     */
+    private static final String A_DATE_TIME_AND_ITS_DAY = """
+            module example.dated
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Slot = { at: DateTime }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if DateTime.toDate(slot.at) >= Date("2026-03-01")
+                    && slot.at >= DateTime("2026-03-15T12:00:00") then Late else Early
+            """;
+
+    /** The exact numbers of the date-time and of its day, asked for together. */
+    private static SequencedMap<RealizationTarget.OfANumber, NumericSet> exactlyTheSecondAndTheDay(
+            Model model, String at, String day) {
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
+        for (Axis axis : model.partitioning.axes()) {
+            boolean ofTheDay = axis.term() instanceof NumericTerm.WholeUnitsOf;
+            long count = ofTheDay ? LocalDate.parse(day).toEpochDay()
+                    : LocalDateTime.parse(at).toEpochSecond(ZoneOffset.UTC);
+            out.put(RealizationTarget.of(axis.term()), new NumericSet.At(Count.of(count)));
+        }
+        return out;
+    }
+
+    /**
+     * A date-time and the day it falls on are answered by one value when one falls on that day at
+     * that second, and by none when no second of the day is that one.
+     *
+     * <p>The group was a capability this compiler lacked: a number of the day beside the date-time
+     * itself was declined, so a row at a point of the day that also had to stand at a point of the
+     * second was never written, though the second is in the day.
+     */
+    @Test
+    void aDateTimeAndTheDayItFallsOnAreAnsweredByOneValueWhereOneIsInTheOther() {
+        Model model = new Model(A_DATE_TIME_AND_ITS_DAY);
+
+        TermRealizations.Realization made = model.answering(exactlyTheSecondAndTheDay(model,
+                "2026-03-15T12:00:00", "2026-03-15"));
+        List<FixtureTemplate> built = assertInstanceOf(TermRealizations.Realization.Built.class,
+                made, made::toString).values();
+        assertEquals(List.of("DateTime(\"2026-03-15T12:00:00\")"),
+                built.stream().map(FixtureTemplate::text).toList());
+
+        TermRealizations.Realization apart = model.answering(exactlyTheSecondAndTheDay(model,
+                "2026-03-15T12:00:00", "2026-03-01"));
+        assertInstanceOf(TermRealizations.Realization.NoNumberTheDeclarationsAdmit.class, apart,
+                "the second is not in that day, and every value tried was read through both");
+    }
+
+    /** Asked for with the value, the day is one more number read off it, and the group is written
+     *  as the value it is read off. */
+    @Test
+    void theDayBesideTheValueItselfIsAGroupWithAWayToBeWritten() {
+        Model model = new Model(A_DATE_TIME_AND_ITS_DAY);
+        List<RealizationTarget> group = new ArrayList<>();
+        model.partitioning.axes().forEach(axis -> group.add(RealizationTarget.of(axis.term())));
+
+        assertInstanceOf(TermRealizations.JointBuilder.ItsOwnValueAndWhatIsTakenOfIt.class,
+                assertInstanceOf(TermRealizations.JointRealization.Supported.class,
+                        TermRealizations.jointRealizationOf(group)).builder());
     }
 
     /**

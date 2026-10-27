@@ -73,6 +73,36 @@ public sealed interface PredicateStatement {
     }
 
     /**
+     * That some value of another position is the value here: the strings an equality between two
+     * positions can hold at one of them, given what the other position may hold.
+     *
+     * <p>Its own arm because the rule is a relation and the class it makes is called by the
+     * partner it is relative to. A class of {@code code} that no value of {@code prefix} equals is
+     * not a class of strings that fail a predicate; which strings those are depends on the other
+     * position's declarations and on nothing the author wrote about this one.
+     *
+     * @param other what the model calls the other position
+     */
+    record CanBeTheValueOf(String other) implements PredicateStatement {
+
+        public CanBeTheValueOf {
+            if (other == null) {
+                throw new IllegalArgumentException("a relation is to some other position");
+            }
+        }
+
+        @Override
+        public String saidOf(String subject) {
+            return subject + " can be " + other;
+        }
+
+        @Override
+        public String deniedOf(String subject) {
+            return subject + " is never " + other;
+        }
+    }
+
+    /**
      * What is asked of the pieces of the string at the position: that some of them, or every one,
      * or none, is held to a predicate or is not.
      *

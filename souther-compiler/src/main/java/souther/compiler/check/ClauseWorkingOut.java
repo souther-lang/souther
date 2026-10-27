@@ -81,6 +81,7 @@ final class ClauseWorkingOut implements ClauseReading<WorkingOutNeeds, Denotatio
     @Override
     public WorkingOutNeeds crossing(ClauseExpr.Scoped binding, Denotations outside,
                                     WorkingOutNeeds body) {
-        return completion.workedOut(binding.binding().value(), known, outside).and(body);
+        WorkingOutNeeds value = completion.workedOut(binding.binding().value(), known, outside);
+        return value.and(body).underABindingWhoseValue(value.read());
     }
 }

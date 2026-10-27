@@ -169,8 +169,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         out.put(UndividedPosition.Reason.UNSUPPORTED_SYNTAX, of("""
                 module m
                 %s
-                behavior f : (x: Decimal) -> Answer
-                let f (x) = if x < Decimal.round(1, HALF_UP, 3.5m) then Yes else No
+                behavior f : (x: Int) -> Answer
+                let f (x) = if x < Int.floorMod(7, 3) then Yes else No
                 """.formatted(ANSWER)));
         // A rule whose end at a position rests on an alternative this compiler does not read. The
         // clause at the position was read and places its end; what the choice leaves is as far out

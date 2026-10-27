@@ -35,6 +35,14 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
 
     Extreme GREATEST = new Greatest();
 
+    /** The other end: what a number is the least of, its negation is the greatest of. */
+    default Extreme other() {
+        return switch (this) {
+            case Least _ -> GREATEST;
+            case Greatest _ -> LEAST;
+        };
+    }
+
     /**
      * The end a choice read in {@code cases} ({@link #casesOf}) keeps of two values, or null where
      * it is no choice between those two that keeps one end.

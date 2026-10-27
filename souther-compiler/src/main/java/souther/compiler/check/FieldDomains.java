@@ -38,6 +38,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import souther.compiler.types.ValueName;
@@ -2605,6 +2606,7 @@ public final class FieldDomains {
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfTheCodePointAt _,
+                 NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
@@ -2692,6 +2694,7 @@ public final class FieldDomains {
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfTheCodePointAt _,
+                 NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
@@ -2757,6 +2760,9 @@ public final class FieldDomains {
         }
         Set<RuleRef> unheld = new LinkedHashSet<>();
         for (ProjectionEvidence.Cause each : causes) {
+            if (place == null && operatorsOfOnlyADefinition(each)) {
+                continue;
+            }
             if (!(each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _))) {
                 return null;
             }
@@ -2773,6 +2779,23 @@ public final class FieldDomains {
             shown.stream().filter(one -> !apart.contains(one)).forEach(apart::add);
         }
         return apart;
+    }
+
+    /**
+     * Whether {@code cause} is that the operators of a rule are not shown to answer, the rule
+     * saying nothing but that places are numbers made of places it leaves free
+     * ({@link ComputedNumbers#leavesFree}).
+     *
+     * <p>Such a rule is met by the number it comes to at any places: every step of the number is
+     * held inside the order it is worked out in, and the number lies inside what the defined place
+     * admits. So the operators answer wherever the rest of the rules put the places, and a value
+     * exists where the rest has one. That says nothing of which values the bounds leave the
+     * places, which are the image of the number and not a box: only the question of whether a
+     * value exists is answered this way.
+     */
+    private boolean operatorsOfOnlyADefinition(ProjectionEvidence.Cause cause) {
+        return cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer(RuleRef rule)
+                && took.isOnlyDefining(rule);
     }
 
     /** The places each reading of a part names. */
@@ -3120,7 +3143,7 @@ public final class FieldDomains {
         if (!(whole instanceof ProjectionEvidence.CertifiedExact)) {
             List<ProjectionEvidence.StandsApart> apart = standingApart(whole, null, asked);
             if (apart == null) {
-                return false;
+                return handedOn.isEmpty() && holdsInAWitness();
             }
             apart.forEach(each -> {
                 unheld.add(each.rule());
@@ -3135,6 +3158,48 @@ public final class FieldDomains {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a value of this declaration is written down that every rule of it holds of
+     * ({@link ADeclarationsWitness}).
+     *
+     * <p>What shows a value to exist where the bounds are not the whole of what the rules leave: a
+     * rule relating several numbers to one another states no end, so no certificate speaks for the
+     * declaration, and a value is exhibited instead. Asked of the rules as the reading of this
+     * declaration holds them, each over the bindings of its fields.
+     */
+    private boolean holdsInAWitness() {
+        Map<Core, Boolean> seen = new IdentityHashMap<>();
+        List<Core> rules = new ArrayList<>();
+        for (InvariantChecker.Written each : readings) {
+            if (seen.put(each.clause(), Boolean.TRUE) == null) {
+                rules.add(each.clause());
+            }
+        }
+        return ADeclarationsWitness.exists(source, named, rules, this::stringsAdmittedAt);
+    }
+
+    /** A string the reading of this declaration admits at {@code place}: the least one its
+     *  language holds, or each string a finite set lists. */
+    private List<String> stringsAdmittedAt(List<String> steps) {
+        // The name the reading knows the place by, found among those it has rather than made: what
+        // a rule may name is decided where names are read, and this has no say in it.
+        RuleKey place = admittedByName.keySet().stream()
+                .filter(each -> each.steps().equals(steps)).findFirst().orElse(null);
+        if (place == null) {
+            return List.of();
+        }
+        return switch (admits(place).approximation()) {
+            case ValueSet.Matching matching -> {
+                String some = matching.language().some();
+                yield some == null ? List.of() : List.of(some);
+            }
+            case ValueSet.Finite finite -> finite.values().stream()
+                    .filter(Value.Text.class::isInstance)
+                    .map(each -> ((Value.Text) each).value()).toList();
+            case ValueSet.Cofinite _, ValueSet.WholeRuns _ -> List.of();
+        };
     }
 
     /**

@@ -97,6 +97,36 @@ final class TermReading {
                     codePointsOfAClass(count.counted(), count.through(), at);
             case NumericTerm.CodePointValueSum _ -> whatTheCodePointsComeTo(at);
             case NumericTerm.CodePointAt point -> theCodePointAt(point.index(), at);
+            case NumericTerm.WholeUnitsOf units -> wholeUnits(units.perUnit(), at, on);
+        };
+    }
+
+    /**
+     * The step of the answer's order that an observed value falls in: the count the value stands
+     * at, over the unit, floored. Floored and not truncated, so a count below nought falls in the
+     * step before it, as the run time's date of a date-time before the epoch is the day before.
+     */
+    private static Reading wholeUnits(long perUnit, ObservedValue at, TermOrders on) {
+        if (on.observed() == null) {
+            return new Reading.NotNumber();
+        }
+        return stepOf(on.observed().placeOf(at), perUnit, on.answered());
+    }
+
+    /** The step of the order {@code answered} that the value standing at {@code at} falls in,
+     *  where {@code perUnit} steps of the order it stands on make one. */
+    private static Reading stepOf(Place at, long perUnit, Carrier answered) {
+        if (answered == null || !(at instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        return switch (ExactRatio.of(count.at()).dividedBy(ExactRatio.of(perUnit))
+                .flatMap(ExactRatio::floor)) {
+            case ExactAnswer.Unheld<BigInteger> unheld ->
+                    new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigInteger> held -> {
+                Place step = answered.onTheGrid(new Count(new BigDecimal(held.value())));
+                yield step == null ? new Reading.NotNumber() : new Reading.Number(step);
+            }
         };
     }
 
@@ -235,6 +265,7 @@ final class TermReading {
         private final NumericTerm.ExtremeOfItsKey term;
         private final Carrier keyedOn;
         private final Carrier observed;
+        private final Carrier answered;
         private final List<Function<ElementProjection, Holding<G>>> each;
         /** Why the first element holding nothing at its key holds nothing, and where it is. */
         private G keyNothing;
@@ -254,6 +285,7 @@ final class TermReading {
             this.term = keyed;
             this.keyedOn = on.fieldCarrier(term.keyField());
             this.observed = on.observed();
+            this.answered = on.answered();
             this.each = List.copyOf(each);
             for (int at = 0; at < this.each.size(); at++) {
                 switch (this.each.get(at).apply(term.keyField())) {
@@ -309,6 +341,9 @@ final class TermReading {
             }
             if (key.stopped() != null) {
                 return new Neighbouring.Read<>(key.stopped());
+            }
+            if (key.end() != null && term.through() != null) {
+                return new Neighbouring.Read<>(stepOf(key.end(), term.perUnit(), answered));
             }
             return new Neighbouring.Read<>(key.end() == null ? new Reading.NotNumber()
                     : new Reading.Number(key.end()));

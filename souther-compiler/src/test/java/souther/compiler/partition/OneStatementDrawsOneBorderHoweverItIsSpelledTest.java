@@ -164,16 +164,15 @@ class OneStatementDrawsOneBorderHoweverItIsSpelledTest {
     }
 
     /**
-     * An exclusion inside the call stops the reading there, which is why the corpus did not move.
+     * The date a date-time falls on is a number of the date-time, and the line is drawn on it.
      *
-     * <p>The conformance corpus writes {@code Date.daysBetween(受付日, DateTime.toDate(締切))}, and
-     * its report is the same document as before. That is not because nothing was gained: the one
-     * place it uses the measure has an operation inside it that is declared to state no form, so the
-     * reading reaches the argument and stops. Written without it, the same rule draws a line.
+     * <p>It is the step of the day order that the second count falls in, not a form of the seconds,
+     * so the line is on {@code DateTime.toDate(d)} as the line of {@code Date.daysBetween} is on a
+     * date.
      */
     @Test
-    void anExclusionInsideTheCallStopsTheReadingThere() {
-        assertEquals(List.of(), bordersOf("a: Date, d: DateTime",
+    void theDateADateTimeFallsOnDrawsTheLineOnThatDate() {
+        assertEquals(List.of("DateTime.toDate(d) - 1"), bordersOf("a: Date, d: DateTime",
                 "Date.daysBetween(a, DateTime.toDate(d)) <= 1"));
         assertEquals(List.of("b - 1"), bordersOf("a: Date, b: Date",
                 "Date.daysBetween(a, b) <= 1"));

@@ -6798,6 +6798,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("position", it.position().discriminated());
                 into.put("index", it.index());
             }
+            // The step of the coarser order the operation answers on that the value falls in.
+            case NumericTerm.WholeUnitsOf it -> {
+                into.put("kind", "whole_units");
+                operationId(into.putObject("operation"), it.operation());
+                into.put("position", it.position().discriminated());
+            }
             // How often the value at the place occurs among the elements of its container.
             case NumericTerm.Multiplicity it -> {
                 into.put("kind", "multiplicity");
@@ -6829,6 +6835,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 });
                 into.put("position", it.value().discriminated());
                 into.put("key", it.key().discriminated());
+                // The steps of the values the end is taken of, where it is not the values.
+                if (it.through() != null) {
+                    operationId(into.putObject("through"), it.through());
+                }
             }
             // What the elements of a run come to among those alike at a place of each: their
             // total or an end, of what each element is made to contribute.

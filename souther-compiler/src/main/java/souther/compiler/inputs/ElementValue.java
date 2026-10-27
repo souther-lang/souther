@@ -765,8 +765,12 @@ public sealed interface ElementValue {
      *              nothing ({@link ARounding#answersAtAScale})
      * @param way   how it is rounded
      * @param inner what is rounded
+     * @param stepsOf the operation whose step of a coarser order this is, where it is the floor of
+     *              a count over the unit that operation declares ({@code CountsTheWholeUnitsOf});
+     *              null for a rounding of a decimal
      */
-    public record Rounding(BigInteger scale, WholeRounding way, ElementValue inner) {
+    public record Rounding(BigInteger scale, WholeRounding way, ElementValue inner,
+                           ValueName.Stdlib stepsOf) {
 
         public Rounding {
             Objects.requireNonNull(scale, "a number is rounded at a scale");
@@ -775,6 +779,15 @@ public sealed interface ElementValue {
             if (!ARounding.answersAtAScale(scale)) {
                 throw new IllegalArgumentException("the run time rounds at no scale " + scale);
             }
+            if (stepsOf != null && (scale.signum() != 0 || way != WholeRounding.FLOOR)) {
+                throw new IllegalArgumentException("the step of a coarser order is the floor of a"
+                        + " count, at the scale of whole numbers: " + stepsOf);
+            }
+        }
+
+        /** A rounding of a decimal, which is the step of no order. */
+        public Rounding(BigInteger scale, WholeRounding way, ElementValue inner) {
+            this(scale, way, inner, null);
         }
 
         /** Ten to the {@code scale}, held as its exponents: how many of the steps this rounds to
@@ -803,7 +816,8 @@ public sealed interface ElementValue {
 
         @Override
         public String toString() {
-            return "round(" + scale + ", " + way + ", " + inner + ")";
+            return stepsOf != null ? stepsOf.qualified() + "(" + inner + ")"
+                    : "round(" + scale + ", " + way + ", " + inner + ")";
         }
     }
 
@@ -1258,6 +1272,115 @@ public sealed interface ElementValue {
     }
 
     /**
+     * A number of the element that is {@code weight} times a number made of places alone, and
+     * {@code constant} beside it.
+     *
+     * @param ofPlaces what the number is without the weight and the constant: a place, or a choice
+     *                 by case among places
+     */
+    public record MultipleOfPlaces(ExactRatio weight, ExactRatio constant, ElementValue ofPlaces) {
+
+        public MultipleOfPlaces {
+            if (weight == null || constant == null || ofPlaces == null || weight.signum() == 0) {
+                throw new IllegalArgumentException("a multiple is by some weight of something");
+            }
+        }
+    }
+
+    /**
+     * {@code value} as a multiple of places and a constant, or null where it is not one: a form of
+     * one place, or a choice by case every arm of which is the same multiple of a place of its own.
+     * The weight and the constant are the same across the arms, which is what lets an end of the
+     * numbers be taken of the places and the multiple applied to it.
+     */
+    public static MultipleOfPlaces asAMultipleOfPlaces(ElementValue value) {
+        StepsOfAPlace steps = asTheStepsOfAPlace(value);
+        if (steps != null) {
+            return new MultipleOfPlaces(steps.weight(), steps.constant(), steps.alone());
+        }
+        return switch (value) {
+            case Affine(LinearForm<ElementProjection> form) when form.coefs().size() == 1 -> {
+                Map.Entry<ElementProjection, ExactRatio> only =
+                        form.coefs().entrySet().iterator().next();
+                yield new MultipleOfPlaces(only.getValue(), form.constant(),
+                        new Affine(LinearForm.atom(only.getKey())));
+            }
+            case OfItsCase choice when choice.rest() == null -> {
+                MultipleOfPlaces first = null;
+                List<OfItsCase.Arm> arms = new ArrayList<>();
+                for (OfItsCase.Arm arm : choice.arms()) {
+                    MultipleOfPlaces each = asAMultipleOfPlaces(arm.value());
+                    if (each == null || (first != null && (!first.weight().equals(each.weight())
+                            || !first.constant().equals(each.constant())))) {
+                        yield null;
+                    }
+                    first = each;
+                    arms.add(new OfItsCase.Arm(arm.cases(), each.ofPlaces()));
+                }
+                yield new MultipleOfPlaces(first.weight(), first.constant(),
+                        choosingByCase(choice.subject(), arms, null));
+            }
+            default -> null;
+        };
+    }
+
+    /**
+     * A number of the element that is {@code weight} times the step a place of it falls in, and
+     * {@code constant} beside it, where one step is {@code perUnit} steps of the place's order.
+     *
+     * @param place   the place of the element whose steps are counted
+     * @param perUnit how many steps of the place's order make one step
+     */
+    public record StepsOfAPlace(ValueName.Stdlib operation, ElementProjection place, long perUnit,
+                                ExactRatio weight, ExactRatio constant) {
+
+        public StepsOfAPlace {
+            if (operation == null || place == null || perUnit < 2 || weight == null
+                    || constant == null || weight.signum() == 0) {
+                throw new IllegalArgumentException("a multiple of the steps a place falls in is by"
+                        + " some weight of a place, counted in units of at least two steps");
+            }
+        }
+
+        /** The steps the place falls in, with no weight and nothing beside. */
+        public ElementValue alone() {
+            ExactRatio per = ExactRatio.ONE.dividedBy(ExactRatio.of(perUnit)).orNull();
+            return multilinear(LinearForm.atom(Monomial.of(new Rounding(BigInteger.ZERO,
+                    WholeRounding.FLOOR, new Affine(LinearForm.weighing(place, per)), operation))));
+        }
+    }
+
+    /**
+     * {@code value} as a weight times the step one place of the element falls in, and a constant —
+     * or null where it is not one: the rounding down of one place over a whole unit, alone.
+     *
+     * <p>Such a number keeps the order of the places and turns it over for a negative weight, which
+     * is what lets an end of the numbers be taken of the places and the step of it worked out once.
+     */
+    public static StepsOfAPlace asTheStepsOfAPlace(ElementValue value) {
+        if (!(value instanceof Multilinear products) || products.form().coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<Monomial, ExactRatio> only = products.form().coefs().entrySet().iterator().next();
+        Rounding rounding = only.getKey().rounding();
+        if (rounding == null || rounding.stepsOf() == null
+                || !(rounding.inner() instanceof Affine(LinearForm<ElementProjection> inner))
+                || inner.coefs().size() != 1 || !inner.constant().isZero()) {
+            return null;
+        }
+        Map.Entry<ElementProjection, ExactRatio> place =
+                inner.coefs().entrySet().iterator().next();
+        ExactRatio unit = ExactRatio.ONE.dividedBy(place.getValue()).orNull();
+        if (unit == null || !unit.isWhole() || unit.signum() <= 0
+                || !(unit.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                || whole.compareTo(BigInteger.TWO) < 0 || whole.bitLength() >= Long.SIZE) {
+            return null;
+        }
+        return new StepsOfAPlace(rounding.stepsOf(), place.getKey(), whole.longValueExact(),
+                only.getValue(), products.form().constant());
+    }
+
+    /**
      * The choice by case of {@code arms} and {@code rest}, with a choice whose every answer is one
      * answer being that answer.
      *
@@ -1579,6 +1702,33 @@ public sealed interface ElementValue {
                     new Rounding(BigInteger.valueOf(scale), way, inner))));
         }
 
+        /**
+         * The step of a coarser order that a number made of the element falls in, as the rounding
+         * down of that number over the unit — or null where {@code e} counts no whole units or
+         * what it counts is no number this reads.
+         *
+         * <p>Which call counts whole units, of which argument and in what unit is what the library
+         * says the operation computes ({@link BoundOperationFacts#wholeUnitsCountedIn}). The step
+         * is a floor and no truncation, so it is the rounding that goes toward minus infinity.
+         */
+        private ElementValue wholeUnitsOf(Core e, Map<BindingId, Core> at) {
+            BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            Core counted = facts.wholeUnitsCountedIn(applied);
+            if (counted == null) {
+                return null;
+            }
+            LinearForm<Atom> form = AffineForms.of(counted, at, atoms());
+            ElementValue inner = form == null ? null : valueOf(form);
+            ExactRatio unit = ExactRatio.of(facts.wholeUnitsPerStep(applied.operation())
+                    .orElseThrow());
+            ElementValue overTheUnit = inner == null || !(ExactRatio.ONE.dividedBy(unit) instanceof
+                    ExactAnswer.Held<ExactRatio>(ExactRatio per)) ? null : times(inner, per);
+            return overTheUnit == null ? null : multilinear(LinearForm.atom(Monomial.of(
+                    new Rounding(BigInteger.ZERO, WholeRounding.FLOOR, overTheUnit,
+                            (ValueName.Stdlib) applied.operation()))));
+        }
+
         /** What a branch on a flag of the element or on a test of its position comes to, or null
          *  where it is not read. */
         private ElementValue byCondition(Core.If branch) {
@@ -1895,7 +2045,10 @@ public sealed interface ElementValue {
                     ElementValue choice = switch (Core.withoutStanding(e)) {
                         case Core.If branch -> byCondition(branch);
                         case Core.Match match -> byCase(match);
-                        case null, default -> roundingOf(e, at);
+                        case null, default -> {
+                            ElementValue rounded = roundingOf(e, at);
+                            yield rounded != null ? rounded : wholeUnitsOf(e, at);
+                        }
                     };
                     return choice == null ? null : termsOf(choice);
                 }
