@@ -49,10 +49,10 @@ import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.DerivedValue;
-import souther.compiler.partition.PointRole;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -1470,42 +1470,75 @@ final class Coverages {
         if (form.isEmpty()) {
             return Optional.empty();
         }
-        List<Criterion> on = new ArrayList<>();
+        List<Criterion> holding = new ArrayList<>();
+        List<Criterion> notHolding = new ArrayList<>();
         boolean someRowIsOn = false;
         boolean pointsRead = true;
+        boolean allWorkedOut = true;
         for (DomainPoint point : border.answers().keySet()) {
-            if (border.roleOf(point) == PointRole.ON
-                    && border.demand(point) instanceof Demand.Owed owed) {
-                on.add(owed.criterion());
-                ItemAssessment.Owed measured = (ItemAssessment.Owed) items.get(point);
-                someRowIsOn |= measured.coverage().made()
-                        .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
-                // That no row is at the point is the whole of what there is to say only where the
-                // rows were all read, which the point's own measurement says.
-                pointsRead &= measured.coverage() instanceof Measurement.Complete;
+            // The values nearest the line on each side, which is where a row shows the line has not
+            // moved; a run away from it shows nothing of that.
+            PointRole role = border.roleOf(point);
+            if (role != PointRole.ON && role != PointRole.OFF) {
+                continue;
+            }
+            switch (border.demand(point)) {
+                case Demand.Owed owed -> {
+                    (role == PointRole.ON ? holding : notHolding).add(owed.criterion());
+                    ItemAssessment.Owed measured = (ItemAssessment.Owed) items.get(point);
+                    someRowIsOn |= measured.coverage().made()
+                            .filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
+                    // That no row is at the point is the whole of what there is to say only where
+                    // the rows were all read, which the point's own measurement says.
+                    pointsRead &= measured.coverage() instanceof Measurement.Complete;
+                }
+                // A point that could not be worked out may have rows nobody can name.
+                case Demand.NotWorkedOut _ -> {
+                    pointsRead = false;
+                    allWorkedOut = false;
+                }
+                case Demand.NotOwed _ -> { }
             }
         }
         boolean rowsAreOn = someRowIsOn;
         boolean noRowIsOnAndTheyWereRead = pointsRead;
+        boolean pointsWorkedOut = allWorkedOut;
         Map<NumericTerm, ExactRatio> weights = form.get().direction().coefs();
         return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
             if (!rowsAreOn) {
-                return new TiltOfADerivedValue.RowsOnABorder(weights, List.of(),
+                return new TiltOfADerivedValue.RowsOnABorder(weights,
+                        new TiltOfADerivedValue.Side(List.of(), !holding.isEmpty()),
+                        new TiltOfADerivedValue.Side(List.of(), !notHolding.isEmpty()),
                         noRowIsOnAndTheyWereRead);
             }
-            // The readings of the rows that stand at the point, asked of the walk that says
-            // whether a row does, and no others: a reading of the same row away from the point
-            // holds numbers that are not on the border.
-            List<Map<NumericTerm, Place>> onTheBorder = new ArrayList<>();
-            boolean complete = true;
-            for (Criterion criterion : on) {
-                StandingAtAPoint.RowsRead read = shape.valuesAt(criterion, rows);
-                onTheBorder.addAll(read.each());
-                complete &= read.why().isEmpty() && !read.unwatched()
-                        && read.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne;
-            }
-            return new TiltOfADerivedValue.RowsOnABorder(weights, onTheBorder, complete);
+            StandingsRead holdingRead = readAt(holding, shape, rows);
+            StandingsRead notHoldingRead = readAt(notHolding, shape, rows);
+            return new TiltOfADerivedValue.RowsOnABorder(weights,
+                    new TiltOfADerivedValue.Side(holdingRead.readings(), !holding.isEmpty()),
+                    new TiltOfADerivedValue.Side(notHoldingRead.readings(), !notHolding.isEmpty()),
+                    pointsWorkedOut && holdingRead.complete() && notHoldingRead.complete());
         }));
+    }
+
+    /** The readings of the rows that stand at the points {@code at}, and whether they are all. */
+    private record StandingsRead(List<Map<NumericTerm, Place>> readings, boolean complete) {}
+
+    /**
+     * The readings of the rows that stand at a point, asked of the walk that says whether a row
+     * does, and no others: a reading of the same row away from the point holds numbers that are
+     * not at it.
+     */
+    private static StandingsRead readAt(List<Criterion> at, OneShapeOfBorder shape,
+                                        List<ObservedInputs> rows) {
+        List<Map<NumericTerm, Place>> each = new ArrayList<>();
+        boolean complete = true;
+        for (Criterion criterion : at) {
+            StandingAtAPoint.RowsRead read = shape.valuesAt(criterion, rows);
+            each.addAll(read.each());
+            complete &= read.why().isEmpty() && !read.unwatched()
+                    && read.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne;
+        }
+        return new StandingsRead(each, complete);
     }
 
     /**
@@ -1572,8 +1605,7 @@ final class Coverages {
                         // the call: the call's weights are fixed by the rows on every border of it,
                         // and not by the ones that happened to be read.
                         ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
-                                .orElseGet(() -> new TiltOfADerivedValue.RowsOnABorder(Map.of(),
-                                        List.of(), false)));
+                                .orElseGet(TiltOfADerivedValue.RowsOnABorder::unread));
                     }
                 }
                 byCall.put(copy, ofOneCall);

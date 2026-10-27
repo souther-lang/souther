@@ -8,6 +8,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.TiltOfADerivedValue.RowsOnABorder;
+import souther.compiler.query.TiltOfADerivedValue.Side;
 import souther.compiler.query.TiltOfADerivedValue.Standing;
 
 import java.math.BigInteger;
@@ -56,11 +57,16 @@ class TiltOfADerivedValueTest {
 
     private static RowsOnABorder onWeighed(Map<NumericTerm, ExactRatio> weights, boolean complete,
                                       Row... readings) {
-        return new RowsOnABorder(weights, Arrays.stream(readings).map(Row::held).toList(), complete);
+        Side side = sideOf(readings);
+        return new RowsOnABorder(weights, side, side, complete);
+    }
+
+    private static Side sideOf(Row... readings) {
+        return new Side(Arrays.stream(readings).map(Row::held).toList(), true);
     }
 
     private static RowsOnABorder nothingOn(boolean complete) {
-        return new RowsOnABorder(UNIT_WEIGHTS, List.of(), complete);
+        return new RowsOnABorder(UNIT_WEIGHTS, sideOf(), sideOf(), complete);
     }
 
     private static Class<? extends Standing> of(SequencedMap<NumericTerm, Standing> standings,
@@ -151,6 +157,31 @@ class TiltOfADerivedValueTest {
         RowsOnABorder first = onWeighed(halves, true, row(200, 0));
         RowsOnABorder second = on(true, row(0, 100));
         SequencedMap<NumericTerm, Standing> standings = oneCall(first, second);
+        assertEquals(Standing.Shown.class, of(standings, A));
+        assertEquals(Standing.Shown.class, of(standings, B));
+    }
+
+    /** Rows on the side where the rule holds catch a position weighed less, and those on the other
+     *  catch one weighed more: a weight is fixed only where both sides reach it. */
+    @Test
+    void aWeightIsFixedOnlyWhereRowsOnBothSidesOfTheBorderReachIt() {
+        RowsOnABorder oneSideOnly = new RowsOnABorder(UNIT_WEIGHTS,
+                sideOf(row(100, 0), row(0, 100)), sideOf(row(99, 0)), true);
+        SequencedMap<NumericTerm, Standing> standings = oneCall(oneSideOnly);
+        assertEquals(Standing.Shown.class, of(standings, A));
+        assertEquals(Standing.NotShown.class, of(standings, B));
+        RowsOnABorder both = new RowsOnABorder(UNIT_WEIGHTS,
+                sideOf(row(100, 0), row(0, 100)), sideOf(row(99, 0), row(0, 99)), true);
+        assertEquals(Standing.Shown.class, of(oneCall(both), A));
+        assertEquals(Standing.Shown.class, of(oneCall(both), B));
+    }
+
+    /** A side the border has no point on is nothing a row could show. */
+    @Test
+    void aSideTheBorderHasNoPointOnIsNotAskedOfTheRows() {
+        RowsOnABorder holdingOnly = new RowsOnABorder(UNIT_WEIGHTS,
+                sideOf(row(100, 0), row(0, 100)), new Side(List.of(), false), true);
+        SequencedMap<NumericTerm, Standing> standings = oneCall(holdingOnly);
         assertEquals(Standing.Shown.class, of(standings, A));
         assertEquals(Standing.Shown.class, of(standings, B));
     }

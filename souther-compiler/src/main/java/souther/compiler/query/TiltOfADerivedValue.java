@@ -30,13 +30,16 @@ import java.util.function.Supplier;
  * is the border's ({@link BorderAssessment}); what is owed here is once for the computation and
  * once for each position (White and Cohen, IEEE TSE SE-6(3), 1980).
  *
- * <p><b>The weights are fixed where the rows on the borders determine them.</b> A row on a border
- * satisfies {@code Σ cₚ·xₚ = T}, with the model's own weights {@code cₚ} and a threshold {@code T}
- * the model wrote. A computation that weighs the positions by {@code cₚ·λₚ} instead agrees with
- * every such row only where {@code Σ cₚ·(λₚ − 1)·xₚ = 0} for each, so the weights are fixed where
- * the vectors {@code (cₚ·xₚ)} the rows give span the space of the positions, and a position's own
- * weight is fixed where its axis is in the span. That is a property of what the rows determine, and
- * not of how a row is shaped.
+ * <p><b>The weights are fixed where the rows beside the borders determine them.</b> A row at the
+ * value nearest a border satisfies {@code Σ cₚ·xₚ = T} for a {@code T} the model wrote, with the
+ * model's own weights {@code cₚ}. A computation that weighs the positions by {@code cₚ·λₚ} instead
+ * moves such a row by {@code Σ cₚ·(λₚ − 1)·xₚ}, so the weights are fixed where the vectors
+ * {@code (cₚ·xₚ)} the rows give span the space of the positions, and a position's own weight is
+ * fixed where its axis is in the span. Which way a wrong weight moves a row decides which rows
+ * catch it: one that moves it up is caught by a row where the rule does not hold and one that moves
+ * it down by a row where it does, and a strict comparison holds one value further up than a
+ * non-strict one. So the two sides are spanned apart, and a weight is fixed where its axis is in
+ * both. A side the border has no value on, because the type ends there, is not asked.
  *
  * <p><b>Evidence belongs to the call that reads it.</b> A computation names the calls cut at the
  * same places, and which of them is one computation is not something the borders can prove: two
@@ -86,21 +89,48 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
     }
 
     /**
+     * The rows that stand at the values nearest a border on one side of where its answer changes.
+     *
+     * @param readings what each position holds at each reading of a row that stands at the border's
+     *             point on this side, and at no other reading
+     * @param owed whether the border has a point on this side at all: a rule bounded by its type
+     *             has none past the bound, and there is nothing there for a row to show
+     */
+    public record Side(List<Map<NumericTerm, Place>> readings, boolean owed) {
+
+        public Side {
+            readings = List.copyOf(readings);
+        }
+    }
+
+    /**
      * What the rows on one border say of the weights, as numbers.
      *
-     * @param weights     the model's weight of each position the border's weighing names
-     * @param onTheBorder what each position holds at each reading of a row that stands at the
-     *                    border's point, and at no other reading
-     * @param complete    whether those are every reading of every row there is: the border was read
-     *                    against every row, every reading of each was tried, and none was left out
-     *                    for nothing having watched it run
+     * <p>Both sides of the border are kept apart. A computation that weighs a position more than the
+     * model does moves a row across the border one way and one that weighs it less moves it the
+     * other, so rows on the side where the rule holds catch the one and rows on the side where it
+     * does not catch the other, and neither side says anything of the one it does not catch.
+     *
+     * @param weights    the model's weight of each position the border's weighing names
+     * @param holding    the rows at the value nearest the border where the rule holds
+     * @param notHolding the rows at the value nearest the border where it does not
+     * @param complete   whether those are every reading of every row there is: the border was read
+     *                   against every row, every reading of each was tried, and none was left out
+     *                   for nothing having watched it run
      */
-    public record RowsOnABorder(Map<NumericTerm, ExactRatio> weights,
-                                List<Map<NumericTerm, Place>> onTheBorder, boolean complete) {
+    public record RowsOnABorder(Map<NumericTerm, ExactRatio> weights, Side holding,
+                                Side notHolding, boolean complete) {
 
         public RowsOnABorder {
             weights = Map.copyOf(weights);
-            onTheBorder = List.copyOf(onTheBorder);
+            Objects.requireNonNull(holding, "the rule holds on one side of the border");
+            Objects.requireNonNull(notHolding, "and does not on the other");
+        }
+
+        /** A border nothing was read against, which says nothing and is not left out. */
+        static RowsOnABorder unread() {
+            return new RowsOnABorder(Map.of(), new Side(List.of(), false),
+                    new Side(List.of(), false), false);
         }
     }
 
@@ -165,29 +195,45 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
         if (borders.isEmpty()) {
             return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
         }
-        ExactSpan span = new ExactSpan(places.size());
+        ExactSpan holding = new ExactSpan(places.size());
+        ExactSpan notHolding = new ExactSpan(places.size());
+        boolean holdingOwed = false;
+        boolean notHoldingOwed = false;
         boolean complete = true;
         for (RowsOnABorder border : borders) {
             complete &= border.complete();
-            for (Map<NumericTerm, Place> values : border.onTheBorder()) {
-                ExactRatio[] vector = vectorOf(places, border.weights(), values);
-                if (vector == null) {
-                    return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
-                }
-                span.add(vector);
-            }
+            holdingOwed |= border.holding().owed();
+            notHoldingOwed |= border.notHolding().owed();
+            // A row the exact arithmetic gave out on is a row left out: what the rest reach is
+            // still reached, and what they leave unreached is no longer known to be unfixed.
+            complete &= takeIn(places, border, border.holding(), holding);
+            complete &= takeIn(places, border, border.notHolding(), notHolding);
         }
-        if (!span.known()) {
+        if (!holdingOwed && !notHoldingOwed) {
             return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
         }
         List<Standing> out = new ArrayList<>();
         for (int at = 0; at < places.size(); at++) {
             // Rows fix a weight whatever else went unread; one they leave unfixed is unfixed only
             // where nothing was left unread.
-            out.add(span.reaches(at) ? new Standing.Shown()
+            boolean fixed = (!holdingOwed || holding.reaches(at))
+                    && (!notHoldingOwed || notHolding.reaches(at));
+            out.add(fixed ? new Standing.Shown()
                     : complete ? new Standing.NotShown() : new Standing.Undecided());
         }
         return out;
+    }
+
+    /** Takes the rows of one side of a border into the space of that side, or false where one was
+     *  left out because the exact arithmetic gave out. */
+    private static boolean takeIn(List<NumericTerm> places, RowsOnABorder border, Side side,
+                                  ExactSpan into) {
+        boolean all = true;
+        for (Map<NumericTerm, Place> values : side.readings()) {
+            ExactRatio[] vector = vectorOf(places, border.weights(), values);
+            all &= vector != null && into.add(vector);
+        }
+        return all;
     }
 
     /** What the calls say of one place together: fixed where every call fixes it, unfixed where

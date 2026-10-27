@@ -52,6 +52,8 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
                     | (N { v = 1 }, N { v = 1 }) -> 2
                     | (N { v = 100 }, N { v = 0 }) -> 4
                     | (N { v = 0 }, N { v = 100 }) -> 5
+                    | (N { v = 99 }, N { v = 0 }) -> 2
+                    | (N { v = 0 }, N { v = 99 }) -> 4
                 """);
         assertFalse(report.contains(SAID + " `b.v` weighs into `a.v + b.v`"), report);
         assertTrue(report.contains(SAID + " `b.v` weighs into `a.v + 3 * b.v`"), report);
@@ -107,6 +109,8 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
                     | (N { v = 1 }, N { v = 0 }) -> 1
                     | (N { v = 50 }, N { v = 0 }) -> 2
                     | (N { v = 60 }, N { v = 20 }) -> 2
+                    | (N { v = 50 }, N { v = 1 }) -> 1
+                    | (N { v = 55 }, N { v = 11 }) -> 1
                 """);
         assertFalse(report.contains(SAID), report);
     }
@@ -127,6 +131,8 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
                 | (N { v = 1 }, N { v = 1 }, N { v = 1 }) -> 1
                 | (N { v = 100 }, N { v = 0 }, N { v = 1 }) -> 2
                 | (N { v = 0 }, N { v = 100 }, N { v = 1 }) -> 2
+                | (N { v = 99 }, N { v = 0 }, N { v = 1 }) -> 1
+                | (N { v = 0 }, N { v = 99 }, N { v = 1 }) -> 1
             """;
 
     /**
@@ -147,6 +153,8 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
         String report = reportOf(BRANCHES + """
                 | (N { v = 100 }, N { v = 0 }, N { v = 0 }) -> 2
                 | (N { v = 0 }, N { v = 100 }, N { v = 0 }) -> 2
+                | (N { v = 99 }, N { v = 0 }, N { v = 0 }) -> 1
+                | (N { v = 0 }, N { v = 99 }, N { v = 0 }) -> 1
                 """);
         assertFalse(report.contains(SAID), report);
     }
@@ -173,7 +181,7 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
 
                 example f
                     | ([P { a = N { v = 1 }, b = N { v = 1 } }]) -> [1]
-                    | ([P { a = N { v = 100 }, b = N { v = 0 } }, P { a = N { v = 0 }, b = N { v = 50 } }]) -> [2, 1]
+                    | ([P { a = N { v = 100 }, b = N { v = 0 } }, P { a = N { v = 0 }, b = N { v = 50 } }, P { a = N { v = 99 }, b = N { v = 0 } }]) -> [2, 1, 1]
                 """);
         long said = report.lines().filter(line -> line.contains(SAID)).count();
         assertEquals(1L, said, report);
@@ -202,6 +210,8 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
                     | (N { v = 1 }, N { v = 1 }) -> 1
                     | (N { v = 100 }, N { v = 0 }) -> 3
                     | (N { v = 0 }, N { v = 100 }) -> 2
+                    | (N { v = 99 }, N { v = 0 }) -> 1
+                    | (N { v = 0 }, N { v = 99 }) -> 1
                 """);
         assertTrue(report.contains(SAID + " `a.v` weighs"), report);
         assertFalse(report.contains(SAID + " `b.v` weighs"), report);

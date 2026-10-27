@@ -51,6 +51,14 @@ class ATotalLookedUpInATableIsOwedAWeightForEachPositionTest {
                 | (N { v = 0 }, N { v = 100 }) -> 2
             """;
 
+    private static final String ROW_BESIDE_A = """
+                | (N { v = 99 }, N { v = 0 }) -> 1
+            """;
+
+    private static final String ROW_BESIDE_B = """
+                | (N { v = 0 }, N { v = 99 }) -> 1
+            """;
+
     private static final String ROW_AT_BOTH = """
                 | (N { v = 60 }, N { v = 40 }) -> 2
             """;
@@ -66,15 +74,26 @@ class ATotalLookedUpInATableIsOwedAWeightForEachPositionTest {
 
     @Test
     void aRowOnTheBorderWithOnePositionAwayShowsThatPositionAndNoOther() {
-        String report = reportOf(SOURCE + EXAMPLES + ROW_OFF_EVERY_BORDER + ROW_AT_A);
+        String report = reportOf(SOURCE + EXAMPLES + ROW_OFF_EVERY_BORDER + ROW_AT_A
+                + ROW_BESIDE_A);
         assertFalse(report.contains(SAID + " `a.v` weighs"), report);
         assertTrue(report.contains(SAID + " `b.v` weighs"), report);
     }
 
     @Test
-    void aRowForEachPositionShowsThemAll() {
-        String report = reportOf(SOURCE + EXAMPLES + ROW_OFF_EVERY_BORDER + ROW_AT_A + ROW_AT_B);
+    void aRowForEachPositionOnEachSideShowsThemAll() {
+        String report = reportOf(SOURCE + EXAMPLES + ROW_OFF_EVERY_BORDER + ROW_AT_A + ROW_AT_B
+                + ROW_BESIDE_A + ROW_BESIDE_B);
         assertFalse(report.contains(SAID), report);
+    }
+
+    /** A position weighed less than the model weighs it is caught by a row where the rule holds and
+     *  one weighed more by a row where it does not, so rows on one side show neither. */
+    @Test
+    void rowsOnOneSideOfTheBorderShowNoWeight() {
+        String report = reportOf(SOURCE + EXAMPLES + ROW_OFF_EVERY_BORDER + ROW_AT_A + ROW_AT_B);
+        assertTrue(report.contains(SAID + " `a.v` weighs"), report);
+        assertTrue(report.contains(SAID + " `b.v` weighs"), report);
     }
 
     /** A row on the border with both positions away from their least is about the sum of their

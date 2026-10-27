@@ -68,17 +68,28 @@ count over a different set of lines — a comparison that draws no border, two r
 
 Each position of such a computation owes its weight, once for the computation however many
 thresholds the table has and however many positions a window of the table reads. The weights are
-fixed where the rows on the borders determine them. A row on a border satisfies the sum of the
-model's weights of the positions, each by the value the position holds, equal to the threshold the
-model wrote. A computation that weighs a position by more or less agrees with such a row only where
-the weighted difference sums to nought, so the weights are fixed where the vectors of weighted values
-the rows give span the space of the positions, and the weight of one position is fixed where its own
-axis is in the span. The span is worked out in exact arithmetic.
+fixed where the rows beside the borders determine them. A row at the value nearest a border
+satisfies the sum of the model's weights of the positions, each by the value the position holds,
+equal to a number the threshold fixes. A computation that weighs a position by more or less moves such
+a row by the weighted difference, so the weights are fixed where the vectors of weighted values the
+rows give span the space of the positions, and the weight of one position is fixed where its own axis
+is in the span. The span is worked out in exact arithmetic.
 
-Only the readings of a row that stand at the border's point are evidence of it. A row inside a
+The two sides of a border are spanned apart. A position weighed more than the model weighs it moves a
+row across the border one way and one weighed less moves it the other, so a row where the rule holds
+catches the one and a row where it does not catches the other, and neither says anything of the one it
+does not catch. Which value is where the rule holds is the comparison's: a strict comparison holds one
+value further up than a non-strict one, so a rule that took the threshold itself for the evidence would
+fix weights that a computation weighing a position by less still agrees with. A weight is fixed where
+its axis is in both spans, and a side the border has no value on, because the type ends there, is not
+asked.
+
+Only the readings of a row that stand at a border's point are evidence of it. A row inside a
 container has a reading for each element, and one of them standing at the point is no reason to take
 the numbers of another: whether a reading stands and what it reads as are asked of one walk, so that
-the reading that was found to stand is the reading whose numbers are taken.
+the reading that was found to stand is the reading whose numbers are taken. A row whose answer is
+not the model's is evidence of nothing, and a point that could not be worked out may have rows nobody
+can name, so a weight is not said to be unfixed past it.
 
 This is a property of what the rows determine, not of how a row is shaped. A row that moves one
 position alone is one way to fix a weight and not the only one: three rows that each move two of three
@@ -87,7 +98,8 @@ still be fixed.
 
 Where nothing was read against the computation, where a border of it was not read and the rest leave
 a weight unfixed, or where the exact arithmetic gave out on a row, no claim is made about the weight
-and the document says `undecided`. It is not a finding.
+and the document says `undecided`. It is not a finding. A row the arithmetic gave out on is left out
+alone: what the other rows fix stays fixed.
 
 The obligation is keyed on the computation and the position, never on a threshold: where a row stands
 moves with every row written, and an obligation whose identity moved with them would be a new

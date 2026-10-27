@@ -403,7 +403,7 @@ public final class StandingAtAPoint {
 
     /**
      * Whether one reading of a row stands at a point, which is the one definition both
-     * {@link #met} and {@link #valuesAt} ask: asked twice in two places, the reading that was found
+     * {@link #met} and {@link AtALine#valuesAt} ask: asked twice in two places, the reading that was found
      * to stand and the reading whose numbers were taken could be two.
      */
     private sealed interface Stood {
