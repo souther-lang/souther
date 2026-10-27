@@ -95,10 +95,10 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
      *                    against every row, every reading of each was tried, and none was left out
      *                    for nothing having watched it run
      */
-    public record Evidence(Map<NumericTerm, ExactRatio> weights,
-                           List<Map<NumericTerm, Place>> onTheBorder, boolean complete) {
+    public record RowsOnABorder(Map<NumericTerm, ExactRatio> weights,
+                                List<Map<NumericTerm, Place>> onTheBorder, boolean complete) {
 
-        public Evidence {
+        public RowsOnABorder {
             weights = Map.copyOf(weights);
             onTheBorder = List.copyOf(onTheBorder);
         }
@@ -111,7 +111,7 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
      * @param evidence what the rows on it say, made when asked: a border no row is on has nothing
      *                 to walk
      */
-    public record Reading(Border border, Supplier<Evidence> evidence) {
+    public record Reading(Border border, Supplier<RowsOnABorder> evidence) {
 
         public Reading {
             Objects.requireNonNull(border, "a reading is of a border");
@@ -126,9 +126,9 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
      *               whose borders was read has no entry
      */
     static TiltOfADerivedValue of(DerivedValue.Replaced of,
-                                  Map<ModelOccurrence, List<Evidence>> byCopy) {
+                                  Map<ModelOccurrence, List<RowsOnABorder>> byCopy) {
         List<NumericTerm> places = NumericTerms.inOrder(of.positions());
-        List<List<Evidence>> perCall = new ArrayList<>();
+        List<List<RowsOnABorder>> perCall = new ArrayList<>();
         for (ModelOccurrence copy : of.value().copies()) {
             perCall.add(byCopy.getOrDefault(copy, List.of()));
         }
@@ -143,9 +143,9 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
      * @param perCall for each call of the computation, the evidence of its borders
      */
     static SequencedMap<NumericTerm, Standing> standingsOf(List<NumericTerm> places,
-                                                           List<List<Evidence>> perCall) {
+                                                           List<List<RowsOnABorder>> perCall) {
         List<List<Standing>> each = new ArrayList<>();
-        for (List<Evidence> borders : perCall) {
+        for (List<RowsOnABorder> borders : perCall) {
             each.add(standingsOfOneCall(places, borders));
         }
         SequencedMap<NumericTerm, Standing> out = new LinkedHashMap<>();
@@ -161,13 +161,13 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
 
     /** What the borders of one call fix of each place. */
     private static List<Standing> standingsOfOneCall(List<NumericTerm> places,
-                                                     List<Evidence> borders) {
+                                                     List<RowsOnABorder> borders) {
         if (borders.isEmpty()) {
             return places.stream().<Standing>map(_ -> new Standing.Undecided()).toList();
         }
         ExactSpan span = new ExactSpan(places.size());
         boolean complete = true;
-        for (Evidence border : borders) {
+        for (RowsOnABorder border : borders) {
             complete &= border.complete();
             for (Map<NumericTerm, Place> values : border.onTheBorder()) {
                 ExactRatio[] vector = vectorOf(places, border.weights(), values);

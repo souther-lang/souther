@@ -7,7 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
-import souther.compiler.query.TiltOfADerivedValue.Evidence;
+import souther.compiler.query.TiltOfADerivedValue.RowsOnABorder;
 import souther.compiler.query.TiltOfADerivedValue.Standing;
 
 import java.math.BigInteger;
@@ -50,17 +50,17 @@ class TiltOfADerivedValueTest {
         return new Row(a, b);
     }
 
-    private static Evidence on(boolean complete, Row... readings) {
+    private static RowsOnABorder on(boolean complete, Row... readings) {
         return onWeighed(UNIT_WEIGHTS, complete, readings);
     }
 
-    private static Evidence onWeighed(Map<NumericTerm, ExactRatio> weights, boolean complete,
+    private static RowsOnABorder onWeighed(Map<NumericTerm, ExactRatio> weights, boolean complete,
                                       Row... readings) {
-        return new Evidence(weights, Arrays.stream(readings).map(Row::held).toList(), complete);
+        return new RowsOnABorder(weights, Arrays.stream(readings).map(Row::held).toList(), complete);
     }
 
-    private static Evidence nothingOn(boolean complete) {
-        return new Evidence(UNIT_WEIGHTS, List.of(), complete);
+    private static RowsOnABorder nothingOn(boolean complete) {
+        return new RowsOnABorder(UNIT_WEIGHTS, List.of(), complete);
     }
 
     private static Class<? extends Standing> of(SequencedMap<NumericTerm, Standing> standings,
@@ -68,7 +68,7 @@ class TiltOfADerivedValueTest {
         return standings.get(place).getClass();
     }
 
-    private static SequencedMap<NumericTerm, Standing> oneCall(Evidence... borders) {
+    private static SequencedMap<NumericTerm, Standing> oneCall(RowsOnABorder... borders) {
         return TiltOfADerivedValue.standingsOf(PLACES, List.of(List.of(borders)));
     }
 
@@ -102,7 +102,7 @@ class TiltOfADerivedValueTest {
     /** One value handed to two calls puts the same rows on both, and each is fixed together. */
     @Test
     void callsPutToTheSameRowsAreFixedTogether() {
-        Evidence same = on(true, row(100, 0), row(0, 100));
+        RowsOnABorder same = on(true, row(100, 0), row(0, 100));
         SequencedMap<NumericTerm, Standing> standings =
                 TiltOfADerivedValue.standingsOf(PLACES, List.of(List.of(same), List.of(same)));
         assertEquals(Standing.Shown.class, of(standings, A));
@@ -148,8 +148,8 @@ class TiltOfADerivedValueTest {
     void bordersOfOneCallInDifferentWeighingsPutTheirRowsTogether() {
         ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
         Map<NumericTerm, ExactRatio> halves = Map.of(A, half, B, half);
-        Evidence first = onWeighed(halves, true, row(200, 0));
-        Evidence second = on(true, row(0, 100));
+        RowsOnABorder first = onWeighed(halves, true, row(200, 0));
+        RowsOnABorder second = on(true, row(0, 100));
         SequencedMap<NumericTerm, Standing> standings = oneCall(first, second);
         assertEquals(Standing.Shown.class, of(standings, A));
         assertEquals(Standing.Shown.class, of(standings, B));
@@ -157,8 +157,8 @@ class TiltOfADerivedValueTest {
 
     @Test
     void theOrderOfTheCallsAndBordersDecidesNothing() {
-        Evidence one = on(true, row(100, 0));
-        Evidence other = on(true, row(0, 100));
+        RowsOnABorder one = on(true, row(100, 0));
+        RowsOnABorder other = on(true, row(0, 100));
         SequencedMap<NumericTerm, Standing> forward = oneCall(one, other);
         SequencedMap<NumericTerm, Standing> backward = oneCall(other, one);
         assertInstanceOf(Standing.Shown.class, forward.get(A));

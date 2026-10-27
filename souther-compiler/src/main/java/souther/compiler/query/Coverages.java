@@ -1490,7 +1490,7 @@ final class Coverages {
         Map<NumericTerm, ExactRatio> weights = form.get().direction().coefs();
         return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
             if (!rowsAreOn) {
-                return new TiltOfADerivedValue.Evidence(weights, List.of(),
+                return new TiltOfADerivedValue.RowsOnABorder(weights, List.of(),
                         noRowIsOnAndTheyWereRead);
             }
             // The readings of the rows that stand at the point, asked of the walk that says
@@ -1504,7 +1504,7 @@ final class Coverages {
                 complete &= read.why().isEmpty() && !read.unwatched()
                         && read.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne;
             }
-            return new TiltOfADerivedValue.Evidence(weights, onTheBorder, complete);
+            return new TiltOfADerivedValue.RowsOnABorder(weights, onTheBorder, complete);
         }));
     }
 
@@ -1563,16 +1563,16 @@ final class Coverages {
             List<DerivedValue.Replaced> replaced) {
         List<TiltOfADerivedValue> out = new ArrayList<>();
         for (DerivedValue.Replaced each : replaced) {
-            Map<ModelOccurrence, List<TiltOfADerivedValue.Evidence>> byCall = new LinkedHashMap<>();
+            Map<ModelOccurrence, List<TiltOfADerivedValue.RowsOnABorder>> byCall = new LinkedHashMap<>();
             for (ModelOccurrence copy : each.value().copies()) {
-                List<TiltOfADerivedValue.Evidence> ofOneCall = new ArrayList<>();
+                List<TiltOfADerivedValue.RowsOnABorder> ofOneCall = new ArrayList<>();
                 for (ReadingOfALine reading : readings) {
                     if (each.value().isCutBy(reading.border(), copy)) {
                         // A border nothing was read against says nothing, and is not left out of
                         // the call: the call's weights are fixed by the rows on every border of it,
                         // and not by the ones that happened to be read.
                         ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
-                                .orElseGet(() -> new TiltOfADerivedValue.Evidence(Map.of(),
+                                .orElseGet(() -> new TiltOfADerivedValue.RowsOnABorder(Map.of(),
                                         List.of(), false)));
                     }
                 }
