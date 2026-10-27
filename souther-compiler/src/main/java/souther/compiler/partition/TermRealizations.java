@@ -14,6 +14,7 @@ import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.ReadingsOfEachValue;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -2303,37 +2304,54 @@ final class TermRealizations {
         // all do. A statement no region carries is one more thing each element would have to be
         // written to meet.
         SearchRegion region = within;
-        DemandsInside demanded = inside;
+        List<DemandsInside> demanded = List.of(inside);
         if (gathered.selection() != null) {
             List<TakenConstraint> kept = gathered.selection().heldTo().orElse(null);
             if (kept == null) {
-                return new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-            }
-            region = TakenConstraint.narrowedBy(kept, within);
-            if (TakenConstraint.nothingIsLeftFor(kept, region)) {
-                return new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
-            }
-            // A text held at one value is written there in every element, as a value asked
-            // inside it: an element's text is chosen by what is asked of it, and not by a region.
-            Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
-            for (TakenConstraint each : kept) {
-                if (each instanceof TakenConstraint.Ordered(var term, Text at, Rel rel)
-                        && rel == Rel.EQ) {
-                    List<FixtureTemplate> held = List.of(FixtureTemplate.string(at.at()));
-                    List<FixtureTemplate> had = among.put(term.position(), held);
-                    if (had != null && !had.equals(held)) {
-                        return new Realization.Unexhausted(CompositionShortfall.writing(
-                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                                "`" + term.position() + "` is asked to hold two values");
+                // A statement that is only which cases the element is in is asked of the element
+                // as the cases it is written in, in each way it is met that stands beside what is
+                // already asked inside.
+                KeptOccurrences.CasesAsked ways = gathered.selection().casesAsked().orElse(null);
+                List<DemandsInside> beside = new ArrayList<>();
+                if (ways != null) {
+                    for (Requirements way : ways.ways()) {
+                        if (inside.required().merge(way)
+                                instanceof Requirements.Merge.Merged(Requirements both)) {
+                            beside.add(new DemandsInside(inside.among(), both));
+                        }
                     }
                 }
+                if (beside.isEmpty()) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                demanded = beside;
+            } else {
+                region = TakenConstraint.narrowedBy(kept, within);
+                if (TakenConstraint.nothingIsLeftFor(kept, region)) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+                }
+                // A text held at one value is written there in every element, as a value asked
+                // inside it: an element's text is chosen by what is asked of it, and not by a
+                // region.
+                Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+                for (TakenConstraint each : kept) {
+                    if (each instanceof TakenConstraint.Ordered(var term, Text at, Rel rel)
+                            && rel == Rel.EQ) {
+                        List<FixtureTemplate> held = List.of(FixtureTemplate.string(at.at()));
+                        List<FixtureTemplate> had = among.put(term.position(), held);
+                        if (had != null && !had.equals(held)) {
+                            return new Realization.Unexhausted(CompositionShortfall.writing(
+                                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                    "`" + term.position() + "` is asked to hold two values");
+                        }
+                    }
+                }
+                demanded = List.of(new DemandsInside(among, inside.required()));
             }
-            demanded = new DemandsInside(among, inside.required());
         }
         SearchRegion keptIn = region;
-        DemandsInside heldInside = demanded;
         // Some element, since a key is filed where one has it: a container of none comes to
         // nought added up and files no key at all. An end is one element, which is its own end
         // by either; and how many elements the key has is asked of them as well where a count of
@@ -2360,11 +2378,15 @@ final class TermRealizations {
         // of the counts in it is the size.
         ContainersAddingUp.HowManyIsAskedFor elements = new ContainersAddingUp.HowManyIsAskedFor(
                 howMany == null || oneElement != null ? some : howMany, Carrier.WHOLE, 1);
-        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                onTheOrder(asked.walking(), orders, asked.named(), within,
-                        UsualPlaces.of(orders.term(), orders.answered(), reading.today())),
-                number -> ContainersAddingUp.to(number, sourceType, keptApart, orders, keptIn,
-                        reading, elements, heldInside));
+        Tried tried = onTheOrder(asked.walking(), orders, asked.named(), within,
+                UsualPlaces.of(orders.term(), orders.answered(), reading.today()));
+        // Each way the statement is met is a row of its own, and one is no row of another: a way
+        // that builds nothing says nothing of the rest.
+        Realization made = firstThatBuilds(asked.walkIsOfTheWholeQuestion() && demanded.size() == 1,
+                demanded, CompositionShortfall.NONE,
+                heldInside -> firstThatBuilds(asked.walkIsOfTheWholeQuestion(), tried,
+                        number -> ContainersAddingUp.to(number, sourceType, keptApart, orders,
+                                keptIn, reading, elements, heldInside)));
         // And one that is not written is not one no row has: the container may be one its type
         // makes hold more of the key's elements than one, which it is made of.
         return oneElement != null ? someOf(made, oneElement) : made;

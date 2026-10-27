@@ -19,6 +19,8 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.Admits;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.FilingCoordinate;
@@ -31,6 +33,8 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -4197,7 +4201,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static NumericDomain.Bounds shownOfAnEnd(NumericTerm end, InputReading read,
                                                      SearchRegion region, List<OnAWay> conditions,
                                                      boolean heldWhole) {
-        List<PlaceOfAnEnd> places = placesOfOneElement(end);
+        List<PlaceOfAnEnd> places = placesOfEnd(end);
+        if (end instanceof NumericTerm.GatheredUnderItsKey gathered && gathered.selection() != null
+                && !aLoneElementMeetsTheSelectionBeside(gathered.selection(), places, read)) {
+            return null;
+        }
         List<NumericTerm.FromOnePosition> measures = new ArrayList<>();
         for (PlaceOfAnEnd each : places) {
             NumericTerm.FromOnePosition measured = each.measure(read);
@@ -4215,18 +4223,131 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Where one element has the number {@code end} is an end of, at each of the places its case
-     * puts it — empty where {@code end} is the end of a selection of the elements, or of anything
-     * but places.
+     * puts it — empty where {@code end} is the end of a selection of the elements that is more than
+     * which cases they are in, or of anything but places. Whether one element is kept by such a
+     * selection beside the place is asked where the end is shown reached
+     * ({@link #aLoneElementMeetsTheSelectionBeside}).
      */
     private static List<PlaceOfAnEnd> placesOfOneElement(NumericTerm end) {
+        return end instanceof NumericTerm.GatheredUnderItsKey gathered && gathered.selection() != null
+                && gathered.selection().casesAsked().isEmpty() ? List.of() : placesOfEnd(end);
+    }
+
+    /**
+     * Whether the one element of a container is kept by {@code selection} wherever it stands at
+     * one of {@code places} — so that the end over the kept elements is that element's number.
+     *
+     * <p>True only where the selection is which cases positions of the element are in
+     * ({@link KeptOccurrences#casesAsked}), and the element can be written in some way of meeting
+     * it: every case of the way holds a value. Beside that, no place of the end sits at or under a
+     * position the selection reads, and no rule of a value those positions sit in names one: the
+     * element is then written at the cases the selection asks and at the number the end is asked
+     * at, the one choice leaving the other free. A selection on a number, or one reading the
+     * element as a whole, is not shown to be met together with the end.
+     *
+     * <p>Which way a row is written in is the composer's, against what else the row asks of the
+     * same positions ({@code TermRealizations}); a place of the end never asks a case at a
+     * position the selection reads, since it would sit under it.
+     */
+    private static boolean aLoneElementMeetsTheSelectionBeside(KeptOccurrences selection,
+                                                               List<PlaceOfAnEnd> places,
+                                                               InputReading read) {
+        KeptOccurrences.CasesAsked asked = selection.casesAsked().orElse(null);
+        if (places.isEmpty() || asked == null) {
+            return false;
+        }
+        for (TermPath subject : asked.positions()) {
+            if (namedDownTo(subject, subject.steps().size(), read, null) != Named.NOT) {
+                return false;
+            }
+            for (PlaceOfAnEnd each : places) {
+                TermPath place = each.place().position();
+                if (place.isAtOrUnder(subject) || subject.isAtOrUnder(place)) {
+                    return false;
+                }
+            }
+        }
+        return asked.ways().stream().anyMatch(way -> everyCaseHoldsAValue(way, places, read));
+    }
+
+    /**
+     * Whether one element can stand at each of {@code places} and meet the statement in {@code way}
+     * — the cases the way asks stand beside the cases each place is in — and the rules, every one
+     * read, leave a value at every case the way asks of a position. A case they refuse holds none,
+     * and one they were not read to the end of may hold none either: only an admission is a value
+     * that can be written.
+     */
+    private static boolean everyCaseHoldsAValue(Requirements way, List<PlaceOfAnEnd> places,
+                                                InputReading read) {
+        for (PlaceOfAnEnd place : places) {
+            if (!(way.merge(place.place().requirements()) instanceof Requirements.Merge.Merged)) {
+                return false;
+            }
+        }
+        for (Map.Entry<TermPath, CasesLeft> each : way.refinements().entrySet()) {
+            for (PlaceOfAnEnd place : places) {
+                if (!admittedBeside(each.getKey(), each.getValue(), place.place().requirements(),
+                        read)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether the rules, every one read, leave a value at {@code cases} of the sum at {@code at},
+     * in an element as {@code element} asks it to be. A name the cases of the element share
+     * stands at one position under each of them, and the element is as one of those asks.
+     */
+    private static boolean admittedBeside(TermPath at, CasesLeft cases, Requirements element,
+                                          InputReading read) {
+        Position there = read.domain().at(at.position());
+        if (there != null) {
+            return admits(there, cases, read);
+        }
+        if (!(read.domain().reach().standingOf(at)
+                instanceof NameReach.Standing.UnderTheCases(
+                        List<NameReach.CaseStanding> standings))) {
+            return false;
+        }
+        boolean any = false;
+        for (NameReach.CaseStanding standing : standings) {
+            if (element.merge(standing.assuming()) instanceof Requirements.Merge.Merged) {
+                Position under = read.domain().at(standing.position().position());
+                if (under == null || !admits(under, cases, read)) {
+                    return false;
+                }
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    /**
+     * Whether the rules of the position leave every one of {@code cases} a value, and each case a
+     * sum has is one its declaration is shown to leave a value of: a position admits the case, and
+     * only the declaration says whether anything can be made of it.
+     */
+    private static boolean admits(Position there, CasesLeft cases, InputReading read) {
+        for (Refinement narrowing : cases.atoms()) {
+            if (!(there.admissionOf(narrowing) instanceof Admits.Admitted)
+                    || (narrowing instanceof Refinement.SumCase sum
+                            && !aValueIsShownToExist(Type.ref(sum.leaf()), read))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<PlaceOfAnEnd> placesOfEnd(NumericTerm end) {
         if (end instanceof NumericTerm.ExtremeOfItsKey extreme) {
             // The end of the steps the values fall in is the end of one element's steps, which is
             // the number of its value that counts them.
             return List.of(new PlaceOfAnEnd(extreme.value(), extreme.through(), extreme.steps()));
         }
         if (!(end instanceof NumericTerm.GatheredUnderItsKey gathered)
-                || !(gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End)
-                || gathered.selection() != null) {
+                || !(gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End)) {
             return List.of();
         }
         return switch (gathered.value()) {
