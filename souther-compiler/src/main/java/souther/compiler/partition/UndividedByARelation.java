@@ -39,6 +39,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTranslation;
@@ -4197,7 +4198,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static NumericDomain.Bounds shownOfAnEnd(NumericTerm end, InputReading read,
                                                      SearchRegion region, List<OnAWay> conditions,
                                                      boolean heldWhole) {
-        List<PlaceOfAnEnd> places = placesOfOneElement(end);
+        List<PlaceOfAnEnd> places = placesOfEnd(end);
+        if (end instanceof NumericTerm.GatheredUnderItsKey gathered && gathered.selection() != null
+                && !aLoneElementMeetsTheSelectionBeside(gathered.selection(), places, read)) {
+            return null;
+        }
         List<NumericTerm.FromOnePosition> measures = new ArrayList<>();
         for (PlaceOfAnEnd each : places) {
             NumericTerm.FromOnePosition measured = each.measure(read);
@@ -4215,18 +4220,92 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Where one element has the number {@code end} is an end of, at each of the places its case
-     * puts it — empty where {@code end} is the end of a selection of the elements, or of anything
-     * but places.
+     * puts it — empty where {@code end} is the end of a selection of the elements that is more than
+     * which cases they are in, or of anything but places. Whether one element is kept by such a
+     * selection beside the place is asked where the end is shown reached
+     * ({@link #aLoneElementMeetsTheSelectionBeside}).
      */
     private static List<PlaceOfAnEnd> placesOfOneElement(NumericTerm end) {
+        return end instanceof NumericTerm.GatheredUnderItsKey gathered && gathered.selection() != null
+                && !inCasesOfFreePositions(gathered.selection().meeting(), new ArrayList<>())
+                ? List.of() : placesOfEnd(end);
+    }
+
+    /**
+     * Whether the one element of a container is kept by {@code selection} wherever it stands at
+     * one of {@code places} — so that the end over the kept elements is that element's number.
+     *
+     * <p>True only where the selection is the case some position of the element is in, and no
+     * place of the end, and no rule of a value the positions sit in, reads or relates them: the
+     * element is then written at the case the selection asks and at the number the end is asked
+     * at, the one choice leaving the other free. A selection on a number, or one reading the
+     * element as a whole, or a place of the end at or under a position it reads, is not shown to
+     * be met together with it.
+     */
+    private static boolean aLoneElementMeetsTheSelectionBeside(KeptOccurrences selection,
+                                                               List<PlaceOfAnEnd> places,
+                                                               InputReading read) {
+        List<TermPath> subjects = new ArrayList<>();
+        if (places.isEmpty() || !inCasesOfFreePositions(selection.meeting(), subjects)) {
+            return false;
+        }
+        for (TermPath subject : subjects) {
+            TermPath at = subject.position();
+            if (namedDownTo(at, at.steps().size(), read, null) != Named.NOT) {
+                return false;
+            }
+            for (PlaceOfAnEnd each : places) {
+                TermPath place = each.place().position();
+                if (place.isAtOrUnder(at) || at.isAtOrUnder(place)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code stated} says of positions of the input, each once, that they are in some of
+     *  their cases and nothing else; those positions are added to {@code out}. */
+    private static boolean inCasesOfFreePositions(Proposition stated, List<TermPath> out) {
+        return switch (stated) {
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), _, boolean holds, _)
+                    when holds -> out.add(at);
+            // Of several the element must meet, two on one position may leave it no case.
+            case Proposition.All all -> {
+                for (Proposition part : all.parts()) {
+                    List<TermPath> here = new ArrayList<>();
+                    if (!inCasesOfFreePositions(part, here)
+                            || here.stream().anyMatch(at -> out.stream()
+                                    .anyMatch(past -> past.position().equals(at.position())))) {
+                        yield false;
+                    }
+                    out.addAll(here);
+                }
+                yield true;
+            }
+            // Meeting any one is meeting it, so each may be asked of the same position.
+            case Proposition.Any any -> {
+                for (Proposition part : any.parts()) {
+                    List<TermPath> here = new ArrayList<>();
+                    if (!inCasesOfFreePositions(part, here)) {
+                        yield false;
+                    }
+                    here.stream().filter(at -> !out.contains(at)).forEach(out::add);
+                }
+                yield true;
+            }
+            default -> false;
+        };
+    }
+
+    private static List<PlaceOfAnEnd> placesOfEnd(NumericTerm end) {
         if (end instanceof NumericTerm.ExtremeOfItsKey extreme) {
             // The end of the steps the values fall in is the end of one element's steps, which is
             // the number of its value that counts them.
             return List.of(new PlaceOfAnEnd(extreme.value(), extreme.through(), extreme.steps()));
         }
         if (!(end instanceof NumericTerm.GatheredUnderItsKey gathered)
-                || !(gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End)
-                || gathered.selection() != null) {
+                || !(gathered.gathering() instanceof NumericTerm.GatheredUnderItsKey.Gathering.End)) {
             return List.of();
         }
         return switch (gathered.value()) {

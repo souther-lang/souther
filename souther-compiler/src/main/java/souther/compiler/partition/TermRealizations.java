@@ -14,6 +14,7 @@ import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.ReadingsOfEachValue;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -2307,30 +2308,39 @@ final class TermRealizations {
         if (gathered.selection() != null) {
             List<TakenConstraint> kept = gathered.selection().heldTo().orElse(null);
             if (kept == null) {
-                return new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-            }
-            region = TakenConstraint.narrowedBy(kept, within);
-            if (TakenConstraint.nothingIsLeftFor(kept, region)) {
-                return new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
-            }
-            // A text held at one value is written there in every element, as a value asked
-            // inside it: an element's text is chosen by what is asked of it, and not by a region.
-            Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
-            for (TakenConstraint each : kept) {
-                if (each instanceof TakenConstraint.Ordered(var term, Text at, Rel rel)
-                        && rel == Rel.EQ) {
-                    List<FixtureTemplate> held = List.of(FixtureTemplate.string(at.at()));
-                    List<FixtureTemplate> had = among.put(term.position(), held);
-                    if (had != null && !had.equals(held)) {
-                        return new Realization.Unexhausted(CompositionShortfall.writing(
-                                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                                "`" + term.position() + "` is asked to hold two values");
+                // A statement that is only which cases the element is in is asked of the element
+                // as the cases it is written in.
+                Requirements cases = gathered.selection().casesRequired().orElse(null);
+                if (cases == null || !(inside.required().merge(cases)
+                        instanceof Requirements.Merge.Merged(Requirements both))) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                demanded = new DemandsInside(inside.among(), both);
+            } else {
+                region = TakenConstraint.narrowedBy(kept, within);
+                if (TakenConstraint.nothingIsLeftFor(kept, region)) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+                }
+                // A text held at one value is written there in every element, as a value asked
+                // inside it: an element's text is chosen by what is asked of it, and not by a
+                // region.
+                Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
+                for (TakenConstraint each : kept) {
+                    if (each instanceof TakenConstraint.Ordered(var term, Text at, Rel rel)
+                            && rel == Rel.EQ) {
+                        List<FixtureTemplate> held = List.of(FixtureTemplate.string(at.at()));
+                        List<FixtureTemplate> had = among.put(term.position(), held);
+                        if (had != null && !had.equals(held)) {
+                            return new Realization.Unexhausted(CompositionShortfall.writing(
+                                    Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
+                                    "`" + term.position() + "` is asked to hold two values");
+                        }
                     }
                 }
+                demanded = new DemandsInside(among, inside.required());
             }
-            demanded = new DemandsInside(among, inside.required());
         }
         SearchRegion keptIn = region;
         DemandsInside heldInside = demanded;

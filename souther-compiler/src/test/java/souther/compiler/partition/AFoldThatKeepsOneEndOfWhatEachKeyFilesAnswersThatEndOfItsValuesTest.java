@@ -656,6 +656,112 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         assertFalse(unreadAnywhere(apart).isEmpty(), apart);
     }
 
+    private static final String KEPT_BY_WHAT_IT_IS_RELATED_TO = """
+            module example.stale
+
+            data ToAccount
+            data ToLead
+            data Related = ToAccount | ToLead
+            data Touch = { account: String, related: Related, days: Int }
+                %s
+
+            let onAnAccount (t: Touch): Bool =
+                match t.related with
+                    | ToAccount -> true
+                    | ToLead -> false
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, t) -> Map.updateOrInsert(t.account, t.days,
+                                                         seen -> Int.min(seen, t.days), acc),
+                          Map.empty, List.filter(t -> onAnAccount(t), touches))
+
+            behavior stale : (touches: List<Touch>, staleAfter: Int) -> Map<String, Int>
+
+            let stale (touches, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches))
+            """;
+
+    /**
+     * An end taken over the touches that are related to an account is shown every value its
+     * number takes where one touch alone is a row: that touch is related to an account, and what
+     * it is related to is not what the number reads. Where the number is a field of the case that
+     * is the relation itself, the touches kept are those with a value, and the proof says so.
+     */
+    @Test
+    void theEndOverASelectionIsShownEveryValueWhereWhatSelectsIsNotWhatTheNumberReads() {
+        for (String declared : List.of("", "invariant days >= 0 && days <= 100")) {
+            Compilation compilation = measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted(declared));
+            String report = report(compilation);
+            assertEquals(List.of(), unreadAnywhere(report), report);
+            assertTrue(json(compilation).contains("kept by touches meeting"),
+                    () -> "the end is taken over the touches kept: " + report);
+            assertEquals(List.of(), report.lines().filter(line -> line.contains("no row is at"))
+                    .toList(), report);
+        }
+    }
+
+    /**
+     * A rule of the touch that reads what it is related to leaves it only some cases, and may
+     * leave it none of the cases that keep it: no touch is then kept, and the end is not shown
+     * a value because one touch alone would be a row.
+     */
+    @Test
+    void aRuleOfTheTouchNamingWhatKeepsItLeavesTheEndUnshownEveryValue() {
+        String report = report(measured(KEPT_BY_WHAT_IT_IS_RELATED_TO.formatted(
+                "invariant onlyALead(related)").replace("let onAnAccount", """
+                let onlyALead (r: Related): Bool =
+                    match r with
+                        | ToAccount -> false
+                        | ToLead -> true
+
+                let onAnAccount""")));
+        assertFalse(unreadAnywhere(report).isEmpty(), report);
+    }
+
+    private static final String KEPT_BY_THE_CASE_ITSELF = """
+            module example.stale
+
+            data Call = { account: String, days: Int }
+            data Email = { account: String, days: Int }
+            data Touch = Call | Email
+
+            let isACall (t: Touch): Bool =
+                match t with
+                    | Call -> true
+                    | Email -> false
+
+            let daysOf (t: Touch): Int =
+                match t with
+                    | Call { days } -> days
+                    | Email { days } -> days
+
+            let accountOf (t: Touch): String =
+                match t with
+                    | Call { account } -> account
+                    | Email { account } -> account
+
+            let sinceOf (touches: List<Touch>): Map<String, Int> =
+                List.fold((acc, t) -> Map.updateOrInsert(accountOf(t), daysOf(t),
+                                                         seen -> Int.min(seen, daysOf(t)), acc),
+                          Map.empty, List.filter(t -> isACall(t), touches))
+
+            behavior stale : (touches: List<Touch>, staleAfter: Int) -> Map<String, Int>
+
+            let stale (touches, staleAfter) =
+                Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(touches))
+            """;
+
+    /**
+     * Where the touches are kept for the case they are, and the number is read from the case
+     * they are in, one touch alone cannot be shown to be both: what keeps it and the number are
+     * not apart, and the end is not shown every value.
+     */
+    @Test
+    void theEndOverASelectionOfTheCaseTheNumberIsReadInIsNotShownEveryValue() {
+        String report = report(measured(KEPT_BY_THE_CASE_ITSELF));
+        assertFalse(unreadAnywhere(report).isEmpty(), report);
+    }
+
     /** The lines saying a place is not read, of any comparison. */
     private static List<String> unreadAnywhere(String report) {
         return report.lines().filter(line -> line.contains("not read")).toList();

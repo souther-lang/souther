@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -116,6 +118,40 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                 yield true;
             }
             default -> false;
+        };
+    }
+
+    /**
+     * The cases an element is written in to be kept, where the statement says no more than which
+     * cases positions of the element are in — or empty where it says anything else, or asks two
+     * things of one position that no case meets. Meeting any of several is met by the first.
+     */
+    Optional<Requirements> casesRequired() {
+        return casesRequired(meeting);
+    }
+
+    private static Optional<Requirements> casesRequired(Proposition stated) {
+        return switch (stated) {
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+                    boolean holds, String _) when holds ->
+                    // The plan writes one case of a sum, so one of those left is the one written.
+                    Optional.of(Requirements.NONE.and(at.position(),
+                            CasesLeft.of(cases.atoms().getFirst())));
+            case Proposition.All all -> {
+                Requirements both = Requirements.NONE;
+                for (Proposition part : all.parts()) {
+                    Optional<Requirements> here = casesRequired(part);
+                    if (here.isEmpty() || !(both.merge(here.get())
+                            instanceof Requirements.Merge.Merged(Requirements merged))) {
+                        yield Optional.empty();
+                    }
+                    both = merged;
+                }
+                yield Optional.of(both);
+            }
+            case Proposition.Any any -> any.parts().stream().map(KeptOccurrences::casesRequired)
+                    .flatMap(Optional::stream).findFirst();
+            default -> Optional.empty();
         };
     }
 
