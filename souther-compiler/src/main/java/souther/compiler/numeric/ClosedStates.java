@@ -44,7 +44,7 @@ import java.util.function.Function;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null, null, false);
+    public static final ClosedStates NONE = new ClosedStates(null, null, null, false);
 
     /**
      * Nothing kept, and every set of rules closed in one run rather than a part at a time
@@ -55,11 +55,12 @@ public final class ClosedStates {
      * the closure, about forms over positions of two parts. Nothing else asks for this: the two are
      * one closure, and this one costs what the rules cost together.
      */
-    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, true);
+    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true);
 
     /** One closure per question, kept for as long as whatever holds this is held. */
     public static ClosedStates kept() {
-        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>(), false);
+        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                new ConcurrentHashMap<>(), false);
     }
 
     private final Map<ClosureQuestion<?>, ClosedState<?>> answers;
@@ -78,7 +79,19 @@ public final class ClosedStates {
      */
     private final Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places;
 
+    /**
+     * How each form has been walked in each order it has been asked of ({@link CanonicalForm#entriesIn}).
+     *
+     * <p>Kept for the reason {@link #places} is: the walk of a form is settled by the form and the
+     * order alone, and the rules a reading is asked about are the same few forms for every form it is
+     * put. Keyed by the order as the object it is, so an order written apart that walks alike is a
+     * walk done again and nothing else. Null for a table that keeps nothing.
+     */
+    private final Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks;
+
     private final AtomicLong workedOut = new AtomicLong();
+
+    private final AtomicLong walkedOut = new AtomicLong();
 
     private final AtomicLong asked = new AtomicLong();
 
@@ -87,10 +100,50 @@ public final class ClosedStates {
 
     private ClosedStates(Map<ClosureQuestion<?>, ClosedState<?>> answers,
                          Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
+                         Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks,
                          boolean inOneRun) {
         this.answers = answers;
         this.places = places;
+        this.walks = walks;
         this.inOneRun = inOneRun;
+    }
+
+    /**
+     * How a form is walked under {@code order}: {@link CanonicalForm#entriesIn}, worked out once for
+     * each form where this keeps what it is asked, and worked out each time where it does not.
+     *
+     * <p>A walk that is refused is refused each time it is asked, and nothing of it is kept.
+     */
+    <A> Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walksIn(
+            CanonicalOrder<A> order) {
+        if (walks == null) {
+            return form -> form.entriesIn(order);
+        }
+        Map<CanonicalForm<?>, List<?>> kept = walks.computeIfAbsent(order,
+                _ -> new ConcurrentHashMap<>());
+        return form -> {
+            // The cast holds because an entry is only ever put under the form it is the walk of, in
+            // the order the table above is keyed by.
+            @SuppressWarnings("unchecked")
+            List<Map.Entry<A, ExactRatio>> had = (List<Map.Entry<A, ExactRatio>>) kept.get(form);
+            if (had != null) {
+                return had;
+            }
+            List<Map.Entry<A, ExactRatio>> made = form.entriesIn(order);
+            walkedOut.incrementAndGet();
+            kept.put(form, made);
+            return made;
+        };
+    }
+
+    /**
+     * How many walks of a form this has worked out rather than lent, for a test holding a reader to
+     * asking for the walk of a rule's form once however many readings are asked about it. Counted
+     * for the same reason {@link #workedOut} is: that a walk asked again is not done again is a
+     * shape and not a speed.
+     */
+    long walksWorkedOut() {
+        return walkedOut.get();
     }
 
     /** What {@code rules} leave, spaced by {@code spacing} and walked in {@code order}. */

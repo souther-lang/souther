@@ -206,11 +206,22 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     public NumbersAskedFor meet(NumbersAskedFor other) {
         List<JointDemand> both = new ArrayList<>(onlyTogether);
         for (JointDemand each : other.onlyTogether) {
-            if (!both.contains(each)) {
+            if (!gathered(both, each)) {
                 both.add(each);
             }
         }
         return new NumbersAskedFor(values.meet(other.values), both);
+    }
+
+    /** Whether {@code demand} is among {@code these}: the very one is found without comparing what
+     *  it says, and only a different one is compared. */
+    private static boolean gathered(List<JointDemand> these, JointDemand demand) {
+        for (JointDemand each : these) {
+            if (each == demand) {
+                return true;
+            }
+        }
+        return these.contains(demand);
     }
 
     /**

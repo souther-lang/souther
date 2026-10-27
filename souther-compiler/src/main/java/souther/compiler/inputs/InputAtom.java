@@ -128,8 +128,21 @@ sealed interface InputAtom {
             return path.isTheValueItself() ? root : root + "." + path;
         }
 
+        /** The spelling, worked out on the first asking: the order a walk takes these in compares
+         *  them by it, so it is asked once for every comparison a sort makes. */
+        private String spelled;
+
         @Override
         public String toString() {
+            String had = spelled;
+            if (had == null) {
+                had = spell();
+                spelled = had;
+            }
+            return had;
+        }
+
+        private String spell() {
             String at = place();
             return switch (kind) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> at;

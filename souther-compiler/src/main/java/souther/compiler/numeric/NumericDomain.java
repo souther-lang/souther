@@ -119,6 +119,7 @@ public final class NumericDomain<A> {
     private final RulesRead<A> readBefore;
     private RulesRead<A> read;
     private ClosedStates.Parted<A> closed;
+    private FormReach<A> reach;
     private Systems<A> systems;
     private Boolean noRow;
 
@@ -903,10 +904,23 @@ public final class NumericDomain<A> {
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
     }
 
-    /** The one reading of what the rules leave a form, over the state they have been worked out to. */
+    /**
+     * The one reading of what the rules leave a form, over the state they have been worked out to.
+     *
+     * <p>Made once for the state and asked of for every form: what a reading comes to is a function
+     * of the state it was made over, and the index of the rules it keeps for the forms of several
+     * positions is the same for each of them, so a reading made for each question works it out as
+     * often as it is asked.
+     */
     private FormReach<A> reading() {
-        ClosedState<A> state = closed();
-        return FormReach.over(rules(), state.box(), state.differences(), order);
+        FormReach<A> had = reach;
+        if (had == null) {
+            ClosedState<A> state = closed();
+            had = FormReach.over(rules(), state.box(), state.differences(), order,
+                    closedStates.walksIn(order));
+            reach = had;
+        }
+        return had;
     }
 
 
