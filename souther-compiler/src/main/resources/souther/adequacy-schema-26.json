@@ -1796,6 +1796,40 @@
         "location": {
           "$ref": "#/$defs/location"
         },
+        "threshold": {
+          "type": "object",
+          "description": "Which threshold of a computation cut at several places the point is owed at, for a point at a value of the quantity: a computation of a total looked up in a table owes its ON and OFF points once for each threshold. `written_at` is the bound the comparison was written against, as the table holds it, and is one threshold however many computations read it. `cut_at` is where the computation itself is cut, named by the computation and the place, for a comparison whose bound could not be told. Absent for a comparison cut at one place.",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "written_at",
+                "cut_at"
+              ]
+            },
+            "bound": {
+              "type": "string",
+              "description": "The number the comparison was written against."
+            },
+            "copies": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/constructOccurrence"
+              }
+            },
+            "quantity": {
+              "type": "string",
+              "description": "The weighing of the positions the computation is cut on."
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            }
+          }
+        },
         "stops": {
           "type": "object",
           "description": "What settled where the run stops. `at_a_line` is a rule that put a line there, named by the line and the place it parts the values. `at_the_domain` is what every rule about the position leaves together, which is a place and no one rule. `at_the_order_end` is nothing stopping it, so the run goes as far as the order does.",

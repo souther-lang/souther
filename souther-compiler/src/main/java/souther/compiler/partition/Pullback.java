@@ -529,6 +529,23 @@ final class Pullback {
     }
 
     /**
+     * The number {@code comparison} is written against, as it is read in {@code reads}: the side
+     * that is the same number on every run, where the other is not.
+     *
+     * <p>Before the statement is pulled back, which weighs the side that varies and divides the
+     * number by it: a table bound held against an average of three months is the bound where it was
+     * written and three times it on the total. Nothing where both sides are numbers or neither is,
+     * since neither is then the bound.
+     */
+    static Optional<ExactRatio> writtenAgainst(StatedComparison comparison, InputReading read,
+                                               InputReads reads) {
+        TheSignOfAnOrder.Sides<InputReads> sides =
+                new Pullback(read, Optional.empty()).sides();
+        ExactRatio left = sides.constant(comparison.left(), reads);
+        return left == null ? Optional.empty() : Optional.of(left);
+    }
+
+    /**
      * What {@code truth} holding states.
      *
      * @param where the construct of the model the condition is, where the caller knows it

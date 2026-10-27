@@ -42,6 +42,7 @@ import souther.compiler.partition.ChoicePattern;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
@@ -6673,10 +6674,36 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Absent for a comparison a body wrote, which is at whatever value a call put it at.
         point.line().at().ifPresent(at -> level(into.putObject("level"), at));
         location(into.putObject("location"), point.point());
+        // Absent for a point of a comparison cut at one place. A computation cut at several owes
+        // these points once for each threshold, and the threshold is what tells two of them apart.
+        if (point instanceof BorderObligationPoint.AtLine(var _, var _, var threshold)) {
+            threshold.ifPresent(each -> thresholdId(into.putObject("threshold"), each));
+        }
         // Absent for a point at a value of the quantity, which has no run to be stopped, and for a
         // comparison a body wrote, whose run stops wherever each call's values stop it.
         if (point instanceof BorderObligationPoint.InRegion(var _, var _, var region)) {
             region.ifPresent(stops -> farEnd(into.putObject("stops"), stops));
+        }
+    }
+
+    /**
+     * Which threshold of a computation cut at several places a point is owed at: the bound the
+     * comparison was written against where there is one, and the computation with the place it is
+     * cut at where there is not.
+     */
+    private static void thresholdId(ObjectNode into, ThresholdOfADerivedValue threshold) {
+        switch (threshold) {
+            case ThresholdOfADerivedValue.WrittenAt(var level) -> {
+                into.put("kind", "written_at");
+                into.put("bound", level.spelled());
+            }
+            case ThresholdOfADerivedValue.CutAt(var value, var place) -> {
+                into.put("kind", "cut_at");
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("quantity", OrderedAffineBoundary.spelled(place.expression().direction()));
+                level(into.putObject("level"), place.at().at());
+            }
         }
     }
 

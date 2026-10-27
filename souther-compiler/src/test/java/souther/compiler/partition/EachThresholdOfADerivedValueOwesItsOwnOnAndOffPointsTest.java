@@ -9,8 +9,15 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.Map;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -82,6 +89,76 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         String report = reportOf(table(200) + AT_100 + AT_200);
         assertFalse(report.contains(MISSING_ON), report);
         assertFalse(report.contains(MISSING_OFF), report);
+    }
+
+    private static final String AVERAGED_AND_PLAIN = """
+            module demo
+
+            data N = { v: Int }
+                invariant v >= 0
+            data Row = { grade: Int, lowerBound: Int }
+            let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
+                                     Row { grade = 2, lowerBound = 100 },
+                                     Row { grade = 3, lowerBound = 300 } ]
+            let gradeOf (m: Int): Int =
+                List.fold((acc, r) -> if r.lowerBound <= m then r.grade else acc, 0, table)
+
+            behavior f : (a: N, b: N) -> Int
+
+            let f (a, b) =
+                gradeOf(Rational.toInt(DOWN, (a.v + b.v) / 2)) + gradeOf(a.v + b.v)
+
+            example f
+                | (N { v = 100 }, N { v = 0 }) -> 3
+                | (N { v = 99 }, N { v = 0 }) -> 2
+                | (N { v = 200 }, N { v = 0 }) -> 4
+                | (N { v = 199 }, N { v = 0 }) -> 3
+            """;
+
+    /**
+     * A bound of the table is one threshold however many computations read it: the average of two
+     * and the plain sum are cut at the bound 300 at 600 and at 300, and a row at either shows where
+     * the bound falls. The bound 100 is stood at by rows of both.
+     */
+    @Test
+    void aBoundTheTableWritesIsOneThresholdForEveryComputationReadingIt() {
+        String report = reportOf(AVERAGED_AND_PLAIN);
+        assertEquals(1, count(report, MISSING_ON), report);
+        assertEquals(1, count(report, MISSING_OFF), report);
+        assertTrue(report.contains("0.5 * a.v + 0.5 * b.v: = 300 in gradeOf")
+                && report.contains("a.v + b.v: = 300 in gradeOf"), report);
+    }
+
+    /** Two points of one line that differ only in the threshold are two obligations in the
+     *  document, and a finding names the one it is about. */
+    @Test
+    void theDocumentTellsTheThresholdsOfOneLineApart() {
+        Compilation compilation = measured(table(200) + AT_100);
+        JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<JsonNode> found = new ArrayList<>();
+        collect(document, found);
+        List<String> ids = found.stream().map(each -> each.get("obligationId").toString())
+                .toList();
+        assertEquals(ids.size(), Set.copyOf(ids).size(), () -> "one entry for each: " + ids);
+        assertTrue(found.stream().anyMatch(each -> each.get("obligationId").has("threshold")),
+                () -> "a point of a threshold says which: " + ids);
+    }
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    private static void collect(JsonNode node, List<JsonNode> out) {
+        if (node.isObject() && node.has("disposition") && node.has("knownWritable")
+                && node.has("rule") && node.has("obligationId")) {
+            out.add(node);
+        }
+        for (JsonNode child : node) {
+            collect(child, out);
+        }
+    }
+
+    private static long count(String text, String word) {
+        return text.lines().filter(each -> each.contains(word)).count();
     }
 
     /** The rows offered stand at the threshold no row is at, and only there. */

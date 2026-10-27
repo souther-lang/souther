@@ -12,6 +12,7 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
@@ -241,15 +242,38 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          *              run through that one is a run through the rule. What arrives at the rule is
          *              what has to hold for a run to get there, and this is whether that is all
          *              getting there takes
+         * @param writtenAgainst the number this reading's comparison was written against, where one
+         *              side is a number the same on every run and the other is not: the bound of a
+         *              table as the table holds it, before the quantity it is held against was
+         *              weighed and divided into the level the line is cut at
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
                            List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn,
-                           CanonicalSelection<WhatMayStopARun> stopsBefore) {
+                           CanonicalSelection<WhatMayStopARun> stopsBefore,
+                           Optional<ExactRatio> writtenAgainst) {
+
+            /**
+             * Which reading this is, which the number it was written against is no part of: that
+             * is what the reading says of the line, and two readings of one comparison at one
+             * place are one reading whatever bound each held.
+             */
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Read read && rule.equals(read.rule)
+                        && states.equals(read.states) && anchor.equals(read.anchor)
+                        && recordedAt.equals(read.recordedAt) && metOn.equals(read.metOn)
+                        && stopsBefore.equals(read.stopsBefore);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(rule, states, anchor, recordedAt, metOn, stopsBefore);
+            }
 
             public Read {
                 if (rule == null || states == null || anchor == null || metOn == null
-                        || stopsBefore == null) {
+                        || stopsBefore == null || writtenAgainst == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");

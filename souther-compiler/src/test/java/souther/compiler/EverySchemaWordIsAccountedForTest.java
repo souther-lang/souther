@@ -1606,6 +1606,9 @@ class EverySchemaWordIsAccountedForTest {
         // And which use of a function fell short, by kind. Written by a switch over the sealed
         // shortfalls, for the reason the one above is.
         held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
+        // Which threshold a point of a computation cut at several places is owed at, by kind.
+        // Written by a switch over the sealed thresholds, for the reason the ones above are.
+        held.add("/$defs/obligationId/properties/threshold/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

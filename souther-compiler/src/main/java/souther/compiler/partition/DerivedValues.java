@@ -150,8 +150,13 @@ public final class DerivedValues {
                 List<DerivedValue.Cut> cuts = DerivedValue.cutsBy(border.origin(),
                         border.cut().of(), border.cut().cut().canonical());
                 if (!cuts.isEmpty()) {
-                    return border.atThreshold(new ThresholdOfADerivedValue(each.value(),
-                            cuts.getFirst().place()));
+                    return border.atThreshold(
+                            border.origin() instanceof LineOrigin.ComparisonOrigin comparison
+                                    && comparison.read().writtenAgainst().isPresent()
+                                    ? new ThresholdOfADerivedValue.WrittenAt(
+                                            comparison.read().writtenAgainst().get())
+                                    : new ThresholdOfADerivedValue.CutAt(each.value(),
+                                            cuts.getFirst().place()));
                 }
             }
         }
