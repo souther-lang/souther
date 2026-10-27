@@ -1594,6 +1594,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (ofOne && ofTheElementAtHand(each, collection)) {
                     continue;
                 }
+                // Which case an element is, said of the element and nothing else, asks the
+                // collection for the element it is said of.
+                if (saysOnlyWhatStandsInside(each, collection)) {
+                    asked = asked.max(BigInteger.ONE);
+                    continue;
+                }
                 Optional<BigInteger> least = holdsAtLeast(each, collection, read);
                 if (least.isEmpty()) {
                     return Optional.empty();
@@ -1661,6 +1667,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static boolean ofTheElementAtHand(OnAWay statement, TermPath collection) {
         return statement.elementsOf() == null && statement.relation() != null
                 && !statement.whatStands()
+                && statement.positions().stream()
+                        .allMatch(at -> !at.equals(collection) && at.isAtOrUnder(collection));
+    }
+
+    /**
+     * Whether {@code statement} says what stands at a value inside {@code collection} and nothing
+     * of the values that stand there beside another, such as which case an element is: an element
+     * is reached only where the collection holds one, and that is all it asks of how many.
+     */
+    private static boolean saysOnlyWhatStandsInside(OnAWay statement, TermPath collection) {
+        return statement.whatStands() && statement.relation() == null
+                && statement.elementsOf() == null
                 && statement.positions().stream()
                         .allMatch(at -> !at.equals(collection) && at.isAtOrUnder(collection));
     }
@@ -4766,7 +4784,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<TermPath.Step> container = new ArrayList<>(here.steps());
         container.addAll(rest.subList(0, fields));
-        return mayHoldOne(new TermPath(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
+        return mayHoldSome(new TermPath(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
     }
 
     /**
@@ -4828,23 +4846,45 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether the container at {@code at} is shown to hold one element beside some value of
-     * everything else: some value of it exists, and one is in a run of how many it holds that the
-     * rules are shown to leave whole ({@link SearchRegion#wholeRunOf}) — so some value holds
-     * exactly one.
+     * Whether the container at {@code at} is shown to hold an element beside some value of
+     * everything else: some value of it exists, and a count of one or more is in a run of how
+     * many it holds that the rules are shown to leave whole ({@link SearchRegion#wholeRunOf}) —
+     * so some value holds that many.
      *
-     * <p>One and not one or more. A container holding one element holds it whatever value it is —
-     * no second element is there to be apart from — so one taken is every value of the elements
-     * standing in some value. More than one asks the element's type for that many values apart,
-     * which a type holding fewer does not have.
+     * <p>A rule that reads only how many a container holds says nothing of what its elements are,
+     * and the elements of a container holding as many as that count may all be one value. So the
+     * count taken is every value of the elements standing in some value, whatever the count is. A
+     * rule keeping the elements apart reads them, and is a reading of its own.
      *
      * <p>Shown of the count, not of the value whole. Whether the rules of everything the
      * container sits in project exactly is a question about all of them, and a pattern a field
      * beside it is held to says nothing of how many it holds.
      */
-    private static boolean mayHoldOne(TermPath at, InputReading read) {
+    private static boolean mayHoldSome(TermPath at, InputReading read) {
         NumericDomain.Bounds whole = howManyItHoldsWhole(at, read);
-        return whole != null && whole.admits(ExactRatio.ONE);
+        if (whole == null) {
+            return false;
+        }
+        if (whole.admits(ExactRatio.ONE)) {
+            return true;
+        }
+        // Not one: the fewest the run holds, where that is more and the elements may repeat. A
+        // set holds that many values apart, which is a question of the element's type.
+        if (!elementsMayRepeat(at, read) || whole.min() == null || !(whole.min().at() instanceof Count least)
+                || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger up))) {
+            return false;
+        }
+        BigInteger fewest = whole.min().inclusive() || !least.exactly().isWhole() ? up
+                : up.add(BigInteger.ONE);
+        return fewest.signum() > 0 && whole.admits(ExactRatio.of(fewest));
+    }
+
+    /** Whether the container at {@code at} is a list, whose elements may be one value as many
+     *  times as it holds them. */
+    private static boolean elementsMayRepeat(TermPath at, InputReading read) {
+        Type type = read.domain().typeAt(at, read.rules());
+        return type != null && TypeOps.base(type, read.rules().inners()) instanceof Type.ListOf;
     }
 
     /**
