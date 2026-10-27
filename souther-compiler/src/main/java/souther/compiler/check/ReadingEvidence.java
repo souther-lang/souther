@@ -113,6 +113,9 @@ final class ReadingEvidence {
     /** The places each rule defines a number from and so leaves as free as they were. */
     private final Map<RuleRef.Invariant, Set<FactSubject>> freed = new LinkedHashMap<>();
 
+    /** The rules that state or work out something besides what places are defined as. */
+    private final Set<RuleRef.Invariant> beyondTheirDefinitions = new HashSet<>();
+
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef.Invariant rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
@@ -128,6 +131,26 @@ final class ReadingEvidence {
     void freedByDefinition(RuleRef.Invariant rule, Collection<FactSubject> positions) {
         freed.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
         positions.forEach(position -> record(rule, position));
+    }
+
+    /**
+     * {@code rule} states or works out something besides the numbers it defines places as: a
+     * statement that is no definition, a definition not shown to leave its places free, or the
+     * value of a binding some operator of which is not read.
+     */
+    void notOnlyDefinitions(RuleRef.Invariant rule) {
+        beyondTheirDefinitions.add(rule);
+    }
+
+    /**
+     * Whether {@code rule} states nothing but that places are defined as numbers made of places it
+     * leaves free ({@link #freedByDefinition}), and works nothing out but those numbers.
+     *
+     * <p>So an operator of {@code rule} that is not shown to answer is an operator of one of those
+     * numbers, which the definition holds inside the order it is worked out in.
+     */
+    boolean isOnlyDefining(RuleRef rule) {
+        return freed.containsKey(rule) && !beyondTheirDefinitions.contains(rule);
     }
 
     /** Whether {@code rule} leaves {@code position} as free as it was, being a place its
