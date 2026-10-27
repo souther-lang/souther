@@ -918,7 +918,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at).said();
                 // Nothing composes a row to show the weight of a position, so no row is weighed
                 // against it here: a weight is shown by the rows already written
-                // ({@link TiltOfAFamily}), which is read where the findings are made.
+                // ({@link TiltOfADerivedValue}), which is read where the findings are made.
                 case ObligationIdentity.OfATiltAtAPosition _ -> new Settlement.DoesNotSettle();
                 case ObligationIdentity.OfAnArm owed -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);

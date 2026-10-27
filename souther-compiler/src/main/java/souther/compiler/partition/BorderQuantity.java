@@ -2012,15 +2012,16 @@ public sealed interface BorderQuantity
     }
 
     /**
-     * The direction of the value this quantity is, where it is one value computed from several
-     * positions, as a total is; empty where it is one position, a distance, a count, a remainder or
-     * a product.
+     * This quantity as the one value a rule computes from several positions, which is a form of
+     * them — a total, a difference, any weighing of them — or empty where it is one position, a
+     * distance, a count, a remainder or a product.
      *
-     * <p>Asked of the quantity because only it knows which of these it is.
+     * <p>Asked of the quantity because only it knows which of these it is. A form that names one
+     * position is that position's own values weighed, and is not computed from several.
      */
-    default Optional<QuantityKey> totalOfSeveralPositions() {
+    default Optional<LinearQuantity> derivedFromSeveralPositions() {
         return switch (this) {
-            case OverAForm form -> Optional.of(QuantityKey.of(form.direction()));
+            case OverAForm form -> form.terms().size() > 1 ? Optional.of(form) : Optional.empty();
             case OfACoordinate _, Apart _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
                  ProductOfAPair _ -> Optional.empty();
         };

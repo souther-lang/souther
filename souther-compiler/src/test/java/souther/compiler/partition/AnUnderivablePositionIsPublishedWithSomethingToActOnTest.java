@@ -213,7 +213,7 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             // is what the rows show of where the line falls.
                  About.ALineTheRowsDoNotTellFromAnother _,
             // And the weight of a position in a total, which is about the rows for the same reason.
-                 About.ATiltOfATotalNoRowShows _,
+                 About.ATiltOfADerivedValueNoRowShows _,
                  About.AnArmNoRowGoesThrough _, About.ARowAtAnArmAwaitsItsAnswer _,
             // A way through the body no row takes, and a combination of its decisions no row
             // makes: both are about the rows and not about how far any reading of a position got.

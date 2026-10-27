@@ -63,7 +63,7 @@ class AnAbsenceIsNotSaidOverABodyNobodyReadTest {
                         new BodyCutInspection.Exhausted())),
                 List.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), Map.of(),
                 ReachingCuts.NONE, closure.partition(), closure.border(), null,
-                WhereTheOperationsStand.NONE, StringsReached.NONE)
+                WhereTheOperationsStand.NONE, StringsReached.NONE, List.of())
                 .undivided();
     }
 

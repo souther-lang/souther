@@ -60,10 +60,10 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // border, and what a row shows at it is which of two lines the model draws rather
                 // than what two positions do at once.
                 "ALineTheRowsDoNotTellFromAnother",
-                // The weight of a position in a total one comparison cuts at several places. Not a
-                // combination: what a row shows is how one position weighs into the total, with
-                // every other position at its least.
-                "ATiltOfATotalNoRowShows",
+                // The weight of a position in a derived value one computation cuts at several
+                // places. Not a combination: what the rows fix is how one position weighs into
+                // the value, whatever the positions do together.
+                "ATiltOfADerivedValueNoRowShows",
                 // An arm and a row at it: what a row is owed at is the arm either way, and the
                 // second says the row is written and its answer is not.
                 "AnArmNoRowGoesThrough",

@@ -9,6 +9,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.DerivedValue;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
@@ -350,41 +352,42 @@ public sealed interface About {
     }
 
     /**
-     * A position of the totals a comparison cuts at several places, that no row shows the weight
-     * of.
+     * A position of a value a computation derives from several positions and cuts at several
+     * places, whose weight no row fixes.
      *
-     * <p>A total looked up in a table is computed once and cut at every row of it, so a position
-     * weighed wrongly or left out moves every border the same way. What shows a weight is a row on
-     * a border where that position alone is away from the least it holds ({@link TiltOfAFamily}),
-     * and one such row shows it for every border of the table: owed once for the comparison and
-     * once for each position, and never once for each threshold.
+     * <p>A value looked up in a table is computed once and cut at every row of it, so a position
+     * weighed wrongly or left out moves every border the same way. What fixes a weight is the rows
+     * on the borders ({@link TiltOfADerivedValue}), and a row there fixes it for every border of
+     * the table: owed once for the computation and once for each position, and never once for each
+     * threshold.
      *
-     * <p>A border of a total the position is in, for the words the total is named in and the rule
-     * it is cited by. Which border carries nothing, since each of them is cut from the same
-     * computation; the one named is the widest total, which is the one the position is least a
-     * part of.
-     *
-     * @param line     a border of a total the position is in
-     * @param position the position of the total the weight is of
+     * @param value    the computation, which is one comparison as one call of it reads it
+     * @param position the position whose weight is owed
+     * @param into     the weighing of the positions the weight is said to be a weight in: the
+     *                 widest of the ones the position is in, which is the one it is least a part
+     *                 of
+     * @param cited    the rule the weight is owed under
      */
-    record ATiltOfATotalNoRowShows(BorderAssessment line, NumericTerm position)
+    record ATiltOfADerivedValueNoRowShows(DerivedValue value, NumericTerm position,
+                                          LinearQuantity into, Set<RuleCitation> cited)
             implements OfAnObligation, RuleCitations {
 
-        public ATiltOfATotalNoRowShows {
-            Objects.requireNonNull(line, "a finding is about something");
+        public ATiltOfADerivedValueNoRowShows {
+            Objects.requireNonNull(value, "a weight is a weight in some computation");
             Objects.requireNonNull(position, "a weight is a weight of some position");
+            Objects.requireNonNull(into, "in some weighing of the positions");
+            cited = Set.copyOf(cited);
         }
 
-        /** Keyed on the comparison and the position, which no row written moves. */
+        /** Keyed on the computation and the position, which no row written moves. */
         @Override
         public ObligationIdentity obligationIdentity() {
-            return new ObligationIdentity.OfATiltAtAPosition(
-                    line.border().origin().authoredLine(), position);
+            return new ObligationIdentity.OfATiltAtAPosition(value, position);
         }
 
         @Override
         public Set<RuleCitation> ruleCitations() {
-            return line.ruleCitations();
+            return cited;
         }
     }
 

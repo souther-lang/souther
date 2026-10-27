@@ -6,7 +6,6 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.BiFunction;
 
 /**
@@ -25,17 +24,18 @@ import java.util.function.BiFunction;
  * supplies. What each place this comparison names is left with, where no line was drawn, is
  * {@link ComparisonAssessment#whatEachPlaceIsLeftWith}'s answer and is not read again here.
  *
- * <p>The lines parting the values that settle a comparison of a total are held apart, in {@code
- * throughATotal}, and not filed with the rest. Whether they part a class of their position is
- * whether the total is cut at more than one place ({@link DerivedFamily}), which is not one
- * comparison's to say: {@link #keepingThoseOfATotalCutAtOnePlace} answers it once every comparison
- * of the behavior has been read.
+ * <p>The lines parting the values that settle a comparison of a value derived from several
+ * positions are held apart, in {@code throughADerivedValue}, and not filed with the rest. Whether
+ * they part a class of their position is whether the computation is cut at more than one place,
+ * which is not one comparison's to say: {@link DerivedValues#decide} answers it once, for every
+ * comparison every reader has read.
  *
- * @param throughATotal the lines on single positions that part the values settling a comparison of
- *                      a total of several positions, with the total and the place it is cut at
+ * @param throughADerivedValue the lines on single positions that part the values settling a
+ *                             comparison of a value derived from several positions, with the
+ *                             computations it cuts and where
  */
 record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
-                          List<Settling> throughATotal) {
+                          List<DerivedValues.Settling> throughADerivedValue) {
 
     private static final ComparisonGeometry NONE =
             new ComparisonGeometry(List.of(), List.of(), List.of());
@@ -43,42 +43,11 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
     ComparisonGeometry {
         evidence = List.copyOf(evidence);
         between = List.copyOf(between);
-        throughATotal = List.copyOf(throughATotal);
+        throughADerivedValue = List.copyOf(throughADerivedValue);
     }
 
     ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) {
         this(evidence, between, List.of());
-    }
-
-    /** What the values settling one comparison of a total add, and which total it cuts where. */
-    record Settling(DerivedFamily.Threshold of, ComparisonGeometry drawn) {}
-
-    /**
-     * What the lines parting the values that settle a comparison of a total add, for the totals
-     * cut at one place only.
-     *
-     * <p>A total cut at several places parts each of its positions at every one of them, and a
-     * position's class between two of them is where one comparison is settled and the next is left
-     * either way: the outcome is not the same through it. Those totals owe the rows of their
-     * family instead ({@link DerivedFamily}). Cut at one place, the values settling the comparison
-     * are the same outcome throughout.
-     *
-     * @param settling every comparison's lines through a total
-     * @param between  the lines drawn between positions, which cut totals as well
-     */
-    static ComparisonGeometry keepingThoseOfATotalCutAtOnePlace(List<Settling> settling,
-                                                                List<LineDrawn> between) {
-        List<DerivedFamily.Threshold> cuts = new ArrayList<>();
-        settling.forEach(each -> cuts.add(each.of()));
-        between.forEach(each -> DerivedFamily.thresholdOf(each).ifPresent(cuts::add));
-        Set<DerivedFamily> several = DerivedFamily.cutAtSeveralPlaces(cuts);
-        ComparisonGeometry out = NONE;
-        for (Settling each : settling) {
-            if (!several.contains(each.of().family())) {
-                out = out.with(each.drawn());
-            }
-        }
-        return out;
     }
 
     /**
@@ -114,7 +83,7 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
         // line, whose origin says which line it is and which case it is read in.
         List<LineEvidence> evidence = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
-        List<Settling> throughATotal = new ArrayList<>();
+        List<DerivedValues.Settling> throughADerivedValue = new ArrayList<>();
         for (ComparisonAssessment.Several.Part part : several.parts()) {
             for (WhereAPartDecides reading : part.readings()) {
                 ComparisonGeometry line = ofALine(part.line(),
@@ -122,10 +91,10 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
                                 authored));
                 evidence.addAll(line.evidence());
                 between.addAll(line.between());
-                throughATotal.addAll(line.throughATotal());
+                throughADerivedValue.addAll(line.throughADerivedValue());
             }
         }
-        return new ComparisonGeometry(evidence, between, throughATotal);
+        return new ComparisonGeometry(evidence, between, throughADerivedValue);
     }
 
     /** What one line adds, its origin answered by {@code originOf}. */
@@ -145,11 +114,13 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
                         : List.of();
                 ComparisonGeometry drawn = new ComparisonGeometry(List.of(), between);
                 ComparisonGeometry settling = settling(over.settling(), originOf);
-                yield drawn.with(DerivedFamily.of(by, over.cutting().of())
-                        .map(family -> new ComparisonGeometry(List.of(), List.of(), List.of(
-                                new Settling(new DerivedFamily.Threshold(family,
-                                        over.cutting().target().cut().canonical()), settling))))
-                        .orElse(settling));
+                List<DerivedValue.Cut> cuts = DerivedValue.cutsBy(by, over.cutting().of(),
+                        over.cutting().target().cut().canonical());
+                yield cuts.isEmpty()
+                        ? drawn.with(settling)
+                        : drawn.with(new ComparisonGeometry(List.of(), List.of(), List.of(
+                                new DerivedValues.Settling(cuts, settling.evidence(),
+                                        settling.between()))));
             }
             // A relation against another value is no line, and each line parting values that
             // settle it is one on its position.
@@ -187,9 +158,10 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
         allEvidence.addAll(more.evidence());
         List<LineDrawn> allBetween = new ArrayList<>(between);
         allBetween.addAll(more.between());
-        List<Settling> allThroughATotal = new ArrayList<>(throughATotal);
-        allThroughATotal.addAll(more.throughATotal());
-        return new ComparisonGeometry(allEvidence, allBetween, allThroughATotal);
+        List<DerivedValues.Settling> allThroughADerivedValue =
+                new ArrayList<>(throughADerivedValue);
+        allThroughADerivedValue.addAll(more.throughADerivedValue());
+        return new ComparisonGeometry(allEvidence, allBetween, allThroughADerivedValue);
     }
 
     private static ComparisonGeometry atAPosition(ComparisonAssessment.AtAPosition at,

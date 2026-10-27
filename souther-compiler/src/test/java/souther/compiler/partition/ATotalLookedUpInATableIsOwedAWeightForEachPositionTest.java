@@ -55,7 +55,7 @@ class ATotalLookedUpInATableIsOwedAWeightForEachPositionTest {
                 | (N { v = 60 }, N { v = 40 }) -> 2
             """;
 
-    private static final String SAID = "no row shows how";
+    private static final String SAID = "no row fixes how";
 
     @Test
     void everyPositionIsOwedItsWeightWhereNoRowIsOnABorder() {

@@ -166,9 +166,11 @@ public final class Partitions {
                                MeasureClosure.OfTheBorder borderClosure,
                                souther.compiler.inputs.EmptyInput inputIsEmpty,
                                WhereTheOperationsStand operationsStanding,
-                               StringsReached strings) {
+                               StringsReached strings,
+                               List<DerivedValue.Replaced> replaced) {
 
         public Partitioning {
+            replaced = List.copyOf(replaced);
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
@@ -573,7 +575,9 @@ public final class Partitions {
                 WhereTheOperationsStand.NONE,
                 // Every position, whether or not an axis is drawn at it: a body measures a
                 // number of a string the declarations never did.
-                StringsReached.of(inputs.positions()));
+                StringsReached.of(inputs.positions()),
+                // No body is read here, so no computation is cut at several places.
+                List.of());
     }
 
     /**
@@ -1086,7 +1090,8 @@ public final class Partitions {
                                             List<LineDrawn> between,
                                             ReachingCuts reaching,
                                             MeasureClosure.Drawing drawing,
-                                            WhereTheOperationsStand operationsStanding) {
+                                            WhereTheOperationsStand operationsStanding,
+                                            List<DerivedValue.Replaced> replaced) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1192,7 +1197,12 @@ public final class Partitions {
                 // Carried across. Whether the rules leave the input a value is the declarations'
                 // answer, and a body drawing lines on what they left does not change it.
                 base.inputIsEmpty(),
-                operationsStanding, base.strings());
+                operationsStanding, base.strings(),
+                // The computations whose positions this did not divide, which is what each of them
+                // is owed a weight for. Decided once by whoever read the lines, and carried: a
+                // reader that counted thresholds again over the borders would count a different
+                // set of lines.
+                replaced);
     }
 
     /**

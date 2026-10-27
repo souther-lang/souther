@@ -3381,7 +3381,7 @@
                     "pair_uncovered",
                     "domain_point_uncovered",
                     "boundary_not_told_from_another",
-                    "tilt_of_a_total_not_shown",
+                    "tilt_of_a_derived_value_not_shown",
                     "rewrite_unnoticed"
                   ]
                 }
@@ -3809,7 +3809,7 @@
                                   "if": {
                                     "properties": {
                                       "kind": {
-                                        "const": "tilt_of_a_total_not_shown"
+                                        "const": "tilt_of_a_derived_value_not_shown"
                                       }
                                     },
                                     "required": [
@@ -3817,7 +3817,7 @@
                                     ]
                                   },
                                   "then": {
-                                    "description": "A position of the totals one comparison cuts at several places, and not a point of any border: what is owed is a row on a border of such a total with that position alone away from the least it holds.",
+                                    "description": "A position of a computation of a value derived from several positions, cut at several places, and not a point of any border: what is owed is rows on the borders of the computation that fix how the position weighs into the value.",
                                     "required": [
                                       "obligationId"
                                     ],
@@ -3849,13 +3849,13 @@
         ],
         "properties": {
           "kind": {
-            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `tilt_of_a_total_not_shown` is a position of the totals one comparison cuts at several places, as a table of thresholds cuts the total it is looked up by, whose weight no row shows: a row on a border of such a total with that position alone away from the least it holds. It is owed once for the comparison and once for each position, and never once for each threshold, and it stands where the positions' own classes would otherwise have been divided by the total's thresholds. Its `subject` names the total and the position. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the declarations leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks. `rewrite_unnoticed` is a rewrite of the body — an arm rows go through answering as a sibling of it, or the body answering one value the rows observed — that some input is shown to be answered differently by and under which no row comes out differently. Reaching an arm shows it ran and not that anything a row states depends on it, so this is said of what the rows do reach. `rule_may_stop_a_run` is a rule a run reaching it may stop in — an operation it is read through ends the run on one of the ways it is worked out, such as a division by nought — where the ways before it are not shown to leave no row for the stop. A possibility and not a run shown to exist: a stop is dropped only where the conditions on the way are shown to rule it out. It is said of the rule whatever line it draws, or none, names the rule by `ruleId`, and carries no `reason`, because nothing was left unread. A rule every run stops in draws no line and is a `partition_not_read` entry with the reason `rule_answers_nowhere`.",
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `tilt_of_a_derived_value_not_shown` is a position of a value a computation derives from several positions and cuts at several places, as a table of thresholds cuts the value it is looked up by, whose weight no rows fix: the rows on the borders of the computation do not span the position's axis. It is owed once for the computation and once for each position, and never once for each threshold, and it stands where the positions' own classes would otherwise have been divided by the value's thresholds. Its `subject` names the value and the position. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the declarations leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks. `rewrite_unnoticed` is a rewrite of the body — an arm rows go through answering as a sibling of it, or the body answering one value the rows observed — that some input is shown to be answered differently by and under which no row comes out differently. Reaching an arm shows it ran and not that anything a row states depends on it, so this is said of what the rows do reach. `rule_may_stop_a_run` is a rule a run reaching it may stop in — an operation it is read through ends the run on one of the ways it is worked out, such as a division by nought — where the ways before it are not shown to leave no row for the stop. A possibility and not a run shown to exist: a stop is dropped only where the conditions on the way are shown to rule it out. It is said of the rule whatever line it draws, or none, names the rule by `ruleId`, and carries no `reason`, because nothing was left unread. A rule every run stops in draws no line and is a `partition_not_read` entry with the reason `rule_answers_nowhere`.",
             "enum": [
               "output_case_unspecified",
               "input_case_unspecified",
               "boundary_unmet",
               "boundary_not_told_from_another",
-              "tilt_of_a_total_not_shown",
+              "tilt_of_a_derived_value_not_shown",
               "arm_unreached",
               "unanswered_row",
               "output_case_unverified",
@@ -5731,9 +5731,10 @@
     },
     "tiltObligationId": {
       "type": "object",
-      "description": "What tells the weight of one position in the totals a comparison cuts at several places from every other thing a row is owed for. The comparison the author wrote and the position, and never a threshold: the total is computed once and every threshold of its table reads it, so a row on any border of it shows the weight for all of them, and where the rows stand moves with every row written while the obligation does not.",
+      "description": "What tells the weight of one position in a value a computation derives from several positions from every other thing a row is owed for. The computation — the comparison the author wrote and the copy of it a call of a helper made — and the position, and never a threshold: the value is computed once and every threshold of its table reads it, so rows on any border of it fix the weight for all of them, and where the rows stand moves with every row written while the obligation does not. The same comparison read at two calls is two computations, each of which can weigh its positions wrongly on its own.",
       "required": [
         "line",
+        "copies",
         "position"
       ],
       "additionalProperties": false,
@@ -5741,9 +5742,17 @@
         "line": {
           "$ref": "#/$defs/authoredLineId"
         },
+        "copies": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Every copy of the comparison a call made that is cut at the same places, in the order they were read, each spelled the way a construct of a body and the calls it was made through are spelled everywhere else in the document. Calls cut at the same places are put to the same rows and are one computation.",
+          "items": {
+            "$ref": "#/$defs/combinationObligationId/properties/decisions/items/properties/construct"
+          }
+        },
         "position": {
           "type": "string",
-          "description": "The position of the total whose weight is owed, as a path of the input."
+          "description": "The position whose weight is owed, as a path of the input."
         }
       }
     },
@@ -7163,6 +7172,31 @@
             }
           }
         },
+        "weights": {
+          "type": "array",
+          "description": "What each computation of a value derived from several positions is owed where the rule cuts it at several places, as a table of thresholds cuts the value it is looked up by: a weight for each position, in place of the classes the thresholds would have divided it into. One entry per position of each computation, and a computation is one comparison as one call of it reads it, so the same comparison read at two calls is two computations. Beside `boundaries` and not under them, because a computation is owed its weights whether or not a border of it was drawn. A `tilt_of_a_derived_value_not_shown` finding joins to the entry carrying its `obligationId`. Absent where no computation is cut at several places.",
+          "items": {
+            "type": "object",
+            "required": [
+              "obligationId",
+              "standing"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "obligationId": {
+                "$ref": "#/$defs/tiltObligationId"
+              },
+              "standing": {
+                "enum": [
+                  "shown",
+                  "not_shown",
+                  "undecided"
+                ],
+                "description": "`shown`: the rows on the borders of the computation fix the weight of this position, which is where its axis is in the space the rows span. `not_shown`: they do not, so rows that fix it are owed and a finding names it. `undecided`: nothing was read against the computation, or the exact arithmetic gave out on a row, which is no claim that the rows fix nothing and is no finding."
+              }
+            }
+          }
+        },
         "boundaries": {
           "type": "array",
           "items": {
@@ -7201,30 +7235,6 @@
                         "not_applicable"
                       ],
                       "description": "`ruled_out`: no threshold on that line keeps every row the model keeps and refuses every row it refuses. `stands`: some threshold does, so a row ruling it out is owed and a finding names it. `undecided`: the question was put and could not be settled — a row nothing watched, one whose values could not be read, a sum the exact arithmetic could not hold, or no input a row arrives at — which weakens the measure and is never read as ruled out. `not_due`: a row is not yet at every point of the border, and the line is asked about once one is. `not_applicable`: the model leaves no value on the side the border refuses — every point it has there is excluded because no value can stand there — so no row could rule the line out whatever threshold it is drawn at, and none is owed; keeping values on the right side of the line is the model's guarantee, made by a type that has no such value or by a rule checked at construction, and not something a row could show."
-                    }
-                  }
-                }
-              },
-              "weights": {
-                "type": "array",
-                "description": "What the total this line cuts is owed beside the lines that cut it, where the rule cuts it at several places: one obligation per position of the totals the comparison cuts, and where each stands. The same under every border of the comparison, since a weight is a fault of the computation and not of one threshold. A `tilt_of_a_total_not_shown` finding joins to the entry carrying its `obligationId`. Not written where the line cuts no such total.",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "obligationId",
-                    "standing"
-                  ],
-                  "additionalProperties": false,
-                  "properties": {
-                    "obligationId": {
-                      "$ref": "#/$defs/tiltObligationId"
-                    },
-                    "standing": {
-                      "enum": [
-                        "shown",
-                        "not_shown"
-                      ],
-                      "description": "`shown`: some row stands on a border of a total with this position alone away from the least it holds, so the weight of that position is shown. `not_shown`: none does, so such a row is owed and a finding names it."
                     }
                   }
                 }

@@ -196,7 +196,7 @@ public enum DiagnosticCode {
     E1937("every-combination-of-two-classes-has-a-row", "check.example.title"),
     E1938("every-border-is-told-from-the-lines-beside-it", "check.example.title"),
     E1939("every-rewrite-of-a-body-is-told-apart", "check.example.title"),
-    E1940("every-position-of-a-total-has-its-weight-shown", "check.example.title"),
+    E1940("every-position-of-a-derived-value-has-its-weight-fixed", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),

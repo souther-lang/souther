@@ -1191,9 +1191,8 @@ public final class GeneratedRows {
                     untold.line().border().label() + " against " + untold.allowed().label();
             // The position and the total it weighs into, which is the whole of what the weight is
             // of.
-            case About.ATiltOfATotalNoRowShows tilt ->
-                    "the weight of " + tilt.position() + " in "
-                            + tilt.line().border().cut().of().left();
+            case About.ATiltOfADerivedValueNoRowShows tilt ->
+                    "the weight of " + tilt.position() + " in " + tilt.into().left();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.

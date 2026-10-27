@@ -114,11 +114,8 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationId;
 import souther.compiler.partition.HeldOutcome;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.partition.AuthoredLine;
-import souther.compiler.partition.DerivedFamily;
+import souther.compiler.partition.DerivedValues;
 import souther.compiler.partition.DomainPoint;
-import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.LeftOutPoint;
 import souther.compiler.partition.NotOwedPoint;
@@ -4163,6 +4160,11 @@ public final class Adequacy {
         return byBehavior(db, module, name -> new Boundaries(module, name));
     }
 
+    /** What the rows fix of the weights of each computation, for every behavior of the module. */
+    public static Map<String, List<TiltOfADerivedValue>> weightsOf(Db db, String module) {
+        return byBehavior(db, module, name -> new Weights(module, name));
+    }
+
     /**
      * The lines each behavior was measured at, as the measurement read them.
      *
@@ -4224,7 +4226,7 @@ public final class Adequacy {
                             .A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER);
             case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
-            case About.ATiltOfATotalNoRowShows _ -> new GenerationOutcome.NotSupported(
+            case About.ATiltOfADerivedValueNoRowShows _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_A_WEIGHT);
             // A row does answer this: one the model refuses within reach of the rows it keeps, or
             // one it keeps at or past the rows it refuses. What became of the search for one is the
@@ -4500,20 +4502,19 @@ public final class Adequacy {
         return byBehavior(db, module, name -> new BoundarySearch(module, name));
     }
 
-    private static Map<String, List<BorderAssessment>> byBehavior(
-            Db db, String module, java.util.function.Function<String,
-                    Key<List<BorderAssessment>>> asked) {
+    private static <T> Map<String, List<T>> byBehavior(
+            Db db, String module, java.util.function.Function<String, Key<List<T>>> asked) {
         CheckSurface prepared =
                 db.ask(new Shapes.CheckSurface(module)).value();
         if (prepared == null) {
             return null;
         }
-        Map<String, List<BorderAssessment>> out = new LinkedHashMap<>();
+        Map<String, List<T>> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : prepared.behaviors()) {
             if (!(behavior instanceof Hir.SpecBehavior spec)) {
                 continue;   // a composition's inputs are its first stage's, measured there
             }
-            List<BorderAssessment> lines = db.ask(asked.apply(spec.name())).value();
+            List<T> lines = db.ask(asked.apply(spec.name())).value();
             if (lines != null) {
                 out.put(spec.name(), lines);
             }
@@ -4694,6 +4695,29 @@ public final class Adequacy {
     }
 
     /**
+     * What the rows fix of the weights of each computation of a value derived from several
+     * positions that this behavior's rules cut at several places.
+     *
+     * <p>Beside {@link Boundaries} and read off the same readings, and not off the lines they
+     * folded into: a computation is owed its weights whether or not a border of it was drawn, and
+     * which computations those are was decided by the partition, once.
+     */
+    public record Weights(String name, String behavior)
+            implements Key<List<TiltOfADerivedValue>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<TiltOfADerivedValue>> compute(Db db) {
+            LineReadings readings = db.ask(new Readings(name, behavior)).value();
+            return readings == null ? Answer.absent() : Answer.of(readings.tilts());
+        }
+    }
+
+    /**
      * The same lines, one entry per reading of one.
      *
      * <p>Below {@link Boundaries} and asked by whatever has something to do while the readings are
@@ -4757,7 +4781,7 @@ public final class Adequacy {
             }
             out.addAll(Coverages.assessBetween(subject, observed, put,
                     partitioning.reaching()));
-            return Coverages.besideEachLine(out, put.all());
+            return Coverages.besideEachLine(out, put.all(), partitioning.replaced());
         }
 
     }
@@ -5768,7 +5792,7 @@ public final class Adequacy {
                     // row this cannot write.
                     case About.ALineTheRowsDoNotTellFromAnother _ -> { }
                     // And a position of a total, whose weight nothing composes a row to show.
-                    case About.ATiltOfATotalNoRowShows _ -> { }
+                    case About.ATiltOfADerivedValueNoRowShows _ -> { }
                     // A row is written here and what is left is its answer, which is the author's
                     // to write and nothing a search composes.
                     case About.AnUnansweredRow _, About.ARowAtAnArmAwaitsItsAnswer _ -> { }
@@ -6227,7 +6251,7 @@ public final class Adequacy {
                             // generation searched.
                             case About.ALineTheRowsDoNotTellFromAnother untold ->
                                     tellingApart(untold, edges);
-                            case About.ATiltOfATotalNoRowShows _ ->
+                            case About.ATiltOfADerivedValueNoRowShows _ ->
                                     throw new IllegalStateException(finding.about().toString());
                             // The ones above, which is what `none` was not null for.
                             // A line a declaration is owed is not one of this behavior's findings,
@@ -7495,17 +7519,18 @@ public final class Adequacy {
          */
         BOUNDARY_NOT_TOLD_FROM_ANOTHER(DiagnosticCode.E1938),
         /**
-         * A position of a total a rule cuts at several places, whose weight no row shows.
+         * A position of a value a computation derives from several positions and cuts at several
+         * places, whose weight no row fixes.
          *
-         * <p>Owed once for the total and once for each position, and never once for each
-         * threshold: a weight is a fault of the total, which every threshold of its table reads.
-         * It stands where the position's classes would have, and only where the total is cut at
-         * more than one place ({@link DerivedFamily}).
+         * <p>Owed once for the computation and once for each position, and never once for each
+         * threshold: a weight is a fault of the computation, which every threshold of its table
+         * reads. It stands where the position's classes would have, and only where the computation
+         * is cut at more than one place ({@link DerivedValues}).
          *
          * <p>Not a measure of its own, for the reason the finding above is not: it comes off the
-         * same rows as the points of the borders it is a family of.
+         * same rows as the points of the borders that cut the computation.
          */
-        TILT_OF_A_TOTAL_NOT_SHOWN(DiagnosticCode.E1940),
+        TILT_OF_A_DERIVED_VALUE_NOT_SHOWN(DiagnosticCode.E1940),
         /**
          * A position the model draws no line through.
          *
@@ -7637,7 +7662,7 @@ public final class Adequacy {
                     About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _,
                     About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
-                    About.ATiltOfATotalNoRowShows _, About.APositionNoLineDivides _,
+                    About.ATiltOfADerivedValueNoRowShows _, About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                     About.ARuleThatMayStopARun _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
@@ -7916,7 +7941,8 @@ public final class Adequacy {
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.ALineTheRowsDoNotTellFromAnother _ ->
                         Kind.BOUNDARY_NOT_TOLD_FROM_ANOTHER;
-                case About.ATiltOfATotalNoRowShows _ -> Kind.TILT_OF_A_TOTAL_NOT_SHOWN;
+                case About.ATiltOfADerivedValueNoRowShows _ ->
+                        Kind.TILT_OF_A_DERIVED_VALUE_NOT_SHOWN;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
                         Kind.PARTITION_NOT_READ;
@@ -8845,6 +8871,7 @@ public final class Adequacy {
             Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
             Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
                     db.ask(new BodyBorders(name)).value();
+            Map<String, List<TiltOfADerivedValue>> weights = weightsOf(db, name);
             // The lines as the measurement read them, which is where what the rows leave standing
             // beside each of them is. Asked beside the account rather than worked out from it: the
             // account is what is owed at the points of a line, and this is the other thing one
@@ -8891,6 +8918,8 @@ public final class Adequacy {
                         accounts == null ? null : accounts.get(behavior.name()),
                         readings == null ? List.of()
                                 : readings.getOrDefault(behavior.name(), List.of()),
+                        weights == null ? List.of()
+                                : weights.getOrDefault(behavior.name(), List.of()),
                         answersNothing, out);
                 BranchEvidence branch = branches == null ? null : branches.get(behavior.name());
                 if (branch != null && branch.measured().made().isPresent()) {
@@ -9185,6 +9214,7 @@ public final class Adequacy {
         private static void partitionFindings(Hir.BehaviorDef behavior, PartitionEvidence partition,
                                               Measure<List<BorderObligationPointAssessment>> account,
                                               List<BorderAssessment> lines,
+                                              List<TiltOfADerivedValue> weights,
                                               WhereNothingIsAnswered answersNothing,
                                               List<Finding> out) {
             if (partition == null) {
@@ -9225,7 +9255,7 @@ public final class Adequacy {
                         new About.APointOfABorder(owed)));
             }
             linesNotToldApart(behavior.name(), lines, account, out);
-            weightsNotShown(behavior.name(), lines, out);
+            weightsNotShown(behavior.name(), weights, out);
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
             //
@@ -9356,48 +9386,25 @@ public final class Adequacy {
         }
 
         /**
-         * Each position of each total this behavior's rules cut at several places whose weight no
-         * row shows.
+         * Each position of each computation this behavior's rules cut at several places whose
+         * weight no row fixes.
          *
-         * <p>One finding per family and position, and never one per border: the total is computed
-         * once and every threshold of its table reads it, so a row at any border shows the weight
-         * for all of them. The lines of the module's declarations are owed once for the module and
-         * answered under the declaration, as the lines beside a border are.
+         * <p>One finding per computation and position, and never one per border: the value is
+         * computed once and every threshold of its table reads it, so a row on any border fixes
+         * the weight for all of them. A position the rows leave undecided is no finding: nothing
+         * was read, or the arithmetic gave out, and neither is a claim about the rows.
          */
-        private static void weightsNotShown(String behavior, List<BorderAssessment> lines,
+        private static void weightsNotShown(String behavior, List<TiltOfADerivedValue> weights,
                                             List<Finding> out) {
-            Set<AuthoredLine> asked = new LinkedHashSet<>();
-            for (BorderAssessment line : lines) {
-                if (line.tilt().isEmpty()
-                        || !line.border().origin().owedToTheDeclaration().isEmpty()
-                        || !asked.add(line.tilt().get().line())) {
-                    continue;
-                }
-                TiltOfAFamily tilt = line.tilt().get();
-                tilt.positions().forEach((position, standing) -> {
-                    if (standing instanceof TiltOfAFamily.Standing.NotShown) {
-                        out.add(Finding.noticed(behavior, new About.ATiltOfATotalNoRowShows(
-                                widestTotalWith(position, tilt.line(), lines), position)));
+            for (TiltOfADerivedValue each : weights) {
+                each.positions().forEach((position, standing) -> {
+                    if (standing instanceof TiltOfADerivedValue.Standing.NotShown) {
+                        out.add(Finding.noticed(behavior, new About.ATiltOfADerivedValueNoRowShows(
+                                each.value(), position, each.widestWith(position),
+                                each.cited())));
                     }
                 });
             }
-        }
-
-        /** A border of the comparison's widest total the position is in, which is the total the
-         *  weight is said to be in. */
-        private static BorderAssessment widestTotalWith(NumericTerm position, AuthoredLine line,
-                                                        List<BorderAssessment> lines) {
-            BorderAssessment widest = null;
-            int terms = -1;
-            for (BorderAssessment each : lines) {
-                if (each.tilt().isPresent() && each.tilt().get().line().equals(line)
-                        && each.border().cut().of() instanceof LinearQuantity total
-                        && total.terms().contains(position) && total.terms().size() > terms) {
-                    widest = each;
-                    terms = total.terms().size();
-                }
-            }
-            return Objects.requireNonNull(widest, "a position of a total is in some total");
         }
 
         /**
@@ -9672,10 +9679,10 @@ public final class Adequacy {
                                 new ExampleMessage.NoRowTellsThatLineFromAnother(
                                         untold.line().border().label(),
                                         untold.allowed().label(), finding.named());
-                        case About.ATiltOfATotalNoRowShows tilt ->
-                                new ExampleMessage.NoRowShowsTheWeightOfThatPosition(
-                                        tilt.position().toString(),
-                                        tilt.line().border().cut().of().left(), finding.named());
+                        case About.ATiltOfADerivedValueNoRowShows tilt ->
+                                new ExampleMessage.NoRowFixesTheWeightOfThatPosition(
+                                        tilt.position().toString(), tilt.into().left(),
+                                        finding.named());
                         case About.APointOfABorder(var point) ->
                                 switch (point.point().line().provenance()) {
                             case RuleRef.Named named ->
@@ -9810,10 +9817,9 @@ public final class Adequacy {
                         built.hint(new ExampleMessage.WriteARowAtThatInput(saw));
                     }
                 }
-                // The weight is shown by a row on a border of the total, the position away from
-                // where it starts and every other at it; the sentence names the position and the
-                // total, and there is no one input to write.
-                case About.ATiltOfATotalNoRowShows _ -> { }
+                // The weight is fixed by the rows on the borders of the computation taken together,
+                // so there is no one input to write: the sentence names the position and the value.
+                case About.ATiltOfADerivedValueNoRowShows _ -> { }
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.
                 case About.APointOfADeclaredBorder(var owed) ->
