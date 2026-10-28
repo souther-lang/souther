@@ -626,10 +626,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the sum, the difference and the product a decimal operation of the"
                             + " library computes, which the fold gives the arithmetic the"
                             + " operators have"),
-            new Held("souther.compiler.check.LookupsAClauseNeeds.work",
+            new Held("souther.compiler.check.WhatAClauseNeeds.work",
                     "names the conjunction and the disjunction, which are the two forms that carry"
                             + " a false part on to the whole clause; any other operator says"
-                            + " nothing of the lookup"));
+                            + " nothing of the lookup or of the elements being apart"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {
