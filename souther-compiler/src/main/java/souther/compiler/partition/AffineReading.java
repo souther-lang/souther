@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
@@ -370,6 +371,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 told.exact = false;
             }
 
+
+            @Override
+            public boolean makingEndsNoRun(Core.Construct construct) {
+                return ClausesInOrder.at(construct, ruleSource).inOrder().isEmpty();
+            }
 
             @Override
             public Symbols symbols() {

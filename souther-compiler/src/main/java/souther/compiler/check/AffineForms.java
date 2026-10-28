@@ -147,6 +147,14 @@ public final class AffineForms {
         }
 
         /**
+         * Whether making {@code construct} ends no run: no clause is checked when it is made. A
+         * reader that does not know says it may.
+         */
+        default boolean makingEndsNoRun(Core.Construct construct) {
+            return false;
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -1022,8 +1030,8 @@ public final class AffineForms {
                 if (eliminated != null) {
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
-                    if (!ValueStanding.theRestOfTheConstructionEndsNone(fa, at, reading,
-                            following)) {
+                    if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
+                            following, reading::makingEndsNoRun)) {
                         reading.unobserved(e);
                     }
                     yield commonForm(eliminated, e, at, following, stopped);

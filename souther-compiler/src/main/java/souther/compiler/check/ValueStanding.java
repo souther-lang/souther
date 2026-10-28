@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * What an occurrence stands as, once every step with one successor has been taken: a name the
@@ -365,20 +366,26 @@ public final class ValueStanding {
     }
 
     /**
-     * Whether the parts of the construction a field access is read off, other than the field it
-     * reads, end no run when they are worked out: they are worked out all the same, and a part
-     * that ends one is an operation the reading of the field does not tell of. False where
-     * nothing written stands against the access, which has no construction to ask.
+     * Whether making the construction a field access is read off, and working out its parts other
+     * than the field it reads, end no run: both are done all the same, and one that ends a run is
+     * an operation the reading of the field does not tell of. The construction itself ends one
+     * where its type has an invariant, which is checked when it is made; a part ends none only
+     * when it is written out under the construction and names nothing, since what a name stands
+     * for was worked out where it was bound, out of this reading's sight. False where nothing
+     * written stands against the access, which has no construction to ask.
      */
-    static <E, N extends Names<E, N>> boolean theRestOfTheConstructionEndsNone(
-            Core.FieldAccess fa, E at, N names, BindingWalk<?> following) {
+    static <E, N extends Names<E, N>> boolean theConstructionAndItsRestEndNone(
+            Core.FieldAccess fa, E at, N names, BindingWalk<?> following,
+            Predicate<Core.Construct> makingEndsNone) {
         for (Standing<E, N> target : of(fa.target(), at, names, following)) {
-            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
+            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)
+                    || !makingEndsNone.test(nd)) {
                 return false;
             }
             Core read = ConstructionProjection.given(nd, fa.field());
             for (var part : nd.values()) {
-                if (part.value() != read && !WhatARunMayEndFor.endsNoneBeneath(part.value())) {
+                if (part.value() != read
+                        && !WhatARunMayEndFor.endsNoneAndReadsNoNameBeneath(part.value())) {
                     return false;
                 }
             }

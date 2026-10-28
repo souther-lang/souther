@@ -1506,7 +1506,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // How far apart two sides are is asked of the relation as it stands, line and all.
         // The differences are answered for by the sizes of the form's addends, so only where
         // those are the sizes the program's operations are worked out over.
-        boolean sizesAnswer = operations.theSizesOfTheFormAnswer(terms, constant);        if (!out.containsAll(places()) && !offItsLine && sizesAnswer) {
+        boolean sizesAnswer = operations.theSizesOfTheFormAnswer(terms, constant);
+        if (!out.containsAll(places()) && !offItsLine && sizesAnswer) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
                     declared, independent));
         }
