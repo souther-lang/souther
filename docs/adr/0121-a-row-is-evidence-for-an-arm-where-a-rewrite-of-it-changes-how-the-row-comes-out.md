@@ -35,7 +35,9 @@ There are two rewrites and no others. An arm a row stating its answer goes throu
 each sibling of its fork, run in the same environment. A body with no such arm is rewritten as each
 value the rows were seen to answer, one rewrite per value: answering one value and answering
 another are two programs, and a row telling one of them apart says nothing of the other. Only there:
-a body whose rows go through a fork is asked about the fork arm by arm. Both rewrites are edits of
+a body with a fork of its own, the arms the branch measure owes a row through, is asked about the
+fork arm by arm. A fork inside a copy of the language's own operation is not the body's fork, so a
+body whose only forks are those is asked about the values as well as about the arms. Both rewrites are edits of
 the source an author could make, so a finding reads against what was written; neither moves an
 input. Where the arm is in the language's own operation the author has no source of it to edit, and
 the finding is shown at the behavior, which is the call the program the model could have been

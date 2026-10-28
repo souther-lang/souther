@@ -106,6 +106,7 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
         assertEquals(List.of(
                         "// fills else answering as then (in a fork of `souther.int.max` this build"
                                 + " holds no source of)",
+                        "// fills the body answering what spread #1 in spread.sou answers",
                         "// fills else answering as then (in a fork of `souther.int.min` this build"
                                 + " holds no source of)"),
                 generated.lines().filter(line -> line.startsWith("// fills")).toList(),

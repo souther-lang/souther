@@ -50,7 +50,9 @@ class ARewriteWarningSaysWhichRewriteItIsTest {
                                 + " answered as the `then` arm.",
                         "No row of `spread` would come out differently if the `else` arm of a fork"
                                 + " of `souther.int.min`, which this build holds no source of,"
-                                + " answered as the `then` arm."),
+                                + " answered as the `then` arm.",
+                        "No row of `spread` would come out differently if its body answered what"
+                                + " row `#1` answers whatever it was given."),
                 said);
     }
 

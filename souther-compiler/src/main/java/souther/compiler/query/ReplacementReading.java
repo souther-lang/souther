@@ -173,10 +173,12 @@ public final class ReplacementReading {
         }
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, Occurrences> occurrences = new LinkedHashMap<>();
-        // Whether some arm of the body has a rewrite that is another program, which is what makes
-        // the body one with a fork as far as a rewrite goes: a fork every rewrite of which the
-        // source and the rules prove is the body under another spelling invites none, and the body
-        // is then asked about as one with no fork. Settled by the body and the rules, and never by
+        // Whether some arm the body owes a row through has a rewrite that is another program,
+        // which is what makes the body one with a fork as far as a rewrite goes: a fork every
+        // rewrite of which the source and the rules prove is the body under another spelling
+        // invites none, and the body is then asked about as one with no fork. An arm of a library
+        // operation's copy that the body owes nothing through is asked about its own rewrites
+        // below, and is no fork of the body's. Settled by the body and the rules, and never by
         // which arms the rows stating an answer reached.
         boolean forked = false;
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
@@ -185,7 +187,7 @@ public final class ReplacementReading {
             }
             List<ArmReplacements.Asked> asked = carried.askedOf(site.obligation().origin(),
                     site.obligation().part(), unreached);
-            forked = forked || !asked.isEmpty();
+            forked = forked || (site.owesARow() && !asked.isEmpty());
             ArmProbe probe = site.place().probe().get();
             if (!reached.contains(probe)) {
                 continue;
