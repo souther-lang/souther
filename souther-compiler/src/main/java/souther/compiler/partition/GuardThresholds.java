@@ -864,7 +864,7 @@ public final class GuardThresholds {
                     new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
             out.add(new BehaviorSetStatements.Partnered(origin,
                     new PredicateStatement.CanBeTheValueOf(strings.partner()), each.getKey(),
-                    strings.canBe()));
+                    strings.canBe(), strings.mayBe(), strings.upTo()));
         }
         return out;
     }

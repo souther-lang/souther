@@ -176,10 +176,24 @@ public final class BehaviorSetStatements {
         return Sameness.Block.of(term);
     }
 
-    /** One rule read as far as the plans for its two sides, waiting on its position's group. */
+    /**
+     * One rule read as far as the plans for its two sides, waiting on its position's group.
+     *
+     * @param notShown the plan for the strings shown on neither side, or null where every string
+     *                 is shown on one
+     * @param trueUpTo the most code points a value of {@code whenTrue} is shown to hold the rule
+     *                 at, or null where every one of them is
+     */
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
-                         AdmittedPlan whenTrue, AdmittedPlan whenFalse) {}
+                         AdmittedPlan whenTrue, AdmittedPlan whenFalse,
+                         AdmittedPlan notShown, Long trueUpTo) {
+
+        Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
+              AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
+            this(by, states, term, whenTrue, whenFalse, null, null);
+        }
+    }
 
     /**
      * What {@code read} states, built under {@code allowance}.
@@ -226,19 +240,35 @@ public final class BehaviorSetStatements {
      * rest and under the same allowance. Whether the position holds values on both sides of it is
      * settled where its values are known ({@link Classing}), as for any rule that states a set.
      *
+     * <p>As far as each string is shown. The strings shown to be the partner's are those of
+     * {@code canBe} no longer than {@code upTo}, the strings shown to be none of its values are
+     * those outside {@code mayBe}, and the rest are told neither way: they are in no class this
+     * draws, and are said to be left open ({@link SetStatement#notShown}).
+     *
      * @param by     which reading of which comparison this is
      * @param states what it states, called by the partner it is relative to
      * @param term   the position it is about
-     * @param canBe  the strings the partner can hold
+     * @param canBe  the strings shown to be some value of the partner, as far as {@code upTo}
+     *               goes
+     * @param mayBe  the strings outside which no value of the partner is
+     * @param upTo   the most code points a string of {@code canBe} is shown one at, or null where
+     *               every one of them is
      */
     public record Partnered(PredicateOrigin by, PredicateStatement states,
-                            NumericTerm.FromOnePosition term, ValueSet canBe) {
+                            NumericTerm.FromOnePosition term, ValueSet canBe, ValueSet mayBe,
+                            Long upTo) {
 
         public Partnered {
-            if (by == null || states == null || term == null || canBe == null) {
+            if (by == null || states == null || term == null || canBe == null || mayBe == null) {
                 throw new IllegalArgumentException(
                         "an equality states of a position the strings its partner can hold");
             }
+        }
+
+        /** Strings shown to be the partner's exactly where {@code canBe} holds them. */
+        public Partnered(PredicateOrigin by, PredicateStatement states,
+                         NumericTerm.FromOnePosition term, ValueSet canBe) {
+            this(by, states, term, canBe, canBe, null);
         }
     }
 
@@ -267,8 +297,17 @@ public final class BehaviorSetStatements {
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         for (Partnered each : partnered) {
+            boolean everyOne = each.upTo() == null && each.canBe().equals(each.mayBe());
+            // A partner none of whose values is shown leaves the true side empty, and every string
+            // it may be told neither way.
+            AdmittedPlan shown = each.canBe().isEmpty() ? AdmittedPlan.NONE
+                    : AdmittedPlan.of(each.canBe());
             asked.add(new Asked(each.by(), each.states(), each.term(),
-                    AdmittedPlan.of(each.canBe()), AdmittedPlan.without(each.canBe())));
+                    shown, AdmittedPlan.without(each.mayBe()),
+                    everyOne ? null : AdmittedPlan.meeting(List.of(AdmittedPlan.of(each.mayBe()),
+                            each.canBe().isEmpty() ? AdmittedPlan.ANY
+                                    : AdmittedPlan.without(each.canBe()))),
+                    each.upTo()));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -300,6 +339,9 @@ public final class BehaviorSetStatements {
                     byTerm.computeIfAbsent(each.term(), _ -> new LinkedHashSet<>());
             plans.add(each.whenTrue());
             plans.add(each.whenFalse());
+            if (each.notShown() != null) {
+                plans.add(each.notShown());
+            }
         }
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
         byTerm.forEach((term, plans) ->
@@ -544,7 +586,9 @@ public final class BehaviorSetStatements {
                             Classing.ofTheDistinctions(it.refused()))));
             case Realizations.Exact built -> statements.add(new RuleEvidence.BySet(
                     new SetStatement(each.term(), built.of(each.whenTrue()),
-                            built.of(each.whenFalse()), each.states(), each.by())));
+                            built.of(each.whenFalse()), each.states(), each.by(),
+                            each.notShown() == null ? ValueSet.NONE : built.of(each.notShown()),
+                            each.trueUpTo())));
         }
     }
 

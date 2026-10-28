@@ -73,6 +73,7 @@ import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
 import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -368,18 +369,39 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The strings the other side of an equality can hold, which are the only ones of this side that
-     * some row can have the equality come out true at.
+     * some row can have the equality come out true at, as far as each is shown.
      *
-     * @param canBe   the strings some value of the partner is; the rest are the strings no value
-     *                of it is, which whoever builds the classes asks for as a plan
+     * <p>Three regions of this side's strings, and none stands for another. A string of
+     * {@code canBe} no longer than {@code upTo} is shown to be some value of the partner, so a row
+     * has the equality true there. A string outside {@code mayBe} is shown to be none, so the
+     * equality is false there whatever the partner holds. Every other string — of {@code mayBe}
+     * and not of {@code canBe}, or of {@code canBe} and longer — is shown neither, and no class of
+     * this side is drawn over it.
+     *
+     * @param canBe   the strings shown to be some value of the partner, as far as {@code upTo}
+     *                goes; empty where none is
+     * @param mayBe   the strings outside which no value of the partner is, which hold
+     *                {@code canBe}
+     * @param upTo    the most code points a string of {@code canBe} is shown to be a value of the
+     *                partner at, or null where every one of them is
      * @param partner what the model calls the partner
      */
-    record StringsAPartnerCanHold(ValueSet canBe, String partner) {
+    record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo, String partner) {
 
         StringsAPartnerCanHold {
-            if (canBe == null || partner == null) {
+            if (canBe == null || mayBe == null || partner == null) {
                 throw new IllegalArgumentException("strings a partner can hold are some strings");
             }
+        }
+
+        /** Strings shown to be the partner's values exactly where {@code canBe} holds them. */
+        StringsAPartnerCanHold(ValueSet canBe, String partner) {
+            this(canBe, canBe, null, partner);
+        }
+
+        /** Whether every string is shown one way or the other. */
+        boolean showsEveryString() {
+            return upTo == null && canBe.equals(mayBe);
         }
     }
 
@@ -1505,22 +1527,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             ValueSet theirStrings = partner.admitted().approximation();
-            ValueSet canBe = here.piece() != null
-                    ? stringsWithAPiece(here.piece(), theirStrings)
-                    : there.piece() != null
-                    ? stringsThatAreThePiece(there.piece(), theirStrings,
-                            longestStringAt(mine.subjectPath(), read))
-                    : theirStrings;
-            if (canBe == null || canBe.isAny() || canBe.isEmpty()
-                    || canBe instanceof ValueSet.WholeRuns) {
+            String called = there.piece() == null ? theirs.subjectPath().toString()
+                    : "piece " + there.piece().index() + " of " + theirs.subjectPath();
+            StringsAPartnerCanHold strings;
+            if (there.piece() != null) {
+                strings = stringsThatAreThePiece(there.piece(), theirStrings,
+                        read.domain().at(mine.subjectPath()), called);
+            } else {
+                ValueSet canBe = here.piece() != null
+                        ? stringsWithAPiece(here.piece(), theirStrings) : theirStrings;
+                strings = canBe == null || canBe.isEmpty() ? null
+                        : new StringsAPartnerCanHold(canBe, called);
+            }
+            if (strings == null || strings.mayBe().isAny() || strings.mayBe().isEmpty()
+                    || strings.mayBe() instanceof ValueSet.WholeRuns) {
                 continue;
             }
             if (!runGetsThere.getAsBoolean()) {
                 continue;
             }
-            out.put(mine, new StringsAPartnerCanHold(canBe, there.piece() == null
-                    ? theirs.subjectPath().toString()
-                    : "piece " + there.piece().index() + " of " + theirs.subjectPath()));
+            out.put(mine, strings);
         }
         return out;
     }
@@ -1560,35 +1586,62 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The strings that are {@code piece} of some value of {@code whole}, for the strings of up
-     * to {@code longest} code points, or null where {@code whole} is not a language of strings,
-     * the machine for them is more than a piece's allowance, or the pieces of that length are not
-     * all the pieces of values ({@link StringsOfAPiece#pieceOfAValueAt}).
+     * The strings at {@code mine} shown to be {@code piece} of some value of {@code whole}, and
+     * those shown to be that of none, or null where {@code whole} is not a language of strings or
+     * the machines for them are more than a piece's allowance
+     * ({@link StringsOfAPiece#piecesOfValuesAt}).
+     *
+     * <p>Told exactly where every string {@code mine} holds is short enough, and its pieces of the
+     * strings are its pieces of the values. Otherwise what is shown is kept apart from what is not:
+     * the pieces of the strings held as written, up to the length a value is written round each,
+     * are values' pieces, and nothing outside the pieces of the strings is — and the strings
+     * between are told neither way.
      */
-    private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole,
-                                                   long longest) {
+    private static StringsAPartnerCanHold stringsThatAreThePiece(Quantity.ThePieceAt piece,
+                                                                 ValueSet whole, Position mine,
+                                                                 String called) {
         if (!(whole instanceof ValueSet.Matching(Language language))) {
             return null;
         }
-        Language image = StringsOfAPiece.pieceOfAValueAt(language, piece.separator(),
-                piece.index(), longest, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
-        return image == null ? null : ValueSet.matching(image);
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        StringsOfAPiece.Shown shown = StringsOfAPiece.piecesOfValuesAt(language,
+                piece.separator(), piece.index(), meter);
+        if (shown == null) {
+            return null;
+        }
+        Language held = mine == null ? null
+                : mine.admitted().approximation() instanceof ValueSet.Matching(Language strings)
+                ? strings : null;
+        long longest = longestOf(held);
+        if (shown.allUpTo(longest)) {
+            return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheStrings()), called);
+        }
+        // No piece is shorter than what is written round it, so none is shown a value's piece.
+        if (shown.upTo() < 0) {
+            return new StringsAPartnerCanHold(ValueSet.NONE,
+                    ValueSet.matching(shown.ofTheStrings()), null, called);
+        }
+        // Only what this side holds is asked about, so the pieces of strings no value is written
+        // as are no gap where this side holds none of them.
+        boolean alike = shown.ofTheStrings().equals(shown.ofTheValues());
+        if (!alike && held != null) {
+            Language between = shown.ofTheStrings().and(shown.ofTheValues().not(meter), meter);
+            Language heldBetween = between == null ? null : between.and(held, meter);
+            alike = heldBetween != null && heldBetween.isEmpty();
+        }
+        return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheValues()),
+                ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()),
+                longest <= shown.upTo() ? null : shown.upTo(), called);
     }
 
     /**
-     * The most code points a string at {@code place} has as the declarations leave it: what its
-     * language bounds, and the most a {@code String} holds where that is no bound.
+     * The most code points a string of {@code held} has: what the language bounds, and the most a
+     * {@code String} holds where that is no bound or the strings are not a language.
      */
-    private static long longestStringAt(TermPath place, InputReading read) {
-        Position at = read.domain().at(place);
-        if (at != null && at.admitted().approximation() instanceof ValueSet.Matching(
-                Language language)) {
-            Language.Ends lengths = language.lengths();
-            if (lengths != null && lengths.most() != null) {
-                return lengths.most();
-            }
-        }
-        return TextExtents.LONGEST_STRING;
+    private static long longestOf(Language held) {
+        Language.Ends lengths = held == null ? null : held.lengths();
+        return lengths != null && lengths.most() != null ? lengths.most()
+                : TextExtents.LONGEST_STRING;
     }
 
     /**

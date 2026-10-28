@@ -95,6 +95,13 @@ public sealed interface StandingQuestion {
                 case PARTITION -> false;
                 case BOUNDARY -> true;
             };
+            // The measure that answers which class a value is in, and only that one. The rule's
+            // classes stand over the values it was shown over, and what is open is which class the
+            // rest are in; where its lines fall is not asked of them.
+            case RegionUndetermined _ -> switch (measure) {
+                case PARTITION -> true;
+                case BOUNDARY -> false;
+            };
             // And a comparison the reading did not finish, which is undecided about what it does at
             // all. A line it comes to divides the position and owes the rows either side, so both
             // measures rest on a reading that stopped — asked per measure rather than answered with
@@ -540,6 +547,113 @@ public sealed interface StandingQuestion {
             /** What makes two of these one, as {@link NothingClassifiesIt.Filed#fact} says. */
             Object fact() {
                 return List.of(rule, at, BlockReason.factOf(why));
+            }
+        }
+    }
+
+    /**
+     * A rule whose classes of a position were shown over some of its values, and which class the
+     * rest are in nothing worked out.
+     *
+     * <p>Beside {@link BoundaryUndetermined}, and the other half of it. There the classes close and
+     * the border is open; here the classes stand over what was shown, the values they do not hold
+     * are open, and the rule has no border on them to leave open.
+     *
+     * @param filed which rule, where it was filed and what the showing stopped at
+     * @param reachedBy every question a reader was offered for that rule, empty exactly where the
+     *                  author named it
+     */
+    record RegionUndetermined(RegionUndetermined.Filed filed,
+                              Set<RuleReportAnchor> reachedBy, ModelOccurrences readAt)
+            implements Unclassified {
+
+        public RegionUndetermined {
+            if (filed == null || readAt == null) {
+                throw new IllegalArgumentException("a question nothing worked out is one question,"
+                        + " of one rule, filed somewhere");
+            }
+            reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
+            RuleCitation.requireReached(filed.rule(), reachedBy);
+        }
+
+        /** One reader's account of it, as that reader produced it, read at {@code readAt}. */
+        public static RegionUndetermined of(RuleCitation cited, ModelOccurrences readAt,
+                                            FilingCoordinate at,
+                                            BlockReason.RelationShownOverARegion why) {
+            return new RegionUndetermined(new RegionUndetermined.Filed(cited.rule(), at, why),
+                    RuleCitation.anchorOf(cited), readAt);
+        }
+
+        @Override
+        public RuleRef rule() {
+            return filed.rule();
+        }
+
+        @Override
+        public Set<RuleCitation> cited() {
+            return RuleCitation.handlesFor(filed.rule(), reachedBy);
+        }
+
+        @Override
+        public FilingCoordinate at() {
+            return filed.at();
+        }
+
+        @Override
+        public BlockReason.RuleReadingStopped why() {
+            return filed.why();
+        }
+
+        @Override
+        public WhatAQuestionStandsOn stopped() {
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
+        }
+
+        @Override
+        public Object fact() {
+            return filed.fact();
+        }
+
+        /**
+         * <p>Two accounts of one rule at one place agree on what is open there, or they are two
+         * readings of the rule that showed different values: the open values are a fact about the
+         * position and the rule, so two that differ are refused.
+         */
+        @Override
+        public StandingQuestion mergedWith(StandingQuestion other) {
+            if (!(other instanceof RegionUndetermined it)) {
+                throw new IllegalArgumentException("a question nothing worked out and " + other
+                        + " are not two accounts of one thing");
+            }
+            if (!filed.equals(it.filed)) {
+                throw new IllegalArgumentException("two accounts put together are of one question: "
+                        + filed + " and " + it.filed);
+            }
+            Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
+            both.addAll(it.reachedBy);
+            return new RegionUndetermined(filed, both, readAt.and(it.readAt));
+        }
+
+        @Override
+        public String toString() {
+            return "undetermined region of " + filed.rule() + " at " + filed.at();
+        }
+
+        /** Which rule, where and what is open — the whole of what makes two of these one, for the
+         *  reason {@link Exact.Fact} gives about the citation. */
+        public record Filed(RuleRef rule, FilingCoordinate at,
+                            BlockReason.RelationShownOverARegion why) {
+
+            public Filed {
+                if (rule == null || at == null || why == null) {
+                    throw new IllegalArgumentException("a question nothing worked out is one of"
+                            + " one rule, filed somewhere, for a reason");
+                }
+            }
+
+            /** What makes two of these one: all of it. */
+            Object fact() {
+                return List.of(rule, at, why);
             }
         }
     }

@@ -42,7 +42,13 @@ import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
+import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
@@ -1256,7 +1262,21 @@ class EverySchemaWordIsAccountedForTest {
                         souther.compiler.inputs.TermPath.of("x"))))));
         out.add(AdequacyReport.questionWord(boundaryUndetermined()));
         out.add(AdequacyReport.questionWord(unclassified()));
+        out.add(AdequacyReport.questionWord(regionUndetermined()));
         return out;
+    }
+
+    /** A rule whose classes of a position stand over some of its values, and the rest open. */
+    private static StandingQuestion regionUndetermined() {
+        return StandingQuestion.RegionUndetermined.of(
+                new RuleCitation.Written(
+                        new RuleRef.Comparison("f",
+                                new SourceConstructOrigin(
+                                        new WrittenOwner.Body("m", "b"), 0, 0,
+                                        SourceConstruct.IF)),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt()),
+                ModelOccurrences.NONE, FilingCoordinate.at(TermPath.of("x")),
+                new BlockReason.RelationShownOverARegion(false, 1L));
     }
 
     /** A rule read far enough to say it restricts the values, and no further. */

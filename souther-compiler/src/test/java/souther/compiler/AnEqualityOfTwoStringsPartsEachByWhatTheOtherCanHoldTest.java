@@ -2,9 +2,13 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.runtime.Strings;
 
 import java.util.List;
 import java.util.Map;
@@ -142,6 +146,16 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
      */
     private static Map<String, List<String>> classesAtOf(String path, String emails,
                                                          String domains, String lets) {
+        Map<String, List<String>> out = new TreeMap<>();
+        evidenceOf(emails, domains, lets).axes().stream()
+                .filter(axis -> axis.path().equals(path))
+                .forEach(axis -> out.put(axis.path(), axis.classes()));
+        return out;
+    }
+
+    /** What {@code f} comes to, the emails and the domains being those {@code emails} and
+     *  {@code domains} spell. */
+    private static PartitionEvidence evidenceOf(String emails, String domains, String lets) {
         Compilation compilation = Compilation.ofSource("""
                 module example.pieces
 
@@ -169,10 +183,116 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
-        Map<String, List<String>> out = new TreeMap<>();
-        all.get("f").axes().stream().filter(axis -> axis.path().equals(path))
-                .forEach(axis -> out.put(axis.path(), axis.classes()));
-        return out;
+        return all.get("f");
+    }
+
+    /** What the rules of {@code evidence} left open at {@code path}, each as what is open. */
+    private static List<BlockReason.RelationShownOverARegion> leftOpenAt(
+            PartitionEvidence evidence, String path) {
+        return evidence.unanswered().stream()
+                .map(PartitionEvidence.Unanswered::asked)
+                .filter(each -> each instanceof StandingQuestion.RegionUndetermined open
+                        && open.at().path().toString().equals(path))
+                .map(each -> ((StandingQuestion.RegionUndetermined) each).filed().why())
+                .toList();
+    }
+
+    /** The reasons {@code evidence} gives at {@code path} for what it did not read there. */
+    private static List<UndividedPosition.Reason> notReadAt(PartitionEvidence evidence,
+                                                            String path) {
+        return evidence.notRead().stream().filter(each -> each.at().equals(path))
+                .map(PartitionEvidence.NotRead::reason).distinct().toList();
+    }
+
+    private static final String ANY_EMAIL = "[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+";
+
+    /** The domains a row names, of no bounded length, each with a dot. */
+    private static final String EVERY_DOMAIN = "[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?"
+            + "(\\\\.[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?)+";
+
+    /** An address written round a domain is two code points longer than it. */
+    private static final long LONGEST_DOMAIN_OF_AN_ADDRESS = Strings.LONGEST_TEXT - 2;
+
+    /**
+     * Every domain is the domain of an address, as far as an address can be written round it: a
+     * domain up to the longest string less two is, and a longer one is shown neither way. The
+     * domains are not parted, since every one shown is on one side; the longest are no class and
+     * are said to be open, and nothing says the relation is not shown at all.
+     */
+    @Test
+    void aDomainIsShownTheDomainOfAnAddressAsFarAsAnAddressIsWrittenRoundIt() {
+        PartitionEvidence evidence = evidenceOf(ANY_EMAIL, EVERY_DOMAIN, """
+                let hasName (name: Domain, r: Row): Bool =
+                    match r.domain with
+                        | Some own -> own == name
+                        | None -> false
+
+                let domainsOf (email: Email): List<Domain> =
+                    match List.get(1, String.split("@", email.value)) with
+                        | Some d -> if Domain(d) as name then [ name ] else []
+                        | None -> []
+
+                let f (email, book) =
+                    List.flatMap(d -> List.filter(r -> hasName(d, r), book.value),
+                            domainsOf(email))
+                """);
+
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(false,
+                        LONGEST_DOMAIN_OF_AN_ADDRESS)),
+                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertEquals(false, notReadAt(evidence, "book[*].domain@Some").contains(
+                UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
+    }
+
+    /**
+     * Where some domains are no domain of an address, the domains are parted over what was shown:
+     * the classes are those a domain short enough to need no bound on its length is parted into,
+     * and the longest domains are in neither of them.
+     */
+    @Test
+    void theClassesOverWhatWasShownAreThoseOfDomainsThatAreAllShown() {
+        String domains = "[a-z0-9]+(\\\\.[a-z0-9]+)*";
+        String shortDomains = "[a-z0-9]{1,20}(\\\\.[a-z0-9]{1,20})?";
+        PartitionEvidence evidence = evidenceOf(ANY_EMAIL, domains,
+                THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK);
+        PartitionEvidence control = evidenceOf(ANY_EMAIL, shortDomains,
+                THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK);
+
+        Map<String, List<String>> parted = Map.of("book[*].domain@Some", List.of(
+                "book[*].domain@Some/x can be piece 1 of email",
+                "book[*].domain@Some/x is never piece 1 of email"));
+        assertEquals(parted,
+                classesAtOf("book[*].domain@Some", ANY_EMAIL, domains,
+                        THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(false,
+                        LONGEST_DOMAIN_OF_AN_ADDRESS)),
+                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertEquals(parted,
+                classesAtOf("book[*].domain@Some", ANY_EMAIL, shortDomains,
+                        THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+        assertEquals(List.of(), leftOpenAt(control, "book[*].domain@Some"),
+                "domains well short of the longest string are all shown");
+    }
+
+    /**
+     * A piece so far into a string that what is written before it is longer than any string is
+     * shown the piece of no value, so no domain is shown on the side where it is one. Those that
+     * are no piece of any string are still shown on the other, which parts nothing, and every
+     * other domain is open whatever its length.
+     */
+    @Test
+    void aPieceNothingCanBeWrittenBeforeLeavesEveryDomainItMayBeOpen() {
+        PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*", """
+                let f (email, book) =
+                    match List.get(300000000, String.split("@", email.value)) with
+                        | Some d -> List.filter(r -> hasDomain(d, r), book.value)
+                        | None -> []
+                """);
+
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertEquals(List.of(), evidence.axes().stream()
+                .filter(axis -> axis.path().equals("book[*].domain@Some")).toList());
     }
 
     private static final Map<String, List<String>> THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN =
@@ -237,13 +357,20 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     }
 
     /**
-     * Where the domains have no length the model bounds, one near the longest string is the piece
-     * of no email, though the language of the pieces holds it: the domains are not parted by it.
+     * Where the domains have no length the model bounds, the domains the emails hold are still
+     * parted from the rest: those are two short domains, an address is written round each, and
+     * every other domain is the piece of no email whatever its length. Nothing is left open.
      */
     @Test
-    void aDomainWithNoBoundOnItsLengthIsNotPartedByTheEmailsThatHoldIt() {
-        assertEquals(Map.of(), classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example",
-                "[a-z0-9]+(\\\\.[a-z0-9]+)+", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+    void aDomainWithNoBoundOnItsLengthIsPartedByTheShortDomainsTheEmailsHold() {
+        assertEquals(Map.of("book[*].domain@Some", List.of(
+                        "book[*].domain@Some/x can be piece 1 of email",
+                        "book[*].domain@Some/x is never piece 1 of email")),
+                classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example",
+                        "[a-z0-9]+(\\\\.[a-z0-9]+)+", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+        assertEquals(List.of(), leftOpenAt(evidenceOf("[a-z]+@(a|b)\\\\.example",
+                        "[a-z0-9]+(\\\\.[a-z0-9]+)+", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK),
+                "book[*].domain@Some"));
     }
 
     /** And where the piece reaches the comparison through a list a function answers. */

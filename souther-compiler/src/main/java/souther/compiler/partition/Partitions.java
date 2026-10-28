@@ -831,6 +831,15 @@ public final class Partitions {
                 case LEFT_TO_THE_WALK -> { }
             }
         }
+        // And the values each rule showed on neither of its sides, which no class holds. The
+        // classes stand over the rest, and the measure of them stays open while any are left.
+        for (Classing.LeftOpen each : answered.leftOpen()) {
+            PredicateOrigin origin = each.statement().origin();
+            found.regionUndetermined(origin.cited(), origin.readAt(),
+                    new FilingCoordinate.AtPosition(term.position()),
+                    new BlockReason.RelationShownOverARegion(!each.atAnyLength().isEmpty(),
+                            each.longerThan()));
+        }
         // The answer's own population, and not what is left after taking the rest away. Subtracted
         // here, the same question is answered twice — and the day the two subtract differently the
         // classes are composed out of one list and recorded as composed out of another.
@@ -1103,15 +1112,6 @@ public final class Partitions {
         found.addAll(rulesWithoutALine);
         unclassifiedIn(base.unanswered(), found);
         RulesWithNoLine gathered = found.found();
-        // And what these readers could not classify, beside the questions the base reading already
-        // had. One list of what holds a measure open, for the one reader of it.
-        //
-        // Taken from the same fold as the findings, because a rule both readers met is one rule
-        // however many of them say so. Concatenated instead, the reader of the report was told
-        // twice about one rule nothing worked out.
-        List<StandingQuestion> asked = new ArrayList<>(base.unanswered().stream()
-                .filter(each -> !(each instanceof StandingQuestion.Unclassified)).toList());
-        asked.addAll(gathered.unclassified());
         List<PositionMeasurements> measurements = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence, blocked);
         // A position at a time, so that what a body's rules add is added where the position already
@@ -1155,6 +1155,16 @@ public final class Partitions {
         }
         List<Axis> out = measurements.stream().flatMap(each -> each.axes().stream()).toList();
         account.everyPieceWasDisposedOf(out);
+        // And what these readers could not classify, beside the questions the base reading already
+        // had. One list of what holds a measure open, for the one reader of it.
+        //
+        // Taken from the same fold as the findings, because a rule both readers met is one rule
+        // however many of them say so. Concatenated instead, the reader of the report was told
+        // twice about one rule nothing worked out. And taken after every position was measured,
+        // since a rule whose classes stand over some of a position's values is found there.
+        List<StandingQuestion> asked = new ArrayList<>(base.unanswered().stream()
+                .filter(each -> !(each instanceof StandingQuestion.Unclassified)).toList());
+        asked.addAll(found.found().unclassified());
         // Both producers into the one account. A line that divides a position leaves its border on
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.

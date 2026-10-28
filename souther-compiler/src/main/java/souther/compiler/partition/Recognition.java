@@ -131,8 +131,15 @@ public sealed interface Recognition {
      * <p>And the one arm that is asked about a value rather than about a place. The strings a
      * behavior tells apart need not be an interval of the order they are written on, so there is no
      * place a line could fall in this and it says so ({@link #answersAboutAPlace}).
+     *
+     * <p>A class shown only as far as some length holds no string longer than that, whatever
+     * {@code values} holds: such a string is shown on neither side of the rule that drew it, and is
+     * in no class of the position.
+     *
+     * @param most the most code points a string of the class has, or null where its strings are
+     *             every one of {@code values}
      */
-    record OfASet(ValueSet values) implements Recognition {
+    record OfASet(ValueSet values, Long most) implements Recognition {
 
         public OfASet {
             if (values == null) {
