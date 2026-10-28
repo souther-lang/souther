@@ -29,14 +29,14 @@ import souther.runtime.Strings;
  * where the string does or at a separator that the rest of some string of the language follows.
  *
  * <p>A language bounds the strings and does not know that a {@code String} holds no more than
- * {@link Strings#LONGEST_TEXT} code points. Parted at one code point, an index multiplies that:
- * a piece at {@code index} is in a string of at least as many separators, and the strings of a
- * language that has the piece there can be longer than any {@code String}, so the language of such
- * pieces holds pieces no value has. Both directions are therefore answered only where
- * {@link #fitsAString} holds, which is where a string of the language with a piece there exists
- * whenever the language says one does, for every piece of up to half the longest string. Past it
- * the answer is null, as it is where the machine is more than the allowance: not worked out, and
- * not a language to part anything by.
+ * {@link Strings#LONGEST_TEXT} code points. The strings that have a piece in a language
+ * ({@link #wholesWithAPieceIn}) are told apart exactly: whether a string has a piece there is
+ * a question about that string, and every string asked about is one a {@code String} holds. The
+ * pieces of the strings of a language ({@link #pieceAt}) are not: a piece is one of a string that
+ * is longer than it by the stretches before it and after it, so a piece near the longest string
+ * is in the language of pieces, which does not know that, and is the piece of no value. That
+ * language is answered only for the pieces of up to a length the caller asks it for, which
+ * {@link #fitsAString} says every such piece is a piece of a value.
  */
 public final class StringsOfAPiece {
 
@@ -44,31 +44,34 @@ public final class StringsOfAPiece {
     }
 
     /**
-     * Whether a string of a machine of {@code states} states that has a piece at {@code index} has
-     * one no longer than a {@code String} holds, whatever the piece, if the piece is up to half
-     * of that.
+     * Whether every piece at {@code index} that a string of a machine of {@code states} states
+     * has, of up to {@code longest} code points, is the piece of a string a {@code String} holds.
      *
      * <p>From any state a machine reaches any other it can reach in fewer than {@code states}
      * symbols, so the stretch before each of the {@code index} separators, the separator, and the
      * rest after the piece come to no more than {@code (index + 2) * (states + 1)} code points
-     * beyond the piece.
+     * beyond the piece. A string that has the piece there at all has one that short.
      */
-    static boolean fitsAString(int index, int states) {
-        return (index + 2L) * (states + 1L) <= Strings.LONGEST_TEXT / 2;
+    static boolean fitsAString(int index, int states, long longest) {
+        return longest >= 0 && longest <= Strings.LONGEST_TEXT
+                && (index + 2L) * (states + 1L) <= Strings.LONGEST_TEXT - longest;
     }
 
     /**
-     * The pieces at {@code index} of the strings of {@code whole} parted at {@code separator}, or
-     * null where making the machine for them is more than {@code meter} allows, or the index is
-     * one the strings of {@code whole} cannot reach within what a {@code String} holds
-     * ({@link #fitsAString}).
+     * The pieces at {@code index} of the strings of {@code whole} parted at {@code separator}, as
+     * far as the pieces of up to {@code longest} code points go: the language holds the longer
+     * ones, and says nothing true of them. Null where making the machine for them is more than
+     * {@code meter} allows, and where a piece of that length may be the piece of no string a
+     * {@code String} holds ({@link #fitsAString}) — which is wherever the caller cannot say its
+     * pieces are shorter than the longest string by the stretches round them.
      */
-    public static Language pieceAt(Language whole, int separator, int index, Meter meter) {
+    public static Language pieceAt(Language whole, int separator, int index, long longest,
+                                   Meter meter) {
         if (index < 0) {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
         }
         Automaton machine = whole.machine();
-        if (!fitsAString(index, machine.size())) {
+        if (!fitsAString(index, machine.size(), longest)) {
             return null;
         }
         meter.starting();
@@ -144,9 +147,6 @@ public final class StringsOfAPiece {
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         int states = machine.size();
-        if (!fitsAString(index, states)) {
-            return null;
-        }
         meter.starting();
         if (!meter.making().states((long) index + states + 1)) {
             return null;

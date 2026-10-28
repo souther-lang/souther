@@ -68,6 +68,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
@@ -1506,7 +1507,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             ValueSet theirStrings = partner.admitted().approximation();
             ValueSet canBe = here.piece() != null
                     ? stringsWithAPiece(here.piece(), theirStrings)
-                    : there.piece() != null ? stringsThatAreThePiece(there.piece(), theirStrings)
+                    : there.piece() != null
+                    ? stringsThatAreThePiece(there.piece(), theirStrings,
+                            longestStringAt(mine.subjectPath(), read))
                     : theirStrings;
             if (canBe == null || canBe.isAny() || canBe.isEmpty()
                     || canBe instanceof ValueSet.WholeRuns) {
@@ -1557,16 +1560,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The strings that are {@code piece} of some string of {@code whole}, or null where {@code whole}
-     * is not a language of strings or the machine for them is more than a piece's allowance.
+     * The strings that are {@code piece} of some string of {@code whole}, for the strings of up
+     * to {@code longest} code points, or null where {@code whole} is not a language of strings,
+     * the machine for them is more than a piece's allowance, or the pieces of that length are not
+     * all the pieces of strings a {@code String} holds ({@link StringsOfAPiece#pieceAt}).
      */
-    private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole) {
+    private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole,
+                                                   long longest) {
         if (!(whole instanceof ValueSet.Matching(Language language))) {
             return null;
         }
         Language image = StringsOfAPiece.pieceAt(language, piece.separator(), piece.index(),
-                PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+                longest, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
         return image == null ? null : ValueSet.matching(image);
+    }
+
+    /**
+     * The most code points a string at {@code place} has as the declarations leave it: what its
+     * language bounds, and the most a {@code String} holds where that is no bound.
+     */
+    private static long longestStringAt(TermPath place, InputReading read) {
+        Position at = read.domain().at(place);
+        if (at != null && at.admitted().approximation() instanceof ValueSet.Matching(
+                Language language)) {
+            Language.Ends lengths = language.lengths();
+            if (lengths != null && lengths.most() != null) {
+                return lengths.most();
+            }
+        }
+        return TextExtents.LONGEST_STRING;
     }
 
     /**
@@ -1575,7 +1597,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A statement of which case a value is, or of how many a container holds, says nothing of
      * the values there; any other statement does not reach them only where it names neither
-     * place. Where {@code theirs} is the string a piece is of, a statement that the string holds
+     * place nor one that holds a place or is held by it. Where {@code theirs} is the string a piece is of, a statement that the string holds
      * the separators the piece's index needs is one the piece's strings already stand on.
      *
      * @param piece the piece the partner is, or null where it is the strings at {@code theirs}
@@ -1588,14 +1610,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean saysNothingOfValues = each.whatStands() && each.relation() == null
                     && each.elementsOf() == null;
             if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
-                    && (each.positions().contains(mine) || each.positions().contains(theirs)
+                    && (reaches(each, mine) || reaches(each, theirs)
                     || each.elementsOf() != null)) {
                 return false;
             }
         }
         return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
-                .anyMatch(term -> term.subjectPath().equals(mine)
-                        || term.subjectPath().equals(theirs)));
+                .anyMatch(term -> overlap(term.subjectPath(), mine)
+                        || overlap(term.subjectPath(), theirs)));
+    }
+
+    /**
+     * Whether {@code statement} turns on {@code place}, or on a place that holds it or is held by
+     * it. A statement of what stands at a value that holds the place, how many a container holds,
+     * says nothing of the place's values, so only what stands at the place or under it is theirs.
+     */
+    private static boolean reaches(OnAWay statement, TermPath place) {
+        return statement.positions().stream().anyMatch(at -> statement.whatStands()
+                ? at.isAtOrUnder(place) : overlap(at, place));
     }
 
     /**

@@ -73,7 +73,8 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
             Language whole = language(regex);
             List<String> held = wholes.stream().filter(whole::has).toList();
             for (int index = 0; index < 4; index++) {
-                Language image = StringsOfAPiece.pieceAt(whole, ';', index, ALLOWANCE);
+                Language image = StringsOfAPiece.pieceAt(whole, ';', index, MOST_PIECE,
+                        ALLOWANCE);
                 assertNotNull(image, regex + " at " + index);
                 for (String piece : pieces) {
                     int at = index;
@@ -111,36 +112,47 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
     @Test
     void anIndexPastARoundOfTheWalkIsThePieceOfTheIndexInTheRound() {
         Language whole = language("(A;7;)*A");
-        Language early = StringsOfAPiece.pieceAt(whole, ';', 3, ALLOWANCE);
-        Language late = StringsOfAPiece.pieceAt(whole, ';', 3 + 2 * 1_000_000, ALLOWANCE);
+        Language early = StringsOfAPiece.pieceAt(whole, ';', 3, 1, ALLOWANCE);
+        Language late = StringsOfAPiece.pieceAt(whole, ';', 3 + 2 * 1_000_000, 1, ALLOWANCE);
         assertEquals(true, early.has("7") && !early.has("A"));
         assertEquals(true, late.has("7") && !late.has("A"));
     }
 
     /**
-     * A language has pieces at an index only of strings that have that many separators, and a
-     * String holds no more than {@code LONGEST_TEXT} code points: past the longest string's worth
-     * of separators there is no piece to name, though the language, which does not know that, has
-     * one.
+     * A piece is the piece of a string longer than it by the stretches round it. The pieces a
+     * language holds of up to a length are the pieces of values only where that length and the
+     * stretches come to no more than the longest string, so a caller that cannot say its pieces
+     * are short is told nothing, and one that can is told the pieces.
      */
     @Test
-    void anIndexNoStringOfTheLanguageReachesWithinWhatAStringHoldsNamesNoPiece() {
-        int past = (int) Strings.LONGEST_TEXT + 1;
-        assertEquals(null, StringsOfAPiece.pieceAt(language("(A;)*A"), ';', past, ALLOWANCE));
-        assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A"), ';', past,
+    void theLanguageOfPiecesIsAnsweredOnlyForPiecesShortEnoughToBeThoseOfAValue() {
+        Language whole = language("A;[A-Z]+");
+        assertEquals(null, StringsOfAPiece.pieceAt(whole, ';', 1, Strings.LONGEST_TEXT, ALLOWANCE));
+        assertEquals(null, StringsOfAPiece.pieceAt(whole, ';', 1, Strings.LONGEST_TEXT - 1,
                 ALLOWANCE));
+        Language shortOnes = StringsOfAPiece.pieceAt(whole, ';', 1, 63, ALLOWANCE);
+        assertEquals(true, shortOnes.has("ABC") && !shortOnes.has("a"));
     }
 
     /**
-     * Nor does a language whose stretch between two separators is long: the index is reached by a
-     * string only if the stretches of as many separators fit, which is what the machine's size
-     * says and the index alone does not.
+     * The stretches between separators multiply with the index. An index a string of the language
+     * reaches within what a String holds is answered, and one it cannot reach is not.
      */
     @Test
-    void anIndexTheStretchesBetweenSeparatorsMakeTooLongForAStringIsNamedNoPiece() {
+    void anIndexIsAnsweredOnlyWhereTheStretchesBeforeItFitInAString() {
         Language whole = language("(AAAAAAAAAA;)*A");
-        assertEquals(true, StringsOfAPiece.pieceAt(whole, ';', 3, ALLOWANCE).has("A"));
-        assertEquals(null, StringsOfAPiece.pieceAt(whole, ';', 20_000_000, ALLOWANCE));
+        assertEquals(true, StringsOfAPiece.pieceAt(whole, ';', 15_000_000, 1, ALLOWANCE)
+                .has("A"));
+        assertEquals(null, StringsOfAPiece.pieceAt(whole, ';', 25_000_000, 1, ALLOWANCE));
+    }
+
+    /** The strings that have a piece are asked of strings a String holds, so no index bounds them
+     *  but the machine it takes. */
+    @Test
+    void anIndexPastWhatTheMeterAllowsAMachineForIsRefused() {
+        int past = (int) Strings.LONGEST_TEXT + 1;
+        assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A"), ';', past,
+                ALLOWANCE));
     }
 
     /** A machine for an index that the meter's states do not reach is refused unmade. */
@@ -152,6 +164,7 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
 
     @Test
     void aLanguageWithFewerPiecesThanTheIndexHasNone() {
-        assertEquals(true, StringsOfAPiece.pieceAt(language("A7"), ';', 1, ALLOWANCE).isEmpty());
+        assertEquals(true, StringsOfAPiece.pieceAt(language("A7"), ';', 1, 1, ALLOWANCE)
+                .isEmpty());
     }
 }

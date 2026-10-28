@@ -132,12 +132,16 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     /** The classes of {@code f}'s positions, over an email and a book of rows with a domain. */
     private static Map<String, List<String>> classesOfAnEmailAgainstTheDomainsOfARow(
             String lets) {
-        return classesAtOf("email", "[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", lets);
+        return classesAtOf("email", "[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+",
+                "[a-z0-9]+(\\\\.[a-z0-9]+)+", lets);
     }
 
-    /** The classes at {@code path}, the emails being those {@code emails} spells. */
+    /**
+     * The classes at {@code path}, the emails and the domains being those {@code emails} and
+     * {@code domains} spell.
+     */
     private static Map<String, List<String>> classesAtOf(String path, String emails,
-                                                         String lets) {
+                                                         String domains, String lets) {
         Compilation compilation = Compilation.ofSource("""
                 module example.pieces
 
@@ -145,7 +149,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                     invariant String.matches("%s", value)
 
                 data Domain = String
-                    invariant String.matches("[a-z0-9]+(\\\\.[a-z0-9]+)+", value)
+                    invariant String.matches("%s", value)
 
                 data Row = { id: String, domain: Domain? }
 
@@ -159,7 +163,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 behavior f : (email: Email, book: Book) -> List<Row>
 
                 %s
-                """.formatted(emails, lets), "Main");
+                """.formatted(emails, domains, lets), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
@@ -190,21 +194,36 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                         """));
     }
 
+    private static final String THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK = """
+            let f (email, book) =
+                match List.get(1, String.split("@", email.value)) with
+                    | Some d -> List.filter(r -> hasDomain(d, r), book.value)
+                    | None -> []
+            """;
+
     /**
-     * The other side is parted too: a domain of a row is a class of its own by whether it is the
-     * second piece of some email, which only two domains are.
+     * The other side is parted too where it is short: a domain of a row is a class of its own by
+     * whether it is the second piece of some email, which only two domains are. A domain the
+     * model bounds is a piece of a value whatever it is.
      */
     @Test
     void theDomainsThatAreTheSecondPieceOfSomeEmailAreAClassOfTheOtherSide() {
         assertEquals(Map.of("book[*].domain@Some", List.of(
                         "book[*].domain@Some/x can be piece 1 of email",
                         "book[*].domain@Some/x is never piece 1 of email")),
-                classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example", """
-                        let f (email, book) =
-                            match List.get(1, String.split("@", email.value)) with
-                                | Some d -> List.filter(r -> hasDomain(d, r), book.value)
-                                | None -> []
-                        """));
+                classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example",
+                        "[a-z0-9]{1,63}(\\\\.[a-z0-9]{1,63}){1,3}",
+                        THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+    }
+
+    /**
+     * Where the domains have no length the model bounds, one near the longest string is the piece
+     * of no email, though the language of the pieces holds it: the domains are not parted by it.
+     */
+    @Test
+    void aDomainWithNoBoundOnItsLengthIsNotPartedByTheEmailsThatHoldIt() {
+        assertEquals(Map.of(), classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example",
+                "[a-z0-9]+(\\\\.[a-z0-9]+)+", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
     }
 
     /** And where the piece reaches the comparison through a list a function answers. */
