@@ -2224,13 +2224,13 @@ public final class Generator {
                     int through = arm.seenThrough().size();
                     Examining pieces = new Examining(looking);
                     Examining lists = new Examining(looking);
+                    Beside growing = aListGrown(arm.ranWith(), axes.subject(), check, looking);
                     yield seen != null ? seen : taking(looking, List.of(
                             inOrder(through, at -> piecesDemanded(arm.seenThrough().get(at),
                                     axes, purposes, looking, check, answers,
                                     read.piecesAttempted(), pieces)),
                             inOrder(through, at -> candidatesBeside(arm.seenThrough().get(at),
-                                    axes, purposes, check, answers, aListGrown(arm.ranWith(), axes.subject(), check),
-                                    lists)),
+                                    axes, purposes, check, answers, growing, lists)),
                             inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
                                     purposes, looking, check, answers))));
                 }
@@ -2270,6 +2270,7 @@ public final class Generator {
                     Examining numbers = new Examining(looking);
                     Examining pieces = new Examining(looking);
                     Examining lists = new Examining(looking);
+                    Beside growing = aListGrown(one.ranWith(), axes.subject(), check, looking);
                     yield seen != null ? seen : taking(looking, List.of(
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
                                     purposes, check, answers, A_WHOLE_NUMBER_MOVED, numbers)),
@@ -2277,8 +2278,7 @@ public final class Generator {
                                     purposes, looking, check, answers, read.piecesAttempted(),
                                     pieces)),
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
-                                    purposes, check, answers, aListGrown(one.ranWith(), axes.subject(), check),
-                                    lists))));
+                                    purposes, check, answers, growing, lists))));
                 }
             };
             replacementAnswers.put(asked, found != null
@@ -2412,12 +2412,20 @@ public final class Generator {
      * is what running it says.
      */
     private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
-                                     CandidateCheck check) {
-        // What stands for a type is the same for every row and list the search grows, so it is
-        // made the first time an element type is asked for.
+                                     CandidateCheck check, ReplacementWitness looking) {
+        // What stands for a type is the same for every row and list the search grows, so this is
+        // made once for the search, and what building it met is said once, the first time the
+        // type's values are asked for.
         Map<Type, List<ObservedValue>> stood = new HashMap<>();
         return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
-                element -> stood.computeIfAbsent(element, each -> ElementsOfAType.of(subject, check, each)));
+                element -> stood.computeIfAbsent(element, each -> {
+                    ElementsOfAType.Elements made = ElementsOfAType.of(
+                            standingFor -> subject.representativesHolding(standingFor,
+                                    FieldDomains.ConstructionLimits.NONE),
+                            subject.ruleReading(), check, each);
+                    looking.composingMet(made.met());
+                    return made.values();
+                }));
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
@@ -10088,6 +10096,13 @@ public final class Generator {
                 case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
             }
             return null;
+        }
+
+        /** Composing stopped at every budget {@code met} holds, if it holds any. */
+        void composingMet(CompositionShortfall met) {
+            if (!met.nothing()) {
+                composingStopped(asFigures(met.figures()));
+            }
         }
 
         /** Composing the rows the search looked through stopped at {@code figure}. */
