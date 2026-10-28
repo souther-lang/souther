@@ -126,9 +126,21 @@ final class BindingEnvironment {
      * names alone, every application of a closure over the values written out is one hash, and
      * telling them apart walks the values each time two of them meet.
      */
-    private record Handed(Map<BindingId, Core> values, int hash, Handed parent, BindingId step) {
+    private static final class Handed {
 
         static final Handed NONE = new Handed(Map.of(), 0, null, null);
+
+        private final Map<BindingId, Core> values;
+        private final int hash;
+        private final Handed parent;
+        private final BindingId step;
+
+        private Handed(Map<BindingId, Core> values, int hash, Handed parent, BindingId step) {
+            this.values = values;
+            this.hash = hash;
+            this.parent = parent;
+            this.step = step;
+        }
 
         /** This, with {@code binding} handed {@code value} in place of whatever it held. */
         Handed with(BindingId binding, Core value) {
@@ -138,6 +150,32 @@ final class BindingEnvironment {
             return new Handed(Map.copyOf(wider),
                     hash - (was == null ? 0 : binding.hashCode() ^ was.hashCode()) + entry,
                     this, binding);
+        }
+
+        /**
+         * What {@code binding} was handed here, or null.
+         *
+         * <p>Not a reading that a {@link Watch} sees: a reading asks {@link Watch#read}, which
+         * asks this once it has placed the read. Whoever calls this directly is answering a
+         * question about the values handed and not reading one.
+         */
+        Core unwatched(BindingId binding) {
+            return values.get(binding);
+        }
+
+        /** Where a read of {@code binding} here stands to the environment {@code began} a watch
+         *  on. */
+        Placing placing(Handed began, BindingId binding) {
+            boolean handedSince = false;
+            for (Handed each = this; each != null; each = each.parent) {
+                if (each == began) {
+                    return handedSince ? Placing.HANDED_SINCE : Placing.AS_BEGUN;
+                }
+                handedSince |= binding.equals(each.step);
+            }
+            // Not reached from here, whatever was handed on the way up: a step that hands the name
+            // in an environment apart from the one the watch began on is not a step since it.
+            return Placing.OFF_THE_WAY;
         }
 
         @Override
@@ -154,6 +192,35 @@ final class BindingEnvironment {
         public int hashCode() {
             return hash;
         }
+
+        @Override
+        public String toString() {
+            return values.toString();
+        }
+    }
+
+    /**
+     * Where a read of a name's handed value stands to the environment a watch began on.
+     *
+     * <p>Every read is one of these three, so a watch that places a read places all of them: a
+     * read that is none is not a read the watch may ignore, and {@link #OFF_THE_WAY} says so.
+     */
+    private enum Placing {
+
+        /** Made on the way from the environment the watch began on, with the name not handed
+         *  since: what it was answered is what the environment began with, and what the reading
+         *  asked after. */
+        AS_BEGUN,
+
+        /** Made on the way from it, with the name handed a value since: the reading decided that
+         *  value itself, and it asked nothing of what was handed before. */
+        HANDED_SINCE,
+
+        /** Made in an environment that does not come from the one the watch began on: an
+         *  ancestor of it, or one made apart from it. What it was answered is no answer of the
+         *  environment another reading is compared with, so nothing the watch says would hold of
+         *  it. */
+        OFF_THE_WAY
     }
 
     /**
@@ -206,33 +273,36 @@ final class BindingEnvironment {
             }
         }
 
-        static void asked(Handed in, BindingId binding, Core answer) {
+        /**
+         * What {@code binding} was handed in {@code in}, which a watch running on this thread
+         * takes note of.
+         *
+         * <p>The one way a value that was handed is read. A read the watch cannot place makes it
+         * unsure, so that it is neither left without that read nor taken for one that holds of
+         * every reading it is compared with.
+         */
+        private static Core read(Handed in, BindingId binding) {
+            Core answer = in.unwatched(binding);
             Watch watch = RUNNING.get();
-            if (watch == null) {
-                return;
-            }
-            for (Handed each = in; each != null; each = each.parent()) {
-                if (each == watch.started) {
-                    watch.asked.putIfAbsent(binding, answer);
-                    return;
-                }
-                if (binding.equals(each.step())) {
-                    return;
+            if (watch != null) {
+                switch (in.placing(watch.started, binding)) {
+                    case AS_BEGUN -> watch.asked.putIfAbsent(binding, answer);
+                    case HANDED_SINCE -> { }
+                    case OFF_THE_WAY -> watch.unsure = true;
                 }
             }
+            return answer;
         }
     }
 
     /** What {@code binding} was handed on the way here, or null. */
     private Core handedTo(BindingId binding) {
-        Core value = handed.values().get(binding);
-        Watch.asked(handed, binding, value);
-        return value;
+        return Watch.read(handed, binding);
     }
 
     /** What {@code binding} is handed here, unwatched: the question {@link HandedAnswers} asks. */
     Core handedUnwatched(BindingId binding) {
-        return handed.values().get(binding);
+        return handed.unwatched(binding);
     }
 
     /** Whether {@code that} is this but for what was handed. */
@@ -579,7 +649,7 @@ final class BindingEnvironment {
             // What was handed, whose hash was worked out as each value was handed, and the names
             // of what was selected, as of what was bound: what each of those is picked out by is
             // a tree, and equality reads it where a hash would walk it for every environment made.
-            h = Objects.hash(roots, handed.hash(), bound().keySet(), heldHash.get(), callsStand,
+            h = Objects.hash(roots, handed.hashCode(), bound().keySet(), heldHash.get(), callsStand,
                     selected.keySet(), opened.keySet(), answered.keySet());
             hash = h;
         }
@@ -589,7 +659,7 @@ final class BindingEnvironment {
     @Override
     public String toString() {
         Watch.compared();
-        return "BindingEnvironment[roots=" + roots + ", handed=" + handed.values() + ", bound="
+        return "BindingEnvironment[roots=" + roots + ", handed=" + handed + ", bound="
                 + bound()
                 + ", elements=" + elements + ", callsStand=" + callsStand
                 + ", selected=" + selected + ", opened=" + opened.keySet() + "]";
