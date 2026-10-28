@@ -2,7 +2,11 @@ package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -298,6 +302,21 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
     }
 
     /** The leaves, and every pair of those joined either way. */
+    @Test
+    void theSpellingOfADenialIsTheSpellingOfTheDenialOfEveryProposition() {
+        List<Proposition> all = new ArrayList<>(pool());
+        for (boolean holds : new boolean[] {true, false}) {
+            all.add(new Proposition.Compared(new Relation.Affine(new LinearForm<>(
+                    ExactRatio.of(-3), Map.of(new DecisionAtom.OfTheInput(
+                            new NumericTerm.ValueOf(ATOMS.get(0))), ExactRatio.ONE)), Rel.GT),
+                    holds));
+        }
+        for (Proposition each : all) {
+            assertEquals(each.denied().key(), each.deniedKey(), each.key());
+            assertEquals(each.key(), each.denied().deniedKey(), each.key());
+        }
+    }
+
     private static List<Proposition> pool() {
         List<Proposition> leaves = leaves();
         List<Proposition> out = new ArrayList<>(leaves);

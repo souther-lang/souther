@@ -52,6 +52,14 @@ import java.util.Set;
 public interface SearchRegion {
 
     /**
+     * Where the regions this one was narrowed to are kept, for a caller narrowing it by lists of
+     * steps that start alike. A region that keeps none folds every list from itself.
+     */
+    default NarrowingsKept narrowingsKept() {
+        return NarrowingsKept.NONE;
+    }
+
+    /**
      * This region without the relation the rules {@code parts} name hold between the places they
      * read, under the parameter each is listed under, with what was taken in and fixed kept.
      *

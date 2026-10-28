@@ -198,6 +198,10 @@ final class ReadQuantities implements Quantities {
      * caller said anything to is {@link #contexts}, and is not kept twice.
      */
     private final Map<StructuralContext, ConstraintState<InputAtom>> answered;
+
+    /** Made on the first narrowing asked of this reading as the base, and not for the readings
+     *  made from it by a search, which are never one. */
+    private volatile NarrowingsKept narrowingsKept;
     /** The same, of those rules with this value's fixings standing in them. Beside the one above
      *  and not in place of it: a form a caller takes in is spaced by what the declarations say,
      *  and not by what a fixing happened to settle. */
@@ -401,6 +405,21 @@ final class ReadQuantities implements Quantities {
         // run, which is a fine order and not one anybody chose — read off it, which of two
         // contradictions a proof names would move between runs of the same compiler.
         this.fixed = Collections.unmodifiableMap(new LinkedHashMap<>(fixed));
+    }
+
+    /** The regions this reading, as a base, was narrowed to. */
+    NarrowingsKept narrowingsKept() {
+        NarrowingsKept had = narrowingsKept;
+        if (had == null) {
+            synchronized (this) {
+                had = narrowingsKept;
+                if (had == null) {
+                    had = new NarrowingsKept();
+                    narrowingsKept = had;
+                }
+            }
+        }
+        return had;
     }
 
     /** Before anything is fixed. */
@@ -651,7 +670,12 @@ final class ReadQuantities implements Quantities {
     /** A value whose rules reach a place, and what those rules call it. Made only by
      *  {@link Roots#nearestTo}, so holding one is holding a root that can name what was asked
      *  about. */
-    private record UnderARoot(TermPath root, RuleKey named) {}
+    private record UnderARoot(TermPath root, RuleKey named, String rootName) {
+
+        UnderARoot(TermPath root, RuleKey named) {
+            this(root, named, root.toString());
+        }
+    }
 
     /**
      * What the behavior takes, and which of them is nearest to each place asked about.
@@ -666,9 +690,22 @@ final class ReadQuantities implements Quantities {
 
         private final Set<TermPath> all;
         private final Map<TermPath, Optional<UnderARoot>> nearest = new ConcurrentHashMap<>();
+        private final Map<TermPath, Optional<UnderARoot>> reNamed = new ConcurrentHashMap<>();
 
         Roots(Set<TermPath> all) {
             this.all = Set.copyOf(all);
+        }
+
+        /**
+         * The nearest root of the place that the root nearest to {@code subject} names it at,
+         * which is where a subject stands when no narrowing moves it.
+         */
+        UnderARoot standingAt(TermPath subject) {
+            return reNamed.computeIfAbsent(subject, s -> {
+                UnderARoot first = nearestTo(s);
+                return Optional.ofNullable(first == null ? null
+                        : nearestTo(pathOf(first.root(), first.named())));
+            }).orElse(null);
         }
 
         /** The nearest root whose rules can name {@code path}, or null where none can. */
@@ -1489,8 +1526,24 @@ final class ReadQuantities implements Quantities {
             return new InputAtom.Computed(
                     rootOf(standingUnder(term.subjectPath(), under)).root().toString(), term);
         }
-        UnderARoot at = rootOf(term.subjectPath());
+        TermPath subject = term.subjectPath();
+        if (!anyNarrowingHeld(under)) {
+            UnderARoot at = roots.standingAt(subject);
+            return new InputAtom.Named(at.rootName(), at.named(), which);
+        }
+        UnderARoot at = rootOf(subject);
         return atomAt(standingUnder(pathOf(at.root(), at.named()), under), which);
+    }
+
+    /** Whether any narrowing this context selects is one of the readings this input holds, which
+     *  is what {@link #standingUnder} moves a place by. */
+    private boolean anyNarrowingHeld(StructuralContext under) {
+        for (OpenedRules opened : byRoot.values()) {
+            if (opened.opening() instanceof RootOpening.Refined it && under.holds(it)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Where a value's own rules put a coordinate, as a place of this input. */
@@ -1509,7 +1562,7 @@ final class ReadQuantities implements Quantities {
     private InputAtom.Named atomAt(TermPath place,
                                    NumberAt.OfWhatNumber kind) {
         UnderARoot at = rootOf(place);
-        return new InputAtom.Named(at.root().toString(), at.named(), kind);
+        return new InputAtom.Named(at.rootName(), at.named(), kind);
     }
 
     /**
