@@ -2422,6 +2422,7 @@ public final class Generator {
                     ElementsOfAType.Elements made = ElementsOfAType.of(
                             standingFor -> subject.representativesHolding(standingFor,
                                     FieldDomains.ConstructionLimits.NONE),
+                            ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
                             subject.ruleReading(), check, each);
                     looking.composingMet(made.met());
                     return made.values();
@@ -10098,9 +10099,18 @@ public final class Generator {
             return null;
         }
 
-        /** Composing stopped at every budget {@code met} holds, if it holds any. */
+        /**
+         * Composing stopped at every figure {@code met} holds, if it holds any.
+         *
+         * <p>The figures and no more of it, as at every place a search's composing is said to have
+         * stopped here: what a rewrite's search ended at is a figure or something no figure decides
+         * ({@link ReplacementDisposition.Met}), and what a shortfall holds besides its figures — a
+         * population written in part, a number not held — is neither said nor asked for here. A
+         * shortfall of those alone says nothing, and does not reach {@link #composingStopped}, which
+         * is only ever told a figure.
+         */
         void composingMet(CompositionShortfall met) {
-            if (!met.nothing()) {
+            if (!met.figures().isEmpty()) {
                 composingStopped(asFigures(met.figures()));
             }
         }

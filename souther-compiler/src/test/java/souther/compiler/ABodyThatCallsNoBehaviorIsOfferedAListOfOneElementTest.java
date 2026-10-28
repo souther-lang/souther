@@ -47,6 +47,7 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
             new Case("", "List<Int>", "Int", "List.length(xs)", "0"),
             new Case("", "List<Int>", "Int",
                     "List.fold((acc, x) -> acc + List.length(x), 0, xs)", "0"),
+            new Case(deeplyNested(12), "N12", "Int", "List.length(xs)", "0"),
             new Case("""
                     data Node = { kids: List<Node> }
                     """, "Node", "Int", "List.length(xs)", "0"),
@@ -64,6 +65,18 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
             new Case("""
                     data Request = { on: Date, count: Int }
                     """, "Request", "Int", "List.length(xs)", "0"));
+
+    /** {@code N1} holds two lists of {@code N0}, {@code N2} two lists of {@code N1}, and so on up
+     *  to {@code N<depth>}: an element that goes into every list it holds goes into {@code N0}
+     *  twice for every level above it. */
+    private static String deeplyNested(int depth) {
+        StringBuilder out = new StringBuilder("data N0 = { value: Int }\n");
+        for (int level = 1; level <= depth; level++) {
+            out.append("data N").append(level).append(" = { left: List<N").append(level - 1)
+                    .append(">, right: List<N").append(level - 1).append("> }\n");
+        }
+        return out.toString();
+    }
 
     /** Each model is compiled once and asked both what {@code --generate} offers and what the
      *  verdict is, and every element that fails either is named. */
