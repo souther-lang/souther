@@ -7,16 +7,21 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A condition inside a copy of a library operation is no rule of the model, and it still decides
- * which of that operation's arms a run can get to.
+ * A fork inside a copy of a library operation is no arm of the model unless the model made it: the
+ * rule the model handed the operation settles the fork.
  *
- * <p>{@code Int.abs} is called only where the caller has already found {@code left} negative, so
- * the arm that answers an argument that is not negative is one no row can go through, and no row
- * is owed there.
+ * <p>{@code Int.abs} compares at nought and {@code List.take} at the count it keeps, whatever the
+ * caller has already found out, so no row is owed through either. The predicate handed to
+ * {@code List.filter} is the model's own decision and is owed, and so is any fork the author
+ * writes inside a closure handed to an operation.
  */
 class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
 
@@ -85,29 +90,75 @@ class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
                 () -> report(UNCONDITIONAL));
     }
 
-    /** The loops {@code take}, {@code drop} and {@code zipShortest} turn at are the library's. */
+    /**
+     * The operations whose forks the library settles itself.
+     *
+     * <p>{@code take} and {@code drop} turn at a count they keep, {@code zipShortest} at what
+     * {@code List.get} found in the other list, and {@code distinctBy} and {@code groupBy} at what
+     * they have gathered so far. The last two are handed a function, and the fork rests on what it
+     * answers — but it only projects a key, and the fork is settled by the gathered state.
+     */
+    private static final String SETTLED_BY_THE_LIBRARY = """
+            module exp.ops
+
+            behavior takeTwo : (xs: List<Int>) -> List<Int>
+            let takeTwo (xs) = List.take(2, xs)
+            example takeTwo
+                | "one" : ([1]) -> [1]
+
+            behavior dropTwo : (xs: List<Int>) -> List<Int>
+            let dropTwo (xs) = List.drop(2, xs)
+            example dropTwo
+                | "one" : ([1]) -> []
+
+            behavior pairs : (xs: List<Int>, ys: List<Int>) -> Int
+            let pairs (xs, ys) = List.length(List.zipShortest(xs, ys))
+            example pairs
+                | "same length" : ([1], [2]) -> 1
+
+            behavior unique : (xs: List<Int>) -> List<Int>
+            let unique (xs) = List.distinctBy(x -> x, xs)
+            example unique
+                | "single" : ([1]) -> [1]
+
+            behavior grouped : (xs: List<String>) -> Int
+            let grouped (xs) = Map.size(List.groupBy(x -> x, xs))
+            example grouped
+                | "single" : (["a"]) -> 1
+            """;
+
     @Test
-    void theForksInsideTakeDropAndZipShortestAreNotTheModels() {
-        String source = """
+    void aForkTheLibrarySettlesItselfOwesNoArm() {
+        Compilation compilation = measured(SETTLED_BY_THE_LIBRARY);
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
+                "the model under test compiles");
+        Map<String, Adequacy.BranchEvidence> byBehavior =
+                compilation.db().ask(new Adequacy.BranchCoverage("exp.ops")).value();
+
+        for (String behavior : List.of("takeTwo", "dropTwo", "pairs", "unique", "grouped")) {
+            assertEquals(Adequacy.BranchEvidence.noArms(
+                            Adequacy.BranchEvidence.NoArms.NO_ARM_OBLIGATIONS),
+                    byBehavior.get(behavior), behavior);
+        }
+        String report = report(compilation);
+        assertFalse(report.contains("no row goes through"), report);
+    }
+
+    /** What the model hands the operation to decide by is its own decision, whichever operation. */
+    @Test
+    void aRuleTheModelHandedTheOperationToDecideByStaysOwed() {
+        Compilation compilation = measured("""
                 module exp.ops
 
-                behavior takeTwo : (xs: List<Int>) -> List<Int>
-                let takeTwo (xs) = List.take(2, xs)
-                example takeTwo
-                    | "one" : ([1]) -> [1]
+                behavior positives : (xs: List<Int>) -> List<Int>
+                let positives (xs) = List.filter(x -> x > 0, xs)
+                example positives
+                    | "positive" : ([5]) -> [5]
+                """);
 
-                behavior dropTwo : (xs: List<Int>) -> List<Int>
-                let dropTwo (xs) = List.drop(2, xs)
-                example dropTwo
-                    | "one" : ([1]) -> []
-
-                behavior pairs : (xs: List<Int>, ys: List<Int>) -> Int
-                let pairs (xs, ys) = List.length(List.zipShortest(xs, ys))
-                example pairs
-                    | "same length" : ([1], [2]) -> 1
-                """;
-
-        assertFalse(report(source).contains("no row goes through"), () -> report(source));
+        assertTrue(report(compilation).contains("no row goes through `else`"),
+                () -> report(compilation));
     }
 
     /** What the author writes inside a closure handed to a library operation is still owed. */
@@ -126,9 +177,17 @@ class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
     }
 
     private static String report(String source) {
+        return report(measured(source));
+    }
+
+    private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }

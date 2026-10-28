@@ -271,7 +271,16 @@ public final class CoverageSites {
      */
     public record ArmSite(String body, SourceOutcome.Arm outcome,
                           ControlPlace.Arm place, int ordinal,
-                          Obligation obligation) implements Site {
+                          Obligation obligation, boolean owesARow) implements Site {
+
+        /**
+         * An arm that owes a row, which is what a site made by hand is. The walk that numbers the
+         * places is the one that says otherwise, by the canonical constructor.
+         */
+        public ArmSite(String body, SourceOutcome.Arm outcome, ControlPlace.Arm place,
+                       int ordinal, Obligation obligation) {
+            this(body, outcome, place, ordinal, obligation, true);
+        }
 
         public ArmSite {
             // The pair is what carries the meaning, so the pair is what is checked. Not every
@@ -307,23 +316,10 @@ public final class CoverageSites {
             return place.anchor();
         }
 
-        /**
-         * Whether a row is owed through this arm.
-         *
-         * <p>A fork inside a copy of the language's own operation is still a place a run is
-         * recorded at and is read as one. It is a decision of the model's only where the model
-         * supplied the rule it decides by, as the predicate handed to {@code List.filter} is; a
-         * fork the operation decides for itself, as {@code List.take} does at its own count, is no
-         * decision of the model's and owes no row.
-         */
-        public boolean owesARow() {
-            return ModelOccurrence.statedAt(place.arm().fork()).isPresent()
-                    || !(obligation.decided() instanceof DecidedBy.ByTheDeclaration);
-        }
-
         /** The same place, owed by {@code behavior}. */
         public ArmSite ownedBy(String behavior) {
-            return new ArmSite(body, outcome, place, ordinal, obligation.ownedBy(behavior));
+            return new ArmSite(body, outcome, place, ordinal, obligation.ownedBy(behavior),
+                    owesARow);
         }
     }
 
@@ -1008,7 +1004,7 @@ public final class CoverageSites {
             sites.add(switch (draft) {
                 case DraftArmSite arm -> new ArmSite(arm.behavior(), arm.outcome(),
                         placeOf(arm.arm(), numbering, issued), arm.ordinal(),
-                        arm.obligation());
+                        arm.obligation(), arm.owesARow());
                 case DraftComparisonSite compared -> new ComparisonSite(compared.behavior(),
                         compared.outcome(), compared.at(),
                         numbering.outcome(compared.raw()), compared.ordinal(),
@@ -1107,7 +1103,8 @@ public final class CoverageSites {
      * again by whoever needed it.
      */
     private record DraftArmSite(DraftArm arm, String behavior, SourceOutcome.Arm outcome,
-                                int ordinal, Obligation obligation) implements DraftSite {}
+                                int ordinal, Obligation obligation, boolean owesARow)
+            implements DraftSite {}
 
     /** A site of one comparison, which no arm stands at. */
     private record DraftComparisonSite(String behavior, SourceOutcome.Compared outcome, Citation at,
@@ -1699,8 +1696,27 @@ public final class CoverageSites {
             // there is no moment at which a site exists and which place it is about is still to be
             // worked out.
             sites.add(new DraftArmSite(draft, behavior, outcome, ordinal++,
-                    new Obligation(behavior, origin, part, decided)));
+                    new Obligation(behavior, origin, part, decided), owesARow(fork)));
             return draft;
+        }
+
+        /**
+         * Whether a row is owed through the arms of {@code fork}.
+         *
+         * <p>A fork inside a copy of the language's own operation is a place a run is recorded at
+         * and is read as one, and it is no decision of the model's unless the model made it: the
+         * rule the model handed the operation settles the fork, as the predicate of
+         * {@code List.filter} does. A fork the operation settles itself, as {@code List.take} does
+         * at its own count or {@code List.distinctBy} does from what it has gathered, owes no row —
+         * a row there would be a row for how the library happens to be written.
+         *
+         * <p>Asked once, where the arm is numbered, and carried on the site: it is a fact about the
+         * fork and not about the behavior that reaches it.
+         */
+        private boolean owesARow(ConstructOccurrence fork) {
+            return ModelOccurrence.statedAt(fork).isPresent()
+                    || (decisions.at(fork.origin()) instanceof DecisionSource.Supplied by
+                            && by.byTheirVerdict());
         }
 
         /**

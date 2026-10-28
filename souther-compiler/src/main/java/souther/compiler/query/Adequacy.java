@@ -5060,28 +5060,11 @@ public final class Adequacy {
                                               Function<List<CoverageSites.ArmSite>,
                                                       List<WhereNothingIsAnswered.Premise>>
                                                       premisesOf) {
-            return measured(behavior, all,
-                    all.stream().filter(CoverageSites.ArmSite::owesARow).toList(), covered,
-                    awaiting, reachable, weakenings, premisesOf);
-        }
-
-        /**
-         * The same, where the arms of {@code all} that owe a row are already in hand as
-         * {@code stated}.
-         *
-         * <p>Over every arm the plan numbered, since a proof a run contradicted may be at an arm of
-         * the language's own operation; what is owed and what is doubted is the part that owes a
-         * row.
-         */
-        static BranchEvidence measured(String behavior,
-                                       List<CoverageSites.ArmSite> all,
-                                       List<CoverageSites.ArmSite> stated,
-                                       Map<ArmProbe, RowWitnesses> covered,
-                                       Set<ArmProbe> awaiting,
-                                       souther.compiler.check.PathReachability.Answers.AsRun reachable,
-                                       WeakeningSet weakenings,
-                                       Function<List<CoverageSites.ArmSite>,
-                                               List<WhereNothingIsAnswered.Premise>> premisesOf) {
+            // Over every arm the plan numbered, since a proof a run contradicted may be at an arm of
+            // the language's own operation; what is owed and what is doubted is the part that owes
+            // a row.
+            List<CoverageSites.ArmSite> stated =
+                    all.stream().filter(CoverageSites.ArmSite::owesARow).toList();
             Set<CoverageSites.Obligation> doubted = armsBehind(all, reachable.contradicted().places());
             Set<CoverageSites.Obligation> owing = new HashSet<>();
             stated.forEach(site -> owing.add(site.obligation()));
@@ -5262,7 +5245,7 @@ public final class Adequacy {
                 souther.compiler.partition.MeasuredInput subject =
                         unanswered.regions().isEmpty() ? null
                                 : subjectOf(db, name, behavior.name());
-                return BranchEvidence.measured(behavior.name(), everyArm, arms, covered, awaited,
+                return BranchEvidence.measured(behavior.name(), everyArm, covered, awaited,
                         arrives, rowsBehind(observed), BranchEvidence.premisesOfArms(
                                 unanswered, met == null ? null : met.get(behavior.name()),
                                 subject == null ? null : subject.axes()));

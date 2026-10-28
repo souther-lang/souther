@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
@@ -178,7 +179,8 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
         Set<String> on = new LinkedHashSet<>();
         rules.restsOn(cond, answersOn, bound, named, on);
         out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN
-                : new DecisionSource.Supplied(declaration, rules.inTheOrderDeclared(on)));
+                : new DecisionSource.Supplied(declaration, rules.inTheOrderDeclared(on),
+                        rules.isTheirVerdict(cond)));
     }
 
     /** The rules one declaration was handed: its function parameters, by binding and by place. */
@@ -208,6 +210,26 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
                 }
             }
             return new Rules(byBinding, inOrder);
+        }
+
+        /**
+         * Whether the truth of {@code e} is nothing but what the rules answered: a call of one of
+         * them, or such calls joined by {@code &&} and {@code ||}.
+         *
+         * <p>Anything else in the condition — a lookup in what the declaration has gathered, a
+         * count, a comparison — is the declaration's own, and the fork is decided by that with a
+         * rule feeding it. Asked narrowly on purpose: a condition this cannot read as the rules'
+         * verdict is left to the declaration, which owes no row.
+         */
+        boolean isTheirVerdict(Hir.Expr e) {
+            return switch (e) {
+                case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee
+                        && callee.denotes() instanceof ValueName.Local local ->
+                        byBinding.containsKey(local.id());
+                case Hir.Binary joined when joined.op() == BinOp.AND || joined.op() == BinOp.OR ->
+                        isTheirVerdict(joined.left()) && isTheirVerdict(joined.right());
+                default -> false;
+            };
         }
 
         /**

@@ -629,7 +629,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.LookupsAClauseNeeds.work",
                     "names the conjunction and the disjunction, which are the two forms that carry"
                             + " a false part on to the whole clause; any other operator says"
-                            + " nothing of the lookup"));
+                            + " nothing of the lookup"),
+            new Held("souther.compiler.coverage.DecisionSources.Rules.isTheirVerdict",
+                    "names the conjunction and the disjunction, the two forms that join the"
+                            + " answers of the rules a declaration was handed into one truth;"
+                            + " any other operator reads something the declaration holds itself"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {

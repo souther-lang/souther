@@ -38,9 +38,14 @@ another are two programs, and a row telling one of them apart says nothing of th
 a body whose rows go through a fork is asked about the fork arm by arm. Both rewrites are edits of
 the source an author could make, so a finding reads against what was written; neither moves an
 input. A sibling reading the name its own arm gives a value is no program the body could be written
-as, and two siblings that do the same thing are one rewrite. The arms are the ones the branch
-measure counts, so a helper is rewritten wherever it is declared, as it is measured wherever it is
-declared. An arm no row reaches is already owed under its own code and is not rewritten.
+as, and two siblings that do the same thing are one rewrite. The arms are the ones the plan
+numbers, so a helper is rewritten wherever it is declared, as it is measured wherever it is
+declared. That includes a fork inside a copy of the language's own operation, though the branch
+measure owes no row through it: no row is owed for how `List.drop` happens to loop, and a rewrite of
+its arm is still another program the model could have been, one that keeps the piece the call was
+there to drop. A row that comes out the same under it leaves the model's call unchecked. An arm no
+row reaches is already owed under its own code, where the branch measure owes it, and is not
+rewritten.
 
 A row tells a rewrite apart where it comes out the other way under it: it holds of one of the two
 bodies and fails of the other. A row that fails of both tells neither apart, which is what keeps a
