@@ -266,16 +266,39 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
                     | ([Throw([Pin(1), Pin(2)])]) -> 2
                     | ([Throw([Pin(1), Pin(2), Pin(3)])]) -> 3
                 """;
-        assertEquals(List.of(), seededOnly(written, "repro.split", "score"));
+        assertEquals(List.of(), offeredForScore(written),
+                "the block a person is handed holds nothing they have written");
 
         String partly = AS_BEHAVIOR + """
 
                 example score
                     | ([Throw([Pin(12)])]) -> 12
                 """;
-        List<String> seeded = seededOnly(partly, "repro.split", "score");
+        List<String> seeded = offeredForScore(partly);
         assertTrue(!seeded.contains("[Throw([Pin(12)])]") && seeded.contains("[Throw([])]"),
-                () -> "only the row not written is offered: " + seeded);
+                () -> "only the rows not written are offered: " + seeded);
+    }
+
+    @Test
+    void aRowTheCallerHasWrittenAgainstTheModulesTableIsNotOfferedAgain() {
+        String written = WITH_A_DEPENDENCY + """
+
+                example total
+                    | ([5]) -> 8
+                """;
+        List<String> offered = offered(written, "repro.dep", "total");
+        assertTrue(!offered.contains("[5]"), () -> "total([5]) is written: " + offered);
+    }
+
+    @Test
+    void aRowTheCallerHasWrittenWithAValueOfItsOwnDoesNotStandForTheSeed() {
+        String written = WITH_A_DEPENDENCY + """
+
+                example total
+                    | ([5]) with rate = 3 -> 9
+                """;
+        assertTrue(offered(written, "repro.dep", "total").contains("[5]"),
+                "the seed leans on the module's table, which is not what this row stands in with");
     }
 
     /** What a row of score is owed for, as the generation asks it. */

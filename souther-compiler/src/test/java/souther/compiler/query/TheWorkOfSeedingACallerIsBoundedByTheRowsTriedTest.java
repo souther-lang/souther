@@ -114,6 +114,38 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
     }
 
     @Test
+    void aRowTheCallerHasWrittenTakesNoneOfTheRowsTried() {
+        StringBuilder f = new StringBuilder();
+        StringBuilder g = new StringBuilder();
+        for (int i = 1; i <= 8; i++) {
+            f.append("    | (").append(i).append(") -> ").append(i).append('\n');
+            if (i <= 5) {
+                g.append("    | ([").append(i).append("]) -> ").append(i).append('\n');
+            }
+        }
+        String written = """
+                module repro.bound
+
+                behavior f : (n: Int) -> Int
+
+                let f (n) = n
+
+                example f
+                """ + f + """
+
+                behavior g : (xs: List<Int>) -> Int
+
+                let g (xs) = List.fold((acc, x) -> acc + f(x), 0, xs)
+
+                example g
+                """ + g;
+        Seeded seeded = seeded(written, false, 5);
+        assertEquals(List.of("[6]", "[7]", "[8]"), seeded.rows().stream()
+                .map(row -> row.inputs().getFirst().text()).toList());
+        assertEquals(3, seeded.built(), "the five written rows are not built");
+    }
+
+    @Test
     void aValueTriedTwiceIsBuiltOnce() {
         Seeded same = seeded(model(false), false, ROWS);
         assertEquals(1, same.rows().size());

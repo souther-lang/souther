@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.FakeTables;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
@@ -10,10 +11,12 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowStatement;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.SeedFixtures;
+import souther.compiler.partition.StoodInAnswer;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -144,15 +147,15 @@ final class CallExampleSeeds {
                         : read.byBehavior().get(name).ran());
         List<Call> calls = callsIn(analysis, input, callee -> callee.module().equals(module)
                 && sigs.containsKey(callee.name()) && !ranOf.apply(callee.name()).isEmpty());
+        if (calls.stream().noneMatch(Call::standsAtTheInputThroughout)) {
+            return List.of();
+        }
         Map<List<String>, Generator.GeneratedRow> out = new LinkedHashMap<>();
-        // Starts as the inputs the caller's own rows write, so that a lift of a callee's row the
-        // caller has written is not offered again. Only where the caller has no dependency: two
-        // rows with one input and different stand-ins are two rows, and the inputs alone do not
-        // tell them apart.
-        Set<List<String>> considered = standsNothingIn
-                ? new HashSet<>(writtenByTheCaller(ranOf.apply(subject.behavior()),
-                        sigs.get(subject.behavior()), subject))
-                : new HashSet<>();
+        Set<List<String>> alreadyWritten = writtenByTheCaller(
+                ranOf.apply(subject.behavior()), sigs.get(subject.behavior()), subject,
+                base == null ? List.of() : base.answers(),
+                db.ask(new Names.FakeTables(module)).value());
+        Set<List<String>> considered = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;
         for (Call call : calls) {
@@ -166,22 +169,23 @@ final class CallExampleSeeds {
                 if (row.inputs().size() != call.at().size()) {
                     continue;
                 }
-                if (tried++ == limit) {
-                    return List.copyOf(out.values());
-                }
                 List<Optional<FixtureTemplate>> inputsWritten = written.computeIfAbsent(
                         new WrittenRow(call.callee(), at), _ -> writtenInputs(row, callee, subject));
                 Optional<Map<Integer, FixtureTemplate>> lifted =
                         lifted(call, inputsWritten, subject);
-                if (lifted.isEmpty()) {
-                    continue;
-                }
-                List<FixtureTemplate> inputs = new ArrayList<>(base == null
-                        ? Collections.nCopies(subject.parameters().size(), null) : base.inputs());
-                lifted.get().forEach(inputs::set);
+                List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
+                        : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
                         .map(each -> each == null ? null : each.text()).toList();
-                if (inputs.contains(null) || !considered.add(key)
+                // A row the author has written costs no build, so it takes none of the rows
+                // tried.
+                if (lifted.isPresent() && alreadyWritten.contains(key)) {
+                    continue;
+                }
+                if (tried++ == limit) {
+                    return List.copyOf(out.values());
+                }
+                if (lifted.isEmpty() || inputs.contains(null) || !considered.add(key)
                         || refused(lifted.get(), check)) {
                     continue;
                 }
@@ -197,19 +201,39 @@ final class CallExampleSeeds {
      *  is a function of. */
     private record WrittenRow(ValueName.Behavior callee, int place) {}
 
+    /** The inputs of the row a lift makes: the base's, with the lifted ones put in place. */
+    private static List<FixtureTemplate> composed(Generator.GeneratedRow base,
+                                                  Map<Integer, FixtureTemplate> lifted,
+                                                  MeasuredInput subject) {
+        List<FixtureTemplate> inputs = new ArrayList<>(base == null
+                ? Collections.nCopies(subject.parameters().size(), null) : base.inputs());
+        lifted.forEach(inputs::set);
+        return inputs;
+    }
+
     /**
      * The inputs, as the text a row of the caller carries them in, of each row the caller has
-     * written. A row with an input that cannot be written is left out: it names no row to compare
-     * with.
+     * written that a seed stands in for the dependencies in the same way as.
+     *
+     * <p>A seed takes the stand-ins of its base, so it is the row the author wrote only when the
+     * author's row is answered by the same. Where the base leans on the module's table, that is a
+     * written row whose every dependency is answered by the table the module declares for it and
+     * not by a {@code with}. A base that answers a dependency with a value of its own is not
+     * compared: whether that is the value a written row states is not read here, and a row not
+     * known to be written is offered. A row with an input that cannot be written is left out too.
      */
     private static Set<List<String>> writtenByTheCaller(List<RowOutcome> rows, Sig caller,
-                                                        MeasuredInput subject) {
+                                                        MeasuredInput subject,
+                                                        List<StoodInAnswer> answers,
+                                                        FakeTables declared) {
         Set<List<String>> out = new HashSet<>();
-        if (caller == null) {
+        if (caller == null || declared == null
+                || !answers.stream().allMatch(StoodInAnswer.InTheModule.class::isInstance)) {
             return out;
         }
         for (RowOutcome row : rows) {
-            if (row.inputs().size() != caller.ins().size()) {
+            if (row.inputs().size() != caller.ins().size()
+                    || !leansOnTheModule(row, declared)) {
                 continue;
             }
             List<Optional<FixtureTemplate>> inputs = writtenInputs(row, caller, subject);
@@ -218,6 +242,18 @@ final class CallExampleSeeds {
             }
         }
         return out;
+    }
+
+    /** Whether every dependency {@code row} states is answered by the table the module declares
+     *  for it, which is where a row is written that has no {@code with} for it. */
+    private static boolean leansOnTheModule(RowOutcome row, FakeTables declared) {
+        if (!(row.statement() instanceof RowStatement.Stated stated)) {
+            return false;
+        }
+        return stated.standIns().stream().allMatch(each ->
+                declared.declaredFor(each.dependency()) instanceof
+                        FakeTables.Declaration.One(FakeTables.Occurrence.Resolved table)
+                        && table.read().pos().equals(each.at()));
     }
 
     /** What each input of {@code row} is written as, empty where it cannot be. */
