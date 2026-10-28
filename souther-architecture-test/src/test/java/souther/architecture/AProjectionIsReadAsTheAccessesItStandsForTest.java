@@ -291,6 +291,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/ValueStanding", "theRestOfTheConstructionEndsNone",
+                "(L" + c + "core/Core$FieldAccess;Ljava/lang/Object;L" + c
+                        + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Z",
+                Reading.ONE_ACCESS,
+                "asks of one access the parts of the construction it is read off, other than"
+                        + " the field it reads");
         row(out, c + "check/ElementsApart", "readOff", "(" + core + "L" + c
                 + "check/DeclarationNewtypes;)L" + c + "check/ElementsApart$ReadOff;",
                 Reading.NAMES, READS_THE_NAMES);
@@ -626,7 +632,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
-        row(out, c + "partition/AffineReading", "endsNoRunBeneath", "(" + core + ")Z",
+        row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneath", "(" + core + ")Z",
                 Reading.STRUCTURE,
                 "asks each node what it ends a run for, and goes down to its parts: a name read"
                         + " off a value ends none, so what a projection may end one for is what"

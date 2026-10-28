@@ -474,19 +474,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return false;
         }
         boolean[] under = {true};
-        Core.forEachChild(Core.withoutStanding(node), child -> under[0] &= endsNoRunBeneath(child));
-        return under[0];
-    }
-
-    /** Whether working {@code node} out, and everything under it, ends no run: a call handed a
-     *  closure written at it is asked apart from the closure, whose body is under it. */
-    private static boolean endsNoRunBeneath(Core node) {
-        Core here = Core.withoutStanding(node);
-        if (!WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(here).endsNone()) {
-            return false;
-        }
-        boolean[] under = {true};
-        Core.forEachChild(here, child -> under[0] &= endsNoRunBeneath(child));
+        Core.forEachChild(Core.withoutStanding(node),
+                child -> under[0] &= WhatARunMayEndFor.endsNoneBeneath(child));
         return under[0];
     }
 

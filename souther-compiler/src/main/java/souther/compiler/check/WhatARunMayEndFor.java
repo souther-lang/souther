@@ -142,6 +142,20 @@ public final class WhatARunMayEndFor {
     }
 
     /**
+     * Whether working {@code e} out, and everything under it, ends no run: a call handed a
+     * closure written at it is asked apart from the closure, whose body is under it.
+     */
+    public static boolean endsNoneBeneath(Core e) {
+        Core here = Core.withoutStanding(e);
+        if (!itselfApartFromTheClosuresWrittenAtIt(here).endsNone()) {
+            return false;
+        }
+        boolean[] under = {true};
+        Core.forEachChild(here, child -> under[0] &= endsNoneBeneath(child));
+        return under[0];
+    }
+
+    /**
      * Where {@code e} itself answers ({@link GetsPast}), apart from the closures written at it
      * as {@link #itselfApartFromTheClosuresWrittenAtIt} reads it, each from the owner of what it
      * is: an operator's from {@link AbortSites}, a kernel's from {@link KernelContracts}, and an

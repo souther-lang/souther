@@ -1021,8 +1021,11 @@ public final class AffineForms {
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
                     // Read off the construction that gave the value, whose other parts are worked
-                    // out all the same.
-                    reading.unobserved(e);
+                    // out all the same: untold where one of them can end a run.
+                    if (!ValueStanding.theRestOfTheConstructionEndsNone(fa, at, reading,
+                            following)) {
+                        reading.unobserved(e);
+                    }
                     yield commonForm(eliminated, e, at, following, stopped);
                 }
                 yield reading.readsThrough(fa, at)

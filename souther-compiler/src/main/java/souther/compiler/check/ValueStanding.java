@@ -365,6 +365,28 @@ public final class ValueStanding {
     }
 
     /**
+     * Whether the parts of the construction a field access is read off, other than the field it
+     * reads, end no run when they are worked out: they are worked out all the same, and a part
+     * that ends one is an operation the reading of the field does not tell of. False where
+     * nothing written stands against the access, which has no construction to ask.
+     */
+    static <E, N extends Names<E, N>> boolean theRestOfTheConstructionEndsNone(
+            Core.FieldAccess fa, E at, N names, BindingWalk<?> following) {
+        for (Standing<E, N> target : of(fa.target(), at, names, following)) {
+            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
+                return false;
+            }
+            Core read = ConstructionProjection.given(nd, fa.field());
+            for (var part : nd.values()) {
+                if (part.value() != read && !WhatARunMayEndFor.endsNoneBeneath(part.value())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * What each of {@code targets} gives {@code field}, or null where one of them is no construction
      * giving it — one field taken off what a projection's target stands at.
      */
