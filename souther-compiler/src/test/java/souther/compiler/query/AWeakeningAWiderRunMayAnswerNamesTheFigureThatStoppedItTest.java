@@ -6,6 +6,7 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.UnheldNumber;
@@ -58,10 +59,12 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
      * What a wider run may answer and nothing here names a figure for, and why.
      *
      * <p>A border nothing watched the runs for was stopped by how this build was asked to run, which
-     * is no figure. It is the one.
+     * is no figure. A weight left undecided by a run nothing watched is the same stop, said for the
+     * weights. Those are the two.
      */
     private static Set<String> wideningWithoutAFigure() {
-        return Set.of("ABorderNotHeldAgainstTheLinesBesideIt NOTHING_WATCHED_THE_RUNS");
+        return Set.of("ABorderNotHeldAgainstTheLinesBesideIt NOTHING_WATCHED_THE_RUNS",
+                "AWeightNotDecided A_RUN_WAS_NOT_WATCHED");
     }
 
     @Test
@@ -214,6 +217,10 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.put("ItemsPlaceNotWorkedOut", new Weakening.ItemsPlaceNotWorkedOut(border(),
                 UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.put("AReadingNotTiedToItsLine", new Weakening.AReadingNotTiedToItsLine(border()));
+        for (Weakening.AWeightNotDecided.Why why : Weakening.AWeightNotDecided.Why.values()) {
+            out.put("AWeightNotDecided " + why, new Weakening.AWeightNotDecided("b",
+                    OneBorder.derivedValue(), new NumericTerm.ValueOf(TermPath.of("x")), why));
+        }
         out.put("BorderReadingsNotExhausted", new Weakening.BorderReadingsNotExhausted(border(),
                 WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(256)));
         for (Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why why

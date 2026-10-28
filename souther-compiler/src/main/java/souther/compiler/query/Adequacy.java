@@ -4659,7 +4659,15 @@ public final class Adequacy {
                     + " the model divides it into, and no answer about the lines that"
                     + " reading drew");
         }
-        return BoundaryDerivation.of(read, divided.borderClosure(), divided.inputIsEmpty());
+        WeakeningSet weightsNotDecided = WeakeningSet.none();
+        List<TiltOfADerivedValue> weights = db.ask(new Weights(name, spec.name())).value();
+        if (weights != null) {
+            for (TiltOfADerivedValue each : weights) {
+                weightsNotDecided = weightsNotDecided.union(each.notDecided(spec.name()));
+            }
+        }
+        return BoundaryDerivation.of(read, weightsNotDecided, divided.borderClosure(),
+                divided.inputIsEmpty());
     }
 
     /**

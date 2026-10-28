@@ -147,26 +147,34 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                 yield out;
             }
             case AnotherLineTheRowsAllow.NotDueYet _, AnotherLineTheRowsAllow.NoSuchQuestion _,
-                 AnotherLineTheRowsAllow.NotApplicable _ -> WeakeningSet.none();
+                 AnotherLineTheRowsAllow.NotApplicable _,
+                 AnotherLineTheRowsAllow.OwedByTheComputation _ -> WeakeningSet.none();
         };
+    }
+
+    /**
+     * What reading the rows of {@code border} in part went without, in the words a reader is told
+     * it in. Said once for every reader of a border's rows, so that two questions over the same
+     * rows that fell short of the same thing say it in the same words.
+     */
+    static WeakeningSet rowsIncomplete(Border border, ReadingReasons met) {
+        WeakeningSet out = WeakeningSet.none();
+        for (souther.compiler.partition.ReadingGap gap : met.eachKindOnce().written()) {
+            out = out.union(WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
+        }
+        return met.tried() instanceof souther.compiler.partition.StandingAtAPoint
+                .ReadingsTried.StoppedAtTheLimit(List<Figure> limits)
+                ? out.union(WeakeningSet.of(
+                        new Weakening.BorderReadingsNotExhausted(border, limits)))
+                : out;
     }
 
     /** What a question about the lines beside this one went without, in the words a reader is
      *  told it in. */
     private WeakeningSet weakeningOf(AnotherLineTheRowsAllow.Unsettled why) {
         return switch (why) {
-            case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) -> {
-                WeakeningSet out = WeakeningSet.none();
-                for (souther.compiler.partition.ReadingGap gap : met.eachKindOnce().written()) {
-                    out = out.union(
-                            WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
-                }
-                yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
-                        .ReadingsTried.StoppedAtTheLimit(List<Figure> limits)
-                        ? out.union(WeakeningSet.of(
-                                new Weakening.BorderReadingsNotExhausted(border, limits)))
-                        : out;
-            }
+            case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) ->
+                    rowsIncomplete(border, met);
             // The reading's own, which is what a measure over these lines is worth.
             case AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(var as) -> as.weakening();
             case AnotherLineTheRowsAllow.Unsettled.TheRowsAreAllOnOneSide _ ->

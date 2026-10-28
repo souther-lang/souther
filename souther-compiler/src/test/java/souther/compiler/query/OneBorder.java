@@ -11,18 +11,27 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.ClauseStatementId;
+import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.WhichLine;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
+
+import java.util.List;
 
 /** One border, for a test that needs a value of that type and for which border it is is no part
  *  of what it is about. */
-final class OneBorder {
+public final class OneBorder {
 
     private OneBorder() {
     }
@@ -40,5 +49,16 @@ final class OneBorder {
                         0), 0)),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
         return Border.at(target, origin, new NumericDomain.Bounds(null, null));
+    }
+
+    /** One computation of a comparison a body wrote, read at one call. */
+    public static DerivedValue derivedValue() {
+        SourceConstructOrigin comparison = new SourceConstructOrigin(
+                new WrittenOwner.Body("m", "b"), 0, 0, SourceConstruct.BINARY);
+        AuthoredLine line = new AuthoredLine(
+                new WhichLine.OfAComparison(new RuleRef.Comparison("b", comparison)),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
+        return new DerivedValue(line, List.of(new ModelOccurrence(comparison,
+                ExpansionLineage.ORIGINAL)));
     }
 }

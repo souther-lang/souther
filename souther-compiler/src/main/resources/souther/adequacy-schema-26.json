@@ -375,6 +375,7 @@
           "no_reachable_distinguisher_for_a_border",
           "a_borders_fault_family_not_worked_out",
           "items_place_not_worked_out",
+          "a_weight_not_decided",
           "a_reading_not_tied_to_its_line",
           "rule_unread",
           "position_not_read",
