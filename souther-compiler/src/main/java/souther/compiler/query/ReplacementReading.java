@@ -39,7 +39,7 @@ import java.util.function.Supplier;
  *
  * <p>Two families of rewrite and no more. An arm answering as one of its siblings does is the
  * rewrite a fork invites; the body answering one value whatever it is given is the rewrite a body
- * with no fork in it invites, and the one rows that all answer alike cannot tell from it. Which
+ * with no fork of its own invites, and the one rows that all answer alike cannot tell from it. Which
  * rewrites are asked about is fixed here and not read off how the body happens to be lowered, so a
  * change of the library under a body is not a change of what its rows are held to.
  *
@@ -126,9 +126,9 @@ public final class ReplacementReading {
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
      * came to about each: the siblings of each arm a row stating its answer went through, by
-     * {@code wentThrough}, in the order the plan numbered the arms, or, where no arm of the body has
-     * a rewrite that is another program, the body answering each value a row stating its answer
-     * came to.
+     * {@code wentThrough}, in the order the plan numbered the arms, and, where no arm the body owes
+     * a row through has a rewrite that is another program, the body answering each value a row
+     * stating its answer came to.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
      * it depends on what it answers, which is a question about the rows that go through it. The arms
@@ -185,9 +185,11 @@ public final class ReplacementReading {
             if (site.place().probe().isEmpty()) {
                 continue;
             }
+            forked = forked || (site.owesARow() && !plan.replacements()
+                    .askedOf(site.obligation().origin(), site.obligation().part(), unreached)
+                    .isEmpty());
             List<ArmReplacements.Asked> asked = carried.askedOf(site.obligation().origin(),
                     site.obligation().part(), unreached);
-            forked = forked || (site.owesARow() && !asked.isEmpty());
             ArmProbe probe = site.place().probe().get();
             if (!reached.contains(probe)) {
                 continue;
@@ -212,13 +214,14 @@ public final class ReplacementReading {
                 ReplacementAsWritten.OfAnArm.in(plan, replaced), at.reportAt(),
                 armStanding(replaced, at.asked(), at.probes(), stated, wentThrough,
                         stoppedAt, ranWith))));
-        // One answer only where no arm has a rewrite that is another program. Which family a body
-        // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
-        // its arms the rows stating an answer happen to reach — read off what they reached
-        // instead, a body every row of which is waiting for its answer would be asked as though it
-        // had no fork, and its answers so far would be called rewrites. And not where the body
-        // answers one value already: every way to an answer that reads something, or that is
-        // another answer, closed by the rules.
+        // One answer only where no arm the body owes a row through has a rewrite that is another
+        // program; the arms of a library operation's copy are asked about above and do not count.
+        // Which family a body invites is the body's: one with a fork is asked about the fork, arm
+        // by arm, whichever of its arms the rows stating an answer happen to reach — read off what
+        // they reached instead, a body every row of which is waiting for its answer would be asked
+        // as though it had no fork, and its answers so far would be called rewrites. And not where
+        // the body answers one value already: every way to an answer that reads something, or that
+        // is another answer, closed by the rules.
         if (!forked && !plan.fromOneValue(behavior).provenAway(unreached)) {
             out.addAll(oneAnswerAccounts(stated, comparing, ranWith));
         }
