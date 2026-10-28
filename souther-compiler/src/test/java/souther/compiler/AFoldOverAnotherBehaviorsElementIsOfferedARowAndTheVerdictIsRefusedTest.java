@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -13,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -111,8 +111,10 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
             statedAsTheConstant.measure(Adequacy.Asked.fullReport());
             statedAsTheConstant.answerEverything();
 
-            assertNotEquals(List.of(), statedAsTheConstant.errors(),
-                    () -> body + ": the row " + offered + " stated as 0 is a row the body fails");
+            assertEquals(List.of(DiagnosticCode.E1905.toString()),
+                    statedAsTheConstant.errors().stream()
+                            .map(e -> e.diagnostic().code().toString()).toList(),
+                    () -> body + ": the row " + offered + " stated as 0 does not hold of the body");
         }
     }
 

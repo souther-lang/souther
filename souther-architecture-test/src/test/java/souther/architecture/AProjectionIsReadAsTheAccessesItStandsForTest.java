@@ -507,6 +507,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
+        // Which behaviors a behavior's body calls, asked of the body a run goes through.
+        row(out, c + "query/CalledBehaviors", "collect", "(" + core + "Ljava/util/Set;)V",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "flow/ValueArrivals", "fill", "(" + core + "L" + c + "flow/Naming;L" + c
                 + "flow/ComparisonWays;Ljava/util/Map;)V", Reading.STRUCTURE, EVALUATION);
         row(out, c + "flow/ValueArrivals", "partsOf", "(" + core + ")Ljava/util/List;",

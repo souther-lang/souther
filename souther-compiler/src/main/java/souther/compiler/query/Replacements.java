@@ -30,6 +30,7 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -97,19 +98,21 @@ public final class Replacements {
             ArmReplacements inTheClasses = carried;
             // Read off the rows only when a body answering one value is asked about, which most
             // modules never are.
-            Supplier<InputsRowsRanWith> ranWith = new Supplier<>() {
-
-                private InputsRowsRanWith read;
-
-                @Override
-                public InputsRowsRanWith get() {
-                    if (read == null) {
-                        read = inputsRowsRanWith(prepared.value(), sigs.value(), byTarget);
-                    }
-                    return read;
-                }
-            };
+            Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule = new HashMap<>();
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
+                Supplier<InputsRowsRanWith> ranWith = new Supplier<>() {
+
+                    private InputsRowsRanWith read;
+
+                    @Override
+                    public InputsRowsRanWith get() {
+                        if (read == null) {
+                            read = inputsRowsRanWith(db, prepared.value(), behavior.name(),
+                                    ofTheModule);
+                        }
+                        return read;
+                    }
+                };
                 Sig sig = sigs.value().get(behavior.name());
                 Adequacy.RowReading reading =
                         Adequacy.RowReadings.readingFor(byTarget, behavior.name());
@@ -143,34 +146,54 @@ public final class Replacements {
         }
 
         /**
-         * What the rows of the module ran with, behavior by behavior in the order they are
-         * declared. A row whose inputs do not line up with the behavior's parameters holds
-         * nothing to take from.
+         * What the rows ran with that a search for a row of {@code subject} can grow a list from:
+         * the rows of the behaviors it calls, wherever they are declared, and then the rows of
+         * the module.
+         *
+         * @param ofTheModule the rows of each behavior of this module, read once for all the
+         *                    subjects of the module
          */
-        private static InputsRowsRanWith inputsRowsRanWith(CheckSurface prepared,
-                Map<String, Sig> sigs, Map<String, Adequacy.RowReading> byTarget) {
-            List<List<List<InputsRowsRanWith.Taken>>> behaviors = new ArrayList<>();
-            for (Hir.BehaviorDef behavior : prepared.behaviors()) {
-                Sig sig = sigs.get(behavior.name());
-                if (sig == null) {
+        private static InputsRowsRanWith inputsRowsRanWith(Db db, CheckSurface prepared,
+                String subject, Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule) {
+            List<List<List<InputsRowsRanWith.Taken>>> called = new ArrayList<>();
+            for (ValueName.Behavior each : CalledBehaviors.of(db, prepared.name(), subject)) {
+                called.add(rowsOf(db, each.module(), each.name()));
+            }
+            List<List<List<InputsRowsRanWith.Taken>>> module = new ArrayList<>();
+            for (Hir.BehaviorDef each : prepared.behaviors()) {
+                module.add(ofTheModule.computeIfAbsent(each.name(),
+                        name -> rowsOf(db, prepared.name(), name)));
+            }
+            return InputsRowsRanWith.of(called, module);
+        }
+
+        /**
+         * The inputs the rows of one behavior were run with, a row at a time. A row whose inputs do
+         * not line up with the behavior's parameters holds nothing to take from, and a behavior no
+         * model of this compilation declares has no rows.
+         */
+        private static List<List<InputsRowsRanWith.Taken>> rowsOf(Db db, String module,
+                                                                  String behavior) {
+            Map<String, Adequacy.RowReading> byTarget =
+                    db.ask(new Adequacy.RowReadings(module)).value();
+            Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
+            Sig sig = sigs == null ? null : sigs.get(behavior);
+            if (byTarget == null || sig == null) {
+                return List.of();
+            }
+            List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+            for (RowOutcome row : Adequacy.RowReadings.readingFor(byTarget, behavior).rowsSeen()) {
+                if (row.inputs().size() != sig.inputTypes().size()) {
                     continue;
                 }
-                List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
-                for (RowOutcome row : Adequacy.RowReadings.readingFor(byTarget, behavior.name())
-                        .rowsSeen()) {
-                    if (row.inputs().size() != sig.inputTypes().size()) {
-                        continue;
-                    }
-                    List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
-                    for (int p = 0; p < row.inputs().size(); p++) {
-                        inputs.add(new InputsRowsRanWith.Taken(sig.inputTypes().get(p),
-                                row.inputs().get(p)));
-                    }
-                    rows.add(inputs);
+                List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
+                for (int p = 0; p < row.inputs().size(); p++) {
+                    inputs.add(new InputsRowsRanWith.Taken(sig.inputTypes().get(p),
+                            row.inputs().get(p)));
                 }
-                behaviors.add(rows);
+                rows.add(inputs);
             }
-            return InputsRowsRanWith.of(behaviors);
+            return rows;
         }
 
         /**

@@ -2202,27 +2202,25 @@ public final class Generator {
                     // are read off the body: a few strings, each one change from a row seen,
                     // where moving a row asks for as many as composing a value takes. And a list
                     // of those rows with one more element, a value the rows of the module ran
-                    // with, where the classes divide no element and the rows held none: a
-                    // candidate of each in turn, as for a body answering one value.
-                    int through = arm.seenThrough().size();
-                    if (seen == null) {
-                        seen = taking(looking, List.of(
-                                inOrder(through, at -> piecesDemanded(arm.seenThrough().get(at),
-                                        axes, purposes, looking, check, answers,
-                                        read.piecesAttempted())),
-                                inOrder(through, at -> candidatesBeside(
-                                        arm.seenThrough().get(at), axes, purposes, check, answers,
-                                        aListGrown(arm.ranWith())))));
-                    }
-                    // And from the rows seen going through it, which is where a run through the
-                    // arm is known to start whatever a reading of the way in could state — an arm
+                    // with, where the classes divide no element and the rows held none. And from
+                    // the rows seen going through it, which is where a run through the arm is
+                    // known to start whatever a reading of the way in could state — an arm
                     // decided by a relation between inputs, which no class of either holds a side
-                    // of, among them.
-                    for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
-                        seen = movedFrom(arm.seenThrough().get(at), axes, purposes, looking,
-                                check, answers);
-                    }
-                    yield seen;
+                    // of, among them. A candidate of each in turn, as for a body answering one
+                    // value: the runs are one budget, and none of the three is asked ahead of
+                    // another.
+                    int through = arm.seenThrough().size();
+                    Examining pieces = new Examining(looking);
+                    Examining lists = new Examining(looking);
+                    yield seen != null ? seen : taking(looking, List.of(
+                            inOrder(through, at -> piecesDemanded(arm.seenThrough().get(at),
+                                    axes, purposes, looking, check, answers,
+                                    read.piecesAttempted(), pieces)),
+                            inOrder(through, at -> candidatesBeside(arm.seenThrough().get(at),
+                                    axes, purposes, check, answers, aListGrown(arm.ranWith()),
+                                    lists)),
+                            inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
+                                    purposes, looking, check, answers))));
                 }
                 case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
@@ -2257,13 +2255,18 @@ public final class Generator {
                     // asked ahead of another, so one with many candidates leaves the others the
                     // runs it would have spent.
                     int rows = one.answeredOn().size();
+                    Examining numbers = new Examining(looking);
+                    Examining pieces = new Examining(looking);
+                    Examining lists = new Examining(looking);
                     yield seen != null ? seen : taking(looking, List.of(
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
-                                    purposes, check, answers, A_WHOLE_NUMBER_MOVED)),
+                                    purposes, check, answers, A_WHOLE_NUMBER_MOVED, numbers)),
                             inOrder(rows, at -> piecesDemanded(one.answeredOn().get(at), axes,
-                                    purposes, looking, check, answers, read.piecesAttempted())),
+                                    purposes, looking, check, answers, read.piecesAttempted(),
+                                    pieces)),
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
-                                    purposes, check, answers, aListGrown(one.ranWith())))));
+                                    purposes, check, answers, aListGrown(one.ranWith()),
+                                    lists))));
                 }
             };
             replacementAnswers.put(asked, found != null
@@ -2312,37 +2315,69 @@ public final class Generator {
      * A parameter moved is the whole of it, so a position inside a record is moved with the rest
      * of its record.
      */
-    private static GeneratedRow movedFrom(List<ObservedValue> seen,
-                                          MeasuredInput.MeasuredAxes axes, List<Purpose> purposes,
-                                          ReplacementWitness looking, CandidateCheck check,
-                                          List<StoodInAnswer> answers) {
+    private static Iterator<GeneratedRow> movedFrom(List<ObservedValue> seen,
+                                                    MeasuredInput.MeasuredAxes axes,
+                                                    List<Purpose> purposes,
+                                                    ReplacementWitness looking,
+                                                    CandidateCheck check,
+                                                    List<StoodInAnswer> answers) {
         MeasuredInput subject = axes.subject();
         List<FixtureTemplate> written = new ArrayList<>();
         for (int p = 0; p < seen.size(); p++) {
             if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
                     instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                             FixtureTemplate value))) {
-                return null;
+                return Collections.emptyIterator();
             }
             written.add(value);
         }
-        for (int moved = 0; moved < written.size(); moved++) {
-            Map<String, Written> kept = new LinkedHashMap<>();
-            for (int p = 0; p < written.size(); p++) {
-                if (p != moved) {
-                    String parameter = subject.parameters().get(p);
-                    kept.put(parameter, new Written(List.of(new WrittenWay(written.get(p),
-                            Map.of(TermPath.of(parameter), written.get(p)))), false));
+        // A position at a time, composed when it is reached: the rows composed for it are
+        // handed over as candidates, so the runs that put them to the rewrite are counted and
+        // shared with the other ways of looking as theirs are.
+        return new Iterator<>() {
+
+            private int moved;
+
+            private Iterator<GeneratedRow> composedForIt = Collections.emptyIterator();
+
+            @Override
+            public boolean hasNext() {
+                while (!composedForIt.hasNext() && moved < written.size()) {
+                    composedForIt = composedWith(moved++);
                 }
+                return composedForIt.hasNext();
             }
-            List<FixtureTemplate> inputs = looking.tookFromComposing(() -> composed(axes,
-                    composes(axes.axes()), HeldTogether.Asked.NOTHING, check, kept,
-                    witnessedBy(looking, purposes, answers)));
-            if (inputs != null) {
-                return new GeneratedRow(purposes, inputs, answers);
+
+            @Override
+            public GeneratedRow next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return composedForIt.next();
             }
-        }
-        return null;
+
+            private Iterator<GeneratedRow> composedWith(int position) {
+                Map<String, Written> kept = new LinkedHashMap<>();
+                for (int p = 0; p < written.size(); p++) {
+                    if (p != position) {
+                        String parameter = subject.parameters().get(p);
+                        kept.put(parameter, new Written(List.of(new WrittenWay(written.get(p),
+                                Map.of(TermPath.of(parameter), written.get(p)))), false));
+                    }
+                }
+                List<GeneratedRow> rows = new ArrayList<>();
+                looking.tookFromComposing(() -> composed(axes, composes(axes.axes()),
+                        HeldTogether.Asked.NOTHING, check, kept,
+                        atMost(MOST_REPAIRS, () -> looking.composingStopped(
+                                        List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS
+                                                .at(MOST_REPAIRS))),
+                                inputs -> {
+                                    rows.add(new GeneratedRow(purposes, inputs, answers));
+                                    return Acceptance.PASSED;
+                                })));
+                return rows.iterator();
+            }
+        };
     }
 
     /**
@@ -2395,14 +2430,53 @@ public final class Generator {
                                                          ReplacementWitness looking,
                                                          CandidateCheck check,
                                                          List<StoodInAnswer> answers,
-                                                         List<PieceDemand> demands) {
+                                                         List<PieceDemand> demands,
+                                                         Examining examining) {
         if (demands.isEmpty()) {
             return Collections.emptyIterator();
         }
         return candidatesBeside(seen, axes, purposes, check, answers,
                 (value, type, reading, parameter) ->
                         NearbyValues.demanded(value, type, reading, parameter, demands, seen,
-                                looking::composingStoppedAt));
+                                looking::composingStoppedAt),
+                examining);
+    }
+
+    /**
+     * How many candidates one way of looking may make and check, whether it goes on to run them or
+     * refuses them first.
+     *
+     * <p>The runs are counted where a candidate is put to the rewrite, and a candidate refused
+     * before that costs none. A way of looking whose candidates are mostly refused would otherwise
+     * be bounded by nothing but how many there are to make. The bound is the one a composing holds
+     * the rows it hands over to, and reaching it is said as that figure: what was not made is not
+     * found absent.
+     */
+    private static final class Examining {
+
+        private final ReplacementWitness looking;
+
+        private int left = MOST_REPAIRS;
+
+        private boolean said;
+
+        private Examining(ReplacementWitness looking) {
+            this.looking = looking;
+        }
+
+        /** Whether one more candidate may be made, the first one past the bound said as stopped. */
+        boolean oneMore() {
+            if (left > 0) {
+                left--;
+                return true;
+            }
+            if (!said) {
+                said = true;
+                looking.composingStopped(List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS
+                        .at(MOST_REPAIRS)));
+            }
+            return false;
+        }
     }
 
     /**
@@ -2418,7 +2492,7 @@ public final class Generator {
                                                            List<Purpose> purposes,
                                                            CandidateCheck check,
                                                            List<StoodInAnswer> answers,
-                                                           Beside how) {
+                                                           Beside how, Examining examining) {
         MeasuredInput subject = axes.subject();
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
@@ -2450,6 +2524,10 @@ public final class Generator {
                         nearer = null;
                         moved++;
                         continue;
+                    }
+                    if (!examining.oneMore()) {
+                        moved = seen.size();
+                        break;
                     }
                     ObservedValue near = nearer.next();
                     if (ObservedFixtures.of(near, subject.types().get(moved),

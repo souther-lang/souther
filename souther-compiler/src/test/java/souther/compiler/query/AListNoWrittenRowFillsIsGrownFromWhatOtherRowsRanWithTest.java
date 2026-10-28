@@ -136,10 +136,12 @@ class AListNoWrittenRowFillsIsGrownFromWhatOtherRowsRanWithTest {
 
         Map<Replacement, ReplacementEvidence.Outcome> rewrites = rewritesOf(source, "score");
 
-        assertEquals(List.of(), rewrites.values().stream()
-                        .filter(each -> !(each instanceof ReplacementEvidence.Unnoticed))
-                        .toList(),
-                () -> "every rewrite of the arm the row reaches is shown to differ: " + rewrites);
+        List<Map.Entry<Replacement, ReplacementEvidence.Outcome>> arms = rewrites.entrySet()
+                .stream().filter(each -> each.getKey() instanceof Replacement.OfAnArm).toList();
+        assertEquals(1, arms.size(),
+                () -> "the one arm the row reaches, as the arm beside it: " + rewrites);
+        assertInstanceOf(ReplacementEvidence.Unnoticed.class, arms.getFirst().getValue(),
+                () -> "and a grown list shows it differs: " + rewrites);
     }
 
     private static void assertToldApart(String source) {
