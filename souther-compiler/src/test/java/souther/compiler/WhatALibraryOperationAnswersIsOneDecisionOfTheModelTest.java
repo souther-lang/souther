@@ -87,15 +87,16 @@ class WhatALibraryOperationAnswersIsOneDecisionOfTheModelTest {
         assertEquals(decisionLine(written), decisionLine(through), through);
     }
 
-    /** The reading of what runs is the operation's own walk, and is measured as the match written
-     *  out is: the arms a row goes through are the same arms. */
+    /** The match the operation holds is no match of the model's: the arms of the one written out
+     *  are owed rows, and the operation's are not. */
     @Test
-    void theArmsARowGoesThroughAreTheMatchWrittenOutsArms() {
+    void theArmsOfTheOperationAreNoArmsOfTheModel() {
         String through = report(measured(THROUGH_THE_OPERATION + ROWS));
         String written = report(measured(WRITTEN_OUT + ROWS));
 
-        assertEquals(lineAbout(written, "branch "), lineAbout(through, "branch "), through);
-        assertTrue(lineAbout(through, "branch ").contains("2/2"), through);
+        assertTrue(lineAbout(written, "branch ").contains("2/2"), written);
+        assertFalse(lineAbout(through, "branch ").contains("2/2"), through);
+        assertFalse(through.contains("no row goes through"), through);
     }
 
     /**

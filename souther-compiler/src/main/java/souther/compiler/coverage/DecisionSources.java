@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
@@ -117,7 +118,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
             return;
         }
         forks(written.expr(), declaration, Rules.of(fn), answersOn, new LinkedHashMap<>(),
-                NamedCallables.NONE, out);
+                NamedCallables.NONE, Set.of(), out);
     }
 
     /**
@@ -127,23 +128,27 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
      * fork that reads it is in force there and nowhere in the condition, so a reading that started
      * afresh at each fork found the name and not what it stands for — and called a fork the caller
      * decides the declaration's own.
+     *
+     * <p>{@code verdicts} are the names in force that stand for nothing but what the rules
+     * answered, which a condition reading one is settled by the same as one applying the rule.
      */
     private static void forks(Hir.Expr e,
                               souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                               AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
-                              NamedCallables named, Map<SourceConstructOrigin, DecisionSource> out) {
+                              NamedCallables named, Set<BindingId> verdicts,
+                              Map<SourceConstructOrigin, DecisionSource> out) {
         switch (e) {
-            case Hir.If iff ->
-                    said(iff.origin(), iff.cond(), declaration, rules, answersOn, bound, named, out);
+            case Hir.If iff -> said(iff.origin(), iff.cond(), declaration, rules, answersOn, bound,
+                    named, verdicts, out);
             // Every construct that bears arms, and by what settles which arm is taken. A `match`
             // decides by its subject as an `if` decides by its condition, and a construction that
             // may fail by the value it is given — so a rule the caller supplied reaches all three
             // the same way. Left out, the arms of a `match` over a rule the caller wrote were one
             // obligation however many rules were handed in.
             case Hir.Match match -> said(match.origin(), match.scrutinee(), declaration, rules,
-                    answersOn, bound, named, out);
+                    answersOn, bound, named, verdicts, out);
             case Hir.IfConstructed made -> said(made.origin(), made.construct(), declaration, rules,
-                    answersOn, bound, named, out);
+                    answersOn, bound, named, verdicts, out);
             // The guards of a comprehension are forks of the lowering rather than of the source, and
             // the lowering runs after the rule has been substituted in. Read here, where the rule is
             // still a parameter: read afterwards, a guard resting on a rule the caller supplied is a
@@ -151,34 +156,41 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
             case Hir.ListComp comp -> {
                 for (int i = 0; i < comp.guards().size(); i++) {
                     said(comp.forkOfGuard(i), comp.guards().get(i), declaration, rules,
-                            answersOn, bound, named, out);
+                            answersOn, bound, named, verdicts, out);
                 }
             }
             case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 Set<String> holds = new LinkedHashSet<>();
                 rules.restsOn(let.value(), answersOn, bound, named, holds);
-                forks(let.value(), declaration, rules, answersOn, bound, named, out);
+                forks(let.value(), declaration, rules, answersOn, bound, named, verdicts, out);
                 Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
                 wider.put(let.binder().binding(), holds);
+                Set<BindingId> widerVerdicts = verdicts;
+                if (rules.isTheirVerdict(let.value(), verdicts)) {
+                    widerVerdicts = new LinkedHashSet<>(verdicts);
+                    widerVerdicts.add(let.binder().binding());
+                }
                 forks(let.body(), declaration, rules, answersOn, wider,
-                        named.and(let.binder().binding(), let.value()), out);
+                        named.and(let.binder().binding(), let.value()), widerVerdicts, out);
                 return;
             }
             default -> { }
         }
         Hir.forEachChild(e,
-                child -> forks(child, declaration, rules, answersOn, bound, named, out));
+                child -> forks(child, declaration, rules, answersOn, bound, named, verdicts, out));
     }
 
     private static void said(SourceConstructOrigin fork, Hir.Expr cond,
                              souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                              AnswerDependencies answersOn,
                              Map<BindingId, Set<String>> bound, NamedCallables named,
+                             Set<BindingId> verdicts,
                              Map<SourceConstructOrigin, DecisionSource> out) {
         Set<String> on = new LinkedHashSet<>();
         rules.restsOn(cond, answersOn, bound, named, on);
         out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN
-                : new DecisionSource.Supplied(declaration, rules.inTheOrderDeclared(on)));
+                : new DecisionSource.Supplied(declaration, rules.inTheOrderDeclared(on),
+                        rules.isTheirVerdict(cond, verdicts)));
     }
 
     /** The rules one declaration was handed: its function parameters, by binding and by place. */
@@ -208,6 +220,31 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
                 }
             }
             return new Rules(byBinding, inOrder);
+        }
+
+        /**
+         * Whether the truth of {@code e} is nothing but what the rules answered: a call of one of
+         * them, a name that stands for one ({@code verdicts}), or such truths joined by
+         * {@code &&} and {@code ||}.
+         *
+         * <p>Anything else in the condition — a lookup in what the declaration has gathered, a
+         * count, a comparison, a helper's answer — is the declaration's own, and the fork is
+         * decided by that with a rule feeding it. Asked narrowly on purpose: a condition this
+         * cannot read as the rules' verdict is left to the declaration, which owes no row, so a
+         * form this does not know is one that stops owing a row and never one that starts.
+         */
+        boolean isTheirVerdict(Hir.Expr e, Set<BindingId> verdicts) {
+            return switch (e) {
+                case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee
+                        && callee.denotes() instanceof ValueName.Local local ->
+                        byBinding.containsKey(local.id());
+                case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local ->
+                        verdicts.contains(local.id());
+                case Hir.Binary joined when joined.op() == BinOp.AND || joined.op() == BinOp.OR ->
+                        isTheirVerdict(joined.left(), verdicts)
+                                && isTheirVerdict(joined.right(), verdicts);
+                default -> false;
+            };
         }
 
         /**
