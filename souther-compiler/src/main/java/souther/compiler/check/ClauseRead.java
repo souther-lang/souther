@@ -17,8 +17,9 @@ import java.util.Objects;
  *
  * @param at   where it reads, as the rules of the value call a place in it
  * @param kind what it reads there
- * @param run  for {@link Kind#EACH_ELEMENTS_RUN}, what it reads of an element, as the rules of the
- *             element call a place in it; the element itself for every other kind
+ * @param run  for {@link Kind#EACH_ELEMENTS_RUN} and {@link Kind#ELEMENTS_THE_CLAUSE_NEEDS_APART},
+ *             what it reads of an element, as the rules of the element call a place in it; the
+ *             element itself for every other kind
  */
 public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
 
@@ -26,7 +27,8 @@ public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
         Objects.requireNonNull(at, "a clause reads somewhere");
         Objects.requireNonNull(kind, "a clause reads something of where it reads");
         Objects.requireNonNull(run, "a clause reads a place of an element, or the element");
-        if (kind != Kind.EACH_ELEMENTS_RUN && !run.isTheValueItself()) {
+        if (kind != Kind.EACH_ELEMENTS_RUN && kind != Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART
+                && !run.isTheValueItself()) {
             throw new IllegalArgumentException("only a read of elements goes down a run: " + kind);
         }
     }
@@ -48,9 +50,17 @@ public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
         /**
          * The fields of each element of the list, set or map there that a run names, and nothing
          * else of the element: what a call saying no two elements share them reads
-         * ({@code ElementsApart}).
+         * ({@code ElementsApart}). Of whether the clause wants the elements apart, wants them not
+         * to be, or does not turn on it, this says nothing.
          */
         EACH_ELEMENTS_RUN,
+
+        /**
+         * The same read, of a call the clause cannot be true without: it is false wherever the
+         * elements are not apart. A list or a set of one element is apart from nothing, so the
+         * call is no reason for it to be refused.
+         */
+        ELEMENTS_THE_CLAUSE_NEEDS_APART,
 
         /**
          * The member of the map, set or list there that a lookup names, and no other member: what

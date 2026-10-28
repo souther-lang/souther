@@ -11,17 +11,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Whether a clause cannot be true unless one lookup in a map, set or list finds a member.
+ * Whether a clause cannot be true unless one part of it comes out a particular way: a lookup in a
+ * map, set or list finds a member, or a call says the elements of a container are apart.
  *
- * <p>Asked by putting the lookup's answer in as no member — a membership test false,
- * {@code Map.get} nothing — and following what the clause comes to along the forms that carry an
- * answer on: a conjunction false for a false part, a disjunction false for two, a name bound to
- * what was worked out, and a match on an absent option taking its absent arm. Where the clause
- * comes to false the lookup is needed. Where it comes to anything else, or the lookup is reached
- * some way not followed here, nothing is said: a clause written as the lookup being absent, or
- * as a comparison of what it found, is not shown to need it.
+ * <p>Asked by putting the part's answer in as the way it fails — a lookup finding no member (a
+ * membership test false, {@code Map.get} nothing), a call saying the elements are not apart
+ * (false) — and following what the clause comes to along the forms that carry an answer on: a
+ * conjunction false for a false part, a disjunction false for two, a name bound to what was worked
+ * out, and a match on an absent option taking its absent arm. Where the clause comes to false the
+ * part is needed. Where it comes to anything else, or the part is reached some way not followed
+ * here, nothing is said: a clause written as the lookup being absent, as a comparison of what it
+ * found, as the elements not being apart, or as that or something else, is not shown to need it.
+ *
+ * <p>What a clause reads and what it needs are two things. A clause that reads a call may deny it,
+ * or may hold with it false, and a reader that took the read for the need would find a rule where
+ * the clause states its opposite.
  */
-final class LookupsAClauseNeeds {
+final class WhatAClauseNeeds {
 
     private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
@@ -33,22 +39,31 @@ final class LookupsAClauseNeeds {
 
     private enum Worked { FALSE, ABSENT, UNKNOWN }
 
-    private final Core lookup;
+    private final Core part;
+    /** What the part comes to where it comes out the way it fails. */
+    private final Worked failing;
     private final Map<BindingId, Worked> bound = new HashMap<>();
 
-    private LookupsAClauseNeeds(Core lookup) {
-        this.lookup = Core.withoutStanding(lookup);
+    private WhatAClauseNeeds(Core part, Worked failing) {
+        this.part = Core.withoutStanding(part);
+        this.failing = failing;
     }
 
     /** Whether {@code clause} is false wherever {@code lookup}, a part of it, finds no member. */
-    static boolean needs(Core clause, Core lookup) {
-        return new LookupsAClauseNeeds(lookup).work(clause) == Worked.FALSE;
+    static boolean aMemberFound(Core clause, Core lookup) {
+        return new WhatAClauseNeeds(lookup, answerOfNoMember(lookup)).work(clause) == Worked.FALSE;
+    }
+
+    /** Whether {@code clause} is false wherever {@code apart}, a call of it saying the elements
+     *  of a container are apart, says they are not. */
+    static boolean elementsApart(Core clause, Core apart) {
+        return new WhatAClauseNeeds(apart, Worked.FALSE).work(clause) == Worked.FALSE;
     }
 
     private Worked work(Core e) {
         Core here = Core.withoutStanding(e);
-        if (here == lookup) {
-            return answerOfNoMember(here);
+        if (here == part) {
+            return failing;
         }
         return switch (here) {
             case Core.Bool literal -> literal.value() ? Worked.UNKNOWN : Worked.FALSE;

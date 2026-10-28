@@ -1201,6 +1201,9 @@ final class Pullback {
         if (e instanceof Core.LetIn li) {
             leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
             leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
+        } else if (e instanceof Core.IfConstructed attempt) {
+            WhatARunMayEndFor.forEachWorkedOut(attempt,
+                    part -> leaveUnsaidWhatMayEndARunUnder(part, reads, bound));
         } else {
             Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
                     Core.withoutStanding(child) instanceof Core.Block block
