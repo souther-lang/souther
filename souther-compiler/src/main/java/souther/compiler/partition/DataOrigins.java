@@ -53,6 +53,9 @@ final class DataOrigins {
     /** The arithmetic a bound is read as a number by, which says what a number is made of. */
     private final AffineForms.Reading<Quantity, InputReads> arithmetic;
 
+    /** The names whose makings have been read, in the one bound this is asked of. */
+    private final Set<BindingId> numbered = new HashSet<>();
+
     /** What each root binding is called, for a reader; no part of which data it is. */
     private final Map<BindingId, String> called = new LinkedHashMap<>();
 
@@ -70,62 +73,51 @@ final class DataOrigins {
         AffineForms.outcome(number, reads, arithmetic, new AffineForms.Consumed<>() {
             @Override
             public void written(Core expression, InputReads at) {
-                origins.addAll(placeOf(expression, at, Set.of()));
+                collectIn(expression, at, Set.of(), origins);
             }
 
             @Override
             public void folded(Core expression, InputReads at) {
-                collectIn(expression, at, origins);
+                collectIn(expression, at, Set.of(), origins);
             }
         });
         return origins.isEmpty() ? null : new BoundHeldIn(List.copyOf(origins), called);
     }
 
     /**
-     * Where the value written at {@code leaf} is read out of: a field of some data, an element of a
-     * container, or what a name was given — and nothing where it is a value of no place, which a
-     * literal is.
+     * Where everything {@code expression} is made of is read out of: a field of some data, an
+     * element of a container, and what each name in it was given, however that is made — a field,
+     * an arithmetic over fields, a fold of one. Nothing for a value of no place, which a literal is.
      *
-     * <p>{@code onPath} is the bindings this is inside of, which is what a cycle is. What another
-     * branch of the walk met is no part of it.
+     * <p>One answer for a value written where it is compared and for an expression folded to one: a
+     * name is followed to what it was given, and what that is made of is asked again of it, so a
+     * number named by a {@code let} is read as the number it is named for.
+     *
+     * <p>{@code onPath} is the bindings this is inside of, which is what a cycle is. A name is read
+     * once for the bound, since what it was made of is the same wherever it is read from and a value
+     * that names the same binding twice would otherwise be read once for each way down to it.
      */
-    private Set<Location> placeOf(Core leaf, InputReads at, Set<BindingId> onPath) {
-        switch (Core.withoutStanding(leaf)) {
-            case Core.FieldAccess field -> {
-                return originsOf(field, at, onPath);
-            }
-            case Core.FieldProjection projection -> {
-                return originsOf(projection, at, onPath);
-            }
-            case Core.Read name -> {
-                if (onPath.contains(name.binding())) {
-                    return Set.of();
-                }
-                if (!at.containersTheElementCameFrom(name).isEmpty()) {
-                    return originsOf(name, at, onPath);
-                }
-                if (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
-                        instanceof ReadMeaning.Through through) {
-                    return placeOf(through.denotes().value(), through.denotes().at(),
-                            with(onPath, name.binding()));
-                }
-                return Set.of();
-            }
-            default -> {
-                return Set.of();
-            }
-        }
-    }
-
-    /** Where every place inside {@code expression} is read out of: a number folded from an
-     *  expression is made of whatever is in it. */
-    private void collectIn(Core expression, InputReads at, Set<Location> into) {
+    private void collectIn(Core expression, InputReads at, Set<BindingId> onPath,
+                           Set<Location> into) {
         Core node = Core.withoutStanding(expression);
         switch (node) {
-            case Core.FieldAccess _, Core.FieldProjection _, Core.Read _ ->
-                    into.addAll(placeOf(node, at, Set.of()));
+            case Core.FieldAccess _, Core.FieldProjection _ ->
+                    into.addAll(originsOf(node, at, onPath));
+            case Core.Read name -> {
+                if (onPath.contains(name.binding()) || !numbered.add(name.binding())) {
+                    return;
+                }
+                if (!at.containersTheElementCameFrom(name).isEmpty()) {
+                    into.addAll(originsOf(name, at, onPath));
+                } else if (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                        instanceof ReadMeaning.Through through) {
+                    collectIn(through.denotes().value(), through.denotes().at(),
+                            with(onPath, name.binding()), into);
+                }
+            }
             default -> ScopeStep.forEachChild(node, (child, step) -> collectIn(child,
-                    at.entering(step, read.rules().symbols(), read.rules().newtypes()), into));
+                    at.entering(step, read.rules().symbols(), read.rules().newtypes()), onPath,
+                    into));
         }
     }
 

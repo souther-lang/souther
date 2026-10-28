@@ -205,6 +205,24 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
         assertEquals(2, placesInTheDocument(source).size(), placesInTheDocument(source).toString());
     }
 
+    /** A bound folded to a number and then given a name is read out of what it was folded from, as
+     *  it is written where it is compared. */
+    @Test
+    void aFoldedBoundGivenANameIsReadOutOfTheDataItIsAFieldOf() {
+        String labelled = helperOver("if String.length(l.label) <= m then 2 else 1", TWO_LIMITS)
+                .replace("data Limit = { lowerBound: Int }", "data Limit = { label: String }")
+                .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
+                .replace("let second: Limit = Limit { label = \"aaaa\" }",
+                        "let second: Limit = Limit { label = \"bbbb\" }");
+        String named = labelled.replace("if String.length(l.label) <= m then 2 else 1",
+                "{ let bound = String.length(l.label)\n        if bound <= m then 2 else 1 }");
+        assertEquals(2, placesInTheDocument(named).size(), placesInTheDocument(named).toString());
+        String twice = labelled.replace("if String.length(l.label) <= m then 2 else 1",
+                "{ let size = String.length(l.label)\n        let bound = size + 1\n"
+                        + "        if bound <= m then 2 else 1 }");
+        assertEquals(2, placesInTheDocument(twice).size(), placesInTheDocument(twice).toString());
+    }
+
     /** A number handed to a helper is read out of what the caller read it out of: a field of a
      *  limit handed as a number is that limit's, and two calls with two limits are two data. */
     @Test
