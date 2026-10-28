@@ -40,6 +40,12 @@ class WhereATypeHasNoGreatestValueTheProgramCanStillStopARowTest {
     }
 
     @Test
+    void anAddendThatIsNoNumberIsNoRowWhateverTheTypeHolds() {
+        assertFalse(RowsComputed.ENDLESS.rowIsComputed(
+                () -> new ExactRatio[] {null}, () -> Map.of()));
+    }
+
+    @Test
     void anUntoldOperationShowsNoRowComputedWhateverTheTypeHolds() {
         RowsComputed rows = RowsComputed.ENDLESS.withOperations(new Operations(List.of(), Told.SOME));
         assertFalse(computedAt(rows, 0));

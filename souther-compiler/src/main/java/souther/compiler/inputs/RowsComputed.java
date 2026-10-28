@@ -182,13 +182,18 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     /** Whether the positive addends together and the negative ones together are within the
      *  greatest; an addend that is no number is no row. */
     private boolean computes(ExactRatio... addends) {
+        for (ExactRatio each : addends) {
+            if (each == null) {
+                return false;
+            }
+        }
         if (greatest == null) {
             return true;
         }
         ExactRatio up = ExactRatio.ZERO;
         ExactRatio down = ExactRatio.ZERO;
         for (ExactRatio each : addends) {
-            if (each == null || up == null || down == null) {
+            if (up == null || down == null) {
                 return false;
             }
             if (each.signum() > 0) {

@@ -421,6 +421,26 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /**
+     * The same relation of decimals, worked out by a program that can stop a row at something no
+     * operation tells of: nothing is shown computed, so no term is left undivided and no run is
+     * taken to settle it, whatever the terms' ends say.
+     */
+    @Test
+    void aDenseTermIsShownNothingWhereTheProgramCanStopARowUntold() {
+        NumericDomain.Bounds aboveFive = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(5)),
+                Endpoint.exclusive(Count.of(10)));
+        NumericDomain.Bounds fromNought =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                dense("a", 1, run(0, 10)), dense("c", 1, aboveFive), dense("s", -1, fromNought));
+
+        assertNull(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.of(-5), Rel.GE,
+                String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
+                new WhatARelationLeavesUndivided.Operations(List.of(),
+                        WhatARelationLeavesUndivided.Told.SOME)));
+    }
+
+    /**
      * {@code a + c - s >= 0} over {@code Int}s, {@code c} strictly between nought and two: held
      * still at one, the whole number inside its ends, {@code c} leaves {@code a} against
      * {@code s}. Where nothing says how the values of {@code c} are spaced, no value is shown

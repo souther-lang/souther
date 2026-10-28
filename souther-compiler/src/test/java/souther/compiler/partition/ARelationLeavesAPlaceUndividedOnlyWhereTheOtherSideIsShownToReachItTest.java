@@ -3038,21 +3038,24 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * every one from it, and run out at 42: from there on no standard is above four times them.
      * A standard past nought has hours below a quarter of it, which a decimal from nought has, so
      * only the standard of nought settles the comparison. Weighed three to four, the hours run out
-     * at 126.
+     * at 126. A decimal product may have no room for its digits or scale, which no operation of
+     * the comparison tells of, so the other's reaching is not shown computed and the places are
+     * not shown, though the line is drawn.
      */
     @Test
     void aWeightOnADecimalDrawsTheLineWhereTheOtherRunsOut() {
         String inputs = "h: Hours, s: Hours";
         for (String body : List.of("h.value * 4.0m >= s.value",
                 "h.value * 4.0m >= s.value * 3.0m")) {
-            assertEquals(Map.of(), left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)),
-                    body);
-            assertEquals(List.of("s/0 <= x <= 0", "s/0 < x <= 168"),
-                    classesAt(inputs, HOURS, body, "s"), body);
+            assertEquals(Map.of("h", NOT_SHOWN, "s", NOT_SHOWN),
+                    left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)), body);
+            // The boundary is where the product meets the other, and a row on either side of it
+            // is one only if the product is worked out there, which a decimal product need not
+            // be: no class is drawn until a row on each side is shown to compute.
+            assertEquals(List.of(), classesAt(inputs, HOURS, body, "s"), body);
         }
-        assertEquals(List.of("h/0 <= x < 42", "h/42 <= x <= 168"),
-                classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
-        assertEquals(List.of("h/0 <= x < 126", "h/126 <= x <= 168"),
+        assertEquals(List.of(), classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
+        assertEquals(List.of(),
                 classesAt(inputs, HOURS, "h.value * 4.0m >= s.value * 3.0m", "h"));
     }
 
@@ -3302,10 +3305,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
         String body = "a.value >= s.value + 5.0m";
-        assertEquals(Map.of("s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
+        assertEquals(Map.of("a", NOT_SHOWN, "s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
                 atThe(">=", amount, "a: Amount, s: Amount", body)));
-        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
-                classesAt("a: Amount, s: Amount", amount, body, "a"));
+        // The boundary at five is the arithmetic's, and the sum past it need not be worked out.
+        assertEquals(List.of(), classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 
     private static final String KEYED = """

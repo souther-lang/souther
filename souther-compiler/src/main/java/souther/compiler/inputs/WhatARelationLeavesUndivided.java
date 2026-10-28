@@ -685,7 +685,8 @@ public final class WhatARelationLeavesUndivided {
             return new Leaves.Undivided();
         }
         if (granularity == Granularity.DENSE) {
-            return leavesOfADenseTerm(terms, at, constant, asking, overlap, independent);
+            return leavesOfADenseTerm(terms, at, constant, asking, overlap, independent,
+                    arithmetic);
         }
         Settling free = settlingOf(terms, at, constant, asking, granularity, arithmetic);
         Leaves shownFree = shown(free, terms, at, constant, asking, overlap, independent,
@@ -1841,10 +1842,15 @@ public final class WhatARelationLeavesUndivided {
     /**
      * What a relation leaves the values of a dense term, which the runs that settle it, open or
      * closed, and the values left between them are asked of.
+     *
+     * <p>A run that settles the relation is a run of rows only where the program gets to the end
+     * of working them out, and the runs here are drawn from the terms' ends alone. Where
+     * something can stop a row, no run is taken, and the term is not shown.
      */
     private static <P> Leaves leavesOfADenseTerm(List<Term<P>> terms, int at, ExactRatio constant,
                                                  Asking asking, BiPredicate<P, P> overlap,
-                                                 Independence independent) {
+                                                 Independence independent,
+                                                 RowsComputed arithmetic) {
         Term<P> it = terms.get(at);
         Span held = Span.ofTheValues(it.holds());
         Interval rest = constant == null ? null : restOf(terms, at, constant);
@@ -1900,7 +1906,7 @@ public final class WhatARelationLeavesUndivided {
         for (Span each : between) {
             Interval values = new Interval(each.lower(), each.upper());
             if (!asking.leftBy().stream().allMatch(relation -> reachedBySome(terms, at, values,
-                    constant, relation, overlap, independent, null, RowsComputed.ENDLESS))) {
+                    constant, relation, overlap, independent, null, arithmetic))) {
                 return null;
             }
         }
