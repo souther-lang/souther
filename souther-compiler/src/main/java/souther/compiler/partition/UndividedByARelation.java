@@ -82,6 +82,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -93,6 +94,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
@@ -190,8 +192,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * computed. What it is over is the comparison's own reading of it, and not the form the
      * comparison is cut as: {@code a + b - 100 >= 0} works out {@code a + b} and then the
      * difference, and {@code a + b >= 100} the sum alone.
+     *
+     * @param after the operations, by where they are among those the comparison works out, whose
+     *              value this one is worked out of, and theirs: each is worked out before it on
+     *              every run. Two operations neither of which is worked out of the other may come
+     *              in either order, and an operation worked out of one through a name is not
+     *              among these, which says less of the order and nothing false
      */
-    record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
+    record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest,
+                        List<Integer> after) {
+
+        IntOperation {
+            after = List.copyOf(new TreeSet<>(after));
+        }
+    }
 
     /**
      * The operations of whole numbers a comparison works out, and how much of what can stop a run
@@ -927,98 +941,168 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The runs of the values at the positions this relation reads at which every run getting to
-     * it in one of {@code regions} stops in an operation the reading of the comparison told of.
+     * Where every run getting to this relation stops in one of the operations the reading of the
+     * comparison told of, said only where every operation that can stop a run was told.
      *
-     * <p>Asked of each operation and each number of the input it is over, alone: where the
-     * operation comes to past its type at a value of the number whatever the rest of it holds in
-     * the region, every run there stops in it. The rest is taken as wide as the region leaves it,
-     * so a run is said to stop only where it does. What several operations rule out only together
-     * is not said, and a run said here is one some region leaves the number at.
+     * <p>A run stops in the first operation it works out that is past its type. So the rows it
+     * stops in one are those at which that one is past its type and every operation it may work
+     * out before it is within its own: all the others but those worked out of its value, which
+     * come after it on every run. The rows are said as the forms of the operations between their
+     * ends, over as many numbers as each is over, and a form over one number as that number's
+     * run. Rows at which two operations either of which may come first are both past their types
+     * stop in one of them, and are said of neither.
+     *
+     * <p>Said where some region leaves such a row: none of what the ways to the comparison leave
+     * holds one, and every row there gets past.
      *
      * @param regions what the ways to the comparison leave, before what the rows that get past
      *                its operations are narrowed to: a region a row got past them in holds none
-     *                of the values a run stops at
+     *                of the rows a run stops at
      */
     List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
+        if (!working.exact()) {
+            return List.of();
+        }
+        List<IntOperation> operations = working.operations();
         Set<EveryRunStops> out = new LinkedHashSet<>();
-        for (IntOperation operation : working.operations()) {
-            for (Map.Entry<NumericTerm, ExactRatio> each : operation.form().coefs().entrySet()) {
-                if (!(each.getKey() instanceof NumericTerm.ValueOf place)
-                        || !each.getValue().isWhole()) {
-                    continue;
+        for (int at = 0; at < operations.size(); at++) {
+            IntOperation it = operations.get(at);
+            List<Bounded> before = new ArrayList<>();
+            for (int other = 0; other < operations.size(); other++) {
+                IntOperation one = operations.get(other);
+                if (other != at && !one.after().contains(at)) {
+                    before.add(new Bounded(one.form(), one.least(), one.greatest()));
                 }
-                Map<NumericTerm, ExactRatio> rest = new LinkedHashMap<>(operation.form().coefs());
-                rest.remove(place);
-                LinearForm<NumericTerm> others =
-                        new LinearForm<>(operation.form().constant(), rest);
-                for (SearchRegion region : regions) {
-                    out.addAll(whereEveryRunStops(operation, place,
-                            each.getValue().floor() instanceof ExactAnswer.Held<BigInteger> a
-                                    ? a.value() : null,
-                            others, region, read));
+            }
+            for (Bounded past : List.of(
+                    new Bounded(it.form(), it.greatest().add(BigInteger.ONE), null),
+                    new Bounded(it.form(), null, it.least().subtract(BigInteger.ONE)))) {
+                List<Bounded> rows = new ArrayList<>(before);
+                rows.add(past);
+                List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
+                if (where != null) {
+                    out.add(new EveryRunStops(written(it.form()), where));
                 }
             }
         }
         return List.copyOf(out);
     }
 
+    /** A form over numbers of the input, constant and all, from {@code least} to
+     *  {@code greatest}, either of which may be null where nothing bounds it there. */
+    private record Bounded(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
+
     /**
-     * The runs of {@code place} at which {@code operation}, which is {@code weight} times it and
-     * {@code others}, comes to past what it holds whatever {@code others} holds in
-     * {@code region}: at the high end of {@code place} and at the low end, each where some value
-     * of it there is one the region leaves it. An end the region places none at is the end of
-     * the type, which no value is past.
+     * The rows meeting every one of {@code bounds}, as each form of numbers they hold between two
+     * ends: the forms alike but for the constant met into one, a form of one number said as that
+     * number's run within its type, and an end that is the type's own left unsaid. Null where no
+     * row meets them, or no region leaves one that does.
      */
-    private static List<EveryRunStops> whereEveryRunStops(IntOperation operation,
-                                                         NumericTerm.ValueOf place,
-                                                         BigInteger weight,
-                                                         LinearForm<NumericTerm> others,
-                                                         SearchRegion region, InputReading read) {
-        if (weight == null || weight.signum() == 0
-                || !(region.projectionOf(place) instanceof NumericDomain.FormProjection.Within(
-                        NumericDomain.Bounds own))) {
-            return List.of();
+    private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
+                                                        List<SearchRegion> regions) {
+        Map<Map<NumericTerm, ExactRatio>, BigInteger[]> met = new LinkedHashMap<>();
+        Set<NumericTerm.ValueOf> numbers = new LinkedHashSet<>();
+        for (Bounded each : bounds) {
+            Map<NumericTerm, ExactRatio> coefs = each.form().coefs();
+            BigInteger weight = coefs.size() == 1 ? wholeOf(coefs.values().iterator().next())
+                    : BigInteger.ONE;
+            BigInteger shift = wholeOf(each.form().constant());
+            if (coefs.isEmpty() || weight == null || shift == null
+                    || !coefs.keySet().stream().allMatch(term ->
+                            term instanceof NumericTerm.ValueOf)) {
+                return null;
+            }
+            coefs.keySet().forEach(term -> numbers.add((NumericTerm.ValueOf) term));
+            BigInteger least = each.least() == null ? null : each.least().subtract(shift);
+            BigInteger greatest = each.greatest() == null ? null
+                    : each.greatest().subtract(shift);
+            Map<NumericTerm, ExactRatio> shape = coefs;
+            if (coefs.size() == 1) {
+                // One number weighed: its own run, the ends divided by the weight.
+                shape = Map.of(coefs.keySet().iterator().next(), ExactRatio.ONE);
+                BigInteger low = least == null ? null : weight.signum() > 0
+                        ? ceilingOf(least, weight) : floorOf(least, weight);
+                BigInteger high = greatest == null ? null : weight.signum() > 0
+                        ? floorOf(greatest, weight) : ceilingOf(greatest, weight);
+                least = weight.signum() > 0 ? low : high;
+                greatest = weight.signum() > 0 ? high : low;
+            }
+            BigInteger[] ends = met.computeIfAbsent(shape, _ -> new BigInteger[2]);
+            if (least != null) {
+                ends[0] = ends[0] == null ? least : ends[0].max(least);
+            }
+            if (greatest != null) {
+                ends[1] = ends[1] == null ? greatest : ends[1].min(greatest);
+            }
         }
-        BigInteger restLeast;
-        BigInteger restMost;
-        if (others.coefs().isEmpty()) {
-            // A rest of no number is its constant, which no region is asked about.
-            restLeast = typeEndOf(others, true, read);
-            restMost = restLeast;
-        } else if (region.projectionOf(others) instanceof NumericDomain.FormProjection.Within(
-                NumericDomain.Bounds rest)) {
-            restLeast = rest.min() != null ? rest.min().wholeAdmitted(true)
-                    : typeEndOf(others, true, read);
-            restMost = rest.max() != null ? rest.max().wholeAdmitted(false)
-                    : typeEndOf(others, false, read);
-        } else {
-            return List.of();
+        List<EveryRunStops.Within> out = new ArrayList<>();
+        List<Bounded> asked = new ArrayList<>();
+        for (Map.Entry<Map<NumericTerm, ExactRatio>, BigInteger[]> each : met.entrySet()) {
+            LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, each.getKey());
+            BigInteger least = each.getValue()[0];
+            BigInteger greatest = each.getValue()[1];
+            BigInteger typeLeast = typeEndOf(form, true, read);
+            BigInteger typeGreatest = typeEndOf(form, false, read);
+            if (form.coefs().size() == 1) {
+                least = least == null ? typeLeast : typeLeast == null ? least : least.max(typeLeast);
+                greatest = greatest == null ? typeGreatest
+                        : typeGreatest == null ? greatest : greatest.min(typeGreatest);
+            }
+            if (least != null && greatest != null && least.compareTo(greatest) > 0) {
+                return null;
+            }
+            asked.add(new Bounded(form, least, greatest));
+            BigInteger shownLeast = least != null && least.equals(typeLeast) ? null : least;
+            BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
+                    : greatest;
+            if (shownLeast != null || shownGreatest != null) {
+                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest));
+            }
         }
-        BigInteger ownLeast = own.min() != null ? own.min().wholeAdmitted(true)
-                : typeEndOf(LinearForm.atom(place), true, read);
-        BigInteger ownMost = own.max() != null ? own.max().wholeAdmitted(false)
-                : typeEndOf(LinearForm.atom(place), false, read);
-        if (ownLeast == null || ownMost == null) {
-            return List.of();
+        // And every number of them within its type, which every row is, for the regions: a
+        // region need not say where a type stops.
+        for (NumericTerm.ValueOf number : numbers) {
+            LinearForm<NumericTerm> alone = LinearForm.atom(number);
+            asked.add(new Bounded(alone, typeEndOf(alone, true, read),
+                    typeEndOf(alone, false, read)));
         }
-        boolean up = weight.signum() > 0;
-        List<EveryRunStops> out = new ArrayList<>();
-        // Past the greatest: weight times the value with the least of the rest is above it.
-        if (restLeast != null) {
-            BigInteger room = operation.greatest().subtract(restLeast);
-            BigInteger from = up ? floorOf(room, weight).add(BigInteger.ONE) : ownLeast;
-            BigInteger to = up ? ownMost : ceilingOf(room, weight).subtract(BigInteger.ONE);
-            stopsWithin(place, from, to, ownLeast, ownMost, operation, out);
+        // In the order of what they are written as, which is what a report is compared by.
+        out.sort(Comparator.comparing(EveryRunStops.Within::form));
+        return out.isEmpty() || regions.stream().noneMatch(region -> holdsARow(region, asked))
+                ? null : out;
+    }
+
+    /** Whether {@code region}, narrowed to {@code bounds}, is not shown to hold no row. A bound
+     *  it cannot carry narrows nothing, which leaves a row where there may be none. */
+    private static boolean holdsARow(SearchRegion region, List<Bounded> bounds) {
+        SearchRegion narrowed = region;
+        for (Bounded each : bounds) {
+            if (each.least() != null) {
+                narrowed = narrowedBy(narrowed, each.form(), each.least(), Rel.GE);
+            }
+            if (each.greatest() != null) {
+                narrowed = narrowedBy(narrowed, each.form(), each.greatest(), Rel.LE);
+            }
         }
-        // Below the least: weight times the value with the most of the rest is under it.
-        if (restMost != null) {
-            BigInteger room = operation.least().subtract(restMost);
-            BigInteger from = up ? ownLeast : floorOf(room, weight).add(BigInteger.ONE);
-            BigInteger to = up ? ceilingOf(room, weight).subtract(BigInteger.ONE) : ownMost;
-            stopsWithin(place, from, to, ownLeast, ownMost, operation, out);
-        }
-        return out;
+        LinearForm<NumericTerm> any = bounds.getFirst().form();
+        return !(narrowed.projectionOf(any)
+                instanceof NumericDomain.FormProjection.NothingIsLeft);
+    }
+
+    /** {@code region} with {@code form rel end} taken in, or as it was where it cannot be. */
+    private static SearchRegion narrowedBy(SearchRegion region, LinearForm<NumericTerm> form,
+                                           BigInteger end, Rel rel) {
+        LinearForm<NumericTerm> moved = new LinearForm<>(
+                form.constant().minus(ExactRatio.of(end)).orNull(), form.coefs());
+        return moved.constant() != null
+                && region.assuming(moved, rel) instanceof SearchRegion.Assumption.Taken(
+                        SearchRegion taken) ? taken : region;
+    }
+
+    /** {@code ratio} where it is a whole number, or null. */
+    private static BigInteger wholeOf(ExactRatio ratio) {
+        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(
+                BigInteger whole) ? whole : null;
     }
 
     /**
@@ -1047,19 +1131,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             sum = sum.add(weight.multiply(end));
         }
         return sum;
-    }
-
-    /** {@code from} to {@code to} as far as {@code least} to {@code most} goes, where any of it
-     *  is left. */
-    private static void stopsWithin(NumericTerm.ValueOf place, BigInteger from, BigInteger to,
-                                    BigInteger least, BigInteger most, IntOperation operation,
-                                    List<EveryRunStops> out) {
-        BigInteger low = from.max(least);
-        BigInteger high = to.min(most);
-        if (low.compareTo(high) <= 0) {
-            out.add(new EveryRunStops(FilingCoordinate.of(place), low, high,
-                    written(operation.form())));
-        }
     }
 
     private static BigInteger floorOf(BigInteger numerator, BigInteger denominator) {

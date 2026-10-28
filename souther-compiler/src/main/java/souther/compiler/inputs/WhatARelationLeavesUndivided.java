@@ -321,12 +321,15 @@ public final class WhatARelationLeavesUndivided {
         /**
          * How many times the form the operations are, at the most, or null where one of them is
          * not a multiple of a sum of some of its terms: every term it reads weighed by the same
-         * multiple of the weight the relation weighs it by, and the constant of the relation
-         * added times that multiple, or none. These are the operations a program that adds the
-         * form up in some order works out, or one that divides the sum by a number after it
-         * ({@code (a + b + c) / 3} works out {@code a + b} and {@code a + b + c}, and weighs
-         * each by a third). {@code a + 4 - 4 + b + c} works out {@code a + 4}, which is no sum
-         * of the form.
+         * multiple of the weight the relation weighs it by, and a constant between nought and the
+         * constant of the relation times that multiple. These are the operations a program that
+         * adds the form up in some order works out, the constant in one piece or in several
+         * ({@code (a + 1) + 1 == b} works out {@code a + 1} and then {@code a + 2}), or one that
+         * divides the sum by a number after it ({@code (a + b + c) / 3} works out {@code a + b}
+         * and {@code a + b + c}, and weighs each by a third). Each lies between the positive
+         * addends together and the negative ones together, since a piece of the constant is on
+         * the side of nought the whole is. {@code a + 4 - 4 + b + c} works out {@code a + 4},
+         * which is no sum of the form: the four is past the constant of none.
          *
          * <p>Never under one: the sizes of the form's addends, times this, are the sizes the
          * operations are worked out over.
@@ -340,8 +343,9 @@ public final class WhatARelationLeavesUndivided {
                     return null;
                 }
                 ExactRatio added = each.constant();
-                if (added.signum() != 0
-                        && added.compareTo(constant.times(multiple).orNull()) != 0) {
+                ExactRatio whole = constant.times(multiple).orNull();
+                if (added.signum() != 0 && (whole == null || added.signum() != whole.signum()
+                        || added.abs().compareTo(whole.abs()) > 0)) {
                     return null;
                 }
                 if (multiple.abs().compareTo(most) > 0) {

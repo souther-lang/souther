@@ -6075,10 +6075,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         StringBuilder out = new StringBuilder();
         for (EveryRunStops each : stops) {
             out.append(out.isEmpty() ? "; every run stops " : ", ")
-                    .append("in ").append(each.operation()).append(" where ")
-                    .append(each.at().path())
-                    .append(each.from().equals(each.to()) ? " is " + each.from()
-                            : " is " + each.from() + " to " + each.to());
+                    .append("in ").append(each.operation()).append(" where ");
+            for (int i = 0; i < each.where().size(); i++) {
+                EveryRunStops.Within within = each.where().get(i);
+                out.append(i == 0 ? "" : " and ").append(within.form());
+                if (within.least() != null && within.least().equals(within.greatest())) {
+                    out.append(" is ").append(within.least());
+                } else if (within.least() != null && within.greatest() != null) {
+                    out.append(" is ").append(within.least()).append(" to ")
+                            .append(within.greatest());
+                } else if (within.least() != null) {
+                    out.append(" is at least ").append(within.least());
+                } else {
+                    out.append(" is at most ").append(within.greatest());
+                }
+            }
         }
         return out.toString();
     }
@@ -9320,17 +9331,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (finding.about() instanceof About.OfSomethingNotRead about) {
             f.put("reason", word(about.finding().reason()));
         }
-        // And where every run getting to a rule a run may stop in is shown to stop: the values,
-        // and the operation it stops in.
+        // And where every run getting to a rule a run may stop in is shown to stop: the
+        // operation it stops in, and the rows, as forms between their ends.
         if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
                 && !it.everyRunStops().isEmpty()) {
             ArrayNode stops = f.putArray("everyRunStops");
             for (EveryRunStops each : it.everyRunStops()) {
                 ObjectNode one = stops.addObject();
-                one.put("at", each.at().path().toString());
-                one.put("from", each.from());
-                one.put("to", each.to());
                 one.put("operation", each.operation());
+                ArrayNode where = one.putArray("where");
+                for (EveryRunStops.Within within : each.where()) {
+                    ObjectNode bound = where.addObject();
+                    bound.put("form", within.form());
+                    if (within.least() != null) {
+                        bound.put("least", within.least());
+                    }
+                    if (within.greatest() != null) {
+                        bound.put("greatest", within.greatest());
+                    }
+                }
             }
         }
         // Present where the kind has one. A finding a build is not told about under any code is

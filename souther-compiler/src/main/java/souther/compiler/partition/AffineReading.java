@@ -359,8 +359,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     default -> null;
                 };
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    told.operations.add(new UndividedByARelation.IntOperation(form,
-                            held.least(), held.greatest()));
+                    told.add(operation, new UndividedByARelation.IntOperation(form,
+                            held.least(), held.greatest(), told.workedOutOf(operation)));
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
                     told.exact = false;
                 }
@@ -490,7 +490,40 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
+        /** The node each of {@link #operations} was told at, by where it is among them. */
+        private final List<Core> at = new ArrayList<>();
         private boolean exact = true;
+
+        void add(Core node, UndividedByARelation.IntOperation operation) {
+            at.add(Core.withoutStanding(node));
+            operations.add(operation);
+        }
+
+        /**
+         * The operations already told that {@code node} is worked out of: those told at one of
+         * its operands, and theirs. The walk tells of an operand just before what it is an
+         * operand of, so the last told at the operand is the one this run works out, where a
+         * definition read twice tells of one node twice.
+         */
+        List<Integer> workedOutOf(Core node) {
+            List<Core> operands = switch (Core.withoutStanding(node)) {
+                case Core.Neg neg -> List.of(neg.operand());
+                case Core.Binary binary -> List.of(binary.left(), binary.right());
+                default -> List.of();
+            };
+            List<Integer> out = new ArrayList<>();
+            for (Core operand : operands) {
+                Core bare = Core.withoutStanding(operand);
+                for (int i = at.size() - 1; i >= 0; i--) {
+                    if (at.get(i) == bare) {
+                        out.add(i);
+                        out.addAll(operations.get(i).after());
+                        break;
+                    }
+                }
+            }
+            return out;
+        }
 
         UndividedByARelation.Working working() {
             return new UndividedByARelation.Working(operations, exact

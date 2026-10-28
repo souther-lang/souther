@@ -4149,32 +4149,56 @@
           "everyRunStops": {
             "type": "array",
             "minItems": 1,
-            "description": "On `rule_may_stop_a_run` only, where it is known: the runs of the values at a position of the rule at which every run that gets to the rule stops in an operation the rule is read through, because what the operation works out is past what its type holds whatever else it is over holds there. A proof about those values and not a class of them: the rule is neither true nor false there, no row there is a witness for either side, and nothing is left open, so no measure waits on it. Absent where no such run is known.",
+            "description": "On `rule_may_stop_a_run` only, where it is known: the rows at which every run that gets to the rule stops in one operation the rule is read through, because what the operation works out is past what its type holds and every operation a run may work out before it is within its own. Said only where every operation that can stop a run there is known, and not of rows at which two operations that may come in either order are both past their types. A proof about those rows and not a class of them: the rule is neither true nor false there, no row there is a witness for either side, and nothing is left open, so no measure waits on it. Absent where no such row is known.",
             "items": {
               "type": "object",
               "required": [
-                "at",
-                "from",
-                "to",
-                "operation"
+                "operation",
+                "where"
               ],
               "additionalProperties": false,
               "properties": {
-                "at": {
-                  "type": "string",
-                  "description": "The position, as a report names it."
-                },
-                "from": {
-                  "type": "integer",
-                  "description": "The least value of the run."
-                },
-                "to": {
-                  "type": "integer",
-                  "description": "The greatest value of the run."
-                },
                 "operation": {
                   "type": "string",
                   "description": "The operation every run there stops in, as the numbers it is over weighed and a constant."
+                },
+                "where": {
+                  "type": "array",
+                  "minItems": 1,
+                  "description": "The rows, as forms over the numbers of the input each between two ends: every row meeting all of them stops in the operation. A form over one number is that number's run; a form over several says what one number alone does not, as where two together pass the type. An end a type already holds every row to is not written.",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "form"
+                    ],
+                    "anyOf": [
+                      {
+                        "required": [
+                          "least"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "greatest"
+                        ]
+                      }
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "form": {
+                        "type": "string",
+                        "description": "The numbers weighed, as an author would write them."
+                      },
+                      "least": {
+                        "type": "integer",
+                        "description": "The least value the form takes there; absent where only the type bounds it below."
+                      },
+                      "greatest": {
+                        "type": "integer",
+                        "description": "The greatest value the form takes there; absent where only the type bounds it above."
+                      }
+                    }
+                  }
                 }
               }
             }

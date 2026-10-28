@@ -21,13 +21,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Where an operation a comparison works out comes to past its type at a value of a position,
- * whatever else it is over holds, every run that gets to the comparison there stops in it. That is
- * said beside the rule, as the values and the operation, and leaves nothing open: no measure waits
+ * Where an operation a comparison works out comes to past its type, and every operation a run may
+ * work out before it gets past, every run that gets to the comparison there stops in it. That is
+ * said beside the rule, as the operation and the rows, and leaves nothing open: no measure waits
  * on it, and no question stands for it.
  *
- * <p>Said of a position only where the operation alone rules every row there out. Where the other
- * numbers it is over can bring it back within its type, a row there gets past, and nothing is said.
+ * <p>The rows are said over as many numbers as the operation is over, and an operation worked
+ * out of another's value comes after it on every run.
  */
 class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
 
@@ -53,7 +53,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
 
     private static final String LEAST = "-9223372036854775808";
 
-    /** Each run every run stops at, as {@code at from..to in operation}. */
+    /** The rows every run stops at, as {@code operation where form least..greatest and ...},
+     *  an end the type already holds left blank. */
     private static List<String> everyRunStops(String type, String bound, String before,
                                               String comparison) {
         Compilation compilation = measured(MODEL.formatted(type, bound, before, comparison));
@@ -66,9 +67,16 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
             if (each.get("kind").asString().equals("rule_may_stop_a_run")
                     && each.has("everyRunStops")) {
                 for (JsonNode stop : each.get("everyRunStops")) {
-                    out.add(stop.get("at").asString() + " " + stop.get("from").asString() + ".."
-                            + stop.get("to").asString() + " in " + stop.get("operation")
-                            .asString());
+                    List<String> where = new ArrayList<>();
+                    for (JsonNode within : stop.get("where")) {
+                        where.add(within.get("form").asString() + " "
+                                + (within.has("least") ? within.get("least").asString() : "")
+                                + ".."
+                                + (within.has("greatest") ? within.get("greatest").asString()
+                                        : ""));
+                    }
+                    out.add(stop.get("operation").asString() + " where "
+                            + String.join(" and ", where));
                 }
             }
         }
@@ -86,10 +94,17 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
 
     @Test
     void aSumPastTheGreatestIntStopsEveryRunAtTheGreatest() {
-        assertEquals(List.of("x " + GREATEST + ".." + GREATEST + " in x + 1"),
+        assertEquals(List.of("x + 1 where x " + GREATEST + ".."),
                 everyRunStops("Int", "x", "", "x + 1 == y"));
         assertEquals(List.of(), standing("Int", "x", "", "x + 1 == y"),
                 "a run shown to stop leaves nothing open");
+    }
+
+    /** The constant added a piece at a time is the same relation, and leaves nothing open. */
+    @Test
+    void aConstantAddedInPiecesLeavesNothingOpen() {
+        assertEquals(List.of(), standing("Int", "x", "", "(x + 1) + 1 == y"));
+        assertEquals(List.of(), standing("Int", "x", "", "(x - 1) - 1 == y"));
     }
 
     /** A position held well short of the end of its type never gets there. */
@@ -105,19 +120,62 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                 "x + 1 == y"));
     }
 
-    /** Every value of {@code x} has a {@code z} that brings the sum back within the type. */
+    /** Every value of {@code x} has a {@code z} that brings the sum back within the type, so no
+     *  value of either stops a run: the two together do. */
     @Test
-    void aSumOverTwoPositionsStopsNoValueOfEither() {
-        assertEquals(List.of(), everyRunStops("Int", "x", "", "x + z == y"));
+    void aSumOverTwoPositionsStopsWhereTheTwoTogetherPassTheType() {
+        assertEquals(List.of("x + z where x + z " + plus(GREATEST, 1) + "..",
+                        "x + z where x + z .." + plus(LEAST, -1)),
+                everyRunStops("Int", "x", "", "x + z == y"));
+        assertEquals(List.of(), standing("Int", "x", "", "x + z == y"));
     }
 
     /** A number taken away is weighed against its own end: one less than nought less the least
      *  two are past the greatest. */
     @Test
     void aNumberTakenAwayStopsAtTheOtherEnd() {
-        assertEquals(List.of("x " + LEAST + ".." + new BigInteger(LEAST).add(BigInteger.ONE)
-                        + " in -x + 1"),
+        assertEquals(List.of("-x + 1 where x .." + plus(LEAST, 1)),
                 everyRunStops("Int", "x", "", "1 - x == y"));
+    }
+
+    /**
+     * {@code x + 2} is worked out of {@code x + 1}, so a run stops in it only where
+     * {@code x + 1} got past: at the greatest {@code x}, the run stopped in {@code x + 1} and
+     * never worked {@code x + 2} out.
+     */
+    @Test
+    void anOperationWorkedOutOfAnotherStopsOnlyWhereThatOneGotPast() {
+        assertEquals(List.of("x + 1 where x " + GREATEST + "..",
+                        "x + 2 where x " + plus(GREATEST, -1) + ".." + plus(GREATEST, -1)),
+                everyRunStops("Int", "x", "", "(x + 1) + 1 == y"));
+    }
+
+    /** {@code z + 1} is worked out first and may stop the run at the greatest {@code z}, so the
+     *  sum is said to stop it only where {@code z + 1} got past. */
+    @Test
+    void anOperationOverAnotherNumberWorkedOutFirstIsGotPastBeforeTheSumStops() {
+        assertEquals(List.of("z + 1 where z " + GREATEST + "..",
+                        "x + z + 1 where x + z " + GREATEST + ".. and z .."
+                                + plus(GREATEST, -1)),
+                everyRunStops("Int", "x", "guard z >= 0 else No { n = 0 }", "(z + 1) + x == y"));
+    }
+
+    /** Neither of {@code x + 1} and {@code z + 1} is worked out of the other, so either may come
+     *  first: each is said to stop a run only where the other gets past, and where both pass the
+     *  type nothing says which one the run stops in. */
+    @Test
+    void twoOperationsInEitherOrderEachStopsARunOnlyWhereTheOtherGetsPast() {
+        assertEquals(List.of("x + 1 where x " + GREATEST + ".. and z .." + plus(GREATEST, -1),
+                        "z + 1 where x .." + plus(GREATEST, -1) + " and z " + GREATEST + "..",
+                        "x + z + 2 where x .." + plus(GREATEST, -1) + " and x + z "
+                                + plus(GREATEST, -1) + ".. and z .." + plus(GREATEST, -1),
+                        "x + z + 2 where x .." + plus(GREATEST, -1) + " and x + z .."
+                                + plus(LEAST, -3) + " and z .." + plus(GREATEST, -1)),
+                everyRunStops("Int", "x", "", "(x + 1) + (z + 1) == y"));
+    }
+
+    private static String plus(String number, int by) {
+        return new BigInteger(number).add(BigInteger.valueOf(by)).toString();
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM. */
