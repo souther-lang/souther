@@ -1108,8 +1108,8 @@ public final class Adequacy {
      * The same, of {@code read}, which is {@code spec}'s input as {@link #inputReadingOf} reads it:
      * for a caller that hands the reading on beside the subject, and asks for it once.
      */
-    private static MeasuredInput subjectOf(Db db, String module, Hir.SpecBehavior spec,
-                                           InputReading read) {
+    static MeasuredInput subjectOf(Db db, String module, Hir.SpecBehavior spec,
+                                   InputReading read) {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);

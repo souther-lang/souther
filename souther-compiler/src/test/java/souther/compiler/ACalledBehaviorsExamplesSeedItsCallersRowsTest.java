@@ -4,7 +4,7 @@ import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
-import souther.compiler.report.AdequacyReport;
+import souther.compiler.query.RowWork;
 
 import org.junit.jupiter.api.Test;
 
@@ -77,7 +77,11 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     @Test
     void aHelperIsOfferedTheSameInputs() {
         List<String> offered = offeredForScore(AS_HELPER);
-        assertTrue(offered.contains("[Throw([Pin(12)])]"), () -> "offered: " + offered);
+        for (String throwText : List.of("Throw([])", "Throw([Pin(12)])",
+                "Throw([Pin(1), Pin(2)])", "Throw([Pin(1), Pin(2), Pin(3)])")) {
+            assertTrue(offered.contains("[" + throwText + "]"),
+                    () -> "a list holding " + throwText + " is offered: " + offered);
+        }
     }
 
     @Test
@@ -91,6 +95,8 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
 
     @Test
     void theRowsOfTheCalleeAddNoObligationToTheCaller() {
+        // Rows that reach the same lines of the declarations, so that what the rows of points
+        // meet is the same and the only difference is the inputs they give score.
         String oneRow = PREFIX + """
                 behavior points : (t: Throw) -> Int
 
@@ -99,8 +105,34 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
                     | (Throw([Pin(12)])) -> 12
 
                 """ + SCORE;
-        assertEquals(gapsAboutScore(oneRow), gapsAboutScore(AS_BEHAVIOR),
-                "what score is owed does not depend on how many rows points has");
+        String moreRows = PREFIX + """
+                behavior points : (t: Throw) -> Int
+
+                """ + BODY + """
+                example points
+                    | (Throw([Pin(12)])) -> 12
+                    | (Throw([])) -> 0
+                    | (Throw([Pin(5), Pin(7)])) -> 2
+
+                """ + SCORE;
+        assertTrue(offeredForScore(moreRows).contains("[Throw([Pin(5), Pin(7)])]")
+                        && !offeredForScore(oneRow).contains("[Throw([Pin(5), Pin(7)])]"),
+                "the rows differ in what they seed");
+        RowWork few = owedForScore(oneRow);
+        RowWork many = owedForScore(moreRows);
+        assertEquals(few.classes(), many.classes(), "classes");
+        assertEquals(few.arms(), many.arms(), "arms");
+        assertEquals(few.pairs(), many.pairs(), "pairs");
+        assertEquals(few.meetings(), many.meetings(), "meetings");
+        assertEquals(few.rules(), many.rules(), "rules");
+        assertEquals(few.replacements(), many.replacements(), "replacements");
+        assertEquals(few.cases(), many.cases(), "cases");
+        // The lines the declarations draw are owed to every behavior that carries their type, and
+        // a row of points that reaches one meets it for score too. That is what rows reaching
+        // lines do whoever calls whom; a point owed with more rows is a point owed because of them.
+        assertTrue(few.points().stream().map(each -> each.point()).toList().containsAll(
+                many.points().stream().map(each -> each.point()).toList()),
+                "more rows of points owe score no point fewer rows did not");
     }
 
     @Test
@@ -108,25 +140,90 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
         assertEquals(offeredForScore(AS_BEHAVIOR), offeredForScore(AS_BEHAVIOR));
     }
 
-    private static List<String> gapsAboutScore(String source) {
+    private static final String ADD = """
+            module repro.add
+
+            behavior add : (x: Int, y: Int) -> Int
+
+            let add (x, y) = x + y
+
+            example add
+                | (3, 7) -> 10
+
+            """;
+
+    @Test
+    void aRowOfTheCalleeIsSeededWholeOrNotAtAll() {
+        String constantSecond = ADD + """
+                behavior score : (x: Int) -> Int
+
+                let score (x) = add(x, 0)
+                """;
+        assertEquals(List.of(), seededOnly(constantSecond, "repro.add", "score"),
+                "score(3) calls add(3, 0), which is no row of add");
+    }
+
+    @Test
+    void aCallerThatOwesNothingIsSeededAtEveryInputAThrough() {
+        String joined = """
+                module repro.join
+
+                behavior join : (a: String, b: String) -> String
+
+                let join (a, b) = String.append(a, b)
+
+                example join
+                    | ("x", "y") -> "xy"
+
+                behavior wrapper : (a: String, b: String) -> String
+
+                let wrapper (a, b) = join(a, b)
+                """;
+        assertTrue(offered(joined, "repro.join", "wrapper").contains("\"x\", \"y\""),
+                () -> "join's row is wrapper's: " + offered(joined, "repro.join", "wrapper"));
+    }
+
+    @Test
+    void aRowOfTheCalleeIsSeededWhenEveryArgumentStandsAtAnInput() {
+        String wrapper = ADD + """
+                behavior wrapper : (a: Int, b: Int) -> Int
+
+                let wrapper (a, b) = add(a, b)
+                """;
+        assertTrue(offered(wrapper, "repro.add", "wrapper").contains("3, 7"),
+                () -> "add's row is wrapper's: " + offered(wrapper, "repro.add", "wrapper"));
+    }
+
+    /** What a row of score is owed for, as the generation asks it. */
+    private static RowWork owedForScore(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).adequacyGaps().stream()
-                // The rules of score's own body. A line a declaration draws is met by whichever
-                // rows reach its edges, and rows of points do.
-                .filter(each -> each.kind() == Adequacy.Kind.DECISION_RULE_UNCOVERED
-                        && each.about().toString().contains("behavior=score"))
-                .map(each -> each.kind() + " " + each.about().getClass().getSimpleName())
-                .toList();
+        return compilation.db().ask(new Adequacy.RowsOwed("repro.split", "score")).value();
     }
 
     private static List<String> offeredForScore(String source) {
+        return offered(source, "repro.split", "score");
+    }
+
+    private static List<String> offered(String source, String module, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("repro.split"))
-                .rowsByBehavior().getOrDefault("score", List.of()).stream()
+        return Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module))
+                .rowsByBehavior().getOrDefault(behavior, List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
+    }
+
+    /** The rows offered that the fill alone would not offer: what the callees' rows add. */
+    private static List<String> seededOnly(String source, String module, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation.db().ask(new Adequacy.Generated(module, behavior)).value()
+                .callSeeds().stream()
                 .map(row -> String.join(", ",
                         row.inputs().stream().map(FixtureTemplate::text).toList()))
                 .toList();

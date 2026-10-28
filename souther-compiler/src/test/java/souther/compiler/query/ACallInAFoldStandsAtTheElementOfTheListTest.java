@@ -49,7 +49,7 @@ class ACallInAFoldStandsAtTheElementOfTheListTest {
         AnalysisBody analysis = db.ask(new Bodies.Observable("repro.split")).value()
                 .analysisBodies().get("score");
 
-        List<CallExampleSeeds.Call> calls = CallExampleSeeds.callsIn(analysis, input);
+        List<CallExampleSeeds.Call> calls = CallExampleSeeds.callsIn(analysis, input, _ -> true);
 
         List<Optional<TermPath>> at = calls.stream()
                 .filter(call -> call.callee().name().equals("points"))
