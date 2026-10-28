@@ -5,7 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
-import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
 import java.util.List;
 
@@ -132,14 +132,12 @@ public sealed interface Recognition {
      * behavior tells apart need not be an interval of the order they are written on, so there is no
      * place a line could fall in this and it says so ({@link #answersAboutAPlace}).
      *
-     * <p>A class shown only as far as some length holds no string longer than that, whatever
-     * {@code values} holds: such a string is shown on neither side of the rule that drew it, and is
-     * in no class of the position.
-     *
-     * @param most the most code points a string of the class has, or null where its strings are
-     *             every one of {@code values}
+     * <p>A class shown only as far as some length holds no string longer than that, whatever the
+     * set holds: such a string is shown on neither side of the rule that drew it, and is in no
+     * class of the position. So the class is the set and its lengths together, and a value is in
+     * it where it is in both ({@link ValuesWithin#has}).
      */
-    record OfASet(ValueSet values, Long most) implements Recognition {
+    record OfASet(ValuesWithin values) implements Recognition {
 
         public OfASet {
             if (values == null) {
@@ -150,7 +148,7 @@ public sealed interface Recognition {
             // report counts, tells an author no row is in, and asks the generator for. What
             // composes these leaves the cells that hold nothing out; one arriving here is that
             // reader having passed one on, and it is refused where the value is made.
-            if (values.isEmpty()) {
+            if (values.shownToHoldNone()) {
                 throw new IllegalArgumentException(
                         "a class holding no value is not a class of the position");
             }

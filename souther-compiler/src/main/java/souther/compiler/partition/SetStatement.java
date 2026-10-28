@@ -3,6 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * What a rule of a behavior states about the strings at a position, as the values on either side.
@@ -29,23 +33,22 @@ import souther.compiler.values.ValueSet;
  * have to name a class after where a rule was written.
  *
  * <p><b>And where neither side is shown.</b> A rule read off what another value can hold may show
- * some strings on neither side: the strings of {@code notShown}, and those of {@code whenTrue}
- * longer than {@code trueUpTo}. Those are no class of either side, and a reader is told they are
- * left open rather than counted on the side nothing showed them on.
+ * some strings on neither side: the strings of {@code notShown}, and those of the set
+ * {@code whenTrue} is of that are longer than it is shown at ({@link #leftOpen}). Those are no
+ * class of either side, and a reader is told they are left open rather than counted on the side
+ * nothing showed them on.
  *
  * @param term      the position it is about, which one position answers
- * @param whenTrue  the values that satisfy the rule, as far as {@code trueUpTo} goes
+ * @param whenTrue  the values shown to satisfy the rule, a length and all
  * @param whenFalse the values that do not
  * @param statement what the rule states, in the words the model states it in
  * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
  * @param notShown  the values shown on neither side, whatever their length; none where every value
  *                  is shown on one
- * @param trueUpTo  the most code points a value of {@code whenTrue} is shown to satisfy the rule
- *                  at, or null where every one of them is
  */
-public record SetStatement(NumericTerm.FromOnePosition term, ValueSet whenTrue, ValueSet whenFalse,
-                          PredicateStatement statement, PredicateOrigin origin,
-                          ValueSet notShown, Long trueUpTo) {
+public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
+                          ValueSet whenFalse, PredicateStatement statement,
+                          PredicateOrigin origin, ValueSet notShown) {
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
@@ -62,6 +65,21 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValueSet whenTrue, 
 
     /** Whether every value is shown on one side or the other. */
     public boolean showsEveryValue() {
-        return notShown.isEmpty() && trueUpTo == null;
+        return leftOpen().isEmpty();
+    }
+
+    /**
+     * The values shown on neither side: those of {@code notShown}, and those of the set the true
+     * side is of past the length it is shown at. A string shorter than that is on one side.
+     */
+    public List<ValuesWithin> leftOpen() {
+        List<ValuesWithin> out = new ArrayList<>();
+        if (!notShown.isEmpty()) {
+            out.add(ValuesWithin.all(notShown));
+        }
+        if (whenTrue.longest() != null) {
+            out.add(ValuesWithin.longerThan(whenTrue.values(), whenTrue.longest()));
+        }
+        return out;
     }
 }

@@ -8,6 +8,7 @@ import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -28,7 +29,8 @@ class AStringLongerThanItsClassWasShownAtIsInThatClassNotTest {
 
     @Test
     void aStringUpToTheLengthIsInTheClassAndALongerOneIsNot() {
-        Recognition upToThree = new Recognition.OfASet(matching("[a-z]+"), 3L);
+        Recognition upToThree =
+                new Recognition.OfASet(ValuesWithin.upTo(matching("[a-z]+"), 3L));
 
         assertEquals(Membership.MATCH,
                 Recognitions.membershipOf(upToThree, new ObservedValue.Text("abc")));
@@ -39,7 +41,7 @@ class AStringLongerThanItsClassWasShownAtIsInThatClassNotTest {
     /** Counted in code points, as a string's length is. */
     @Test
     void theLengthIsCountedInCodePoints() {
-        Recognition upToTwo = new Recognition.OfASet(matching(".+"), 2L);
+        Recognition upToTwo = new Recognition.OfASet(ValuesWithin.upTo(matching(".+"), 2L));
 
         assertEquals(Membership.MATCH,
                 Recognitions.membershipOf(upToTwo, new ObservedValue.Text("😀a")));
@@ -49,7 +51,7 @@ class AStringLongerThanItsClassWasShownAtIsInThatClassNotTest {
     @Test
     void aClassShownAtEveryLengthHoldsEveryStringOfItsSet() {
         assertEquals(Membership.MATCH, Recognitions.membershipOf(
-                new Recognition.OfASet(matching("[a-z]+"), null),
+                new Recognition.OfASet(ValuesWithin.all(matching("[a-z]+"))),
                 new ObservedValue.Text("abcdefgh")));
     }
 }

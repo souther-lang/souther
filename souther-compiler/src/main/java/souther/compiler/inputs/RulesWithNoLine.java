@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.types.ModelOccurrences;
+import souther.compiler.values.ValuesWithin;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -217,8 +218,8 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * while any are left.
          */
         public void regionUndetermined(RuleCitation cited, ModelOccurrences readAt,
-                                       FilingCoordinate at,
-                                       BlockReason.RelationShownOverARegion why) {
+                                       FilingCoordinate at, List<ValuesWithin> open) {
+            BlockReason.RelationShownOverARegion why = BlockReason.RelationShownOverARegion.of(open);
             add(RuleWithoutALine.of(cited, readAt, at, why));
             asked(StandingQuestion.RegionUndetermined.of(cited, readAt, at, why));
         }

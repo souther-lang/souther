@@ -127,6 +127,34 @@ public final class StringsHeldAsWritten {
     }
 
     /**
+     * The fewest code points one of these has, or -1 where there are none: the machine walked a
+     * layer at a time from its start, each step taking one code point, to the first state that
+     * stops.
+     */
+    public long shortest() {
+        BitSet reached = new BitSet();
+        Deque<Integer> layer = new ArrayDeque<>();
+        reached.set(Automaton.START);
+        layer.add(Automaton.START);
+        for (long length = 0; !layer.isEmpty(); length++) {
+            Deque<Integer> next = new ArrayDeque<>();
+            for (int state : layer) {
+                if (machine.stopsAt(state)) {
+                    return length;
+                }
+                for (Automaton.Step step : machine.stepsFrom(state)) {
+                    if (!reached.get(step.to())) {
+                        reached.set(step.to());
+                        next.add(step.to());
+                    }
+                }
+            }
+            layer = next;
+        }
+        return -1;
+    }
+
+    /**
      * {@link #isEmpty} of the strings of {@code language}, without making their machine: a step
      * is taken where it holds a stable starter, which stops at the first one, and the machine of
      * these keeps every such code point of every step.

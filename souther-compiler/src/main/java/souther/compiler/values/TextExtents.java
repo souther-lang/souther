@@ -217,6 +217,65 @@ public final class TextExtents {
         return holdsAValue(set).isEmpty();
     }
 
+    /** Whether {@link #holdsAValue(ValueSet, long, Long)} settles that {@code set} holds a value
+     *  of the lengths it is asked at. */
+    public static boolean shownToHoldAValue(ValueSet set, long shortest, Long longest) {
+        Emptiness held = holdsAValue(set, shortest, longest);
+        return held.isDecided() && !held.isEmpty();
+    }
+
+    /** Whether it settles that {@code set} holds none of those lengths. */
+    public static boolean shownToHoldNone(ValueSet set, long shortest, Long longest) {
+        return holdsAValue(set, shortest, longest).isEmpty();
+    }
+
+    /**
+     * Whether {@code set} holds a value of {@code shortest} to {@code longest} code points —
+     * every length from {@code shortest} where that is null. A length is a range of the strings,
+     * met with the set as any range is. A value that is no string has no length, and is one where
+     * the set holds it.
+     *
+     * <p>A language is shown to hold one where a string it holds as written is of such a length
+     * ({@link Language#heldAsWritten}, the fewest code points of those), and to hold none where no
+     * string of
+     * it is; a set of every string but a few holds strings of every length but nought, and of
+     * that one where it leaves the empty string in.
+     */
+    public static Emptiness holdsAValue(ValueSet set, long shortest, Long longest) {
+        if (shortest == 0 && longest == null) {
+            return holdsAValue(set);
+        }
+        long most = longest == null ? Long.MAX_VALUE : longest;
+        return switch (set) {
+            case ValueSet.Finite finite -> finite.values().stream()
+                    .anyMatch(each -> ofALengthWithin(each, shortest, longest))
+                    ? Emptiness.NONEMPTY : Emptiness.EMPTY;
+            case ValueSet.Cofinite cofinite -> most > 0 || cofinite.has(new Value.Text(""))
+                    ? Emptiness.NONEMPTY : Emptiness.EMPTY;
+            case ValueSet.Matching(Language language) -> {
+                Language.Ends lengths = language.lengths();
+                if (language.isEmpty() || (lengths != null && (lengths.least() > most
+                        || (lengths.most() != null && lengths.most() < shortest)))) {
+                    yield Emptiness.EMPTY;
+                }
+                long written = language.heldAsWritten().shortest();
+                yield written >= shortest && written <= most ? Emptiness.NONEMPTY
+                        : Emptiness.UNDECIDED;
+            }
+            case ValueSet.WholeRuns _ -> holdsAValue(set);
+        };
+    }
+
+    /** Whether {@code value} is of {@code shortest} to {@code longest} code points, or is no
+     *  string and has no length to be held to. */
+    public static boolean ofALengthWithin(Value value, long shortest, Long longest) {
+        if (!(value instanceof Value.Text(String text))) {
+            return true;
+        }
+        long length = text.codePointCount(0, text.length());
+        return length >= shortest && (longest == null || length <= longest);
+    }
+
     /**
      * Whether every length {@code wanted} names is the length of a value of {@code set}.
      *

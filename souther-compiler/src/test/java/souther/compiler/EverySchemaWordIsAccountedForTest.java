@@ -46,6 +46,8 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
@@ -1276,7 +1278,8 @@ class EverySchemaWordIsAccountedForTest {
                                         SourceConstruct.IF)),
                         new RuleReportAnchor.ByTheModuleThatWroteIt()),
                 ModelOccurrences.NONE, FilingCoordinate.at(TermPath.of("x")),
-                new BlockReason.RelationShownOverARegion(false, 1L));
+                BlockReason.RelationShownOverARegion.of(
+                        List.of(ValuesWithin.longerThan(ValueSet.ANY, 1L))));
     }
 
     /** A rule read far enough to say it restricts the values, and no further. */

@@ -65,9 +65,7 @@ public final class Recognitions {
             // shape arrived is exactly where it would not be.
             case Recognition.OfASet set -> byShape(value, seen -> {
                 Value written = writtenValueOf(seen);
-                return written != null && set.values().has(written)
-                        && (set.most() == null || !(written instanceof Value.Text(String text))
-                                || text.codePointCount(0, text.length()) <= set.most());
+                return written != null && set.values().has(written);
             });
             case Recognition.Nothing _ -> Membership.NO_MATCH;
         };

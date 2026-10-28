@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.ValuesWithin;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.
@@ -1335,6 +1336,18 @@ public sealed interface BlockReason {
                 throw new IllegalArgumentException("a relation shown over a region leaves some"
                         + " values open");
             }
+        }
+
+        /**
+         * What a reader is shown of the values {@code open} holds, each as long as it is left
+         * open at: whether some are open whatever their length, and the fewest code points the
+         * rest are longer than.
+         */
+        public static RelationShownOverARegion of(List<ValuesWithin> open) {
+            boolean atAnyLength = open.stream().anyMatch(each -> each.shortest() == 0);
+            Long longerThan = open.stream().filter(each -> each.shortest() > 0)
+                    .map(each -> each.shortest() - 1).min(Long::compare).orElse(null);
+            return new RelationShownOverARegion(atAnyLength, longerThan);
         }
     }
 

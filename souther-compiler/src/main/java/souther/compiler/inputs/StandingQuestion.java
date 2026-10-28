@@ -639,8 +639,15 @@ public sealed interface StandingQuestion {
             return "undetermined region of " + filed.rule() + " at " + filed.at();
         }
 
-        /** Which rule, where and what is open — the whole of what makes two of these one, for the
-         *  reason {@link Exact.Fact} gives about the citation. */
+        /**
+         * Which rule, where and what of it is open — the whole of what makes two of these one, for
+         * the reason {@link Exact.Fact} gives about the citation.
+         *
+         * <p>What a report says of the values open, and not the values. A question is carried by
+         * every answer that waits on it, and a set of strings is a machine compared by where it
+         * is: held here, it would stand under all of them. The values are worked out and used where
+         * the classes are composed, which is the one reader that needs them.
+         */
         public record Filed(RuleRef rule, FilingCoordinate at,
                             BlockReason.RelationShownOverARegion why) {
 

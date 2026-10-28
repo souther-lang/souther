@@ -11,13 +11,13 @@ import souther.compiler.numeric.Text;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
-import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -125,15 +125,15 @@ final class Classing {
     private static AsASet asASet(RuleEvidence evidence, Carrier carrier) {
         return switch (evidence) {
             case RuleEvidence.BySet(SetStatement it) ->
-                    new AsASet(it.whenTrue(), it.whenFalse(), it.statement(), it.trueUpTo());
+                    new AsASet(it.whenTrue(), it.whenFalse(), it.statement());
             case RuleEvidence.Singles(GuardThresholds.Guards.Singled it) -> {
                 if (!(carrier instanceof Carrier.Text) || !(it.value() instanceof Text text)) {
                     yield null;
                 }
                 Value one = new Value.Text(text.at());
-                yield new AsASet(new ValueSet.Finite(Set.of(one)),
+                yield new AsASet(ValuesWithin.all(new ValueSet.Finite(Set.of(one))),
                         new ValueSet.Cofinite(Set.of(one)),
-                        new PredicateStatement.Equalling(text.at()), null);
+                        new PredicateStatement.Equalling(text.at()));
             }
             case RuleEvidence.Divides _ -> null;
         };
@@ -147,11 +147,10 @@ final class Classing {
      * nothing, which is what makes the question about the distinction rather than about which
      * reader produced it.
      *
-     * @param trueUpTo the most code points a value of {@code whenTrue} is shown to be on that side
-     *                 at, or null where every one of them is
+     * @param whenTrue the values shown on the side the rule holds on, a length and all: what is
+     *                 asked of that side is asked of the length as well
      */
-    private record AsASet(ValueSet whenTrue, ValueSet whenFalse, PredicateStatement states,
-                          Long trueUpTo) {}
+    private record AsASet(ValuesWithin whenTrue, ValueSet whenFalse, PredicateStatement states) {}
 
     /**
      * What the rules of one position came to: the classes, and the rules that make none.
@@ -318,7 +317,7 @@ final class Classing {
             }
             Worked<Telling> worked = tellsApart(term, admits,
                     new AsASet(set.states().whenTrue(), set.states().whenFalse(),
-                            set.states().statement(), set.states().trueUpTo()),
+                            set.states().statement()),
                     allowance);
             Worked<LeftOpen> left = leftOpen(term, admits, set.states(), allowance);
             if (left.refused() != null) {
@@ -386,25 +385,21 @@ final class Classing {
     }
 
     /**
-     * The values of a position one rule shows on neither of its sides.
+     * The values of a position one rule shows on neither of its sides, which no class holds: the
+     * strings it shows nothing of at any length, and the strings of its true side longer than it
+     * is shown at ({@link SetStatement#leftOpen}), each met with what the position holds.
      *
-     * <p>Two kinds, and both are values no class holds. The strings the rule shows nothing of at
-     * any length, and the strings of its true side longer than it is shown at — said by that
-     * length, since a set of the strings past a length is no language this holds.
-     *
-     * @param statement   the rule
-     * @param atAnyLength the values of the position it shows on neither side whatever their length,
-     *                    or none
-     * @param longerThan  where some value of its true side is longer than it is shown at, that
-     *                    length; null otherwise
+     * @param statement the rule
+     * @param open      the values left open, each as long as it is left open at; none of them
+     *                  shown to hold nothing
      */
-    record LeftOpen(SetStatement statement, ValueSet atAnyLength, Long longerThan) {
+    record LeftOpen(SetStatement statement, List<ValuesWithin> open) {
 
         LeftOpen {
-            if (statement == null || atAnyLength == null
-                    || (atAnyLength.isEmpty() && longerThan == null)) {
+            if (statement == null || open == null || open.isEmpty()) {
                 throw new IllegalArgumentException("a rule leaves some values of a position open");
             }
+            open = List.copyOf(open);
         }
     }
 
@@ -415,49 +410,19 @@ final class Classing {
     private static Worked<LeftOpen> leftOpen(NumericTerm.FromOnePosition term, ValueSet admits,
                                              SetStatement statement,
                                              Allowance<NumericTerm.FromOnePosition> allowance) {
-        if (statement.showsEveryValue()) {
-            return Worked.to(null);
-        }
-        ValueSet atAnyLength = ValueSet.NONE;
-        if (!statement.notShown().isEmpty()) {
+        List<ValuesWithin> open = new ArrayList<>();
+        for (ValuesWithin each : statement.leftOpen()) {
             Allowance.Composed held =
-                    allowance.meet(Sameness.Block.of(term), admits, statement.notShown());
+                    allowance.meet(Sameness.Block.of(term), admits, each.values());
             if (held.gaveUp()) {
                 return Worked.refusedAt(held.refused());
             }
-            atAnyLength = TextExtents.shownToHoldNone(held.set()) ? ValueSet.NONE : held.set();
-        }
-        Long longerThan = null;
-        if (statement.trueUpTo() != null) {
-            Allowance.Composed held =
-                    allowance.meet(Sameness.Block.of(term), admits, statement.whenTrue());
-            if (held.gaveUp()) {
-                return Worked.refusedAt(held.refused());
-            }
-            if (mayHoldLongerThan(held.set(), statement.trueUpTo())) {
-                longerThan = statement.trueUpTo();
+            ValuesWithin here = each.over(held.set());
+            if (!here.shownToHoldNone()) {
+                open.add(here);
             }
         }
-        return atAnyLength.isEmpty() && longerThan == null ? Worked.to(null)
-                : Worked.to(new LeftOpen(statement, atAnyLength, longerThan));
-    }
-
-    /** Whether {@code values} may hold a string of more than {@code most} code points: told no only
-     *  where every string of it is shown to be shorter. */
-    private static boolean mayHoldLongerThan(ValueSet values, long most) {
-        return switch (values) {
-            case ValueSet.Finite finite -> finite.values().stream().anyMatch(each ->
-                    !(each instanceof Value.Text(String text))
-                            || text.codePointCount(0, text.length()) > most);
-            case ValueSet.Matching(Language language) -> {
-                if (language.isEmpty()) {
-                    yield false;
-                }
-                Language.Ends lengths = language.lengths();
-                yield lengths == null || lengths.most() == null || lengths.most() > most;
-            }
-            case ValueSet.Cofinite _, ValueSet.WholeRuns _ -> true;
-        };
+        return Worked.to(open.isEmpty() ? null : new LeftOpen(statement, open));
     }
 
     /**
@@ -545,7 +510,8 @@ final class Classing {
     private static Worked<Telling> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
                                               AsASet said,
                                               Allowance<NumericTerm.FromOnePosition> allowance) {
-        Allowance.Composed yes = allowance.meet(Sameness.Block.of(term), admits, said.whenTrue());
+        Allowance.Composed yes =
+                allowance.meet(Sameness.Block.of(term), admits, said.whenTrue().values());
         if (yes.gaveUp()) {
             return Worked.refusedAt(yes.refused());
         }
@@ -553,11 +519,11 @@ final class Classing {
         if (no.gaveUp()) {
             return Worked.refusedAt(no.refused());
         }
-        if (TextExtents.shownToHoldNone(yes.set()) || TextExtents.shownToHoldNone(no.set())) {
+        ValuesWithin holding = said.whenTrue().over(yes.set());
+        if (holding.shownToHoldNone() || TextExtents.shownToHoldNone(no.set())) {
             return Worked.to(Telling.NOTHING_APART);
         }
-        return Worked.to(TextExtents.shownToHoldAValue(yes.set())
-                && TextExtents.shownToHoldAValue(no.set())
+        return Worked.to(holding.shownToHoldAValue() && TextExtents.shownToHoldAValue(no.set())
                 ? Telling.APART : Telling.UNSETTLED);
     }
 
@@ -581,25 +547,21 @@ final class Classing {
      * cell from its neighbours — so the assignment is what a cell is, and a reader names the class
      * out of it.
      */
-    record Cell(ValueSet values, List<Answered> under, Long most) {
+    record Cell(ValuesWithin values, List<Answered> under) {
 
         Cell {
-            if (values == null || values.isEmpty()) {
+            if (values == null || values.values().isEmpty()) {
                 throw new IllegalArgumentException(
                         "a class of a position holds a value; an empty one is no class of it");
             }
             under = List.copyOf(under);
         }
 
-        /**
-         * The same cell, with one more rule coming out {@code holding} and what that leaves — no
-         * longer than {@code upTo} where that is how far the rule is shown on that side.
-         */
-        Cell and(ValueSet narrowed, PredicateStatement states, boolean holding, Long upTo) {
+        /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
+        Cell and(ValuesWithin narrowed, PredicateStatement states, boolean holding) {
             List<Answered> wider = new ArrayList<>(under);
             wider.add(new Answered(states, holding));
-            return new Cell(narrowed, wider,
-                    upTo == null ? most : most == null ? upTo : Long.valueOf(Math.min(most, upTo)));
+            return new Cell(narrowed, wider);
         }
     }
 
@@ -631,21 +593,22 @@ final class Classing {
         // strings instead, a rule would divide values the declarations already refused and the
         // position would come back with classes no run is ever in.
         List<Cell> cells = new ArrayList<>();
-        cells.add(new Cell(admits, List.of(), null));
+        cells.add(new Cell(ValuesWithin.all(admits), List.of()));
         for (AsASet each : said) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
                 for (boolean holding : new boolean[] {true, false}) {
-                    ValueSet side = holding ? each.whenTrue() : each.whenFalse();
-                    Allowance.Composed met =
-                            allowance.meet(Sameness.Block.of(term), cell.values(), side);
+                    ValuesWithin side = holding ? each.whenTrue()
+                            : ValuesWithin.all(each.whenFalse());
+                    Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
+                            cell.values().values(), side.values());
                     if (met.gaveUp()) {
                         return Worked.refusedAt(met.refused());
                     }
-                    if (TextExtents.shownToHoldAValue(met.set())) {
-                        narrower.add(cell.and(met.set(), each.states(), holding,
-                                holding ? each.trueUpTo() : null));
-                    } else if (!TextExtents.shownToHoldNone(met.set())) {
+                    ValuesWithin both = cell.values().meeting(side, met.set());
+                    if (both.shownToHoldAValue()) {
+                        narrower.add(cell.and(both, each.states(), holding));
+                    } else if (!both.shownToHoldNone()) {
                         // Neither a class nor none: the cell stands for strings no value may be.
                         return new Worked<>(null, null);
                     }
@@ -670,16 +633,15 @@ final class Classing {
         // recorded at. That is the arrangement every other class in this measure is already under,
         // and one kind of class keeping its own would be a document that reads two ways.
         String id = term + "/" + label;
-        Recognition is = new Recognition.OfASet(cell.values(), cell.most());
+        Recognition is = new Recognition.OfASet(cell.values());
         // Over the whole of the order and away from nothing: what the cell holds is already what
         // the rules leave, met together where the cells were refined. An allowance of this class's
         // own, because what one of them costs to write is nothing the class beside it should be
-        // short of. A string longer than the class is shown at is in no class, so it stands for
-        // none.
-        Place stands = carrier.somewhereIn(cell.values(), new OrderedInterval(null, null),
-                PlacesApart.NONE, perWitness.get());
-        if (stands instanceof Text(String text) && cell.most() != null
-                && text.codePointCount(0, text.length()) > cell.most()) {
+        // short of. Looked for among the values of the cell's lengths, and a value found past them
+        // is in no class, so it stands for none.
+        Place stands = carrier.somewhereIn(cell.values().toLookIn(),
+                new OrderedInterval(null, null), PlacesApart.NONE, perWitness.get());
+        if (stands instanceof Text(String text) && !cell.values().has(new Value.Text(text))) {
             stands = null;
         }
         FixtureTemplate written =

@@ -63,7 +63,7 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
         for (PartitionClass each : axis.classes()) {
             Recognition.OfASet is = assertInstanceOf(Recognition.OfASet.class, each.recognises(),
                     "a class such a rule makes is the values in it");
-            assertTrue(!is.values().isEmpty(), "and it holds some of them");
+            assertTrue(!is.values().shownToHoldNone(), "and it holds some of them");
         }
     }
 

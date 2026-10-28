@@ -25,6 +25,7 @@ import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -585,10 +586,11 @@ public final class BehaviorSetStatements {
                     new BlockReason.BehaviorDistinctionsTooCostly(
                             Classing.ofTheDistinctions(it.refused()))));
             case Realizations.Exact built -> statements.add(new RuleEvidence.BySet(
-                    new SetStatement(each.term(), built.of(each.whenTrue()),
+                    new SetStatement(each.term(),
+                            ValuesWithin.upTo(built.of(each.whenTrue()), each.trueUpTo()),
                             built.of(each.whenFalse()), each.states(), each.by(),
-                            each.notShown() == null ? ValueSet.NONE : built.of(each.notShown()),
-                            each.trueUpTo())));
+                            each.notShown() == null ? ValueSet.NONE
+                                    : built.of(each.notShown()))));
         }
     }
 

@@ -8,16 +8,25 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.StatedContract;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Membership;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Text;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -303,7 +312,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 // A position whose own declarations leave it a language, which is what an
                 // `invariant String.matches(...)` leaves. Meeting a rule with it is machine work,
                 // and that is the work this allowance cannot afford.
-                ((RuleEvidence.BySet) read.statements().get(0)).states().whenTrue(),
+                ((RuleEvidence.BySet) read.statements().get(0)).states().whenTrue().values(),
                 spent, PatternPlan.Budget.OF_A_WITNESS::meter, place -> null);
 
         assertInstanceOf(Classing.Classed.NotComposed.class, answered.classed(),
@@ -311,6 +320,105 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         assertEquals(read.statements().size(), answered.forEach().size(),
                 "and every rule that reached here is answered for, which is what the account that"
                         + " follows is owed: " + answered.forEach());
+    }
+
+    /**
+     * A rule shown on its true side only as far as two code points, at a position whose values on
+     * that side are all three long: no value is shown to hold the rule, so the rule tells none of
+     * them apart, and the one it does not show is left open rather than made a class no value is
+     * in.
+     */
+    @Test
+    void aTrueSideShownOnlyShorterThanEveryValueOnItMakesNoClassThere() {
+        SetStatement read = divisionIn(readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) = if String.matches("[a-z]+", code) then Yes else No
+                """));
+        Classing.Result answered = classedShownUpTo(read, 2L, ValueSet.oneOf(
+                new LinkedHashSet<>(List.of(new Value.Text("abc"), new Value.Text("ABC")))),
+                place -> null);
+
+        assertEquals(List.of(Classing.Outcome.TOLD_NOTHING_APART),
+                answered.forEach().stream().map(Classing.Disposed::outcome).toList(),
+                "no value is shown on the side the rule holds on");
+        assertEquals(1, answered.leftOpen().size(), "and the one past the length is left open");
+        assertTrue(answered.leftOpen().getFirst().open().stream()
+                        .anyMatch(each -> each.has(new Value.Text("abc"))),
+                "it is the value past the length: " + answered.leftOpen());
+    }
+
+    /**
+     * A class shown as far as three code points is stood for by a value it holds: the shortest
+     * string within the length, and not the first the set names, which is past it.
+     */
+    @Test
+    void aClassShownSoFarIsStoodForByAValueWithinIt() {
+        SetStatement read = divisionIn(readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) = if String.matches("[a-z]+", code) then Yes else No
+                """));
+        List<Place> offered = new ArrayList<>();
+        classedShownUpTo(read, 3L, ValueSet.oneOf(new LinkedHashSet<>(List.of(
+                new Value.Text("abcdef"), new Value.Text("ab"), new Value.Text("AB")))),
+                place -> {
+                    offered.add(place);
+                    return null;
+                });
+
+        assertTrue(offered.contains(Text.of("ab")), "the value within the length: " + offered);
+        assertFalse(offered.contains(Text.of("abcdef")), "and not the one past it");
+    }
+
+    /**
+     * Two rules at one position, each shown on its true side only so far: a value past either
+     * length is in no class, and each rule says what it leaves open.
+     */
+    @Test
+    void aValuePastWhereEitherOfTwoRulesIsShownIsInNoClass() {
+        SetStatement read = divisionIn(readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) = if String.matches("[a-z]+", code) then Yes else No
+                """));
+        ValueSet admits = ValueSet.oneOf(new LinkedHashSet<>(List.of(new Value.Text("ab"),
+                new Value.Text("abcd"), new Value.Text("abcdefg"), new Value.Text("AB"))));
+        Classing.Result answered = Classing.of(read.term(),
+                List.of(shownUpTo(read, 3L), shownUpTo(read, 5L)), List.of(),
+                new souther.compiler.check.Carrier.Text(), admits,
+                Allowance.of(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                PatternPlan.Budget.OF_A_WITNESS::meter, place -> null);
+
+        List<PartitionClass> classes = assertInstanceOf(Classing.Classed.Composed.class,
+                answered.classed()).classes();
+        for (String value : List.of("abcd", "abcdefg")) {
+            assertTrue(classes.stream().allMatch(each -> Recognitions.membershipOf(
+                            each.recognises(), new ObservedValue.Text(value))
+                            == Membership.NO_MATCH),
+                    value + " is shown by neither rule and is in no class");
+        }
+        for (String value : List.of("ab", "AB")) {
+            assertEquals(1, classes.stream().filter(each -> Recognitions.membershipOf(
+                            each.recognises(), new ObservedValue.Text(value))
+                            == Membership.MATCH).count(),
+                    value + " is shown by both and is in one class");
+        }
+        assertEquals(2, answered.leftOpen().size(), "each rule leaves its own values open");
+    }
+
+    private static RuleEvidence shownUpTo(SetStatement read, long longest) {
+        return new RuleEvidence.BySet(new SetStatement(read.term(),
+                ValuesWithin.upTo(read.whenTrue().values(), longest), read.whenFalse(),
+                read.statement(), read.origin(), ValueSet.NONE));
+    }
+
+    /** {@code read}, its true side shown only as far as {@code longest}, classed over a position
+     *  holding {@code admits}. */
+    private static Classing.Result classedShownUpTo(SetStatement read, long longest,
+                                                    ValueSet admits,
+                                                    Function<Place, FixtureTemplate> writing) {
+        return Classing.of(read.term(), List.of(shownUpTo(read, longest)), List.of(),
+                new souther.compiler.check.Carrier.Text(), admits,
+                Allowance.of(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                PatternPlan.Budget.OF_A_WITNESS::meter, writing);
     }
 
     /** The one division the model under test states. */
