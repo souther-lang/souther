@@ -537,14 +537,17 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      * Int}: a value the arithmetic cannot hold is not one some row reaches. So the comparison is
      * not shown to get every value the end takes, and is read only where the elements' own numbers
      * are what is filed.
+     *
+     * <p>Why it is unread is said by the reading that stops first: a run may stop at the multiple,
+     * or the value is related to another not shown to reach every value, which is the same
+     * comparison short of what it states and says nothing of a row that exists.
      */
     @Test
     void theEndOfAMultipleIsNotShownReachedWhereWorkingOutTheMultipleCanStopARun() {
         assertEquals(List.of(), unreadAnywhere(report(measured(UNBOUNDED.formatted("p.days")))));
         for (String since : List.of("p.days + 1", "p.days - 1", "2 * p.days", "0 - p.days")) {
             String report = report(measured(UNBOUNDED.formatted(since)));
-            assertTrue(unreadAnywhere(report).stream()
-                    .anyMatch(line -> line.contains("a run may stop")), since + "\n" + report);
+            assertFalse(unreadAnywhere(report).isEmpty(), since + "\n" + report);
         }
     }
 

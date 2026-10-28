@@ -1355,8 +1355,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * not nought; where it may lie is still read from nought, so a gross of nought is neither
      * shown to fail nor shown to be left either way, and nothing is shown of the gross. Elements
      * that are even are not every value from nought, and the total is shown to take nothing, so
-     * nothing is shown of the gross; the total is left either way by a gross taking every value,
-     * wherever it may lie, as the totals above are.
+     * nothing is shown of the gross. Nor is the total shown left either way by a gross taking every
+     * value: a total of a list is a number worked out by a run that may stop and that no operation
+     * of the comparison tells of, so a row at an end of the type is not shown computed and the
+     * gross at the least {@code Int}, which fails whatever the total is, is not a value it is left
+     * either way at.
      */
     @Test
     void aTotalTakesWhatOneElementTakesAndNoughtWhereTheListMayBeEmpty() {
@@ -1366,7 +1369,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ps",
                 positive + "data Ps = List<Pos> invariant List.length(value) >= 1",
                 "gross >= List.sum(List.map(n -> n.value, ns.value))", 27).get("gross"));
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Even>",
                         "data Even = Int invariant Int.floorMod(value, 2) == 0",
                         "gross >= " + TOTAL, 27));
@@ -1541,12 +1544,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** Beside a total, two positions are each a term of the relation and not of the run. The
-     *  adjustment held at nought, the gross stands at every value the total takes; and the total
-     *  held at nought, the gross and the adjustment stand at each other's values wherever a row is
-     *  computed, which leaves out only those beside the ends of the type. */
+     *  adjustment held at nought, the gross stands at every value the total takes. The gross and
+     *  the adjustment are not left either way over the whole type: at the least {@code Int} the
+     *  gross fails whatever they hold, since the adjustment would have to pass the greatest to
+     *  make up for it, and a row at an end of the type is not shown computed beside a total. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", RELATES, "gross", RELATES),
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", NOT_SHOWN,
+                        "gross", NOT_SHOWN),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));
     }
@@ -3109,6 +3114,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * {@code c} from 150001. Held there, {@code c} leaves {@code a} against {@code s} one apart,
      * and each {@code a} has an {@code s} at one above it and two above it. Where nothing shows the
      * allowance takes a value above its cap, nothing is shown of {@code a} along that arm.
+     *
+     * <p>The arm is expanded into a relation of its own, which carries none of the operations the
+     * comparison works out, so a row at an end of the type is not shown computed and nothing is
+     * shown of {@code a}, {@code c} or {@code s} along either arm. That is a reading short of
+     * what the comparison states and says nothing of a row that exists.
      */
     @Test
     void aTermHeldAboveItsCapAlongAnArmIsHeldWhereItStarts() {
@@ -3124,8 +3134,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         String written = capped.formatted("data Unused = Int", "Yen");
         String at = "7:" + (written.lines().toList().get(6).indexOf(">=") + 1);
-        assertEquals(Set.of(), notReadIn(written, at));
-        assertEquals(RELATES, leftIn(written, at).get("a"));
+        assertEquals(Set.of("a", "c", "s"), notReadIn(written, at));
         String unshown = capped.formatted(
                 "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
         assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());
@@ -3175,7 +3184,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(gross.value - subtracted.value)
                 }
                 """;
-        assertEquals(Set.of(), notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
+        // The capped allowance is a call whose arms are expanded into relations of their own,
+        // which carry none of the operations the comparison works out: nothing is shown of the
+        // places, and that is a reading short of what the comparison states.
+        assertEquals(Set.of("insurance", "p.base", "p.commuting", "p.other", "uplift"),
+                notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
     }
 
     /**

@@ -7,6 +7,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementsMet;
@@ -23,8 +24,11 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -71,11 +75,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *                 less the right, which is how the line is faced to the position the left
          *                 names first ({@link #facesTheOtherWay}) and is what tells which of the two
          *                 written sides is above on either side of the line
+         * @param working  the sums, differences, products and negations of whole numbers the
+         *                 comparison works out as it is written, each over the numbers it was
+         *                 read through, and whether they are all a run can stop at: what the
+         *                 line is cut as does not say which of them the program runs, and these do
          */
-        record Cuts(AffineReading read, boolean mirrored) implements OfAComparison {
+        record Cuts(AffineReading read, boolean mirrored, UndividedByARelation.Working working)
+                implements OfAComparison {
 
             public Cuts {
-                java.util.Objects.requireNonNull(read, "a comparison that cuts has a line");
+                Objects.requireNonNull(read, "a comparison that cuts has a line");
+                Objects.requireNonNull(working, "a comparison says what it works out");
             }
         }
 
@@ -168,7 +178,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
         AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
                 reads, reading(read.domain(), read.rules(), KeptTruths.readIn(read),
-                        new LinkedHashSet<>(), new ElementsMet()));
+                        new LinkedHashSet<>(), new ElementsMet(), new Told()));
         return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }
@@ -187,12 +197,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
         // One element of each container for the whole comparison, whichever side names it.
         ElementsMet met = new ElementsMet();
+        // What the two sides work out, as they are written.
+        Told told = new Told();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
                     AffineForms.outcome(side, reads,
-                            reading(inputs, ruleSource, kept, named, met));
+                            reading(inputs, ruleSource, kept, named, met, told));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped);
             }
@@ -223,7 +235,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // line from the rule written the other way.
                 boolean mirrored =
                         here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource));
-                return new OfAComparison.Cuts(mirrored ? here.mirrored() : here, mirrored);
+                return new OfAComparison.Cuts(mirrored ? here.mirrored() : here, mirrored,
+                        told.working());
             }
         }
         throw new IllegalStateException("a comparison has two sides");
@@ -301,8 +314,38 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
             InputDomain inputs, RuleReadingSource ruleSource, ReadMeaning.WhereKept kept,
-            Set<NumericTerm> named, ElementsMet met) {
+            Set<NumericTerm> named, ElementsMet met, Told told) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
+
+            /**
+             * An operation of whole numbers the walk composed, told with the number it comes to:
+             * where its type says it answers only between two ends, a row is computed only where
+             * that number lies between them. An operation whose type says a run may stop at it
+             * and not where is not every operation, and what is told is then not all there is.
+             */
+            @Override
+            public void composed(Core operation, LinearForm<NumericTerm> form) {
+                WhereAnOperatorAnswers where = switch (Core.withoutStanding(operation)) {
+                    case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                            binary.type(), List.of(binary.left().type(), binary.right().type()));
+                    case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+                    default -> null;
+                };
+                if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+                    if (!form.coefs().isEmpty()) {
+                        told.operations.add(new UndividedByARelation.IntOperation(form,
+                                held.least(), held.greatest()));
+                    }
+                } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
+                    told.exact = false;
+                }
+            }
+
+            @Override
+            public void unobserved(Core node) {
+                told.exact = false;
+            }
+
 
             @Override
             public Symbols symbols() {
@@ -320,6 +363,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         InputNumber.formOf(node, inputs, at, ruleSource, met);
                 if (numbers != null) {
                     named.addAll(numbers.coefs().keySet());
+                    // A number worked out by a run that may stop, and no operation here tells
+                    // where. What may stop one is its owners' to say, and a node they do not say
+                    // of is one that may.
+                    if (!WhatARunMayEndFor.of(node).endsNone()) {
+                        told.exact = false;
+                    }
                 }
                 return numbers;
             }
@@ -385,6 +434,18 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && !Location.isStep(fa.target().type(), fa.field(), ruleSource.newtypes());
             }
         };
+    }
+
+    /** What a reading of a comparison was told as it went: the operations of whole numbers, and
+     *  whether nothing it read could stop a run without telling. */
+    private static final class Told {
+
+        private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
+        private boolean exact = true;
+
+        UndividedByARelation.Working working() {
+            return new UndividedByARelation.Working(operations, exact);
+        }
     }
 
     /** The one position this cuts where it cuts one with a coefficient of one, or null. A form

@@ -809,7 +809,10 @@ sealed interface ComparisonAssessment {
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,
-                    () -> aboutNoPosition(comparison, reads, read.newtypes()), witnesses);
+                    () -> aboutNoPosition(comparison, reads, read.newtypes()), witnesses,
+                    () -> conditions.comparison(comparison, reads, read).arithmetic().get()
+                            instanceof AffineReading.OfAComparison.Cuts cuts
+                            ? cuts.working() : UndividedByARelation.Working.NOTHING);
             // One rule and a line for each relation it holds, each line read as a comparison of
             // one line is and carrying where it decides.
             case Cutting.Read.Several several -> eachLineOf(behavior,
@@ -860,11 +863,12 @@ sealed interface ComparisonAssessment {
     private static ComparisonAssessment aLine(Cutting.Read line, Citation at, InputReading read,
                                               boolean drawnByAnInvariant,
                                               Supplier<ComparisonAssessment> aboutNoPosition,
-                                              CountWitnesses.Lookup witnesses) {
+                                              CountWitnesses.Lookup witnesses,
+                                              Supplier<UndividedByARelation.Working> working) {
         return switch (line) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(at, cuts.cutting(), cuts.authored(), read, drawnByAnInvariant,
-                            witnesses);
+                            witnesses, working.get());
             // And where the quantity was read and stands on no order this counts, the carrier is
             // what a reader is owed — at the quantity's own coordinates, because the quantity is
             // what such a rule is about. The word is what the reading established and not what is
@@ -914,7 +918,7 @@ sealed interface ComparisonAssessment {
                          Cutting.Read.AnswersNowhere _, Cutting.Read.Several _,
                          Cutting.Read.StatesNoRelation _ ->
                             aLine(part.line(), at, read, drawnByAnInvariant, aboutNoPosition,
-                                    witnesses);
+                                    witnesses, () -> UndividedByARelation.Working.NOTHING);
                 }, part.cases()))
                 .toList());
     }
@@ -1490,6 +1494,20 @@ sealed interface ComparisonAssessment {
     private static ComparisonAssessment onTheQuantity(
             Citation at, Cutting cutting, AuthoredPointMapping authored, InputReading read,
             boolean drawnByAnInvariant, CountWitnesses.Lookup witnesses) {
+        return onTheQuantity(at, cutting, authored, read, drawnByAnInvariant, witnesses,
+                UndividedByARelation.Working.NOTHING);
+    }
+
+    /**
+     * The same, of a line the comparison that drew it works out {@code working} for: the sums,
+     * differences and products of whole numbers that stop a row where they come to a number their
+     * type does not hold. They are the comparison's and not the line's, which a rule written
+     * another way draws as well.
+     */
+    private static ComparisonAssessment onTheQuantity(
+            Citation at, Cutting cutting, AuthoredPointMapping authored, InputReading read,
+            boolean drawnByAnInvariant, CountWitnesses.Lookup witnesses,
+            UndividedByARelation.Working working) {
         Quantities quantities = read.quantities();
         // Whether there is an input at all, before anything is asked about where its values run.
         // A quantity is a function of the input, so where the rules admit no input they admit no
@@ -1524,7 +1542,7 @@ sealed interface ComparisonAssessment {
             // Named by the comparison that drew it, which is the one thing about such a place this
             // compiler can always say exactly. It is on no position, and writing it out would be as
             // much of it as a pretty-printer got.
-            UndividedByARelation relation = relationOf(cutting);
+            UndividedByARelation relation = relationOf(cutting).workingOut(working);
             return AcrossPositions.leaving(cutting, at, kind, relation,
                     relation.left(read, witnesses), authored, read, witnesses);
         }

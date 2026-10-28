@@ -673,16 +673,31 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
     private static final Pattern AT = Pattern.compile("at=(-?\\d+)\\]");
 
-    /** Whether {@code line} is a line of {@code a.pay} at a value its product with the divisor
-     *  has no {@code Int} for. */
+    /**
+     * Whether {@code line} is a line of {@code a.pay} that the comparison written out draws
+     * because it works the product out: at a value its product with the divisor has no
+     * {@code Int} for, or beside the hundred the least divisor multiplies.
+     *
+     * <p>The product is an operation the comparison works out, so a pay far out is shown to have
+     * a divisor on either side of the line, and the pays below the hundred are shown to fail
+     * whatever the divisor is. A quotient works out no product and tells of no operation a run
+     * stops at, so a row at an end of the type is not shown computed and the pays beyond the
+     * hundred are not shown reached: the quotient draws no line there, which says nothing of a
+     * row that exists.
+     */
     private static boolean drawnWhereTheProductStops(String line) {
         Matcher at = AT.matcher(line);
-        return line.contains("term=a.pay") && at.find()
-                && new BigInteger(at.group(1)).abs().compareTo(WHERE_THE_PRODUCT_STOPS) >= 0;
+        if (!line.contains("term=a.pay") || !at.find()) {
+            return false;
+        }
+        BigInteger value = new BigInteger(at.group(1)).abs();
+        return value.compareTo(WHERE_THE_PRODUCT_STOPS) >= 0
+                || (value.compareTo(BigInteger.valueOf(99)) >= 0
+                && value.compareTo(BigInteger.valueOf(101)) <= 0);
     }
 
-    /** {@code lines} but for those the comparison written out draws only where the product
-     *  stops ({@link #drawnWhereTheProductStops}). */
+    /** {@code lines} but for those the comparison written out draws only because it works the
+     *  product out ({@link #drawnWhereTheProductStops}). */
     private static Set<String> withoutWhereTheProductStops(List<String> lines) {
         return lines.stream().filter(line -> !drawnWhereTheProductStops(line))
                 .collect(Collectors.toSet());

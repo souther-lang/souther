@@ -8769,7 +8769,7 @@ final class Pullback {
     private static Derivation asACut(StatedComparison comparison,
                                      AffineReading.OfAComparison arithmetic, boolean fixed) {
         return switch (arithmetic) {
-            case AffineReading.OfAComparison.Cuts(var affine, var mirrored) -> {
+            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, _) -> {
                 Rel states = affine.claim().statedRelation();
                 LinearForm<NumericTerm> against;
                 switch (affine.form().minus(LinearForm.constant(affine.cut()))) {

@@ -455,6 +455,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",
                     "which arithmetic an expression composes into a form"),
+            new Held("souther.compiler.check.AffineForms.quotientTold",
+                    "asks the operator's own account whether a quotient it composed can still"
+                            + " stop a run, so that a reading says it did not tell of every"
+                            + " operation"),
+            new Held("souther.compiler.partition.AffineReading.1.composed",
+                    "asks the operator's own account where an operation a comparison works out"
+                            + " answers, so that a row is asked to get past it"),
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",
