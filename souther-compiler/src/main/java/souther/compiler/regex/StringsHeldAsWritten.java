@@ -11,6 +11,7 @@ import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
 
 /**
  * The strings of a language a {@code String} holds as they are written: every one of them is in
@@ -79,6 +80,11 @@ public final class StringsHeldAsWritten {
             at += Character.charCount(codePoint);
         }
         return machine.stopsAt(state);
+    }
+
+    /** These as a language, or null past what {@code meter} allows. */
+    Language language(Meter meter) {
+        return Language.canonical(machine, meter);
     }
 
     /**

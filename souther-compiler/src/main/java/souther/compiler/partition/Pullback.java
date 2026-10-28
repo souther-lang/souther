@@ -2533,6 +2533,49 @@ final class Pullback {
                         piece.from(), piece.first());
     }
 
+    /** The piece {@code side} is: one of the pieces a statement is about, or the one at an index. */
+    private Quantity aPieceOrTheOneAtAnIndex(Denotation side) {
+        Quantity.APieceOf some = aPiece(side);
+        return some != null ? some : thePieceAt(side);
+    }
+
+    /**
+     * The piece {@code side} is, where it is the element a list lookup at an index written down
+     * picks of the pieces of a string of the input — or null where it is not.
+     *
+     * <p>The arm that opens the lookup binds the element, which InputReads records as picked at the
+     * index of the list; the list is the pieces when it is what a split at one code point answered.
+     * It is one piece, the one at that index, whichever statement it is read inside.
+     */
+    private Quantity.ThePieceAt thePieceAt(Denotation side) {
+        Denotation stands = side.at().standing(side.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        // A name wearing a string is the string: where the construction is attempted the value
+        // is the one handed it, which is the case the comparison is reached in.
+        while (Core.withoutStanding(stands.value()) instanceof Core.Construct made
+                && made.values().size() == 1
+                && made.typeName() instanceof TypeSymbol.AtModule named
+                && read.rules().newtypes().of(named.key())) {
+            stands = stands.at().standing(made.values().getFirst().value(),
+                    read.rules().symbols(), read.rules().newtypes());
+        }
+        InputReads.PickedAtAnIndex picked = stands.at().pickedAtAnIndex(stands.value());
+        if (picked == null || picked.index() > Integer.MAX_VALUE) {
+            return null;
+        }
+        Pieces pieces = piecesOf(picked.list().at().standing(picked.list().value(),
+                read.rules().symbols(), read.rules().newtypes()));
+        if (pieces == null || pieces.separator().isEmpty()) {
+            return null;
+        }
+        Quantity string = valueOfTheInput(
+                pieces.split().args().get(pieces.parted().string().position()), pieces.at());
+        return !(string instanceof DecisionAtom.OfTheInput)
+                && !(string instanceof Quantity.WhatAnOperationAnswers) ? null
+                : new Quantity.ThePieceAt(pieces.operation(), pieces.separator().getAsInt(),
+                        string, (int) picked.index());
+    }
+
     /** A statement read of each value a container written out holds, or why it was not. */
     private sealed interface WrittenOutRead {
 
@@ -6293,6 +6336,8 @@ final class Pullback {
                     out.addAll(answers.positionsItIsMadeOf());
                 } else if (atom instanceof Quantity.APieceOf piece) {
                     out.addAll(piece.positionsItIsMadeOf());
+                } else if (atom instanceof Quantity.ThePieceAt piece) {
+                    out.addAll(piece.positionsItIsMadeOf());
                 } else if (atom instanceof Quantity.IsAmongThePieces among) {
                     out.addAll(among.positionsItIsMadeOf());
                 }
@@ -6315,7 +6360,7 @@ final class Pullback {
     private Derivation overQuantitiesCounting(ASide left, ASide right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         List<Denotation> calls = new ArrayList<>();
-        List<Quantity.APieceOf> pieces = new ArrayList<>();
+        List<Quantity> pieces = new ArrayList<>();
         Derivation unread = null;
         for (ASide each : List.of(left, right)) {
             Denotation side = each.whole();
@@ -6365,8 +6410,8 @@ final class Pullback {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> {
                     // A value a walk was handed, such as a piece a closure wrapped, is a name for a
                     // value and may be a piece of a string.
-                    Quantity.APieceOf piece = soleQuantity(form) instanceof Quantity.OfABinding
-                            && !elementsMet.crowded() ? aPiece(side) : null;
+                    Quantity piece = soleQuantity(form) instanceof Quantity.OfABinding
+                            && !elementsMet.crowded() ? aPieceOrTheOneAtAnIndex(side) : null;
                     sides.add(form);
                     calls.add(piece == null && madeOfWhereItStopped(form) ? callOf(side) : null);
                     pieces.add(piece);
@@ -6383,8 +6428,8 @@ final class Pullback {
                     // string a statement about some piece is read of; nothing is read past any
                     // other stop.
                     Denotation call = elementsMet.crowded() ? null : callOf(side);
-                    Quantity.APieceOf piece =
-                            call != null || elementsMet.crowded() ? null : aPiece(side);
+                    Quantity piece = call != null || elementsMet.crowded() ? null
+                            : aPieceOrTheOneAtAnIndex(side);
                     if (call == null && piece == null) {
                         return unread != null ? unread : stop;
                     }
@@ -6446,7 +6491,7 @@ final class Pullback {
      * the two.
      */
     private Related answeredApart(List<LinearForm<Quantity>> asRead, List<Denotation> calls,
-                                  List<Quantity.APieceOf> pieces, Rel states) {
+                                  List<Quantity> pieces, Rel states) {
         if (states != Rel.EQ && states != Rel.NE && calls.stream().anyMatch(call -> call != null
                 && Carrier.ofValue(call.value().type(), read.rules().declarations())
                         instanceof Carrier carrier && carrier.counts())) {
@@ -6576,6 +6621,7 @@ final class Pullback {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
                 case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                 case Quantity.APieceOf piece -> piece.positionsItIsMadeOf();
+                case Quantity.ThePieceAt piece -> piece.positionsItIsMadeOf();
                 default -> null;
             };
             if (terms == null) {

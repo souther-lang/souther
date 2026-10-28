@@ -289,13 +289,17 @@ sealed interface ComparisonAssessment {
      * @param mayStopBefore those of {@code undivided} a run may stop on the way to some relation
      *                  about on what nothing here says, so that every value there getting to the
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
+     * @param partnered each string position the relation is shown to part by the strings its
+     *                  partner can hold, where the partner is a piece of a string
      */
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
                                Set<FilingCoordinate> undivided, List<AtAPosition> settling,
                                Optional<DrawnBeside> beside,
                                Map<FilingCoordinate, Set<Figure>> stoppedAt,
-                               Set<FilingCoordinate> mayStopBefore)
+                               Set<FilingCoordinate> mayStopBefore,
+                               Map<NumericTerm.FromOnePosition,
+                                       UndividedByARelation.StringsAPartnerCanHold> partnered)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
@@ -307,6 +311,7 @@ sealed interface ComparisonAssessment {
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
             settling = List.copyOf(settling);
+            partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
             Objects.requireNonNull(beside, "drawn beside something, or nothing");
             if (beside.isEmpty() && !settling.isEmpty()) {
                 throw new IllegalArgumentException("a line is drawn beside a comparison");
@@ -319,7 +324,8 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of()).whereRowsArrive(reading, List.of(), witnesses);
+                    beside, Map.of(), Set.of(), Map.of())
+                    .whereRowsArrive(reading, List.of(), witnesses);
         }
 
         /** The same, with what it leaves undivided over the rows that arrive along {@code ways}. */
@@ -368,7 +374,34 @@ sealed interface ComparisonAssessment {
                 }
             }
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped,
-                    stops);
+                    stops, partedByTheirPartners(about, leaves));
+        }
+
+        /**
+         * Each string position some relation shows parted by the strings its partner can hold
+         * where every relation about its place shows it parted by the same strings.
+         */
+        private static Map<NumericTerm.FromOnePosition,
+                UndividedByARelation.StringsAPartnerCanHold> partedByTheirPartners(
+                List<Set<FilingCoordinate>> about,
+                List<UndividedByARelation.WhatItLeaves> leaves) {
+            Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> out =
+                    new LinkedHashMap<>();
+            for (UndividedByARelation.WhatItLeaves each : leaves) {
+                each.partnered().forEach((term, strings) -> {
+                    FilingCoordinate at = FilingCoordinate.of(term);
+                    boolean alike = true;
+                    for (int i = 0; i < leaves.size(); i++) {
+                        if (about.get(i).contains(at)) {
+                            alike &= strings.equals(leaves.get(i).partnered().get(term));
+                        }
+                    }
+                    if (alike) {
+                        out.putIfAbsent(term, strings);
+                    }
+                });
+            }
+            return out;
         }
 
         /**
@@ -399,17 +432,19 @@ sealed interface ComparisonAssessment {
             return out;
         }
 
-        /** The places a line on one of them parts the values that settle the relation at. */
+        /** The places a line on one of them parts the values that settle the relation at, and the
+         *  places the strings their partner can hold part. */
         Set<FilingCoordinate> dividedBySettling() {
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             settling.forEach(line -> out.addAll(line.cutting().over()));
+            partnered.keySet().forEach(term -> out.add(FilingCoordinate.of(term)));
             return out;
         }
 
         /** The same relation with only {@code lines} parting what settles it. */
         AgainstAnotherValue partedBy(List<AtAPosition> lines) {
             return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside,
-                    stoppedAt, mayStopBefore);
+                    stoppedAt, mayStopBefore, partnered);
         }
     }
 

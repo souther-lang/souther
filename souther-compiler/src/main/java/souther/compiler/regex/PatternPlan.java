@@ -238,6 +238,19 @@ public final class PatternPlan {
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
         public static final Budget OF_A_FOLD = new Budget(50_000, 200_000, 50_000_000);
+
+        /**
+         * What making the machine for the pieces at an index of the strings of a language is
+         * allowed to cost.
+         *
+         * <p>Its own, because what it decides is only whether a string compared with such a piece
+         * is parted by what the piece can be. Spent from what a reading of the rules is allowed,
+         * a comparison would change what the model is read to admit.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_THE_PIECES_OF_A_LANGUAGE =
+                new Budget(50_000, 200_000, 50_000_000);
     }
 
     /**

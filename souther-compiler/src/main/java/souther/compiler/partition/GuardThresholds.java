@@ -848,12 +848,16 @@ public final class GuardThresholds {
     private static List<BehaviorSetStatements.Partnered> stringsPartnersCanHold(
             String behavior, ModelOccurrence stated, SourceConstructOrigin wrote,
             RuleReportAnchor anchor, ComparisonAssessment read, int first) {
-        if (!(read instanceof ComparisonAssessment.AcrossPositions across)) {
-            return List.of();
-        }
+        Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> partnered =
+                switch (read) {
+                    case ComparisonAssessment.AcrossPositions across ->
+                            across.left().partnered();
+                    case ComparisonAssessment.AgainstAnotherValue against -> against.partnered();
+                    default -> Map.of();
+                };
         List<BehaviorSetStatements.Partnered> out = new ArrayList<>();
         for (Map.Entry<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>
-                each : across.left().partnered().entrySet()) {
+                each : partnered.entrySet()) {
             UndividedByARelation.StringsAPartnerCanHold strings = each.getValue();
             PredicateOrigin origin = new PredicateOrigin(
                     new PredicateOccurrence(first + out.size()),

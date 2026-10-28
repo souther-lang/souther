@@ -55,6 +55,11 @@ public final class Language {
         this.machine = canonical;
     }
 
+    /** The machine, for a builder in this package that makes a language out of another. */
+    Automaton machine() {
+        return machine;
+    }
+
     /**
      * The strings {@code made} stops on, where making the one machine for them is within what
      * {@code meter} allows.
