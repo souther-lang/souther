@@ -158,10 +158,14 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void aQuotientBesideTheStopIsNotTheStopsToAnswerFor() {
-        assertEquals(UndividedByARelation.Working.UNREAD,
-                workingOfTheStop("(m * k) / n >= 100"));
-        assertEquals(UndividedByARelation.Working.UNREAD,
-                workingOfTheStop("m * k >= n / m"));
+        assertUnread(workingOfTheStop("(m * k) / n >= 100"));
+        assertUnread(workingOfTheStop("m * k >= n / m"));
+    }
+
+    /** No row is shown computed, and no operation is told. */
+    private static void assertUnread(UndividedByARelation.Working working) {
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, working.told(), working::toString);
+        assertTrue(working.operations().isEmpty(), working::toString);
     }
 
     /**
@@ -170,8 +174,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void aConstructionAroundTheStopStillChecksItsInvariant() {
-        assertEquals(UndividedByARelation.Working.UNREAD,
-                workingOfTheStop(CHECKED, "Pos(m * k).value + n >= 100"));
+        assertUnread(workingOfTheStop(CHECKED, "Pos(m * k).value + n >= 100"));
     }
 
     /**
@@ -181,7 +184,6 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void aQuotientAddedToAProductIsNotTheQuotientsToAnswerFor() {
-        assertEquals(UndividedByARelation.Working.UNREAD,
-                workingOfTheRule("n / m + k * k >= 100"));
+        assertUnread(workingOfTheRule("n / m + k * k >= 100"));
     }
 }

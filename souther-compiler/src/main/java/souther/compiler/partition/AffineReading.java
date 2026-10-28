@@ -899,7 +899,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     told.exact = false;
                 }
             }
-            return told.working();
+            // The stopped expression is worked out too, and a run may stop in it before any
+            // operation told.
+            return told.working().notOnEveryRun();
         }
     }
 

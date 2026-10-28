@@ -213,8 +213,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param told whether the reading of the comparison told of every operation that can stop a
      *             run, only some, or was not made
+     * @param onEveryRun whether every run that gets to the comparison works the operations out,
+     *                   and works out nothing that can stop it before them: not where they are
+     *                   those of one arm of a choice, or those beside an expression another
+     *                   analysis answers for
      */
-    record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
+    record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
+                   boolean onEveryRun) {
+
+        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
+            this(operations, told, true);
+        }
 
         /** No reading of the comparison was made, and the program is taken to add the form up.
          *  That holds for the relations read from the cut of a comparison (a product, a whole and
@@ -257,10 +266,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return earlier;
             }
             List<IntOperation> both = new ArrayList<>(earlier.operations);
-            both.addAll(operations);
+            for (IntOperation each : operations) {
+                // What an operation is worked out of is told by where it stands among them.
+                both.add(new IntOperation(each.form(), each.least(), each.greatest(),
+                        each.after().stream().map(at -> at + earlier.operations.size())
+                                .toList()));
+            }
             return new Working(both, earlier.exact() && exact()
                     ? WhatARelationLeavesUndivided.Told.EVERY
-                    : WhatARelationLeavesUndivided.Told.SOME);
+                    : WhatARelationLeavesUndivided.Told.SOME,
+                    earlier.onEveryRun && onEveryRun);
+        }
+
+        /** The same operations, for a relation not every run that gets to the comparison reaches. */
+        Working notOnEveryRun() {
+            return new Working(operations, told, false);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -995,7 +1015,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                of the rows a run stops at
      */
     List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
-        if (!working.exact()) {
+        if (!working.exact() || !working.onEveryRun()) {
             return List.of();
         }
         List<IntOperation> operations = working.operations();

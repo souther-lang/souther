@@ -9090,7 +9090,7 @@ final class Pullback {
                 || !(cut instanceof Derivation.AComparisonRead made)) {
             return;
         }
-        UndividedByARelation.Working told = working;
+        UndividedByARelation.Working told = working.notOnEveryRun();
         for (UndividedByARelation.Working earlier : beforeTheFork) {
             told = told.after(earlier);
         }
