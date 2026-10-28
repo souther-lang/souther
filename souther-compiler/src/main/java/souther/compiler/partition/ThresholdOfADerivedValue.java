@@ -29,6 +29,19 @@ import java.util.Optional;
 public sealed interface ThresholdOfADerivedValue {
 
     /**
+     * Whether this is a threshold of a computation cut at several places, whose weights the
+     * computation owes once for all of its thresholds. A bound told only by the data it is held in
+     * is no computation's: nothing about its weights is owed elsewhere, so what stands beside its
+     * border is asked as it is of any other.
+     */
+    default boolean isOfAComputation() {
+        return switch (this) {
+            case WrittenAt _, CutAt _ -> true;
+            case HeldIn _ -> false;
+        };
+    }
+
+    /**
      * The bound the comparison was written against, as the table holds it.
      *
      * @param value  the computation the bound is a threshold of

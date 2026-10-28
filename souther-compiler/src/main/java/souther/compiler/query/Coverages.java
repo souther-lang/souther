@@ -54,6 +54,7 @@ import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
@@ -1666,7 +1667,9 @@ final class Coverages {
         // placed it. The weights of that computation are owed once for it, so this border is asked
         // nothing about them, and that comes before whether the rows were read: what is owed
         // elsewhere cannot be left unsettled here.
-        if (ofOneLine.getFirst().border().threshold().isPresent()) {
+        if (ofOneLine.getFirst().border().threshold()
+                .filter(ThresholdOfADerivedValue::isOfAComputation)
+                .isPresent()) {
             return new AnotherLineTheRowsAllow.OwedByTheComputation();
         }
         // Nothing was read against the line, which is the line's and not one reading's: what says
