@@ -100,6 +100,69 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                 + " else gradeIn(config.second, a.v)");
     }
 
+    private static String limits(String second, String chosen) {
+        return """
+                module demo
+
+                data N = { v: Int }
+                    invariant v >= 0
+                data Limit = { lowerBound: Int }
+                let first: Limit = Limit { lowerBound = 100 }
+                let second: Limit = Limit { lowerBound = %s }
+
+                behavior f : (a: N, useFirst: Bool) -> Int
+
+                let f (a, useFirst) =
+                    { let chosen = %s
+                        if chosen.lowerBound <= a.v then 2 else 1 }
+
+                example f
+                    | (N { v = 100 }, true) -> 2
+                    | (N { v = 99 }, true) -> 1
+                    | (N { v = 101 }, true) -> 2
+                    | (N { v = 98 }, true) -> 1
+                """.formatted(second, chosen);
+    }
+
+    /** A limit a condition chooses is whichever the condition says: rows through the first leave
+     *  the points where the second is chosen owed. */
+    @Test
+    void aLimitChosenByAConditionIsOwedWhereEachIsChosen() {
+        String report = reportOf(limits("100", "if useFirst then first else second"));
+        assertTrue(owedAtTheBound(report).stream()
+                .anyMatch(each -> each.contains("ON point")), report);
+        assertTrue(report.contains("where useFirst is false"), report);
+    }
+
+    /** And a bound written wrong in the one rows never choose is shown by no row. */
+    @Test
+    void aBoundWrittenWrongInTheLimitNoRowChoosesIsOwed() {
+        String report = reportOf(limits("1000", "if useFirst then first else second"));
+        assertTrue(report.contains("= 1000"), report);
+    }
+
+    /** A limit handed to a helper is chosen the same way. */
+    @Test
+    void aLimitHandedToAHelperAfterAChoiceIsOwedWhereEachIsChosen() {
+        String report = reportOf(limits("1000", "if useFirst then first else second")
+                .replace("if chosen.lowerBound <= a.v then 2 else 1",
+                        "atLeast(chosen, a.v)")
+                .replace("behavior f :", "let atLeast (l: Limit, m: Int): Int =\n"
+                        + "                    if l.lowerBound <= m then 2 else 1\n\n"
+                        + "                behavior f :"));
+        assertTrue(report.contains("= 1000"), report);
+    }
+
+    /** A table a condition chooses is no position a fold runs over, which the report says in so
+     *  many words and never as every point met. */
+    @Test
+    void aTableChosenByAConditionIsSaidToBeUnreadNotMet() {
+        String report = reportOf(model(Shape.FLAT,
+                "{ let chosen = if useFirst then first else second\n        gradeIn(chosen, a.v) }"));
+        assertTrue(report.contains("what is no position of the input"), report);
+        assertTrue(report.contains("adequacy: not satisfied"), report);
+    }
+
     private static void assertOwedAtTheBound(int expected, Shape shape, String call) {
         String report = reportOf(model(shape, call));
         assertEquals(expected, owedAtTheBound(report).size(), report);
