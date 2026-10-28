@@ -48,10 +48,6 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
             let classify (n, m, k) = if %s then Yes else No
             """;
 
-    private static ReadComparisons readOf(String condition) {
-        return readOf(SOURCE, condition);
-    }
-
     private static ReadComparisons readOf(String source, String condition) {
         return ReadComparisons.of(source.formatted(condition), "classify");
     }
