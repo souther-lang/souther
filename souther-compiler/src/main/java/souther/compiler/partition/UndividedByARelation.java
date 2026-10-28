@@ -201,6 +201,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         static final Working NOTHING =
                 new Working(List.of(), WhatARelationLeavesUndivided.Told.NOTHING_SAID);
 
+        /** A comparison was read and nothing it told is known to belong to this relation: no row
+         *  is shown computed. */
+        static final Working UNREAD =
+                new Working(List.of(), WhatARelationLeavesUndivided.Told.SOME);
+
+        /**
+         * What several readings of one relation tell together: the same where they agree, and
+         * otherwise nothing that holds of the rows of every one of them. A row arrives along one
+         * reading, and an operation told by another is not one it is asked to get past.
+         */
+        static Working together(List<Working> readings) {
+            Working first = readings.getFirst();
+            return readings.stream().allMatch(first::equals) ? first : UNREAD;
+        }
+
         Working {
             operations = List.copyOf(operations);
             Objects.requireNonNull(told, "what the reading told, or that there was none");

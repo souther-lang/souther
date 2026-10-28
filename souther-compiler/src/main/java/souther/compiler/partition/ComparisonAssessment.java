@@ -918,7 +918,7 @@ sealed interface ComparisonAssessment {
                          Cutting.Read.AnswersNowhere _, Cutting.Read.Several _,
                          Cutting.Read.StatesNoRelation _ ->
                             aLine(part.line(), at, read, drawnByAnInvariant, aboutNoPosition,
-                                    witnesses, () -> UndividedByARelation.Working.NOTHING);
+                                    witnesses, part::working);
                 }, part.cases()))
                 .toList());
     }
@@ -1494,6 +1494,7 @@ sealed interface ComparisonAssessment {
     private static ComparisonAssessment onTheQuantity(
             Citation at, Cutting cutting, AuthoredPointMapping authored, InputReading read,
             boolean drawnByAnInvariant, CountWitnesses.Lookup witnesses) {
+        // A line made on one term against a place: its form is that term and nothing is added.
         return onTheQuantity(at, cutting, authored, read, drawnByAnInvariant, witnesses,
                 UndividedByARelation.Working.NOTHING);
     }
