@@ -108,8 +108,8 @@ final class CallExampleSeeds {
      * what the first of {@code bases} has there, or nothing is composed where there is no base and
      * the callee's row does not fill them all.
      *
-     * <p>A row the caller has written is not offered again, and takes none of the rows tried: it
-     * costs no build. It is the same row when its inputs are the inputs of the written one and
+     * <p>A row the caller has written is not offered again, and the first lift to it takes none of
+     * the rows tried: it costs no build. It is the same row when its inputs are the inputs of the written one and
      * both are answered by the module's table for each dependency; a written row with a
      * {@code with} of its own, or a base that answers with a value of its own, is not compared
      * and the row is offered.
@@ -159,6 +159,7 @@ final class CallExampleSeeds {
                 base == null ? List.of() : base.answers(),
                 db.ask(new Names.FakeTables(module)).value());
         Set<List<String>> considered = new HashSet<>();
+        Set<List<String>> skipped = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;
         for (Call call : calls) {
@@ -180,9 +181,10 @@ final class CallExampleSeeds {
                         : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
                         .map(each -> each == null ? null : each.text()).toList();
-                // A row the author has written costs no build, so it takes none of the rows
-                // tried.
-                if (lifted.isPresent() && alreadyWritten.contains(key)) {
+                // A row the author has written costs no build, so the first lift to it takes none
+                // of the rows tried. One written row is skipped once, so the rows looked at past
+                // the limit are no more than the rows the author wrote.
+                if (lifted.isPresent() && alreadyWritten.contains(key) && skipped.add(key)) {
                     continue;
                 }
                 if (tried++ == limit) {
@@ -256,7 +258,7 @@ final class CallExampleSeeds {
         return stated.standIns().stream().allMatch(each ->
                 declared.declaredFor(each.dependency()) instanceof
                         FakeTables.Declaration.One(FakeTables.Occurrence.Resolved table)
-                        && table.read().pos().equals(each.at()));
+                        && declared.writtenAt(each.at()).filter(table::equals).isPresent());
     }
 
     /** What each input of {@code row} is written as, empty where it cannot be. */

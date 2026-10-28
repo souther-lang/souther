@@ -75,6 +75,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 
@@ -1583,10 +1584,10 @@ public final class Output {
                                             + with.pos() + " answers")));
                 }
             }
-            for (FakeTables.Occurrence written : prepared.forExamples().fakes().written()) {
-                if (written.read().pos().equals(stoodIn.at())) {
-                    return definitionsOf(prepared, written.read(), stoodIn);
-                }
+            Optional<FakeTables.Occurrence> written =
+                    prepared.forExamples().fakes().writtenAt(stoodIn.at());
+            if (written.isPresent()) {
+                return definitionsOf(prepared, written.get().read(), stoodIn);
             }
             throw new IllegalStateException("what stands in for `" + stoodIn.dependency()
                     + "` is read as written at " + stoodIn.at() + ", where the module writes"
