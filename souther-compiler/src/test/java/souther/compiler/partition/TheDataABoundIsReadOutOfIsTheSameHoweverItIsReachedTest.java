@@ -223,6 +223,49 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
         assertEquals(2, placesInTheDocument(twice).size(), placesInTheDocument(twice).toString());
     }
 
+    /** A table of the bounds themselves: the number is an element of the table it was taken from. */
+    @Test
+    void aBoundThatIsAnElementOfAListOfNumbersIsReadOutOfThatList() {
+        String source = """
+                module demo
+
+                data N = { v: Int }
+                    invariant v >= 0
+                let first: List<Int> = [0, 100]
+                let second: List<Int> = [0, 100]
+                let gradeIn (bounds: List<Int>, m: Int): Int =
+                    List.fold((acc, b) -> if b <= m then acc + 1 else acc, 0, bounds)
+
+                behavior f : (a: N, useFirst: Bool) -> Int
+
+                let f (a, useFirst) =
+                    if useFirst then gradeIn(first, a.v) else gradeIn(second, a.v)
+
+                example f
+                    | (N { v = 100 }, true) -> 2
+                    | (N { v = 99 }, true) -> 1
+                    | (N { v = 101 }, true) -> 2
+                    | (N { v = 98 }, true) -> 1
+                """;
+        assertEquals(2, placesInTheDocument(source).size(), placesInTheDocument(source).toString());
+    }
+
+    /** What is in a folded expression and takes no part in its number is no data of the bound. */
+    @Test
+    void aNameNothingReadsInAFoldedExpressionIsNoDataOfTheBound() {
+        String labelled = helperOver("if String.length(l.label) <= m then 2 else 1", TWO_LIMITS)
+                .replace("data Limit = { lowerBound: Int }", "data Limit = { label: String }")
+                .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
+                .replace("let second: Limit = Limit { label = \"aaaa\" }",
+                        "let second: Limit = Limit { label = \"bbbb\" }");
+        String idle = labelled.replace("let first:", "let third: Limit = Limit { label = \"cccc\" }\n"
+                        + "                let first:")
+                .replace("if String.length(l.label) <= m then 2 else 1",
+                        "if String.length({ let idle = third.label\n        l.label }) <= m"
+                                + " then 2 else 1");
+        assertEquals(2, placesInTheDocument(idle).size(), placesInTheDocument(idle).toString());
+    }
+
     /** A number handed to a helper is read out of what the caller read it out of: a field of a
      *  limit handed as a number is that limit's, and two calls with two limits are two data. */
     @Test

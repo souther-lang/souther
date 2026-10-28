@@ -53,9 +53,6 @@ final class DataOrigins {
     /** The arithmetic a bound is read as a number by, which says what a number is made of. */
     private final AffineForms.Reading<Quantity, InputReads> arithmetic;
 
-    /** The names whose makings have been read, in the one bound this is asked of. */
-    private final Set<BindingId> numbered = new HashSet<>();
-
     /** What each root binding is called, for a reader; no part of which data it is. */
     private final Map<BindingId, String> called = new LinkedHashMap<>();
 
@@ -72,53 +69,83 @@ final class DataOrigins {
         // is asked of that and this answers only where each of those was read out of.
         AffineForms.outcome(number, reads, arithmetic, new AffineForms.Consumed<>() {
             @Override
-            public void written(Core expression, InputReads at) {
-                collectIn(expression, at, Set.of(), origins);
+            public void read(Core expression, InputReads at) {
+                origins.addAll(readAt(expression, at));
             }
 
             @Override
-            public void folded(Core expression, InputReads at) {
-                collectIn(expression, at, Set.of(), origins);
+            public void written(Core expression, InputReads at) {
+                origins.addAll(writtenAt(expression, at, Set.of()));
             }
         });
-        return origins.isEmpty() ? null : new BoundHeldIn(List.copyOf(origins), called);
+        return origins.isEmpty() ? null
+                : new BoundHeldIn(List.copyOf(finest(origins)), called);
     }
 
     /**
-     * Where everything {@code expression} is made of is read out of: a field of some data, an
-     * element of a container, and what each name in it was given, however that is made — a field,
-     * an arithmetic over fields, a fold of one. Nothing for a value of no place, which a literal is.
-     *
-     * <p>One answer for a value written where it is compared and for an expression folded to one: a
-     * name is followed to what it was given, and what that is made of is asked again of it, so a
-     * number named by a {@code let} is read as the number it is named for.
-     *
-     * <p>{@code onPath} is the bindings this is inside of, which is what a cycle is. A name is read
-     * once for the bound, since what it was made of is the same wherever it is read from and a value
-     * that names the same binding twice would otherwise be read once for each way down to it.
+     * The places read, less each one a field of it was read out of as well: a record is read to
+     * read a field of it, and the number is the field's. What is left of a place is where nothing
+     * finer was read — an element that is itself the number.
      */
-    private void collectIn(Core expression, InputReads at, Set<BindingId> onPath,
-                           Set<Location> into) {
-        Core node = Core.withoutStanding(expression);
-        switch (node) {
-            case Core.FieldAccess _, Core.FieldProjection _ ->
-                    into.addAll(originsOf(node, at, onPath));
-            case Core.Read name -> {
-                if (onPath.contains(name.binding()) || !numbered.add(name.binding())) {
-                    return;
-                }
-                if (!at.containersTheElementCameFrom(name).isEmpty()) {
-                    into.addAll(originsOf(name, at, onPath));
-                } else if (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
-                        instanceof ReadMeaning.Through through) {
-                    collectIn(through.denotes().value(), through.denotes().at(),
-                            with(onPath, name.binding()), into);
-                }
+    private static Set<Location> finest(Set<Location> places) {
+        Set<Location> out = new LinkedHashSet<>();
+        for (Location each : places) {
+            boolean readFurther = places.stream().anyMatch(other -> !other.equals(each)
+                    && other.root().equals(each.root())
+                    && other.path().size() > each.path().size()
+                    && other.path().subList(0, each.path().size()).equals(each.path()));
+            if (!readFurther) {
+                out.add(each);
             }
-            default -> ScopeStep.forEachChild(node, (child, step) -> collectIn(child,
-                    at.entering(step, read.rules().symbols(), read.rules().newtypes()), onPath,
-                    into));
         }
+        return out;
+    }
+
+    /**
+     * Where a place the evaluation read is read out of: a field of some data, or an element of a
+     * container. A name that is neither is nothing here, since the evaluation went on from what it
+     * stands for and told what it read there.
+     *
+     * <p>Asked of what was read and not of what is written around it, so a value nothing evaluated
+     * is no data of the number, and a name that stands for several values is told before it is
+     * expanded to them.
+     */
+    private Set<Location> readAt(Core expression, InputReads at) {
+        return switch (Core.withoutStanding(expression)) {
+            case Core.FieldAccess field -> originsOf(field, at, Set.of());
+            case Core.FieldProjection projection -> originsOf(projection, at, Set.of());
+            case Core.Read name -> at.containersTheElementCameFrom(name).isEmpty() ? Set.of()
+                    : originsOf(name, at, Set.of());
+            default -> Set.of();
+        };
+    }
+
+    /**
+     * Where a value the evaluation ended in is read out of: found by following the names from
+     * {@code leaf}, which is the one thing the evaluation did not do and so is done here, and
+     * nothing where it is a value of no place, which a literal is.
+     *
+     * <p>{@code onPath} is the bindings this is inside of, which is what a cycle is.
+     */
+    private Set<Location> writtenAt(Core leaf, InputReads at, Set<BindingId> onPath) {
+        return switch (Core.withoutStanding(leaf)) {
+            case Core.FieldAccess field -> originsOf(field, at, onPath);
+            case Core.FieldProjection projection -> originsOf(projection, at, onPath);
+            case Core.Read name -> onPath.contains(name.binding()) ? Set.of()
+                    : !at.containersTheElementCameFrom(name).isEmpty()
+                            ? originsOf(name, at, onPath)
+                            : writtenAtWhatNameWasGiven(name, at, onPath);
+            default -> Set.of();
+        };
+    }
+
+    private Set<Location> writtenAtWhatNameWasGiven(Core.Read name, InputReads at,
+                                                    Set<BindingId> onPath) {
+        return at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                instanceof ReadMeaning.Through through
+                ? writtenAt(through.denotes().value(), through.denotes().at(),
+                        with(onPath, name.binding()))
+                : Set.of();
     }
 
     private Set<Location> originsOf(Core value, InputReads at, Set<BindingId> onPath) {

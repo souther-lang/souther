@@ -597,10 +597,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/DataOrigins", "originsOf",
                 "(" + core + reads + "Ljava/util/Set;)Ljava/util/Set;", Reading.NAMES,
                 READS_THE_NAMES);
-        row(out, c + "partition/DataOrigins", "collectIn",
-                "(" + core + reads + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
-                "finds the places an expression reads: a projection is one place, read whole,"
-                        + " and what is under it is no other place of the expression");
         row(out, c + "partition/DataOrigins", "answeredBy",
                 "(" + core + reads + "Ljava/util/Set;)Ljava/util/Set;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
