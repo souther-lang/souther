@@ -374,7 +374,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public boolean makingEndsNoRun(Core.Construct construct) {
-                return ClausesInOrder.at(construct, ruleSource).inOrder().isEmpty();
+                return ClausesInOrder.at(construct, ruleSource).governsNothing();
             }
 
             @Override
