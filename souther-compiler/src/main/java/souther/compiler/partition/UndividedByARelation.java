@@ -419,11 +419,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
 
-        Side(List<FilingCoordinate> madeOf, ExactRatio weight, NumericTerm number,
-             Quantity.ReadAlongAContainer along) {
-            this(madeOf, weight, number, along, null);
-        }
-
         /** The end a walk keeping one carried into its step, where this is that; null
          *  otherwise. */
         Quantity.KeptSoFar kept() {
@@ -588,21 +583,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         each.getValue());
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null, null);
+                        each.getValue(), null, null, null);
                 case Quantity.APieceOf piece -> new Side(
                         piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null, null);
+                        each.getValue(), null, null, null);
                 case Quantity.ThePieceAt piece -> new Side(
                         piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null, piece);
                 case Quantity.IsAmongThePieces among -> new Side(
                         among.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null, null);
+                        each.getValue(), null, null, null);
                 case Quantity.OfABinding bound -> new Side(List.of(), each.getValue(), null,
-                        bound.handed().orElse(null));
+                        bound.handed().orElse(null), null);
                 case Quantity.HowManyMeet counted -> new Side(List.of(), each.getValue(), null,
-                        counted);
-                default -> new Side(List.of(), each.getValue(), null, null);
+                        counted, null);
+                default -> new Side(List.of(), each.getValue(), null, null, null);
             });
         }
         return new UndividedByARelation(sides, form.constant(), relation, List.of(), Kind.AFFINE,
@@ -625,9 +620,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     static UndividedByARelation ofTwoPositions(TermPath one, TermPath other) {
         return new UndividedByARelation(List.of(
                 new Side(List.of(FilingCoordinate.at(one)), ExactRatio.ONE,
-                        new NumericTerm.ValueOf(one), null),
+                        new NumericTerm.ValueOf(one), null, null),
                 new Side(List.of(FilingCoordinate.at(other)), ExactRatio.ONE.negated(),
-                        new NumericTerm.ValueOf(other), null)), ExactRatio.ZERO, Rel.EQ,
+                        new NumericTerm.ValueOf(other), null, null)), ExactRatio.ZERO, Rel.EQ,
                 List.of(), Kind.AFFINE, null);
     }
 
@@ -653,7 +648,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<Side> sides = new ArrayList<>();
         sides.add(new Side(dividend.coefs().keySet().stream().map(FilingCoordinate::of).toList(),
-                ExactRatio.ONE, null, null));
+                ExactRatio.ONE, null, null, null));
         added.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
         return new UndividedByARelation(sides, level.negated(), relation, List.of(), Kind.AFFINE,
                 new RemainderSide(dividend, shift, divisor));
@@ -689,7 +684,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
-        return new Side(List.of(FilingCoordinate.of(term)), weight, term, null);
+        return new Side(List.of(FilingCoordinate.of(term)), weight, term, null, null);
     }
 
     /** The places shown undivided over what the declarations leave. */

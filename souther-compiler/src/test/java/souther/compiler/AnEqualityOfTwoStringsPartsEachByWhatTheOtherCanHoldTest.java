@@ -8,6 +8,7 @@ import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -48,7 +49,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
-        Map<String, List<String>> out = new java.util.TreeMap<>();
+        Map<String, List<String>> out = new TreeMap<>();
         all.get("f").axes().forEach(axis -> out.put(axis.path(), axis.classes()));
         return out;
     }
@@ -76,7 +77,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
-        Map<String, List<String>> out = new java.util.TreeMap<>();
+        Map<String, List<String>> out = new TreeMap<>();
         all.get("f").axes().stream()
                 .filter(axis -> axis.path().equals("a") || axis.path().equals("b"))
                 .forEach(axis -> out.put(axis.path(), axis.classes()));
@@ -164,7 +165,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
-        Map<String, List<String>> out = new java.util.TreeMap<>();
+        Map<String, List<String>> out = new TreeMap<>();
         all.get("f").axes().stream().filter(axis -> axis.path().equals(path))
                 .forEach(axis -> out.put(axis.path(), axis.classes()));
         return out;

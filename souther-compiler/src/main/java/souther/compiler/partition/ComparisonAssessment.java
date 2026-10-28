@@ -318,16 +318,6 @@ sealed interface ComparisonAssessment {
             }
         }
 
-        /** A relation no string of which is parted by what its partner can hold. */
-        AgainstAnotherValue(List<FilingCoordinate> filedAt, List<UndividedByARelation> relations,
-                            Set<FilingCoordinate> undivided, List<AtAPosition> settling,
-                            Optional<DrawnBeside> beside,
-                            Map<FilingCoordinate, Set<Figure>> stoppedAt,
-                            Set<FilingCoordinate> mayStopBefore) {
-            this(filedAt, relations, undivided, settling, beside, stoppedAt, mayStopBefore,
-                    Map.of());
-        }
-
         /** {@code read}, with what it leaves undivided over what the declarations leave, and the
          *  lines parting what settles it drawn {@code beside}. */
         static AgainstAnotherValue of(Cutting.Read.AgainstAnotherValue read,
