@@ -152,14 +152,16 @@ public final class WhatARelationLeavesUndivided {
      * the relation does not say, and this does.
      *
      * @param coefs the weight of each term in the sum, by the key the term is called
-     *              ({@link Term#key}); a term the sum does not read is not in it
+     *              ({@link Term#key}); a term the sum does not read is not in it. A sum that reads
+     *              none is a number the input does not move, and still an operation: where it
+     *              lies outside the ends, no row gets past it
      */
     public record IntSum(Map<Object, ExactRatio> coefs, ExactRatio constant, BigInteger least,
                          BigInteger greatest) {
 
         public IntSum {
             if (coefs == null || constant == null || least == null || greatest == null
-                    || least.compareTo(greatest) > 0 || coefs.isEmpty()
+                    || least.compareTo(greatest) > 0
                     || coefs.containsKey(null) || coefs.containsValue(null)) {
                 throw new IllegalArgumentException("an operation comes to a number between two"
                         + " ends, weighing each term by a number: " + coefs);
@@ -250,6 +252,9 @@ public final class WhatARelationLeavesUndivided {
             }
             ExactRatio most = ExactRatio.ONE;
             for (IntSum each : sums) {
+                if (each.coefs().isEmpty()) {
+                    return null;
+                }
                 ExactRatio multiple = null;
                 for (Map.Entry<Object, ExactRatio> weighed : each.coefs().entrySet()) {
                     ExactRatio weight = weights.get(weighed.getKey());

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,6 +18,10 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
 
     /** What reading the comparison of {@code body} told, or null where the reading stopped. */
     private static UndividedByARelation.Working told(String body) {
+        return told(body, "No");
+    }
+
+    private static UndividedByARelation.Working told(String body, String outcome) {
         String source = """
                 module g
 
@@ -25,9 +31,9 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
                 behavior classify : (n: Int, m: Int, k: Int) -> Yes | No
                 let classify (n, m, k) = %s
 
-                example classify
-                    | "one" : (1, 1, 1) -> No
-                """.formatted(body);
+                %s
+                """.formatted(body, outcome == null ? ""
+                : "example classify\n    | \"one\" : (1, 1, 1) -> " + outcome);
         ReadComparisons read = ReadComparisons.of(source, "classify");
         ComparisonReadings.Reading against = read.only();
         return AffineReading.read(
@@ -49,6 +55,25 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
                 "{\n    let s = n + m\n    if s + k >= 100 then Yes else No\n}");
         assertTrue(working.exact());
         assertEquals(2, working.operations().size());
+    }
+
+    /**
+     * An operation whose number does not move with the input is still one a run stops at: the
+     * intermediate {@code 9223372036854775807 + 1} is past the type whatever {@code m} is, and
+     * the number it comes to is told with no term in it.
+     */
+    @Test
+    void anOperationThatReadsNoTermIsToldWithTheNumberItComesTo() {
+        UndividedByARelation.Working working = told(
+                "if (m - m) + 9223372036854775807 + 1 - 1 + n <= k then Yes else No",
+                null);
+        assertTrue(working.exact());
+        UndividedByARelation.IntOperation past = working.operations().stream()
+                .filter(each -> each.form().coefs().isEmpty())
+                .filter(each -> each.form().constant().compareTo(
+                        ExactRatio.of(each.greatest())) > 0)
+                .findFirst().orElse(null);
+        assertTrue(past != null, () -> "the sum past the greatest value is told: " + working);
     }
 
     @Test

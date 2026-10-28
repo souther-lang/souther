@@ -334,10 +334,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     default -> null;
                 };
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    if (!form.coefs().isEmpty()) {
-                        told.operations.add(new UndividedByARelation.IntOperation(form,
-                                held.least(), held.greatest()));
-                    }
+                    told.operations.add(new UndividedByARelation.IntOperation(form,
+                            held.least(), held.greatest()));
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
                     told.exact = false;
                 }

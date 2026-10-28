@@ -193,7 +193,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
 
-        /** No reading of the comparison was made. */
+        /** No reading of the comparison was made, and the program is taken to add the form up.
+         *  That holds for the relations read from the cut of a comparison (a product, a whole and
+         *  its part, a difference, a remainder or quotient, and the lines drawn from them), whose
+         *  form is the program's own expression and not a sum the walk composed. A relation read
+         *  by the affine walk carries what that walk told instead. */
         static final Working NOTHING =
                 new Working(List.of(), WhatARelationLeavesUndivided.Told.NOTHING_SAID);
 
@@ -741,7 +745,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (IntOperation each : working.operations()) {
             boolean overTheSides = each.form().coefs().keySet().stream()
                     .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
-            if (!overTheSides || each.form().coefs().isEmpty()) {
+            if (!overTheSides) {
                 leftOut = true;
                 continue;
             }
