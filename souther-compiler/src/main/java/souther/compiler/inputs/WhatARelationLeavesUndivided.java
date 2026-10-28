@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 /**
  * Which of the places a relation is written over it is shown to leave undivided.
@@ -727,6 +728,9 @@ public final class WhatARelationLeavesUndivided {
      * {@code b}, and a {@code b} further out than that is no row either.
      */
     private static <P> List<Term<P>> withinTheSums(List<Term<P>> terms, List<IntSum> sums) {
+        if (sums.isEmpty()) {
+            return terms;
+        }
         List<Term<P>> cut = new ArrayList<>(terms);
         Map<Object, Integer> at = keyedTerms(terms);
         for (IntSum sum : sums) {
@@ -836,7 +840,7 @@ public final class WhatARelationLeavesUndivided {
         }
         for (BigInteger end : List.of(first, last)) {
             ExactRatio value = ExactRatio.of(end);
-            if (!arithmetic.computedAt(valuesByKey(terms,
+            if (!arithmetic.computedAt(() -> valuesByKey(terms,
                     i -> i == at ? value : heldNearestNought(terms.get(i))))) {
                 return false;
             }
@@ -943,7 +947,7 @@ public final class WhatARelationLeavesUndivided {
             row[at] = weighedAt(nearest, it.weight());
             if (!arithmetic.computes(row) && !computedAtBothEnds(arithmetic, terms, at, each,
                     held) && !(holdsSeveralValuesOfTheType(arithmetic, each)
-                    && arithmetic.computedAt(valuesByKey(terms,
+                    && arithmetic.computedAt(() -> valuesByKey(terms,
                     i -> i == at ? nearest : heldNearestNought(terms.get(i)))))) {
                 return null;
             }
@@ -2146,9 +2150,12 @@ public final class WhatARelationLeavesUndivided {
          * terms stand at {@code values}, each by its key ({@link Term#key}); false where one of
          * them reads a term the row does not name.
          */
-        boolean computedAt(Map<Object, ExactRatio> values) {
-            return greatest != null && operations.exact()
-                    && operations.sums().stream().allMatch(sum -> sum.holdsAt(values));
+        boolean computedAt(Supplier<Map<Object, ExactRatio>> values) {
+            if (greatest == null || !operations.exact()) {
+                return false;
+            }
+            Map<Object, ExactRatio> standing = values.get();
+            return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing));
         }
 
         /** Whether it stops at a size, so that a row's sizes say whether it is computed. */
@@ -3403,7 +3410,7 @@ public final class WhatARelationLeavesUndivided {
                 List<ExactRatio> witness = new ArrayList<>(row);
                 witness.add(at.times(terms.get(by).weight()).orNull());
                 if (!arithmetic.computes(witness.toArray(ExactRatio[]::new))
-                        && !arithmetic.computedAt(valuesByKey(terms, i -> i == by ? at
+                        && !arithmetic.computedAt(() -> valuesByKey(terms, i -> i == by ? at
                                 : i == of ? value : heldNearestNought(terms.get(i))))) {
                     return false;
                 }

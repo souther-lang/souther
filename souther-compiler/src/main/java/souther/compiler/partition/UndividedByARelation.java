@@ -720,6 +720,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * here, so the operations are then not every one.
      */
     private WhatARelationLeavesUndivided.Operations operationsOverTheSides() {
+        if (working.operations().isEmpty()) {
+            return new WhatARelationLeavesUndivided.Operations(List.of(), working.exact());
+        }
         Map<NumericTerm, Integer> named = new LinkedHashMap<>();
         for (Side each : sides) {
             if (each.number() != null) {
