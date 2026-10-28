@@ -27,12 +27,15 @@ import java.util.function.Supplier;
  *
  * <p>First what the compiler stands for the type with, and what it stands for a collection of one
  * element of it where the type is a collection ({@link #withOneElement}); then, from each of those,
- * the numbers a unit away and the value with one more element in a list it holds. The last is the
- * same question asked of the values already made, so each value that grows a list leads to the
- * next, one level deeper in the lists: a value is made when the one before it has been asked for,
- * and the search that stops asking leaves the deeper ones unmade. Every value is built by the
- * type's own decoder ({@link Generator.CandidateCheck#builtAlone}), so a type the decoder does not
- * build on its own (an optional, a tuple) or a check with no runtime offers nothing.
+ * the numbers a unit away and the value with an element in a list it holds that held nothing
+ * ({@link NearbyValues#populated}). The last is the same question asked of the values already made,
+ * so each value that fills a list leads to the next, one level deeper in the lists and no longer
+ * in any of them: a value is made when the one before it has been asked for, and the search that
+ * stops asking leaves the deeper ones unmade. A type whose lists are all filled has nothing left
+ * to fill, so the values of a type that does not hold itself come to an end, and the search that
+ * has been given all of them has been given all there are. Every value is built by the type's own
+ * decoder ({@link Generator.CandidateCheck#builtAlone}), so a type the decoder does not build on
+ * its own (an optional, a tuple) or a check with no runtime offers nothing.
  *
  * <p>The values beyond the representatives are for the ones that are the identity of the body's
  * arithmetic. A sum is the same at no element as at a zero, and a count of what the elements hold
@@ -214,9 +217,8 @@ final class ElementsOfAType {
                         if (origin != Origin.UNIT) {
                             stages.add(new Stage(() -> NearbyValues.oneUnitFrom(value, element,
                                     reading), Origin.UNIT));
-                            stages.add(new Stage(() -> NearbyValues.grown(value, element, reading,
-                                    InputsRowsRanWith.NONE, ElementsOfAType.this::of),
-                                    Origin.GROWN));
+                            stages.add(new Stage(() -> NearbyValues.populated(value, element,
+                                    reading, ElementsOfAType.this::of), Origin.GROWN));
                         }
                     }
                 } else if (!stages.isEmpty()) {

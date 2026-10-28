@@ -113,6 +113,27 @@ final class NearbyValues {
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor) {
+        return withAnElement(value, type, reading, ranWith, stoodFor, false);
+    }
+
+    /**
+     * The values {@code value} becomes where a list it holds, or is, that holds nothing has an
+     * element a value {@code stoodFor} offers for the type: a list with something in it is left as
+     * it is, and everything else stays as it was.
+     *
+     * <p>One level deeper in the lists and no longer in any of them, which is what separates a
+     * value that goes on from one that only gets bigger. A type whose lists are all filled has
+     * nothing left to fill, and the values asked for one after another come to an end.
+     */
+    static Iterator<ObservedValue> populated(ObservedValue value, Type type,
+                                             RuleReadingContext reading,
+                                             Function<Type, Iterator<ObservedValue>> stoodFor) {
+        return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor, true);
+    }
+
+    private static Iterator<ObservedValue> withAnElement(
+            ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
+            Function<Type, Iterator<ObservedValue>> stoodFor, boolean onlyWhereEmpty) {
         return of(value, type, reading, null, List.of(), new Leaves() {
 
             @Override
@@ -124,6 +145,9 @@ final class NearbyValues {
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
                                                   Shape.Sequence sequence) {
+                if (onlyWhereEmpty && !held.elements().isEmpty()) {
+                    return none();
+                }
                 // One of the rows' and one of the type's in turn, so that however many values the
                 // rows ran with, the type's are reached within the runs the search is given. The
                 // type's are asked for when the second is.

@@ -268,6 +268,24 @@ class NearbyValuesTest {
         assertEquals(1, asked[0]);
     }
 
+    /** A list that holds nothing is filled, one that holds something is left as it is: the value
+     *  goes a level deeper and no longer. */
+    @Test
+    void anEmptyListIsFilledAndAFullOneIsNot() {
+        Type listOfLists = Type.list(Type.list(Type.INT));
+        List<ObservedValue> filled = new ArrayList<>();
+        NearbyValues.populated(listOf(listOf(), listOf(whole(1))), listOfLists, READING,
+                type -> List.of(whole(7)).iterator()).forEachRemaining(filled::add);
+
+        assertEquals(List.of(listOf(listOf(whole(7)), listOf(whole(1)))), filled);
+
+        List<ObservedValue> none = new ArrayList<>();
+        NearbyValues.populated(listOf(listOf(whole(1))), listOfLists, READING,
+                type -> List.of(whole(7)).iterator()).forEachRemaining(none::add);
+
+        assertEquals(List.of(), none);
+    }
+
     private static TypeSymbol declared(String name) {
         return TypeSymbols.declared(new TypeKey("example.nearby", name));
     }

@@ -208,6 +208,23 @@ class ElementsOfATypeTest {
         assertEquals(List.of(deepest), seen.withOneElement);
     }
 
+    /**
+     * The values of a type whose lists can all be filled come to an end, and the end is not said to
+     * be a bound: a body that answers the constant was asked every one of them and none told it
+     * apart, which is not the same as having stopped short.
+     */
+    @Test
+    void theValuesOfATypeThatDoesNotHoldItselfComeToAnEnd() {
+        Seen seen = new Seen();
+
+        List<ObservedValue> values = first(1000, Type.list(Type.list(Type.list(Type.INT))),
+                elements(64, seen));
+
+        assertTrue(values.size() < 64, values.toString());
+        assertEquals(List.of(), seen.limits);
+        assertTrue(values.contains(listOf(listOf(listOf(whole(0))))), values.toString());
+    }
+
     /** Past what the bound lets be made, nothing more is, and the bound is said. */
     @Test
     void theValuesOfATypeAreBoundedAndTheBoundIsSaid() {
