@@ -198,6 +198,10 @@ final class ReadQuantities implements Quantities {
      * caller said anything to is {@link #contexts}, and is not kept twice.
      */
     private final Map<StructuralContext, ConstraintState<InputAtom>> answered;
+
+    /** Made on the first narrowing asked of this reading as the base, and not for the readings
+     *  made from it by a search, which are never one. */
+    private volatile NarrowingsKept narrowingsKept;
     /** The same, of those rules with this value's fixings standing in them. Beside the one above
      *  and not in place of it: a form a caller takes in is spaced by what the declarations say,
      *  and not by what a fixing happened to settle. */
@@ -401,6 +405,21 @@ final class ReadQuantities implements Quantities {
         // run, which is a fine order and not one anybody chose — read off it, which of two
         // contradictions a proof names would move between runs of the same compiler.
         this.fixed = Collections.unmodifiableMap(new LinkedHashMap<>(fixed));
+    }
+
+    /** The regions this reading, as a base, was narrowed to. */
+    NarrowingsKept narrowingsKept() {
+        NarrowingsKept had = narrowingsKept;
+        if (had == null) {
+            synchronized (this) {
+                had = narrowingsKept;
+                if (had == null) {
+                    had = new NarrowingsKept();
+                    narrowingsKept = had;
+                }
+            }
+        }
+        return had;
     }
 
     /** Before anything is fixed. */
