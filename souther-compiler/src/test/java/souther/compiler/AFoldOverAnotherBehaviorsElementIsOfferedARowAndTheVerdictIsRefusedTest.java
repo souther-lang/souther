@@ -80,9 +80,9 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
                     Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
                     compilation.db()).text();
 
-            List<RowsOfABlock.Row> offered = RowsOfABlock.of(block).stream()
-                    .filter(row -> row.behavior().equals("score")).toList();
-            assertEquals(1, offered.size(), () -> body + " is offered one row: " + block);
+            List<RowsOfABlock.Row> offered = rowsForTheRewrite(block);
+            assertEquals(1, offered.size(),
+                    () -> body + " is offered one row for the rewrite: " + block);
             assertTrue(offered.getFirst().written().contains("Throw("),
                     () -> "and it holds a throw: " + block);
             assertTrue(offered.getFirst().written().contains("<?>"),
@@ -100,9 +100,7 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
                             OfferingRequest.overTheModule("repro.open")),
                     Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
                     compilation.db()).text();
-            String offered = RowsOfABlock.of(block).stream()
-                    .filter(row -> row.behavior().equals("score")).findFirst().orElseThrow()
-                    .written();
+            String offered = rowsForTheRewrite(block).getFirst().written();
             String stated = offered.replace("<?>", "0");
 
             Compilation statedAsTheConstant = Compilation.ofSource(
@@ -116,6 +114,16 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
                             .map(e -> e.diagnostic().code().toString()).toList(),
                     () -> body + ": the row " + offered + " stated as 0 does not hold of the body");
         }
+    }
+
+    /** The rows of `score` composed for the body answering one value: the others a block offers
+     *  are rows for what its callee's rows cover. */
+    private static List<RowsOfABlock.Row> rowsForTheRewrite(String block) {
+        return RowsOfABlock.of(block).stream()
+                .filter(row -> row.behavior().equals("score"))
+                .filter(row -> row.name().filter(name ->
+                        name.startsWith("the body answering what score")).isPresent())
+                .toList();
     }
 
     private static long rewritesUnnoticed(Compilation compilation) {
