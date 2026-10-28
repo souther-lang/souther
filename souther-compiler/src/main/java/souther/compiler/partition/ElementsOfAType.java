@@ -120,14 +120,12 @@ final class ElementsOfAType {
     /** What is made of one type so far, and the means of making more. */
     private final class Values {
 
-        private final Type element;
         private final List<ObservedValue> made = new ArrayList<>();
         private final Source source;
         private boolean making;
         private boolean finished;
 
         Values(Type element) {
-            this.element = element;
             this.source = new Source(element);
         }
 
