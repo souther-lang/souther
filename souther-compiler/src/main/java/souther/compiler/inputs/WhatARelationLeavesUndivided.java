@@ -531,8 +531,14 @@ public final class WhatARelationLeavesUndivided {
         // none of the model's. `2r >= i` over amounts from nought has a row at no `r` past half
         // the greatest `Int`, and an `i` at and above it at every `r` before.
         if (free.runs().isEmpty() && bounded.runs().isEmpty()) {
+            List<SettledRun> runs = new ArrayList<>();
+            // Not reached at every value of the rows that compute, but at its ends only, where the
+            // model draws no line and the size the arithmetic stops at may be all that leaves it.
             if (!asking.leftBy().stream().allMatch(relation -> reachedBySome(withinTheirOrders,
-                    at, constant, relation, overlap, independent, jointly, arithmetic))) {
+                    at, constant, relation, overlap, independent, jointly, arithmetic))
+                    && !(asking.leftBy().size() == 1 && theSizeAloneLeavesTheEnds(withinTheirOrders,
+                            at, constant, asking.leftBy().getFirst(), overlap, independent,
+                            arithmetic))) {
                 return null;
             }
             List<SettledRun> past = pastTheRows(free.held(), bounded.held(), terms.get(at),
@@ -540,8 +546,9 @@ public final class WhatARelationLeavesUndivided {
             if (past == null) {
                 return null;
             }
-            return past.isEmpty() ? new Leaves.Undivided()
-                    : Leaves.Settled.ofWhole(inOrder(past, true), free.held().low,
+            runs.addAll(past);
+            return runs.isEmpty() ? new Leaves.Undivided()
+                    : Leaves.Settled.ofWhole(inOrder(runs, true), free.held().low,
                             free.held().high).besideWhatTheModelDraws(model);
         }
         return shown(bounded, withinTheirOrders, at, constant, asking, overlap, independent,
@@ -1675,11 +1682,7 @@ public final class WhatARelationLeavesUndivided {
                                              BiPredicate<P, P> overlap,
                                              Independence independent, Jointly jointly,
                                              Arithmetic arithmetic) {
-        boolean[] free = new boolean[terms.size()];
-        for (int other = 0; other < terms.size(); other++) {
-            free[other] = other != at && apart(terms, other, overlap)
-                    && untied(terms, other, independent);
-        }
+        boolean[] free = freeOf(terms, at, overlap, independent);
         HeldStill still = HeldStill.of(terms, free, constant);
         for (int other = 0; other < terms.size(); other++) {
             if (free[other] && (reaches(terms, other, at, within, constant, relation,
@@ -1694,6 +1697,120 @@ public final class WhatARelationLeavesUndivided {
                         jointly))
                 || (within == null && reachedPieceByPiece(terms, at, constant, relation, free,
                         still, arithmetic));
+    }
+
+    /** Which terms are apart from every other and tied to none, so that each stands wherever it
+     *  is shown to without the term at {@code at} or any other moving with it. */
+    private static <P> boolean[] freeOf(List<Term<P>> terms, int at, BiPredicate<P, P> overlap,
+                                       Independence independent) {
+        boolean[] free = new boolean[terms.size()];
+        for (int other = 0; other < terms.size(); other++) {
+            free[other] = other != at && apart(terms, other, overlap)
+                    && untied(terms, other, independent);
+        }
+        return free;
+    }
+
+    /**
+     * Whether the model draws no line on the term at {@code at}, the others reaching it at every
+     * value of the rows that compute but those at its two ends, where the size the arithmetic
+     * stops at may be what leaves them.
+     *
+     * <p>A row is computed only where the sizes it adds up stay within the greatest value of the
+     * type ({@link Arithmetic}), and which of the numbers in the relation are added up in the
+     * program, and which one the sum is only compared with, is not here to know. With
+     * {@code a + b + c >= 100} and {@code a} at the greatest, the sum is computed and compared
+     * with a hundred in a row of {@code b} at {@code 99} less the greatest, though not as
+     * {@code a + b + c - 100}. So nothing is said of which side a value at an end has a computed
+     * row on, and no run is drawn: an end is left undivided where, with the arithmetic let go, the
+     * others are shown to take the relation either way at it, so that nothing but the size can be
+     * what leaves it ({@link #bothSidesLetGo}).
+     *
+     * <p>Every other piece of the run ({@link #piecesOf}) is reached by a term apart from the
+     * term, as {@link #reachedPieceByPiece} asks it.
+     */
+    private static <P> boolean theSizeAloneLeavesTheEnds(List<Term<P>> terms, int at,
+                                                         ExactRatio constant, Rel relation,
+                                                         BiPredicate<P, P> overlap,
+                                                         Independence independent,
+                                                         Arithmetic arithmetic) {
+        if (!arithmetic.stopsAtASize() || constant == null || terms.size() < 3
+                || relation == Rel.EQ || relation == Rel.NE) {
+            return false;
+        }
+        boolean[] free = freeOf(terms, at, overlap, independent);
+        HeldStill still = HeldStill.of(terms, free, constant);
+        List<Interval> pieces = piecesOf(terms, at, constant, free);
+        if (pieces == null) {
+            return false;
+        }
+        for (int i = 0; i < pieces.size(); i++) {
+            Interval piece = pieces.get(i);
+            boolean anEnd = i == 0 || i == pieces.size() - 1;
+            if (!pieceReached(terms, at, piece, constant, relation, free, still, arithmetic)
+                    && !(anEnd && bothSidesLetGo(terms, at, free, piece, constant, relation))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether, with the arithmetic let go, the relation holds in one row and fails in another
+     * with the term at {@code at} at any value of {@code piece} and the others each at a value it
+     * is shown to take.
+     *
+     * <p>The others' weighed sum is least where each stands at the end of its run that lessens it
+     * and greatest at the other, so the relation holds in some row where the greatest sum holds
+     * it, and fails in some row where the least sum fails it, for a relation holding from above;
+     * the other way round for one holding from below. Each is a sum linear along the piece, so
+     * what holds at its two ends holds between.
+     */
+    private static <P> boolean bothSidesLetGo(List<Term<P>> terms, int at, boolean[] free,
+                                              Interval piece, ExactRatio constant, Rel relation) {
+        Term<P> it = terms.get(at);
+        List<Interval> shown = new ArrayList<>();
+        for (int i = 0; i < terms.size(); i++) {
+            if (i == at) {
+                continue;
+            }
+            Interval taken = wholeRunTakenOnItsOrder(terms.get(i));
+            Interval weighed = taken == null ? null : taken.times(terms.get(i).weight());
+            if (!free[i] || weighed == null || weighed.low() == null || weighed.high() == null) {
+                return false;
+            }
+            shown.add(weighed);
+        }
+        boolean fromAbove = relation == Rel.GE || relation == Rel.GT;
+        for (ExactRatio value : List.of(piece.low(), piece.high())) {
+            ExactRatio least = constant.plus(weighedAt(value, it.weight())).orNull();
+            ExactRatio most = least;
+            for (Interval each : shown) {
+                least = least == null ? null : least.plus(each.low()).orNull();
+                most = most == null ? null : most.plus(each.high()).orNull();
+            }
+            if (least == null || most == null) {
+                return false;
+            }
+            ExactRatio holding = fromAbove ? most : least;
+            ExactRatio failing = fromAbove ? least : most;
+            if (!comesOut(relation, holding) || comesOut(relation, failing)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether a sum of {@code sum} comes out as the relation holds it against nought. */
+    private static boolean comesOut(Rel relation, ExactRatio sum) {
+        return switch (relation) {
+            case GE -> sum.signum() >= 0;
+            case GT -> sum.signum() > 0;
+            case LE -> sum.signum() <= 0;
+            case LT -> sum.signum() < 0;
+            case EQ -> sum.signum() == 0;
+            case NE -> sum.signum() != 0;
+        };
     }
 
     /**
@@ -1755,17 +1872,52 @@ public final class WhatARelationLeavesUndivided {
                                                    ExactRatio constant, Rel relation,
                                                    boolean[] free, HeldStill still,
                                                    Arithmetic arithmetic) {
+        List<Interval> pieces = piecesOf(terms, at, constant, free);
+        if (pieces == null) {
+            return false;
+        }
+        for (Interval piece : pieces) {
+            if (!pieceReached(terms, at, piece, constant, relation, free, still, arithmetic)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether some one term apart from the one at {@code at} reaches every value of
+     *  {@code piece}. */
+    private static <P> boolean pieceReached(List<Term<P>> terms, int at, Interval piece,
+                                            ExactRatio constant, Rel relation, boolean[] free,
+                                            HeldStill still, Arithmetic arithmetic) {
+        for (int other = 0; other < terms.size(); other++) {
+            if (free[other] && (reaches(terms, other, at, piece, constant, relation,
+                    theConstantAlone(constant), arithmetic)
+                    || reachesWithTheRestHeld(terms, other, at, piece, constant, relation,
+                            free, still, arithmetic))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The whole run of the term at {@code at} cut where a term apart from it stands at an end of
+     * its run or at nought, and at the whole number after each — or null where it is not a run of
+     * whole numbers with both ends, or no cut falls inside it.
+     */
+    private static <P> List<Interval> piecesOf(List<Term<P>> terms, int at, ExactRatio constant,
+                                               boolean[] free) {
         Term<P> it = terms.get(at);
         Interval run = Interval.of(it.holds());
         if (constant == null || run == null || run.low() == null || run.high() == null
                 || it.spacing() != Granularity.DISCRETE || !run.low().isWhole()
                 || !run.high().isWhole()) {
-            return false;
+            return null;
         }
         BigInteger first = run.low().floor().orNull();
         BigInteger last = run.high().floor().orNull();
         if (first == null || last == null) {
-            return false;
+            return null;
         }
         TreeSet<BigInteger> starts = new TreeSet<>();
         starts.add(first);
@@ -1799,24 +1951,15 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         if (starts.size() < 2) {
-            return false;
+            return null;
         }
         List<BigInteger> from = List.copyOf(starts);
+        List<Interval> pieces = new ArrayList<>(from.size());
         for (int i = 0; i < from.size(); i++) {
             BigInteger to = i + 1 < from.size() ? from.get(i + 1).subtract(BigInteger.ONE) : last;
-            Interval piece = new Interval(ExactRatio.of(from.get(i)), ExactRatio.of(to));
-            boolean reached = false;
-            for (int other = 0; other < terms.size() && !reached; other++) {
-                reached = free[other] && (reaches(terms, other, at, piece, constant, relation,
-                        theConstantAlone(constant), arithmetic)
-                        || reachesWithTheRestHeld(terms, other, at, piece, constant, relation,
-                                free, still, arithmetic));
-            }
-            if (!reached) {
-                return false;
-            }
+            pieces.add(new Interval(ExactRatio.of(from.get(i)), ExactRatio.of(to)));
         }
-        return true;
+        return pieces;
     }
 
     /**

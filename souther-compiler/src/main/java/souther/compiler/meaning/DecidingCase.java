@@ -3,7 +3,10 @@ package souther.compiler.meaning;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -180,6 +183,23 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             public EachOf {
                 alternatives = List.copyOf(alternatives);
             }
+
+            /** Cases share what follows from a choice, so a hash walking them is as long as they
+             *  are many: what is shared here is the number of alternatives. */
+            @Override
+            public int hashCode() {
+                return 31 * alternatives.size() + 1;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof EachOf && same(this, (Cases) other, new IdentityHashMap<>());
+            }
+
+            @Override
+            public String toString() {
+                return describe(this);
+            }
         }
 
         /** One case of each of these, holding together. None is the case where nothing is asked. */
@@ -187,6 +207,23 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
 
             public Together {
                 factors = List.copyOf(factors);
+            }
+
+            /** As {@link EachOf#hashCode}: what is shared here is the number of factors. */
+            @Override
+            public int hashCode() {
+                return 37 * factors.size() + 2;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Together
+                        && same(this, (Cases) other, new IdentityHashMap<>());
+            }
+
+            @Override
+            public String toString() {
+                return describe(this);
             }
         }
 
@@ -223,6 +260,84 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         }
 
         /**
+         * What a fold makes of each kind of cases, given what it made of the cases inside.
+         *
+         * <p>The cases are a graph and not a tree: the state a choice leaves is one value every
+         * way to it shares ({@link WhereEachLineDecides}), so the ways of choosing grow as the
+         * product of the choices while the cases that hold them grow as their sum. A reader that
+         * walks them as a tree walks the product.
+         *
+         * <p>Nor may what it makes of a case be a copy of what it made of the cases inside: a case
+         * held twice by one case is the same result twice, and a result that holds those of the
+         * cases inside by copying them is as long as the ways to the case. A result holds the ones
+         * made of the cases inside it, or something of a size that does not grow with them.
+         */
+        interface Fold<R> {
+
+            R one(One one);
+
+            R eachOf(EachOf node, List<R> alternatives);
+
+            R together(Together node, List<R> factors);
+
+            R notTakenApart(NotTakenApart notTakenApart);
+        }
+
+        /**
+         * What {@code by} makes of these, each of the cases they hold worked out once however many
+         * ways lead to it.
+         *
+         * <p>The one place that walks the cases and the only one that may: every question asked of
+         * all of them, and every comparison and every rendering, goes through it, so that none
+         * is a tree walk of a graph. What a fold makes of a case is a function of the case, so it
+         * is the same whichever way the case was reached.
+         */
+        default <R> R fold(Fold<R> by) {
+            return fold(by, new IdentityHashMap<>());
+        }
+
+        /** The same, taking {@code worked} as what has been made of the cases already, and adding
+         *  what is made here to it: for a reader that folds the cases more than once. */
+        default <R> R fold(Fold<R> by, Map<Cases, R> worked) {
+            R known = worked.get(this);
+            if (known != null) {
+                return known;
+            }
+            R made = switch (this) {
+                case One one -> by.one(one);
+                case EachOf each -> by.eachOf(each, foldAll(each.alternatives(), by, worked));
+                case Together group -> by.together(group, foldAll(group.factors(), by, worked));
+                case NotTakenApart notTakenApart -> by.notTakenApart(notTakenApart);
+            };
+            worked.put(this, Objects.requireNonNull(made, "a fold makes something of every case"));
+            return made;
+        }
+
+        /**
+         * How many cases hold each case of these, each case counted once however many ways lead
+         * to it: a case held by one case is only in that one's way, and one held by more is shared
+         * by every way that goes through them.
+         */
+        default Map<Cases, Integer> references() {
+            Map<Cases, Integer> held = new IdentityHashMap<>();
+            countHolds(this, held);
+            return held;
+        }
+
+        /** Each figure some of these were stopped at where they were never taken apart. */
+        default Set<CompositionBudget> notTakenApartAt() {
+            return notTakenApartAt(new IdentityHashMap<>());
+        }
+
+        private static <R> List<R> foldAll(List<Cases> cases, Fold<R> by, Map<Cases, R> worked) {
+            List<R> made = new ArrayList<>(cases.size());
+            for (Cases one : cases) {
+                made.add(one.fold(by, worked));
+            }
+            return made;
+        }
+
+        /**
          * Where some one of these holds, written as they were taken apart — or nothing where some
          * of them were never taken apart, which nothing writes.
          *
@@ -230,20 +345,46 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * the two cannot come to say different things: what is said of a case's parts where the
          * line stands under a case of a value is said of each case, part by part, and the
          * condition is said as one part.
+         *
+         * <p>Nothing either where there are more than {@code most} ways of choosing a case. The
+         * condition is as long as they are many however the cases share what follows from a
+         * choice, so it is not written: a reader that wanted it was told so here and not left to
+         * count the ways first.
          */
-        default Optional<Proposition> holdingInSome() {
-            return switch (this) {
-                case One(var condition) -> Optional.of(condition);
-                case EachOf(var alternatives) -> joined(alternatives, false);
-                case Together(var factors) -> joined(factors, true);
-                case NotTakenApart _ -> Optional.empty();
-            };
+        default Optional<Proposition> holdingInSome(long most) {
+            if (waysOfChoosing(most) > most) {
+                return Optional.empty();
+            }
+            return fold(new Fold<Optional<Proposition>>() {
+
+                @Override
+                public Optional<Proposition> one(One one) {
+                    return Optional.of(one.condition());
+                }
+
+                @Override
+                public Optional<Proposition> eachOf(EachOf node,
+                                                    List<Optional<Proposition>> alternatives) {
+                    return joined(alternatives, false);
+                }
+
+                @Override
+                public Optional<Proposition> together(Together node,
+                                                      List<Optional<Proposition>> factors) {
+                    return joined(factors, true);
+                }
+
+                @Override
+                public Optional<Proposition> notTakenApart(NotTakenApart notTakenApart) {
+                    return Optional.empty();
+                }
+            });
         }
 
-        private static Optional<Proposition> joined(List<Cases> each, boolean every) {
+        private static Optional<Proposition> joined(List<Optional<Proposition>> each,
+                                                    boolean every) {
             List<Proposition> parts = new ArrayList<>();
-            for (Cases one : each) {
-                Optional<Proposition> holding = one.holdingInSome();
+            for (Optional<Proposition> holding : each) {
                 if (holding.isEmpty()) {
                     return Optional.empty();
                 }
@@ -261,40 +402,201 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * as many as theirs multiplied. Cases nobody took apart are one way, which ends there.
          */
         default long waysOfChoosing(long past) {
-            return switch (this) {
-                case One _, NotTakenApart _ -> 1;
-                case EachOf(var alternatives) -> {
-                    long ways = 0;
-                    for (Cases one : alternatives) {
-                        ways = Math.min(past + 1, ways + one.waysOfChoosing(past));
-                    }
-                    yield ways;
+            return fold(new Fold<Long>() {
+
+                @Override
+                public Long one(One one) {
+                    return 1L;
                 }
-                case Together(var factors) -> {
+
+                @Override
+                public Long eachOf(EachOf node, List<Long> alternatives) {
+                    long ways = 0;
+                    for (long these : alternatives) {
+                        ways = Math.min(past + 1, ways + these);
+                    }
+                    return ways;
+                }
+
+                @Override
+                public Long together(Together node, List<Long> factors) {
                     long ways = 1;
-                    for (Cases one : factors) {
-                        long these = one.waysOfChoosing(past);
+                    for (long these : factors) {
                         if (these == 0) {
-                            yield 0;
+                            return 0L;
                         }
                         ways = Math.min(past + 1, ways * these);
                     }
-                    yield ways;
+                    return ways;
                 }
-            };
+
+                @Override
+                public Long notTakenApart(NotTakenApart notTakenApart) {
+                    return 1L;
+                }
+            });
         }
 
         /** These, each one case of them said as {@code each} says it — no case at all where it
          *  says none. */
         default Cases eachSaid(Function<Proposition, Cases> each) {
-            return switch (this) {
-                case One(var condition) -> each.apply(condition);
-                case EachOf(var alternatives) ->
-                        new EachOf(alternatives.stream().map(one -> one.eachSaid(each)).toList());
-                case Together(var factors) ->
-                        new Together(factors.stream().map(one -> one.eachSaid(each)).toList());
-                case NotTakenApart notTakenApart -> notTakenApart;
+            return fold(new Fold<Cases>() {
+
+                @Override
+                public Cases one(One one) {
+                    return each.apply(one.condition());
+                }
+
+                @Override
+                public Cases eachOf(EachOf node, List<Cases> alternatives) {
+                    return new EachOf(alternatives);
+                }
+
+                @Override
+                public Cases together(Together node, List<Cases> factors) {
+                    return new Together(factors);
+                }
+
+                @Override
+                public Cases notTakenApart(NotTakenApart notTakenApart) {
+                    return notTakenApart;
+                }
+            });
+        }
+
+        /**
+         * Each figure some of these were stopped at where they were never taken apart.
+         *
+         * <p>Written in the cases and not worked out by choosing among them, so it costs a visit
+         * to each case and no more, and a reader that has run out of steps may ask it.
+         *
+         * @param worked what has been made of the cases already, for a reader that asks of
+         *               several cases that share some
+         */
+        default Set<CompositionBudget> notTakenApartAt(Map<Cases, Set<CompositionBudget>> worked) {
+            return fold(new Fold<Set<CompositionBudget>>() {
+
+                @Override
+                public Set<CompositionBudget> one(One one) {
+                    return Set.of();
+                }
+
+                @Override
+                public Set<CompositionBudget> eachOf(EachOf node,
+                                                     List<Set<CompositionBudget>> alternatives) {
+                    return union(alternatives);
+                }
+
+                @Override
+                public Set<CompositionBudget> together(Together node,
+                                                       List<Set<CompositionBudget>> factors) {
+                    return union(factors);
+                }
+
+                @Override
+                public Set<CompositionBudget> notTakenApart(NotTakenApart notTakenApart) {
+                    return Set.of(notTakenApart.stoppedAt());
+                }
+            }, worked);
+        }
+
+        private static Set<CompositionBudget> union(List<Set<CompositionBudget>> these) {
+            Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
+            these.forEach(out::addAll);
+            return out.isEmpty() ? Set.of() : Collections.unmodifiableSet(out);
+        }
+
+        /**
+         * Whether {@code one} and {@code other} are the same cases, as a graph.
+         *
+         * <p>A pair of cases is compared once. Compared as trees, two graphs that are equal and
+         * not the same object are as long to compare as they have ways of choosing, which is the
+         * product of their choices; a comparison stops at the first difference, so a pair that
+         * has been met again is one that was equal when it was met.
+         */
+        private static boolean same(Cases one, Cases other, Map<Cases, Set<Cases>> met) {
+            if (one == other) {
+                return true;
+            }
+            if (!met.computeIfAbsent(one, _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                    .add(other)) {
+                return true;
+            }
+            return switch (one) {
+                case One(var condition) -> other instanceof One(var that)
+                        && condition.equals(that);
+                case NotTakenApart(var stoppedAt) -> other instanceof NotTakenApart(var that)
+                        && stoppedAt == that;
+                case EachOf(var alternatives) -> other instanceof EachOf(var that)
+                        && sameAll(alternatives, that, met);
+                case Together(var factors) -> other instanceof Together(var that)
+                        && sameAll(factors, that, met);
             };
+        }
+
+        private static boolean sameAll(List<Cases> these, List<Cases> those,
+                                       Map<Cases, Set<Cases>> met) {
+            if (these.size() != those.size()) {
+                return false;
+            }
+            for (int at = 0; at < these.size(); at++) {
+                if (!same(these.get(at), those.get(at), met)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * These written out once each: a case that more than one case holds is written in full
+         * where it first comes and by its number after, so that what is written is as long as
+         * the cases are many and not as their ways of choosing.
+         */
+        private static String describe(Cases root) {
+            Map<Cases, Integer> held = new IdentityHashMap<>();
+            countHolds(root, held);
+            return describe(root, held, new IdentityHashMap<>());
+        }
+
+        private static void countHolds(Cases cases, Map<Cases, Integer> held) {
+            if (held.merge(cases, 1, Integer::sum) > 1) {
+                return;
+            }
+            switch (cases) {
+                case EachOf(var alternatives) -> alternatives.forEach(one -> countHolds(one, held));
+                case Together(var factors) -> factors.forEach(one -> countHolds(one, held));
+                case One _, NotTakenApart _ -> { }
+            }
+        }
+
+        private static String describe(Cases cases, Map<Cases, Integer> held,
+                                       Map<Cases, Integer> numbered) {
+            Integer number = numbered.get(cases);
+            if (number != null) {
+                return "#" + number;
+            }
+            String label = "";
+            if (held.get(cases) > 1 && !(cases instanceof One || cases instanceof NotTakenApart)) {
+                number = numbered.size() + 1;
+                numbered.put(cases, number);
+                label = "#" + number + "=";
+            }
+            return label + switch (cases) {
+                case One(var condition) -> "One[" + condition + "]";
+                case NotTakenApart(var stoppedAt) -> "NotTakenApart[" + stoppedAt + "]";
+                case EachOf(var alternatives) -> "EachOf" + describeAll(alternatives, held,
+                        numbered);
+                case Together(var factors) -> "Together" + describeAll(factors, held, numbered);
+            };
+        }
+
+        private static String describeAll(List<Cases> each, Map<Cases, Integer> held,
+                                          Map<Cases, Integer> numbered) {
+            StringBuilder out = new StringBuilder("[");
+            for (Cases one : each) {
+                out.append(out.length() > 1 ? ", " : "").append(describe(one, held, numbered));
+            }
+            return out.append(']').toString();
         }
     }
 }

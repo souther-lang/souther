@@ -119,6 +119,7 @@ public final class NumericDomain<A> {
     private final RulesRead<A> readBefore;
     private RulesRead<A> read;
     private ClosedStates.Parted<A> closed;
+    private FormReach<A> reach;
     private Systems<A> systems;
     private ProjectionCertification certification;
     private Boolean noRow;
@@ -337,7 +338,7 @@ public final class NumericDomain<A> {
      * stop early, so a box that has not emptied is not a box with a value in it.
      */
     public boolean isBottom() {
-        return readARuleNothingSatisfies || closed().holdsNothing();
+        return readARuleNothingSatisfies || parted().holdsNothing();
     }
 
     // --- assume: take in one more rule ------------------------------------------------------------
@@ -397,8 +398,33 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
+        RulesRead<A> known = readLent();
+        if (known != null && alreadyAmong(known.rules(), rule)) {
+            return this;
+        }
         return new NumericDomain<>(stated.and(StatedRules.of(rule)), spaces, false, order,
                 closedStates, lent(), readLent());
+    }
+
+    /**
+     * Whether {@code rule} says nothing the rules already read say: a sum held below a bound that
+     * one of them holds as low or lower, or any other rule that is one of them.
+     *
+     * <p>Asked of rules read from a prefix of the ones this domain states, so that a rule found here
+     * is one every reading of the whole holds as well, and a rule not found settles nothing.
+     */
+    private static <A> boolean alreadyAmong(List<AffineConstraint<A>> read,
+                                            AffineConstraint<A> rule) {
+        if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
+            return read.contains(rule);
+        }
+        for (AffineConstraint<A> each : read) {
+            if (each instanceof AffineConstraint.HalfSpace<A> held
+                    && held.form().equals(half.form())) {
+                return ExactCut.tighterUpper(held.bound(), half.bound()).equals(held.bound());
+            }
+        }
+        return false;
     }
 
     /**
@@ -576,12 +602,21 @@ public final class NumericDomain<A> {
      * on the order, which is the thing this arrangement exists to be rid of.
      */
     private ClosedState<A> closed() {
+        return parted().state();
+    }
+
+    /**
+     * What the rules leave, a part at a time. A question about the positions of one part is answered
+     * by that part's closure ({@link ClosedStates.Parted#partWeighing}), and only a question about
+     * all of them asks for the parts put together.
+     */
+    private ClosedStates.Parted<A> parted() {
         ClosedStates.Parted<A> had = closed;
         if (had == null) {
             had = closedStates.of(rules(), this::spacingOf, order, closedBefore);
             closed = had;
         }
-        return had.state();
+        return had;
     }
 
     // --- entails / refutes --------------------------------------------------------------------------
@@ -639,7 +674,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new ProjectionCertification.NothingIsLeft();
         }
-        if (!closed().everyBoundWasComposed()) {
+        if (!parted().everyBoundWasComposed()) {
             return new ProjectionCertification.ArithmeticLeftTheClosureIncomplete();
         }
         if (!everyRelatedPositionIsSpacedAlike()) {
@@ -907,16 +942,51 @@ public final class NumericDomain<A> {
      *                  ranges either, which holds less than this does
      */
     private ExactCut highestProven(Goal<A> goal, boolean withRules) {
-        FormReach<A> reading = reading();
+        FormReach<A> reading = readingFor(goal.coefs());
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
     }
 
-    /** The one reading of what the rules leave a form, over the state they have been worked out to. */
+    /**
+     * The reading a form is asked of: the part's, for a form of one position.
+     *
+     * <p>A form of one position is answered by that position's ends and by nothing else
+     * ({@link FormReach}'s highest), and the ends of a position are its part's. So the part's
+     * closure is read as it stands, without the parts put together or the rules of the others
+     * indexed. A form of more positions may take a rule as a premise from anywhere, and is read
+     * against all of them.
+     */
+    private FormReach<A> readingFor(Map<A, ExactRatio> coefs) {
+        if (coefs.size() == 1) {
+            A atom = coefs.keySet().iterator().next();
+            ClosedStates.Parted<A> parted = parted();
+            ClosedState<A> part = parted.partWeighing(atom);
+            if (part != null) {
+                return FormReach.over(parted.rulesOfThePartWeighing(atom), part.box(),
+                        part.differences(), order, closedStates.walksIn(order));
+            }
+        }
+        return reading();
+    }
+
+    /**
+     * The one reading of what the rules leave a form, over the state they have been worked out to.
+     *
+     * <p>Made once for the state and asked of for every form: what a reading comes to is a function
+     * of the state it was made over, and the index of the rules it keeps for the forms of several
+     * positions is the same for each of them, so a reading made for each question works it out as
+     * often as it is asked.
+     */
     private FormReach<A> reading() {
-        ClosedState<A> state = closed();
-        return FormReach.over(rules(), state.box(), state.differences(), order);
+        FormReach<A> had = reach;
+        if (had == null) {
+            ClosedState<A> state = closed();
+            had = FormReach.over(rules(), state.box(), state.differences(), order,
+                    closedStates.walksIn(order));
+            reach = had;
+        }
+        return had;
     }
 
 
@@ -942,7 +1012,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Bounds(null, null);
         }
-        Box<A> box = closed().box();
+        Box<A> box = boxAround(atom);
         return new Bounds(written(box.leastOf(atom), false), written(box.mostOf(atom), true));
     }
 
@@ -1508,7 +1578,7 @@ public final class NumericDomain<A> {
     }
 
     private Systems<A> systemsOf() {
-        if (isBottom() || !closed().everyBoundWasComposed()) {
+        if (isBottom() || !parted().everyBoundWasComposed()) {
             return Systems.none();
         }
         Map<A, A> reaches = related();
@@ -1926,8 +1996,15 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return true;   // no ends are handed over, so none of them is rounded
         }
-        Box<A> box = closed().box();
+        Box<A> box = boxAround(atom);
         return writtenExactly(box.leastOf(atom)) && writtenExactly(box.mostOf(atom));
+    }
+
+    /** The ends the rules leave {@code atom}, which are those of the part weighing it. Asked only
+     *  where the rules leave a value. */
+    private Box<A> boxAround(A atom) {
+        ClosedState<A> part = parted().partWeighing(atom);
+        return part != null ? part.box() : closed().box();
     }
 
     private static boolean writtenExactly(ExactCut cut) {

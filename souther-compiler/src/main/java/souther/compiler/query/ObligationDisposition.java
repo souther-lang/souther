@@ -390,6 +390,9 @@ public sealed interface ObligationDisposition {
                      // on before any reading of one could be asked for — a question this sentence's
                      // reading never reached, and not a gap in the reading itself.
                      Weakening.ItemsPlaceNotWorkedOut _,
+                     // And how a position weighs into a value the line cuts, which is the
+                     // computation's and not a reading of any one point of the line.
+                     Weakening.AWeightNotDecided _,
                      // And a reading of the line that could not be tied to the point: what it came
                      // to is about the line, and this sentence's reading is not short of it.
                      Weakening.AReadingNotTiedToItsLine _,

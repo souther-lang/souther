@@ -68,8 +68,9 @@ import java.util.function.UnaryOperator;
  * not say that something does, because the row it went without is exactly what would have ruled it
  * out.
  *
- * <p><b>Five answers, and two of them settle a verdict without a row.</b> {@link ByDirection}
- * answers each line of the family, {@link NotDueYet} says the question waits on the points,
+ * <p><b>Six answers, and two of them settle a verdict without a row.</b> {@link ByDirection}
+ * answers each line of the family, {@link OwedByTheComputation} says another reader owes it,
+ * {@link NotDueYet} says the question waits on the points,
  * {@link CouldNotTell} says it was put and could not be settled, {@link NoSuchQuestion} says there is
  * no such question to put, and {@link NotApplicable} says the model's rules leave no row that could
  * settle it. What goes in the last two is a fact — about the line itself, or a proof read off the
@@ -886,6 +887,20 @@ public sealed interface AnotherLineTheRowsAllow {
             Objects.requireNonNull(why, "a question that does not exist says why");
         }
     }
+
+    /**
+     * The border is one threshold of a value computed from several positions and cut at several
+     * places, and a line beside it that weighs a position otherwise is a fault of that computation,
+     * which {@link TiltOfADerivedValue} owes once for every threshold of it.
+     *
+     * <p>Not {@link NoSuchQuestion}: the lines exist. Not {@link NotApplicable} either, which is a
+     * proof read off the rules. The owner of the question is another reader, and that reader's
+     * answer is the weights' own whatever it is, so this border is asked nothing and weakens
+     * nothing. A line that weighs a position otherwise and moves the threshold with it is two faults
+     * at once, a wrong weight and a wrong constant, and each is owed where it is one: the weight
+     * once for the computation, the constant at the ON and OFF points of each threshold.
+     */
+    record OwedByTheComputation() implements AnotherLineTheRowsAllow {}
 
     /**
      * There are lines one step from this one, and the model's own rules leave no value on the side

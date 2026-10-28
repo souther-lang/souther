@@ -212,7 +212,26 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             for (String position : positionsOf(both)) {
                 assertEquals(inOneRun.projectionOf(position), parted.projectionOf(position),
                         () -> "where " + position + " is under " + both);
+                // A form of the one position is read from the part weighing it, and weighed or
+                // shifted it is the same answer the rules in one run give.
+                for (int weight : new int[] {1, -1, 3}) {
+                    LinearForm<String> alone = new LinearForm<>(ExactRatio.of(2),
+                            Map.of(position, ExactRatio.of(weight)));
+                    assertEquals(inOneRun.projectionOf(alone), parted.projectionOf(alone),
+                            () -> "what " + alone + " runs between under " + both);
+                    for (Rel rel : List.of(Rel.LE, Rel.LT, Rel.GE, Rel.EQ)) {
+                        assertEquals(inOneRun.entails(alone, rel), parted.entails(alone, rel),
+                                () -> "whether " + alone + " " + rel + " 0 follows from " + both);
+                        assertEquals(inOneRun.refutes(alone, rel), parted.refutes(alone, rel),
+                                () -> "whether " + alone + " " + rel + " 0 is refused by " + both);
+                    }
+                }
+                assertEquals(inOneRun.endsAreWrittenExactly(position),
+                        parted.endsAreWrittenExactly(position),
+                        () -> "whether the ends of " + position + " are written exactly");
             }
+            assertEquals(inOneRun.projectionCertification(), parted.projectionCertification(),
+                    () -> "what is certified of " + both);
         }
         assertTrue(bounded > 0, "no form over both halves was bounded both ways, so the forms were"
                 + " compared where they ran without end");

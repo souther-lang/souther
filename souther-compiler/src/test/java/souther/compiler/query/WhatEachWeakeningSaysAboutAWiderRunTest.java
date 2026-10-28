@@ -6,6 +6,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.RulesLeftUnread;
 import souther.compiler.inputs.TermPath;
@@ -86,6 +87,11 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // Which of the author's points a reading stands at is a question about how the reading
         // was derived, and a wider run derives it the same way.
         table.put("AReadingNotTiedToItsLine", "answers/UNAFFECTED");
+        // Only what is first a fact of the weights: the exact arithmetic giving out, nothing read,
+        // a border short with no word of its own, and a run nothing watched. What a border's own
+        // reading stopped at stays that border's weakening, carried as it was said, so a row here
+        // is the sample made with the arithmetic and the other ways are held in the figure test.
+        table.put("AWeightNotDecided", "answers/UNAFFECTED");
         // A border nothing held against the lines beside it, which does not answer one way: a
         // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
         // watched is. The row is written with the one that is, so what it shows is the answer
@@ -230,6 +236,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
                  Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
+                 Weakening.AWeightNotDecided _,
                  Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
                  Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
@@ -277,6 +284,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
                 souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.add(new Weakening.AReadingNotTiedToItsLine(border()));
+        out.add(new Weakening.AWeightNotDecided("b", OneBorder.derivedValue(),
+                new NumericTerm.ValueOf(TermPath.of("x")),
+                Weakening.AWeightNotDecided.Why.THE_ARITHMETIC_GAVE_OUT));
         out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
         out.add(new Weakening.MeetingsNotWalked("b", 1,

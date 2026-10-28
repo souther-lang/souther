@@ -60,6 +60,9 @@ final class Subjects {
             // carried in the words a report writes about the border's own items, not in a second
             // place to send a reader.
             case Weakening.ItemsPlaceNotWorkedOut it -> atThe(it.border());
+            // The behavior, which is whose weights these are. Which position is the computation's
+            // own and is said where the weights are, in the document's `partition.weights`.
+            case Weakening.AWeightNotDecided it -> new Subject.OfABehavior(it.behavior());
             // The border the reading is: which point it could not be tied to is the point's, and
             // the reading is what a reader is sent to.
             case Weakening.AReadingNotTiedToItsLine it -> atThe(it.border());

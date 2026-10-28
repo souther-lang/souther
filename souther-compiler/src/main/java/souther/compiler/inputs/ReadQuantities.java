@@ -731,6 +731,28 @@ final class ReadQuantities implements Quantities {
         private final Map<NumericTerm.TakenOver, Optional<NumericDomain.Bounds>> runs =
                 new ConcurrentHashMap<>();
 
+        /**
+         * Where the numbers a reading has fixed and taken in stand together, for the terms listed in
+         * the order they were fixed and then taken in ({@link #standing}).
+         *
+         * <p>Kept here for the reason {@link #runs} is: what a reading's terms stand under is the
+         * terms' and not the reading's, and a search makes a reading for every value it tries of
+         * terms that are the same.
+         */
+        private final Map<List<NumericTerm>, StructuralContext.Merge> standings =
+                new ConcurrentHashMap<>();
+
+        StructuralContext.Merge standing(List<NumericTerm> terms) {
+            StructuralContext.Merge had = standings.get(terms);
+            if (had != null) {
+                return had;
+            }
+            StructuralContext.Merge made = whereTermsStand(terms);
+            STANDINGS_WORKED_OUT.incrementAndGet();
+            standings.put(List.copyOf(terms), made);
+            return made;
+        }
+
         NumericDomain.Bounds runOf(NumericTerm.TakenOver over, ReadQuantities asking) {
             Optional<NumericDomain.Bounds> had = runs.get(over);
             if (had != null) {
@@ -779,6 +801,17 @@ final class ReadQuantities implements Quantities {
     static long contextsRead() {
         return CONTEXTS_READ.get();
     }
+
+    /**
+     * How many lists of terms have had the context they stand in together worked out, for a test
+     * holding the readings a search makes to working it out once for terms fixed at other values.
+     * Counted for the reason {@link #contextsRead} is.
+     */
+    static long standingsWorkedOut() {
+        return STANDINGS_WORKED_OUT.get();
+    }
+
+    private static final AtomicLong STANDINGS_WORKED_OUT = new AtomicLong();
 
     private static final AtomicLong CONTEXTS_READ = new AtomicLong();
 
@@ -1327,12 +1360,22 @@ final class ReadQuantities implements Quantities {
 
     /** {@link #accumulated}, worked out. */
     private StructuralContext.Merge whereItStands() {
-        // Each term spelled once to be put in order, and each place once: a place put together with
-        // itself is what it was.
+        List<NumericTerm> terms = new ArrayList<>(fixed.keySet());
+        assumed.forEach(each -> terms.addAll(each.terms()));
+        return contexts.standing(terms);
+    }
+
+    /**
+     * Where the numbers {@code terms} stand together, which is settled by the terms and the order
+     * they are listed in and by nothing a reading holds: not the values fixed, not the rules.
+     *
+     * <p>Each term spelled once to be put in order, and each place once: a place put together with
+     * itself is what it was. Listed in the order they were fixed and taken in, since two terms
+     * spelled alike are put in the order they are listed.
+     */
+    private static StructuralContext.Merge whereTermsStand(List<NumericTerm> terms) {
         List<Map.Entry<String, TermPath>> said = new ArrayList<>();
-        fixed.keySet().forEach(term -> said.add(Map.entry(term.toString(), term.subjectPath())));
-        assumed.forEach(each -> each.terms().forEach(
-                term -> said.add(Map.entry(term.toString(), term.subjectPath()))));
+        terms.forEach(term -> said.add(Map.entry(term.toString(), term.subjectPath())));
         said.sort(Map.Entry.comparingByKey());
         Set<TermPath> places = new LinkedHashSet<>();
         said.forEach(each -> places.add(each.getValue()));
@@ -1452,11 +1495,7 @@ final class ReadQuantities implements Quantities {
 
     /** Where a value's own rules put a coordinate, as a place of this input. */
     private static TermPath pathOf(TermPath root, RuleKey named) {
-        TermPath at = root;
-        for (String field : named.steps()) {
-            at = at.then(field);
-        }
-        return at;
+        return root.then(named.steps());
     }
 
     /**

@@ -9376,7 +9376,7 @@ public final class Generator {
         Map<RealizationTarget, NumbersAskedFor> out = new LinkedHashMap<>(itemAsks);
         // Every count the row stands at, which is one of the counts the item and every condition
         // on the way leave it, and every statement its elements meet together.
-        counted.forEach((target, counts) -> out.merge(target, counts, NumbersAskedFor::meet));
+        counted.forEach((target, counts) -> out.merge(target, counts, leaves::met));
         // Every number a place was chosen for on the way, and not every number a cut names. A cut
         // may be met more than one way — every element meeting a condition, or a container holding
         // none — and what the row stands at is whichever way was placed; asked of the cut's numbers
@@ -9388,7 +9388,7 @@ public final class Generator {
         // ({@link Standing#routed}) — worked out again, a number read at a name every case of a sum
         // spreads would be filed under the sum's own name while the row stands at a position under
         // a case, and the search would be built for a number nothing had said what it was one of.
-        routed.forEach((at, target) -> out.merge(target, leaves.of(at), NumbersAskedFor::meet));
+        routed.forEach((at, target) -> out.merge(target, leaves.of(at), leaves::met));
         return out;
     }
 
@@ -9410,9 +9410,20 @@ public final class Generator {
         private final Reachability.Reaching reaching;
         private final Map<NumericTerm, NumbersAskedFor> said = new HashMap<>();
 
+        /** What two answers come to together, for the two as objects: a number is asked of again
+         *  at every condition placed after the one that routed it, with the same two answers. */
+        private final Map<NumbersAskedFor, Map<NumbersAskedFor, NumbersAskedFor>> together =
+                new IdentityHashMap<>();
+
         WhatTheWayLeaves(MeasuredInput subject, Reachability.Reaching reaching) {
             this.subject = subject;
             this.reaching = reaching;
+        }
+
+        /** {@code held} and {@code other} met, worked out once for the pair. */
+        NumbersAskedFor met(NumbersAskedFor held, NumbersAskedFor other) {
+            return together.computeIfAbsent(held, _ -> new IdentityHashMap<>())
+                    .computeIfAbsent(other, _ -> held.meet(other));
         }
 
         NumbersAskedFor of(NumericTerm at) {

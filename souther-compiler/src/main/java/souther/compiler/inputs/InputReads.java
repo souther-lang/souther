@@ -37,6 +37,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -344,6 +345,41 @@ public final class InputReads {
             }
             return h;
         }
+    }
+
+    /**
+     * What {@code reading} comes to, with what it asked of the values handed on the way here.
+     * Another reading that is this but for what was handed ({@link #sameButForWhatIsHanded}) and
+     * hands the same answers ({@link #handsAsAsked}) is read to the same.
+     */
+    public <T> Watched<T> watchingWhatIsHanded(Supplier<T> reading) {
+        return BindingEnvironment.Watch.over(names, reading);
+    }
+
+    /** Whether a reading is being watched on this thread, which a reading that skips part of
+     *  itself would leave without what that part asked. */
+    public static boolean watching() {
+        return BindingEnvironment.Watch.running();
+    }
+
+    /** Whether the values handed on the way here are the ones {@code asked} was answered. */
+    public boolean handsAsAsked(HandedAnswers asked) {
+        return asked.holdsOf(names);
+    }
+
+    /** Whether {@code that} holds what this does, but for the values handed on the way to it. */
+    public boolean sameButForWhatIsHanded(InputReads that) {
+        return this == that || (alternatives.equals(that.alternatives)
+                && declared.equals(that.declared)
+                && dependencies.equals(that.dependencies)
+                && applied.equals(that.applied)
+                && names.sameButForWhatIsHanded(that.names));
+    }
+
+    /** A hash that two readings which are the same but for what was handed share. */
+    public int hashButForWhatIsHanded() {
+        return Objects.hash(names.hashButForWhatIsHanded(), applied.readings(), applied.widths(),
+                applied.handed(), applied.taken());
     }
 
     private InputReads(BindingEnvironment names,
