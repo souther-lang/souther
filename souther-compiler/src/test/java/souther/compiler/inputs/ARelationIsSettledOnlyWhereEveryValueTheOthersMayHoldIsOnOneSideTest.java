@@ -394,10 +394,10 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
             // side without one, where the sum is computed and compared with the constant and not
             // added up with it. So a side a row is missing from is the arithmetic's only where
             // rows on each side stand once the arithmetic is let go.
-            boolean[] letGo = sidesOf(terms, at, value, constant, relation, LET_GO);
+            // Asked only where the computed rows leave a side out, which is rare.
             switch (leaves) {
-                case Leaves.Undivided _ -> assertTrue(
-                        (sides[0] && sides[1]) || (letGo[0] && letGo[1]),
+                case Leaves.Undivided _ -> assertTrue((sides[0] && sides[1])
+                                || bothSidesOnceLetGo(terms, at, value, constant, relation),
                         "left either way at " + value + ": " + where);
                 case Leaves.Settled settled -> {
                     // A value no row computes is outside what is said of the term.
@@ -408,7 +408,8 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                     SettledRun inside = settled.runs().stream()
                             .filter(run -> within(run, value)).findFirst().orElse(null);
                     if (inside == null) {
-                        assertTrue((sides[0] && sides[1]) || (letGo[0] && letGo[1]),
+                        assertTrue((sides[0] && sides[1])
+                                        || bothSidesOnceLetGo(terms, at, value, constant, relation),
                                 "left either way at " + value + ": " + where);
                     } else {
                         // Settled is that no computed row is on the other side. A value no row
@@ -429,6 +430,14 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 || (run.from().inclusive() && at.compareTo(run.from().at()) == 0))
                 && (run.to() == null || at.compareTo(run.to().at()) < 0
                 || (run.to().inclusive() && at.compareTo(run.to().at()) == 0));
+    }
+
+    /** Whether, with the arithmetic let go, some row holds the relation and some row fails it. */
+    private static boolean bothSidesOnceLetGo(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, long value,
+            long constant, Rel relation) {
+        boolean[] sides = sidesOf(terms, at, value, constant, relation, LET_GO);
+        return sides[0] && sides[1];
     }
 
     /** Whether some computed row holds the relation, and whether some computed row fails it. */

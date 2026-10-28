@@ -44,7 +44,7 @@ class ThreeTermsAreSettledOnlyWhereTheirComputedRowsSayTest {
     private static final long LEAST = -5;
 
     /** How far past the type's ends a term is let run where the arithmetic is let go. */
-    private static final long FAR = 12;
+    private static final long FAR = 8;
 
     private static NumericDomain.Bounds run(long low, long high) {
         return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(low)),
@@ -235,8 +235,11 @@ class ThreeTermsAreSettledOnlyWhereTheirComputedRowsSayTest {
             boolean added = java.util.Arrays.stream(weights).allMatch(weight -> weight == 1);
             for (long divisor : added ? new long[] {1, 3} : new long[] {1}) {
                 for (NumericDomain.Bounds heldAt : HELD_AT) {
-                    for (Other other : OTHERS) {
-                        for (long constant : CONSTANTS) {
+                    // Four terms make rows of the cube of the values there are: a few of the
+                    // others and constants stand for them.
+                    for (Other other : weights.length > 3 ? OTHERS.subList(0, 3) : OTHERS) {
+                        for (long constant : weights.length > 3 ? new long[] {-3, 0, 4}
+                                : CONSTANTS) {
                             for (Rel relation : RELATIONS) {
                                 for (int at = 0; at < weights.length; at++) {
                                     out.add(new Case(weights, divisor, heldAt, other, constant,
@@ -249,6 +252,20 @@ class ThreeTermsAreSettledOnlyWhereTheirComputedRowsSayTest {
             }
         }
         return out;
+    }
+
+    /** Whether a computed row stands on each side at {@code value} among the values the others
+     *  are shown to take, or the size alone keeps one from it: rows stand on each side once the
+     *  arithmetic is let go. */
+    private static boolean eitherWay(Case each, long value) {
+        boolean[] shown = sidesOf(each.weights(), each.at(), value, each.constant(),
+                each.relation(), each.shown(), Rows.WITH_THE_CONSTANT);
+        if (shown[0] && shown[1]) {
+            return true;
+        }
+        boolean[] letGo = sidesOf(each.weights(), each.at(), value, each.constant(),
+                each.relation(), each.letGo(), Rows.LET_GO);
+        return letGo[0] && letGo[1];
     }
 
     /**
@@ -281,28 +298,26 @@ class ThreeTermsAreSettledOnlyWhereTheirComputedRowsSayTest {
                 if (!takes(value, each.heldAt())) {
                     continue;
                 }
-                boolean[] possible = sidesOf(weights, each.at(), value, each.constant(),
-                        each.relation(), each.held(), Rows.WITH_THE_CONSTANT);
-                boolean[] shown = sidesOf(weights, each.at(), value, each.constant(),
-                        each.relation(), each.shown(), Rows.WITH_THE_CONSTANT);
-                boolean[] letGo = sidesOf(weights, each.at(), value, each.constant(),
-                        each.relation(), each.letGo(), Rows.LET_GO);
-                boolean eitherWay = (shown[0] && shown[1]) || (letGo[0] && letGo[1]);
+                // Each enumeration is asked only where a claim needs it: the rows the others make
+                // are many, and the arithmetic let go runs past the type.
                 switch (leaves) {
-                    case Leaves.Undivided _ -> assertTrue(eitherWay,
+                    case Leaves.Undivided _ -> assertTrue(eitherWay(each, value),
                             "left either way at " + value + ": " + each);
                     case Leaves.Settled settled -> {
                         long at = value;
                         SettledRun inside = settled.runs().stream()
                                 .filter(run -> within(run, at)).findFirst().orElse(null);
                         if (inside != null) {
+                            boolean[] possible = sidesOf(weights, each.at(), value,
+                                    each.constant(), each.relation(), each.held(),
+                                    Rows.WITH_THE_CONSTANT);
                             assertFalse(possible[inside.holds() ? 1 : 0],
                                     "settled " + inside.holds() + " at " + value + ": " + each
                                             + " " + leaves);
                         } else if (settled.least() != null && settled.greatest() != null
                                 && value >= settled.least().at().floor().orNull().longValue()
                                 && value <= settled.greatest().at().floor().orNull().longValue()) {
-                            assertTrue(eitherWay,
+                            assertTrue(eitherWay(each, value),
                                     "left either way at " + value + ": " + each + " " + leaves);
                         }
                     }

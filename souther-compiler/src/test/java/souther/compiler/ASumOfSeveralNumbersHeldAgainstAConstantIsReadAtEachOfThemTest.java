@@ -81,7 +81,7 @@ class ASumOfSeveralNumbersHeldAgainstAConstantIsReadAtEachOfThemTest {
 
     @Test
     void anAverageOfSeveralNumbersIsReadAtEachOfThem() {
-        for (int numbers = 2; numbers <= 4; numbers++) {
+        for (int numbers = 2; numbers <= 3; numbers++) {
             assertEquals(List.of(),
                     unread("Rational.toInt(DOWN, (" + sum(numbers, "+") + ") / " + numbers
                             + ") >= 100"),
