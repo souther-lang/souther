@@ -49,7 +49,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyDifferentAcross, Quantity.SumOver, Quantity.TheKeptTotal,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
-        Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
+        Quantity.HowManyCarried, Quantity.APieceOf, Quantity.ThePieceAt,
+        Quantity.IsAmongThePieces {
 
     /** Where the pieces a window holds begin, as a key spells it: nothing for the first. */
     private static String fromSpelled(int from) {
@@ -89,6 +90,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      TheKeptTotal _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
                 case APieceOf piece -> isIn(piece.string());
+                case ThePieceAt piece -> isIn(piece.string());
                 case IsAmongThePieces among -> isIn(among.value()) || isIn(among.string());
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
@@ -268,6 +270,57 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
                             + ", " : "") + string.spelled() + ")";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * The piece at an index of a string that an operation parts: one value, told apart by the
+     * string, the separator and the index.
+     *
+     * <p>The piece a list lookup at an index written down picks of the pieces, which the arm that
+     * opens the lookup binds. Beside {@link APieceOf}, which is whichever piece the statement it
+     * is read inside is about: this is one piece, the one at the index, and it is there only where
+     * the string has that many.
+     *
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param index     which of the pieces it is, counting from nought
+     */
+    record ThePieceAt(ValueName.Stdlib operation, int separator, Quantity string, int index)
+            implements Quantity {
+
+        public ThePieceAt {
+            Objects.requireNonNull(operation, "a piece is of what some operation parts");
+            if (!(string instanceof DecisionAtom.OfTheInput)
+                    && !(string instanceof WhatAnOperationAnswers)) {
+                throw new IllegalArgumentException(
+                        "a piece read here is of a string of the input: " + string);
+            }
+            if (index < 0) {
+                throw new IllegalArgumentException("a piece is at an index of nought or more: "
+                        + index);
+            }
+        }
+
+        /** The numbers of the input the string is made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            return switch (string) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                default -> throw new IllegalStateException("held out by the constructor");
+            };
+        }
+
+        @Override
+        public String spelled() {
+            return "piece " + index + " of " + operation.qualified() + "(U+"
+                    + Integer.toHexString(separator) + ", " + string.spelled() + ")";
         }
 
         @Override

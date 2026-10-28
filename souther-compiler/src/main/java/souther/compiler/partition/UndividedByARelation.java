@@ -56,8 +56,12 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.Language;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.StringsHeldAsWritten;
+import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.Accumulation;
+import souther.compiler.semantics.CaseMapping;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -396,9 +400,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *               a walk kept so far of what it carried, where the element it hands its step
      *               stands, or how many of the elements meet a statement — which says where it
      *               lies; null otherwise
+     * @param piece  the piece of a string of the input at an index that it is, which is made of
+     *               that string's position and is at none of its own; null otherwise
      */
     record Side(List<FilingCoordinate> madeOf, ExactRatio weight,
-                NumericTerm number, Quantity.ReadAlongAContainer along) {
+                NumericTerm number, Quantity.ReadAlongAContainer along,
+                Quantity.ThePieceAt piece) {
 
         Side {
             madeOf = List.copyOf(madeOf);
@@ -406,6 +413,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException("what is read along a container is at no"
                         + " position: " + along);
             }
+            if (piece != null && number != null) {
+                throw new IllegalArgumentException("a piece of a string is no number of one"
+                        + " position: " + piece);
+            }
+        }
+
+        Side(List<FilingCoordinate> madeOf, ExactRatio weight, NumericTerm number,
+             Quantity.ReadAlongAContainer along) {
+            this(madeOf, weight, number, along, null);
         }
 
         /** The end a walk keeping one carried into its step, where this is that; null
@@ -576,6 +592,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case Quantity.APieceOf piece -> new Side(
                         piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null);
+                case Quantity.ThePieceAt piece -> new Side(
+                        piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
+                        each.getValue(), null, null, piece);
                 case Quantity.IsAmongThePieces among -> new Side(
                         among.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null);
@@ -1473,13 +1492,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < 2; at++) {
             Side here = sides.get(at);
             Side there = sides.get(1 - at);
-            if (!(here.number() instanceof NumericTerm.ValueOf mine)
-                    || !(there.number() instanceof NumericTerm.ValueOf theirs)
+            NumericTerm.ValueOf mine = placeOf(here);
+            NumericTerm.ValueOf theirs = placeOf(there);
+            if (mine == null || theirs == null
+                    || (here.piece() != null && there.piece() != null)
                     || !(carriers.get(at) instanceof Carrier.Text)
                     || !(carriers.get(1 - at) instanceof Carrier.Text)
                     || shown.contains(FilingCoordinate.of(mine))
                     || !leavesTheStringsOf(mine.subjectPath(), theirs.subjectPath(), written,
-                            narrowing)) {
+                            narrowing, here.piece() != null ? here.piece() : there.piece())) {
                 continue;
             }
             Position partner = read.domain().at(theirs.subjectPath());
@@ -1487,16 +1508,70 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     instanceof AdmissibleSet.Completeness.Complete)) {
                 continue;
             }
-            ValueSet canBe = partner.admitted().approximation();
-            if (canBe.isAny() || canBe.isEmpty() || canBe instanceof ValueSet.WholeRuns) {
+            ValueSet theirStrings = partner.admitted().approximation();
+            ValueSet canBe = here.piece() != null
+                    ? stringsWithAPiece(here.piece(), theirStrings)
+                    : there.piece() != null ? stringsThatAreThePiece(there.piece(), theirStrings)
+                    : theirStrings;
+            if (canBe == null || canBe.isAny() || canBe.isEmpty()
+                    || canBe instanceof ValueSet.WholeRuns) {
                 continue;
             }
             if (!runGetsThere.getAsBoolean()) {
                 continue;
             }
-            out.put(mine, new StringsAPartnerCanHold(canBe, theirs.subjectPath().toString()));
+            out.put(mine, new StringsAPartnerCanHold(canBe, there.piece() == null
+                    ? theirs.subjectPath().toString()
+                    : "piece " + there.piece().index() + " of " + theirs.subjectPath()));
         }
         return out;
+    }
+
+    /**
+     * The position whose strings {@code side} is read off: the position it is a number of, or the
+     * position of the string it is a piece of — or null where it is neither.
+     */
+    private static NumericTerm.ValueOf placeOf(Side side) {
+        if (side.number() instanceof NumericTerm.ValueOf place) {
+            return place;
+        }
+        return side.piece() == null ? null : stringOf(side.piece());
+    }
+
+    /**
+     * The position of the string {@code piece} is of, where that is a string of the input as it
+     * stands — or null where it is made of one by an operation.
+     */
+    private static NumericTerm.ValueOf stringOf(Quantity.ThePieceAt piece) {
+        return piece.string() instanceof DecisionAtom.OfTheInput(NumericTerm.ValueOf string)
+                ? string : null;
+    }
+
+    /**
+     * The strings that have {@code piece} in some string of {@code whole}, or null where
+     * {@code whole} is not a language of strings or the machine for them is more than a piece's
+     * allowance.
+     */
+    private static ValueSet stringsWithAPiece(Quantity.ThePieceAt piece, ValueSet whole) {
+        if (!(whole instanceof ValueSet.Matching(Language language))) {
+            return null;
+        }
+        Language having = StringsOfAPiece.wholesWithAPieceIn(language, piece.separator(),
+                piece.index(), PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        return having == null ? null : ValueSet.matching(having);
+    }
+
+    /**
+     * The strings that are {@code piece} of some string of {@code whole}, or null where {@code whole}
+     * is not a language of strings or the machine for them is more than a piece's allowance.
+     */
+    private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole) {
+        if (!(whole instanceof ValueSet.Matching(Language language))) {
+            return null;
+        }
+        Language image = StringsOfAPiece.pieceAt(language, piece.separator(), piece.index(),
+                PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        return image == null ? null : ValueSet.matching(image);
     }
 
     /**
@@ -1505,15 +1580,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A statement of which case a value is, or of how many a container holds, says nothing of
      * the values there; any other statement does not reach them only where it names neither
-     * place.
+     * place. Where {@code theirs} is the string a piece is of, a statement that the string holds
+     * the separators the piece's index needs is one the piece's strings already stand on.
+     *
+     * @param piece the piece the partner is, or null where it is the strings at {@code theirs}
      */
     private static boolean leavesTheStringsOf(TermPath mine, TermPath theirs,
                                               List<OnAWay> written,
-                                              List<TakenConstraint> narrowing) {
+                                              List<TakenConstraint> narrowing,
+                                              Quantity.ThePieceAt piece) {
         for (OnAWay each : written) {
             boolean saysNothingOfValues = each.whatStands() && each.relation() == null
                     && each.elementsOf() == null;
-            if (!saysNothingOfValues
+            if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
                     && (each.positions().contains(mine) || each.positions().contains(theirs)
                     || each.elementsOf() != null)) {
                 return false;
@@ -1522,6 +1601,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
                 .anyMatch(term -> term.subjectPath().equals(mine)
                         || term.subjectPath().equals(theirs)));
+    }
+
+    /**
+     * Whether {@code statement} says the string {@code piece} is of holds at least as many of the
+     * separator as the piece's index needs and nothing else, which the strings that have a piece
+     * at that index all do.
+     */
+    private static boolean holdsTheSeparatorsOf(OnAWay statement, Quantity.ThePieceAt piece) {
+        NumericTerm.ValueOf whole = piece == null ? null : stringOf(piece);
+        if (whole == null) {
+            return false;
+        }
+        TermPath string = whole.subjectPath();
+        if (statement.elementsOf() != null
+                || !statement.positions().equals(Set.of(string))
+                || !(statement.relation() instanceof TakenConstraint.Affine(
+                        LinearForm<NumericTerm> form, Rel rel)) || rel != Rel.GE
+                || form.coefs().size() != 1) {
+            return false;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getKey() instanceof NumericTerm.CodePointClassCount count
+                && count.position().equals(string)
+                && count.through().equals(CaseMapping.NONE)
+                && count.counted().equals(new CodePointClass.OneOf(
+                        CodePoints.of(piece.separator())))
+                && only.getValue().equals(ExactRatio.ONE)
+                && ExactRatio.of(piece.index()).compareTo(form.constant().negated()) >= 0;
     }
 
     /**

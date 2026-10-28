@@ -501,7 +501,7 @@ final class MeaningAssumptions {
             case Quantity.CodePointsOfAPiece _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _,
                  Quantity.WhatAnOperationAnswers _, Quantity.ProductOfTwo _,
-                 Quantity.RemainderByAnInput _, Quantity.APieceOf _,
+                 Quantity.RemainderByAnInput _, Quantity.APieceOf _, Quantity.ThePieceAt _,
                  Quantity.IsAmongThePieces _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);

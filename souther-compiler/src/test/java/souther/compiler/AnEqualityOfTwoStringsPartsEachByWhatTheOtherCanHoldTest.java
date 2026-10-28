@@ -128,6 +128,111 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                         + " [ a.value ])"));
     }
 
+    /** The classes of {@code f}'s positions, over an email and a book of rows with a domain. */
+    private static Map<String, List<String>> classesOfAnEmailAgainstTheDomainsOfARow(
+            String lets) {
+        Compilation compilation = Compilation.ofSource("""
+                module example.pieces
+
+                data Email = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+                data Domain = String
+                    invariant String.matches("[a-z0-9]+(\\\\.[a-z0-9]+)+", value)
+
+                data Row = { id: String, domain: Domain? }
+
+                data Book = List<Row>
+
+                let hasDomain (text: String, r: Row): Bool =
+                    match r.domain with
+                        | Some own -> own.value == text
+                        | None -> false
+
+                behavior f : (email: Email, book: Book) -> List<Row>
+
+                %s
+                """.formatted(lets), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, PartitionEvidence> all = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        Map<String, List<String>> out = new java.util.TreeMap<>();
+        all.get("f").axes().stream().filter(axis -> axis.path().equals("email"))
+                .forEach(axis -> out.put(axis.path(), axis.classes()));
+        return out;
+    }
+
+    private static final Map<String, List<String>> THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN =
+            Map.of("email", List.of("email/x can be book[*].domain@Some",
+                    "email/x is never book[*].domain@Some"));
+
+    /**
+     * The piece a lookup at an index written down picks of the pieces of a string is one value,
+     * and the string it is of is parted by whether that piece can be what the other side holds.
+     */
+    @Test
+    void theStringsWhoseSecondPieceCanBeTheOtherSideAreAClassOfTheString() {
+        assertEquals(THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN,
+                classesOfAnEmailAgainstTheDomainsOfARow("""
+                        let f (email, book) =
+                            match List.get(1, String.split("@", email.value)) with
+                                | Some d -> List.filter(r -> hasDomain(d, r), book.value)
+                                | None -> []
+                        """));
+    }
+
+    /** And where the piece reaches the comparison through a list a function answers. */
+    @Test
+    void thePieceMayReachTheComparisonThroughAnAnsweredList() {
+        assertEquals(THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN,
+                classesOfAnEmailAgainstTheDomainsOfARow("""
+                        let domainsOf (email: Email): List<String> =
+                            match List.get(1, String.split("@", email.value)) with
+                                | Some d -> [ d ]
+                                | None -> []
+
+                        let f (email, book) =
+                            List.flatMap(d -> List.filter(r -> hasDomain(d, r), book.value),
+                                    domainsOf(email))
+                        """));
+    }
+
+    /** And where the piece is attempted as a name, which is the string it is made of. */
+    @Test
+    void aPieceAttemptedAsANameIsTheSamePiece() {
+        assertEquals(THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN,
+                classesOfAnEmailAgainstTheDomainsOfARow("""
+                        let hasName (name: Domain, r: Row): Bool =
+                            match r.domain with
+                                | Some own -> own == name
+                                | None -> false
+
+                        let domainsOf (email: Email): List<Domain> =
+                            match List.get(1, String.split("@", email.value)) with
+                                | Some d -> if Domain(d) as name then [ name ] else []
+                                | None -> []
+
+                        let f (email, book) =
+                            List.flatMap(d -> List.filter(r -> hasName(d, r), book.value),
+                                    domainsOf(email))
+                        """));
+    }
+
+    /** A guard on the string itself narrows it before the lookup, and nothing is said. */
+    @Test
+    void aGuardOnTheWholeStringPartsNothing() {
+        assertEquals(Map.of(), classesOfAnEmailAgainstTheDomainsOfARow("""
+                let f (email, book) = {
+                    guard String.length(email.value) >= 8 else []
+                    match List.get(1, String.split("@", email.value)) with
+                        | Some d -> List.filter(r -> hasDomain(d, r), book.value)
+                        | None -> []
+                }
+                """));
+    }
+
     /** A guard on a number beside the two says nothing of their strings. */
     @Test
     void aGuardOnAnotherPositionLeavesTheStringsPartedAsTheyWere() {

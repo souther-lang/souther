@@ -150,6 +150,7 @@ public sealed interface Proposition {
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.APieceOf piece -> mayBeAnElementOf(piece.string(), container);
+            case Quantity.ThePieceAt piece -> mayBeAnElementOf(piece.string(), container);
             case Quantity.IsAmongThePieces among -> mayBeAnElementOf(among.value(), container)
                     || mayBeAnElementOf(among.string(), container);
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
@@ -1873,7 +1874,8 @@ public sealed interface Proposition {
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
-                 Quantity.APieceOf _, Quantity.IsAmongThePieces _, Quantity.TheKeptTotal _ -> false;
+                 Quantity.APieceOf _, Quantity.ThePieceAt _, Quantity.IsAmongThePieces _,
+                 Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
