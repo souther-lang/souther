@@ -181,8 +181,7 @@ public record Composition(OfferingRequest request,
                 }
             }
             out.put(behavior, filling.holding(
-                    new Adequacy.Generated.RowsForCases(filling.cases().asked(), kept))
-                    .seededBy(seeds));
+                    new Adequacy.Generated.RowsForCases(filling.cases().asked(), kept), seeds));
         });
         return out;
     }

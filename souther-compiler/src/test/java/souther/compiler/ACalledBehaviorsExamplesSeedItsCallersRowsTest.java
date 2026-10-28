@@ -183,6 +183,47 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
                 () -> "join's row is wrapper's: " + offered(joined, "repro.join", "wrapper"));
     }
 
+    /** A caller that depends on another behavior, and calls one that has rows. */
+    private static final String WITH_A_DEPENDENCY = """
+            module repro.dep
+
+            behavior scale : (n: Int) -> Int
+
+            let scale (n) = n + 1
+
+            example scale
+                | (5) -> 6
+
+            behavior rate : (n: Int) -> Int
+
+            fake rate
+                | _ -> 2
+
+            behavior total : (xs: List<Int>) -> Int
+                depends on rate
+
+            let total (xs, rate) = List.fold((acc, x) -> acc + scale(x) + rate(x), 0, xs)
+            """;
+
+    @Test
+    void aSeededRowStandsInEveryDependencyItsCallerRequires() {
+        Compilation compilation = Compilation.ofSource(WITH_A_DEPENDENCY, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
+                "the model compiles");
+        var offering = Adequacy.offeredFor(compilation.db(),
+                OfferingRequest.overTheModule("repro.dep"));
+        var rows = offering.rowsByBehavior().getOrDefault("total", List.of());
+        var seeded = rows.stream()
+                .filter(row -> row.inputs().stream().anyMatch(each -> each.text().equals("[5]")))
+                .toList();
+        assertEquals(1, seeded.size(), () -> "scale's row is total's: " + rows);
+        assertEquals(1, seeded.getFirst().answers().size(),
+                "and total's dependency is answered in it, as it is in every row");
+    }
+
     @Test
     void aRowOfTheCalleeIsSeededWhenEveryArgumentStandsAtAnInput() {
         String wrapper = ADD + """

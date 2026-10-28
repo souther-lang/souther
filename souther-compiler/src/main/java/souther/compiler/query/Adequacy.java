@@ -5663,21 +5663,11 @@ public final class Adequacy {
             callSeeds = List.copyOf(callSeeds);
         }
 
-        /** A filling no call seeds a row of. */
-        public Filling(souther.compiler.partition.FillResult composed,
-                       Generator.GenerationResult boundaries, Generated.RowsForRules rules,
-                       Generated.RowsForCases cases, List<GenerationDisposition> generation) {
-            this(composed, boundaries, rules, cases, generation, List.of());
-        }
-
-        /** This filling holding {@code cases} for the cases a statement draws inside itself. */
-        Filling holding(Generated.RowsForCases cases) {
-            return new Filling(composed, boundaries, rules, cases, generation, callSeeds);
-        }
-
-
-        /** This filling with {@code seeds} for the rows the callees' inputs seed. */
-        Filling seededBy(List<Generator.GeneratedRow> seeds) {
+        /**
+         * This filling holding {@code cases} for the cases a statement draws inside itself, and
+         * {@code seeds} for the rows the callees' inputs seed.
+         */
+        Filling holding(Generated.RowsForCases cases, List<Generator.GeneratedRow> seeds) {
             return new Filling(composed, boundaries, rules, cases, generation, seeds);
         }
 

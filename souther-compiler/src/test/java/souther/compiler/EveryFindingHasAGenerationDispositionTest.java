@@ -923,7 +923,7 @@ class EveryFindingHasAGenerationDispositionTest {
                                 atTheEdges(alsoAtTheEdges),
                                 Adequacy.Generated.RowsForRules.NOTHING,
                                 Adequacy.Generated.RowsForCases.NOTHING,
-                                List.of())), null)),
+                                List.of(), List.of())), null)),
                 Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE),
                 compiled(KIND).db()).text();
     }

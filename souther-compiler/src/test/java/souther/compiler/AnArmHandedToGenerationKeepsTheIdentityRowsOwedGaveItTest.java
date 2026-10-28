@@ -124,7 +124,7 @@ class AnArmHandedToGenerationKeepsTheIdentityRowsOwedGaveItTest {
                                         PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE))))));
         Adequacy.Filling tampered = new Adequacy.Filling(tamperedFill,
                 Generator.GenerationResult.NONE, Adequacy.Generated.RowsForRules.NOTHING,
-                Adequacy.Generated.RowsForCases.NOTHING, List.of());
+                Adequacy.Generated.RowsForCases.NOTHING, List.of(), List.of());
 
         Map<String, Adequacy.Filling> withTamperedPlan = new LinkedHashMap<>(generated);
         withTamperedPlan.put("feeFor", tampered);
