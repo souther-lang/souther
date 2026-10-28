@@ -1546,10 +1546,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /** Beside a total, two positions are each a term of the relation and not of the run. The
      *  adjustment held at nought, the gross stands at every value the total takes; and the total
      *  held at nought, the gross and the adjustment stand at each other's values wherever a row is
-     *  computed, which leaves out only those beside the ends of the type. */
+     *  computed, which leaves out only those beside the ends of the type. The total is left
+     *  undivided as well: the totals past the greatest {@code Int} are none a row stands at, so
+     *  they are no run past the rows. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "adjustment", RELATES,
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", RELATES,
                         "gross", RELATES),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));

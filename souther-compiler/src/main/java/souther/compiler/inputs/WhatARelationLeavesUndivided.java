@@ -797,8 +797,11 @@ public final class WhatARelationLeavesUndivided {
                             arithmetic))) {
                 return null;
             }
-            List<SettledRun> past = pastTheRows(free.held(), bounded.held(), terms.get(at),
-                    asking.holding());
+            // Values past where the term's order stops are none it takes: no row stands at them,
+            // whatever the operations, and they are no run past the rows.
+            WholeRun inItsOrder = WholeRun.ofTheValues(withinItsOrder(terms.get(at)).holds());
+            List<SettledRun> past = pastTheRows(inItsOrder == null ? free.held() : inItsOrder,
+                    bounded.held(), terms.get(at), asking.holding());
             if (past == null) {
                 return null;
             }

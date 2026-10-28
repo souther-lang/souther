@@ -255,6 +255,52 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
                 () -> "add's row is wrapper's: " + offered(wrapper, "repro.add", "wrapper"));
     }
 
+    @Test
+    void aRowTheCallerHasWrittenIsNotOfferedAgain() {
+        String written = AS_BEHAVIOR + """
+
+                example score
+                    | ([]) -> 0
+                    | ([Throw([])]) -> 0
+                    | ([Throw([Pin(12)])]) -> 12
+                    | ([Throw([Pin(1), Pin(2)])]) -> 2
+                    | ([Throw([Pin(1), Pin(2), Pin(3)])]) -> 3
+                """;
+        assertEquals(List.of(), offeredForScore(written),
+                "the block a person is handed holds nothing they have written");
+
+        String partly = AS_BEHAVIOR + """
+
+                example score
+                    | ([Throw([Pin(12)])]) -> 12
+                """;
+        List<String> seeded = offeredForScore(partly);
+        assertTrue(!seeded.contains("[Throw([Pin(12)])]") && seeded.contains("[Throw([])]"),
+                () -> "only the rows not written are offered: " + seeded);
+    }
+
+    @Test
+    void aRowTheCallerHasWrittenAgainstTheModulesTableIsNotOfferedAgain() {
+        String written = WITH_A_DEPENDENCY + """
+
+                example total
+                    | ([5]) -> 8
+                """;
+        List<String> offered = offered(written, "repro.dep", "total");
+        assertTrue(!offered.contains("[5]"), () -> "total([5]) is written: " + offered);
+    }
+
+    @Test
+    void aRowTheCallerHasWrittenWithAValueOfItsOwnDoesNotStandForTheSeed() {
+        String written = WITH_A_DEPENDENCY + """
+
+                example total
+                    | ([5]) with rate = 3 -> 9
+                """;
+        assertTrue(offered(written, "repro.dep", "total").contains("[5]"),
+                "the seed leans on the module's table, which is not what this row stands in with");
+    }
+
     /** What a row of score is owed for, as the generation asks it. */
     private static RowWork owedForScore(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
