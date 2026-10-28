@@ -441,6 +441,23 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /**
+     * {@code a >= b} with {@code a} from nought to ten and {@code b} held at five: the runs that
+     * settle it cover every value of {@code a}, so no value is left between them to be asked of
+     * the program. They are still runs of rows only where the program gets to the end of working
+     * them out, which a program that can stop a row untold does not show.
+     */
+    @Test
+    void aDenseRunFullySettledByTheFormStillNeedsComputedRows() {
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                dense("a", 1, run(0, 10)), dense("b", -1, run(5, 5)));
+
+        assertNull(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
+                String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
+                new WhatARelationLeavesUndivided.Operations(List.of(),
+                        WhatARelationLeavesUndivided.Told.SOME)));
+    }
+
+    /**
      * {@code a + c - s >= 0} over {@code Int}s, {@code c} strictly between nought and two: held
      * still at one, the whole number inside its ends, {@code c} leaves {@code a} against
      * {@code s}. Where nothing says how the values of {@code c} are spaced, no value is shown

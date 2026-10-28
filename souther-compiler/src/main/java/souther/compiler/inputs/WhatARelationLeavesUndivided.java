@@ -1851,6 +1851,9 @@ public final class WhatARelationLeavesUndivided {
                                                  Asking asking, BiPredicate<P, P> overlap,
                                                  Independence independent,
                                                  RowsComputed arithmetic) {
+        if (arithmetic.mayStopARow()) {
+            return null;
+        }
         Term<P> it = terms.get(at);
         Span held = Span.ofTheValues(it.holds());
         Interval rest = constant == null ? null : restOf(terms, at, constant);
