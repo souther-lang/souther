@@ -20,6 +20,7 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -154,7 +155,8 @@ public final class ReplacementReading {
                                    Predicate<ControlPlace.Arm> unreached,
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
-                                   Comparing comparing) {
+                                   Comparing comparing,
+                                   Map<Type, List<ObservedValue>> statedElsewhere) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
         // model owes there — so it is evidence for neither the body nor the rewrite, on either side
@@ -215,7 +217,7 @@ public final class ReplacementReading {
         // answers one value already: every way to an answer that reads something, or that is
         // another answer, closed by the rules.
         if (!forked && !plan.fromOneValue(behavior).provenAway(unreached)) {
-            out.addAll(oneAnswerAccounts(stated, comparing));
+            out.addAll(oneAnswerAccounts(stated, comparing, statedElsewhere));
         }
         return List.copyOf(out);
     }
@@ -329,8 +331,8 @@ public final class ReplacementReading {
      * anywhere inside is not one a body could be rewritten to answer, since nothing here knows what
      * it is.
      */
-    private static List<Account> oneAnswerAccounts(List<RowOutcome> rows,
-                                                   Comparing comparing) {
+    private static List<Account> oneAnswerAccounts(List<RowOutcome> rows, Comparing comparing,
+                                                   Map<Type, List<ObservedValue>> statedElsewhere) {
         List<RowOutcome> answered = new ArrayList<>();
         List<ObservedValue> values = new ArrayList<>();
         for (RowOutcome row : rows) {
@@ -350,7 +352,8 @@ public final class ReplacementReading {
                         RowRef.of(answered.get(i)));
                 out.add(new Account(new ReplacementAsWritten.ByOneAnswer(rewrite),
                         new ReplacementReportAnchor.AtTheBehavior(),
-                        oneAnswerStanding(rewrite, rows, answered, values, comparing)));
+                        oneAnswerStanding(rewrite, rows, answered, values, comparing,
+                                statedElsewhere)));
             }
         }
         return List.copyOf(out);
@@ -359,7 +362,8 @@ public final class ReplacementReading {
     /** What the rows came to about the body answering {@code rewrite}'s value always. */
     private static Standing oneAnswerStanding(Replacement.ByOneAnswer rewrite,
                                               List<RowOutcome> rows, List<RowOutcome> answered,
-                                              List<ObservedValue> values, Comparing comparing) {
+                                              List<ObservedValue> values, Comparing comparing,
+                                              Map<Type, List<ObservedValue>> statedElsewhere) {
         ObservedValue always = rewrite.answer();
         boolean unread = false;
         for (RowOutcome row : rows) {
@@ -382,7 +386,7 @@ public final class ReplacementReading {
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         }
         ReplacementOwed.ByOneAnswer lookFor = new ReplacementOwed.ByOneAnswer(rewrite,
-                answered.stream().map(RowOutcome::inputs).toList());
+                answered.stream().map(RowOutcome::inputs).toList(), statedElsewhere);
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {

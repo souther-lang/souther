@@ -28,6 +28,7 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,6 +39,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Predicate;
 
 /**
@@ -92,6 +94,8 @@ public final class Replacements {
                 }
             }
             ArmReplacements inTheClasses = carried;
+            Map<String, Map<Type, List<ObservedValue>>> takenBy =
+                    inputsTakenBy(sigs.value(), byTarget);
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
                 Sig sig = sigs.value().get(behavior.name());
                 Adequacy.RowReading reading =
@@ -121,8 +125,62 @@ public final class Replacements {
                                 return Comparisons.verdict(stated, answered, types, at)
                                         instanceof Verdict.Held;
                             }
-                        });
+                        }, statedBeside(behavior.name(), takenBy));
             });
+        }
+
+        /** The most values of one type that the rows of other behaviors are asked for. */
+        private static final int MOST_VALUES_OF_A_TYPE = 8;
+
+        /**
+         * The inputs each behavior's rows were run with, by the type of the parameter each stood
+         * at, in the order the rows are written. A row whose inputs do not line up with the
+         * behavior's parameters holds nothing to take from.
+         */
+        private static Map<String, Map<Type, List<ObservedValue>>> inputsTakenBy(
+                Map<String, Sig> sigs, Map<String, Adequacy.RowReading> byTarget) {
+            Map<String, Map<Type, List<ObservedValue>>> out = new TreeMap<>();
+            sigs.forEach((name, sig) -> {
+                Map<Type, List<ObservedValue>> taken = new LinkedHashMap<>();
+                for (RowOutcome row : Adequacy.RowReadings.readingFor(byTarget, name).rowsSeen()) {
+                    if (row.inputs().size() != sig.inputTypes().size()) {
+                        continue;
+                    }
+                    for (int p = 0; p < row.inputs().size(); p++) {
+                        List<ObservedValue> held = taken.computeIfAbsent(sig.inputTypes().get(p),
+                                _ -> new ArrayList<>());
+                        if (!held.contains(row.inputs().get(p))) {
+                            held.add(row.inputs().get(p));
+                        }
+                    }
+                }
+                out.put(name, taken);
+            });
+            return out;
+        }
+
+        /**
+         * What the rows of the behaviors other than {@code behavior} were run with, by type: the
+         * values a position of that type is known to take, which a list of them is not otherwise
+         * composed from where nothing divides its elements.
+         */
+        private static Map<Type, List<ObservedValue>> statedBeside(String behavior,
+                Map<String, Map<Type, List<ObservedValue>>> takenBy) {
+            Map<Type, List<ObservedValue>> out = new LinkedHashMap<>();
+            takenBy.forEach((name, taken) -> {
+                if (name.equals(behavior)) {
+                    return;
+                }
+                taken.forEach((type, values) -> {
+                    List<ObservedValue> held = out.computeIfAbsent(type, _ -> new ArrayList<>());
+                    for (ObservedValue value : values) {
+                        if (held.size() < MOST_VALUES_OF_A_TYPE && !held.contains(value)) {
+                            held.add(value);
+                        }
+                    }
+                });
+            });
+            return out;
         }
 
         /**

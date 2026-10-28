@@ -3,9 +3,12 @@ package souther.compiler.partition;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.Type;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.TreeMap;
@@ -69,13 +72,26 @@ public sealed interface ReplacementOwed {
      *                   the order the rows are written. Somewhere a run is known to come back, which
      *                   is where a row the rewrite answers differently on is looked for beside the
      *                   values the classes offer
+     * @param statedElsewhere the inputs the other behaviors of the module have rows for, by the
+     *                   type each stands at, in the order the rows are written. Each is a value a
+     *                   run took at a position of the type, which is where an element of a list
+     *                   the classes divide no way is looked for
      */
     record ByOneAnswer(Replacement.ByOneAnswer replacement,
-                       List<List<ObservedValue>> answeredOn) implements ReplacementOwed {
+                       List<List<ObservedValue>> answeredOn,
+                       Map<Type, List<ObservedValue>> statedElsewhere) implements ReplacementOwed {
 
         public ByOneAnswer {
             Objects.requireNonNull(replacement, "a body answering one value answers some value");
             answeredOn = answeredOn.stream().map(List::copyOf).toList();
+            Map<Type, List<ObservedValue>> kept = new LinkedHashMap<>();
+            statedElsewhere.forEach((type, values) -> kept.put(type, List.copyOf(values)));
+            statedElsewhere = Collections.unmodifiableMap(kept);
+        }
+
+        public ByOneAnswer(Replacement.ByOneAnswer replacement,
+                           List<List<ObservedValue>> answeredOn) {
+            this(replacement, answeredOn, Map.of());
         }
 
         /** The value the rewritten body answers. */

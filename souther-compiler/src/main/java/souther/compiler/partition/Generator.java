@@ -2251,6 +2251,14 @@ public final class Generator {
                         seen = demandedFrom(one.answeredOn().get(at), axes, purposes, looking,
                                 check, answers, read.piecesAttempted());
                     }
+                    // And with one more element in a list, which is a value the rows of another
+                    // behavior ran with: where the classes divide no element, the rows written
+                    // hold only the lists they ran with, and none of them has an element to move.
+                    for (int at = 0; seen == null && !looking.spent()
+                            && at < one.answeredOn().size(); at++) {
+                        seen = grownFrom(one.answeredOn().get(at), one.statedElsewhere(), axes,
+                                purposes, looking, check, answers);
+                    }
                     yield seen;
                 }
             };
@@ -2349,6 +2357,25 @@ public final class Generator {
                                        CandidateCheck check, List<StoodInAnswer> answers) {
         return beside(seen, axes, purposes, looking, check, answers,
                 (value, type, reading, _) -> NearbyValues.of(value, type, reading));
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, found beside the inputs
+     * of a row a run came back on, with one more element in a list they hold — one of
+     * {@code stated}, the values the rows of other behaviors ran with, by the type they stood at
+     * ({@link NearbyValues#grown}). Which candidate answers, and whether it answers differently,
+     * is what running it says.
+     */
+    private static GeneratedRow grownFrom(List<ObservedValue> seen,
+                                          Map<Type, List<ObservedValue>> stated,
+                                          MeasuredInput.MeasuredAxes axes, List<Purpose> purposes,
+                                          ReplacementWitness looking, CandidateCheck check,
+                                          List<StoodInAnswer> answers) {
+        if (stated.isEmpty()) {
+            return null;
+        }
+        return beside(seen, axes, purposes, looking, check, answers,
+                (value, type, reading, _) -> NearbyValues.grown(value, type, reading, stated));
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
