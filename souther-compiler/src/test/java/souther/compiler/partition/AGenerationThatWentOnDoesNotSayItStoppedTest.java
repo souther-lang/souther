@@ -98,7 +98,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                                 Generator.GenerationResult.NONE,
                                 Adequacy.Generated.RowsForRules.NOTHING,
                                 Adequacy.Generated.RowsForCases.NOTHING,
-                                List.of())), null)),
+                                List.of(), List.of())), null)),
                 Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE), COMPILED.db()).text();
     }
 
