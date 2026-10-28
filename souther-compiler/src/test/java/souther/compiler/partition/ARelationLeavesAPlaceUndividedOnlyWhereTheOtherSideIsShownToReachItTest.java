@@ -3294,13 +3294,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * Over decimals from nought, {@code a >= s + 5}: every {@code s} has an {@code a} at five
      * above it and one below, the {@code a} needed running on without end on an order that has
-     * none, and an {@code a} below five holds it for no {@code s}.
+     * none, and an {@code a} below five holds it for no {@code s}. The addition of decimals can
+     * stop a run at a scale, which no operation of the comparison tells of, so the run past every
+     * value is not taken as rows the program computes, and the relation is not shown to reach.
      */
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
         String body = "a.value >= s.value + 5.0m";
-        assertEquals(Map.of("s", RELATES), left("a: Amount, s: Amount", amount, body,
+        assertEquals(Map.of("s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
                 atThe(">=", amount, "a: Amount, s: Amount", body)));
         assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
                 classesAt("a: Amount, s: Amount", amount, body, "a"));

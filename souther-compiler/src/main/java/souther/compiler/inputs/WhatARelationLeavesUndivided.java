@@ -162,7 +162,8 @@ public final class WhatARelationLeavesUndivided {
         public IntSum {
             if (coefs == null || constant == null || least == null || greatest == null
                     || least.compareTo(greatest) > 0
-                    || coefs.containsKey(null) || coefs.containsValue(null)) {
+                    || coefs.keySet().stream().anyMatch(Objects::isNull)
+                    || coefs.values().stream().anyMatch(Objects::isNull)) {
                 throw new IllegalArgumentException("an operation comes to a number between two"
                         + " ends, weighing each term by a number: " + coefs);
             }
@@ -1962,7 +1963,7 @@ public final class WhatARelationLeavesUndivided {
                 return true;
             }
         }
-        return reachedWithoutEnd(terms, relation, free)
+        return (!arithmetic.mayStopARow() && reachedWithoutEnd(terms, relation, free))
                 || (within == null && reachedTogether(terms, at, constant, relation, free,
                         jointly))
                 || (within == null && reachedPieceByPiece(terms, at, constant, relation, free,
@@ -3211,7 +3212,7 @@ public final class WhatARelationLeavesUndivided {
     private static boolean rowsComputeAtTheEnds(ExactRatio weight, ExactRatio constant,
                                                 NumericDomain.Bounds run,
                                                 RowsComputed arithmetic) {
-        if (!arithmetic.stopsAtASize()) {
+        if (arithmetic.nothingStopsARow()) {
             return true;
         }
         Interval ends = Interval.of(run);
@@ -3596,7 +3597,7 @@ public final class WhatARelationLeavesUndivided {
         // Compared with each other and nothing added is a fact of the form. Whether the program
         // computes the row is what it works out, which may be more than the form shows:
         // `(a + 1) - 1 >= b` stops at the greatest `a`.
-        if (!arithmetic.stopsAtASize() || (standsAtTheOthersValue(terms, constant)
+        if (arithmetic.nothingStopsARow() || (standsAtTheOthersValue(terms, constant)
                 && beside.stream().allMatch(each -> each.signum() == 0)
                 && !arithmetic.mayStopARow())) {
             return true;

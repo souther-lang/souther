@@ -77,7 +77,16 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
 
     /** Whether every operation that can stop a run is told. */
     boolean tellsEveryOperation() {
-        return greatest != null && operations.told() == WhatARelationLeavesUndivided.Told.EVERY;
+        return operations.told() == WhatARelationLeavesUndivided.Told.EVERY;
+    }
+
+    /**
+     * Whether no row can fail to be computed: the type holds no greatest value, and nothing the
+     * program does can stop a row either. A type with no greatest value says only that no size
+     * stops a run; a number built into a type with an invariant, or an operation told, still can.
+     */
+    boolean nothingStopsARow() {
+        return greatest == null && !mayStopARow();
     }
 
     /**
@@ -86,9 +95,6 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      */
     boolean rowIsComputed(Supplier<ExactRatio[]> addends,
                           Supplier<Map<Object, ExactRatio>> values) {
-        if (greatest == null) {
-            return true;
-        }
         return switch (operations.told()) {
             case EVERY -> computedAt(values);
             case SOME -> false;
@@ -118,9 +124,6 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      */
     <P> boolean farthestRowsAreComputed(List<Term<P>> terms, ExactRatio constant,
                                         ExactRatio... sizes) {
-        if (greatest == null) {
-            return true;
-        }
         return switch (operations.told()) {
             case SOME -> false;
             case NOTHING_SAID -> computes(sizes);
