@@ -466,8 +466,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      *                leave no point of the line in common
      */
     private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
-                                Map<String, LevelRegion> counts,
-                                List<TakenConstraint.Affine> numbers) {
+                                Map<String, LevelRegion> counts, FormsHeld numbers) {
 
         HeldTogether withRequirements(Requirements required) {
             return new HeldTogether(required, truths, counts, numbers);
@@ -494,14 +493,12 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             }
             // The ones taken in before have not been proved to leave none, since the way was
             // open, so only the statements of this one's form can newly be proved to.
-            List<TakenConstraint.Affine> ofItsForm =
-                    WhatStatementsOfOneFormDecide.ofTheFormOf(numbers, affine);
-            if (WhatStatementsOfOneFormDecide.of(ofItsForm, null).noRowArrives()) {
-                return new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm));
-            }
-            List<TakenConstraint.Affine> stated = new ArrayList<>(numbers);
-            stated.add(affine);
-            return new Step.Held<>(new HeldTogether(requirements, truths, counts, stated));
+            return switch (numbers.taking(affine)) {
+                case FormsHeld.Taken.NoPointLeft(var ofItsForm) ->
+                        new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm));
+                case FormsHeld.Taken.Held(var forms) -> new Step.Held<>(
+                        new HeldTogether(requirements, truths, counts, forms));
+            };
         }
 
         /** These with the count {@code counted}, one {@link AStatementAtARow#countIn} answers,
@@ -562,7 +559,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public HeldTogether nothing() {
-                    return new HeldTogether(Requirements.NONE, List.of(), Map.of(), List.of());
+                    return new HeldTogether(Requirements.NONE, List.of(), Map.of(),
+                            FormsHeld.NONE);
                 }
 
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */

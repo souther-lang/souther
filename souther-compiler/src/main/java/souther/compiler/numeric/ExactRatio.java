@@ -480,7 +480,91 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      */
     @Override
     public int compareTo(ExactRatio other) {
-        return ExactArithmetic.compare(parts(), other.parts());
+        int quickly = quickly(other);
+        return quickly != UNDECIDED ? quickly : ExactArithmetic.compare(parts(), other.parts());
+    }
+
+    /** What {@link #quickly} answers where it has not the room to: no order is this. */
+    private static final int UNDECIDED = 2;
+
+    /** What {@link #times} answers where the product is more than a long holds. */
+    private static final long TOO_LARGE = -1;
+
+    /** The most two is raised to, and five, in the products {@link #quickly} forms. */
+    private static final int MOST_TWOS = 62;
+    private static final int MOST_FIVES = 27;
+
+    private static final long[] POWERS_OF_FIVE = powersOfFive();
+
+    private static long[] powersOfFive() {
+        long[] out = new long[MOST_FIVES + 1];
+        out[0] = 1;
+        for (int at = 1; at < out.length; at++) {
+            out[at] = out[at - 1] * 5;
+        }
+        return out;
+    }
+
+    /** The widest exponent whose difference from another this reads as a long without checking. */
+    private static final long NEAR = 1L << 31;
+
+    /**
+     * Where this stands against {@code other} by cross-multiplying longs, or {@link #UNDECIDED}
+     * where the numbers do not fit them.
+     *
+     * <p>The order of two values is the order of {@code |n₁|·d₂·2^t₁·5^f₁} against
+     * {@code |n₂|·d₁·2^t₂·5^f₂} under their common sign, and dividing both by the smaller power of
+     * each prime leaves only the differences of the exponents. Where those are small and the integers
+     * and their products fit a long, that is a few multiplications and no allocation; the order that
+     * brackets values of any size ({@link ExactArithmetic#compare}) is for every other pair.
+     */
+    private int quickly(ExactRatio other) {
+        int sign = numeratorWithoutUnits.signum();
+        int bySign = Integer.compare(sign, other.numeratorWithoutUnits.signum());
+        if (bySign != 0) {
+            return bySign;
+        }
+        if (sign == 0) {
+            return 0;
+        }
+        if (twos < -NEAR || twos > NEAR || other.twos < -NEAR || other.twos > NEAR
+                || fives < -NEAR || fives > NEAR || other.fives < -NEAR || other.fives > NEAR
+                || denominatorWithoutUnits.signum() <= 0
+                || other.denominatorWithoutUnits.signum() <= 0
+                || numeratorWithoutUnits.bitLength() > 62
+                || other.numeratorWithoutUnits.bitLength() > 62
+                || denominatorWithoutUnits.bitLength() > 62
+                || other.denominatorWithoutUnits.bitLength() > 62) {
+            return UNDECIDED;
+        }
+        long twosApart = twos - other.twos;
+        long fivesApart = fives - other.fives;
+        if (twosApart > MOST_TWOS || twosApart < -MOST_TWOS
+                || fivesApart > MOST_FIVES || fivesApart < -MOST_FIVES) {
+            return UNDECIDED;
+        }
+        long mine = times(times(Math.abs(numeratorWithoutUnits.longValue()),
+                other.denominatorWithoutUnits.longValue()),
+                times(1L << Math.max(twosApart, 0),
+                        POWERS_OF_FIVE[(int) Math.max(fivesApart, 0)]));
+        long theirs = times(times(Math.abs(other.numeratorWithoutUnits.longValue()),
+                denominatorWithoutUnits.longValue()),
+                times(1L << Math.max(-twosApart, 0),
+                        POWERS_OF_FIVE[(int) Math.max(-fivesApart, 0)]));
+        if (mine == TOO_LARGE || theirs == TOO_LARGE) {
+            return UNDECIDED;
+        }
+        int byMagnitude = Long.compare(mine, theirs);
+        return sign > 0 ? byMagnitude : -byMagnitude;
+    }
+
+    /** {@code x · y} for two longs that are not negative, or {@link #TOO_LARGE}. */
+    private static long times(long x, long y) {
+        if (x == TOO_LARGE || y == TOO_LARGE) {
+            return TOO_LARGE;
+        }
+        long low = x * y;
+        return Math.multiplyHigh(x, y) != 0 || low < 0 ? TOO_LARGE : low;
     }
 
     /**

@@ -7,7 +7,9 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The numbers a search for a value at one target is about.
@@ -105,7 +107,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
         if (on == null) {
             return ANYTHING;
         }
-        NumbersAskedFor asked = leaving(term, within, on);
+        Meeting asked = new Meeting(leaving(term, within, on));
         for (OnTheWay.TakenIn cut : cuts) {
             // One an element meets several ways leaves the term whatever the way chosen leaves
             // it, which is nothing said until one is.
@@ -113,7 +115,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
                     || !RowDemand.writtenAlikeAsItStands(cut.demand())) {
                 continue;
             }
-            asked = asked.meet(switch (cut.demand()) {
+            asked.and(switch (cut.demand()) {
                 case RowDemand.Relational(var relation) -> askedBy(relation, on, ANYTHING);
                 // What an element meets, which the region was not narrowed by. So what it leaves
                 // the term is read off a region that is, one relation of it at a time — the
@@ -134,7 +136,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
                 case RowDemand.OnARemainder _ -> ANYTHING;
             });
         }
-        return asked;
+        return asked.asked();
     }
 
     /** What the relations an element is to meet ask of {@code term}, each read off a region it
@@ -142,14 +144,14 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     private static NumbersAskedFor ofTheElement(List<RowDemand.Relational> relations,
                                                 NumericTerm term,
                                                 SearchRegion within, Carrier on) {
-        NumbersAskedFor asked = ANYTHING;
+        Meeting asked = new Meeting(ANYTHING);
         for (RowDemand.Relational each : relations) {
             if (each.terms().contains(term)) {
-                asked = asked.meet(askedBy(each.constraint(), on,
+                asked.and(askedBy(each.constraint(), on,
                         leaving(term, each.constraint().narrowing(within), on)));
             }
         }
-        return asked;
+        return asked.asked();
     }
 
     /** What {@code within} leaves {@code term}, on its own order. */
@@ -204,13 +206,34 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      * searching a position the rules bound and searching the whole of its order.
      */
     public NumbersAskedFor meet(NumbersAskedFor other) {
-        List<JointDemand> both = new ArrayList<>(onlyTogether);
-        for (JointDemand each : other.onlyTogether) {
-            if (!both.contains(each)) {
-                both.add(each);
-            }
+        return new Meeting(this).and(other).asked();
+    }
+
+    /**
+     * Many questions met one after another, which is what a way's cuts are.
+     *
+     * <p>The joint conditions are held as a set while they are gathered, each one hashed once as it
+     * comes in. Met pair by pair into a list, every condition would be compared with all that were
+     * gathered before it, and a way with many cuts is asked that for each of its terms.
+     */
+    private static final class Meeting {
+        private LevelRegion values;
+        private final Set<JointDemand> together;
+
+        Meeting(NumbersAskedFor start) {
+            values = start.values;
+            together = new LinkedHashSet<>(start.onlyTogether);
         }
-        return new NumbersAskedFor(values.meet(other.values), both);
+
+        Meeting and(NumbersAskedFor other) {
+            values = values.meet(other.values);
+            together.addAll(other.onlyTogether);
+            return this;
+        }
+
+        NumbersAskedFor asked() {
+            return new NumbersAskedFor(values, new ArrayList<>(together));
+        }
     }
 
     /**

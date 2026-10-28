@@ -63,6 +63,8 @@ import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
+import souther.compiler.inputs.HandedAnswers;
+import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -536,15 +538,46 @@ final class Pullback {
      * number by it: a table bound held against an average of three months is the bound where it was
      * written and three times it on the total. Nothing where both sides are numbers or neither is,
      * since neither is then the bound.
+     *
+     * <p>And the data that number is read out of ({@link TheBound#heldIn}).
      */
-    static Optional<ExactRatio> writtenAgainst(StatedComparison comparison, InputReading read,
-                                               InputReads reads) {
-        TheSignOfAnOrder.Sides<InputReads> sides =
-                new Pullback(read, Optional.empty()).sides();
+    static TheBound boundOf(StatedComparison comparison, InputReading read, InputReads reads,
+                            boolean inACopy) {
+        Pullback pullback = new Pullback(read, Optional.empty());
+        TheSignOfAnOrder.Sides<InputReads> sides = pullback.sides();
         ExactRatio left = sides.constant(comparison.left(), reads);
         ExactRatio right = sides.constant(comparison.right(), reads);
-        return left == null == (right == null) ? Optional.empty()
-                : Optional.of(left == null ? right : left);
+        if (left == null == (right == null)) {
+            return TheBound.NONE;
+        }
+        // What data a bound is read out of tells the lines of one comparison apart only where the
+        // comparison is a copy of a helper's: written in a body of its own it is one line with one
+        // data, and its place is what names it. Asked nowhere else, so what is not asked is not
+        // walked.
+        if (!inACopy) {
+            return new TheBound(Optional.of(left == null ? right : left), Optional.empty());
+        }
+        BoundHeldIn data = new DataOrigins(read, pullback.quantities()).ofTheNumbersIn(
+                left == null ? comparison.right() : comparison.left(), reads);
+        return new TheBound(Optional.of(left == null ? right : left), Optional.ofNullable(data));
+    }
+
+    /**
+     * What a comparison is held against, where one side is a number the same on every run.
+     *
+     * <p>Both answers from one reading of the two sides, which is what asking for them one after
+     * the other would do twice.
+     *
+     * @param written the number, as it is read before the quantity it is held against is weighed
+     * @param heldIn  the data it is read out of, where it is read out of data: a number the
+     *                comparison or a call writes outright is none, so a helper applied to
+     *                different values is not told apart by them, while a field read is, because
+     *                what it stands for is written once in the table and the same table reached by
+     *                two calls, or under another name, is the same data
+     */
+    record TheBound(Optional<ExactRatio> written, Optional<BoundHeldIn> heldIn) {
+
+        static final TheBound NONE = new TheBound(Optional.empty(), Optional.empty());
     }
 
     /**
@@ -7901,8 +7934,77 @@ final class Pullback {
         return form;
     }
 
-    /** What {@code added}, a container the body wrote out, adds up to ({@link #totalOfWrittenOut}). */
+    /**
+     * What a reading of a sum came to, with what it asked of the comparison it was read in: the
+     * reading it was read at, the values handed to names on the way to it that it asked after, and
+     * the elements it asked of and the names it left standing for them. Another reading of the same
+     * node that holds the same but for what was handed, hands the answers this was given, and finds
+     * the elements as these were, comes to the same sum and leaves the same names.
+     */
+    private record SumRead(InputReads at, int hash, HandedAnswers asked,
+                           ElementsMet.Footprint footprint, SearchRegion onTheWay,
+                           Map<BindingId, LinearForm<Quantity>> sized,
+                           Map<BindingId, LinearForm<Quantity>> carried,
+                           List<AnAggregateInACase> aggregates, boolean askingWhere,
+                           LinearForm<Quantity> form) {}
+
+    private final Map<Core, List<SumRead>> sumsRead = new IdentityHashMap<>();
+
+    /**
+     * What {@code added}, a container the body wrote out, adds up to ({@link #totalOfWrittenOut}).
+     *
+     * <p>The sum of a node is read at many readings of one comparison, and they differ in what the
+     * applications on the way to them handed to names, which a node that is not read through those
+     * names does not ask after. A sum already read is taken again where the reading is the same but
+     * for what was handed, what this one asks of what was handed is what that one was answered, and
+     * the comparison stands as it did for the elements that one asked of. It costs no reading.
+     */
     private LinearForm<Quantity> sumOfWrittenOut(Core added, InputReads at) {
+        if (InputReads.watching() || elementsMet.crowded()) {
+            return sumOfWrittenOutAfresh(added, at);
+        }
+        List<SumRead> before = sumsRead.computeIfAbsent(added, _ -> new ArrayList<>());
+        int hash = at.hashButForWhatIsHanded();
+        for (SumRead each : before) {
+            if (each.hash() == hash && each.onTheWay() == onTheWay
+                    && each.askingWhere() == askingWhereAStepAnswers
+                    && each.sized().equals(sizedSoFar) && each.carried().equals(carriedSoFar)
+                    && sameAggregates(each.aggregates()) && elementsMet.agrees(each.footprint())
+                    && at.handsAsAsked(each.asked()) && at.sameButForWhatIsHanded(each.at())) {
+                elementsMet.takes(each.footprint());
+                return each.form();
+            }
+        }
+        Map<BindingId, LinearForm<Quantity>> sized = Map.copyOf(sizedSoFar);
+        Map<BindingId, LinearForm<Quantity>> carried = Map.copyOf(carriedSoFar);
+        List<AnAggregateInACase> aggregates = List.copyOf(aggregatesInACase);
+        SearchRegion region = onTheWay;
+        boolean askingWhere = askingWhereAStepAnswers;
+        ElementsMet.Noting noting = elementsMet.noting();
+        Watched<LinearForm<Quantity>> read = at.watchingWhatIsHanded(
+                () -> sumOfWrittenOutAfresh(added, at));
+        ElementsMet.Footprint footprint = noting.ended(elementsMet);
+        if (read.result() != null && read.asked().toldApart() && footprint != null) {
+            before.add(new SumRead(at, hash, read.asked(), footprint, region, sized, carried,
+                    aggregates, askingWhere, read.result()));
+        }
+        return read.result();
+    }
+
+    /** Whether the aggregates being read are the ones {@code then}, each the same one. */
+    private boolean sameAggregates(List<AnAggregateInACase> then) {
+        if (then.size() != aggregatesInACase.size()) {
+            return false;
+        }
+        for (int i = 0; i < then.size(); i++) {
+            if (then.get(i) != aggregatesInACase.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private LinearForm<Quantity> sumOfWrittenOutAfresh(Core added, InputReads at) {
         Denotation container = at.standing(added, read.rules().symbols(),
                 read.rules().newtypes());
         if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())

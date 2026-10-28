@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * How far a set of rules lets a whole form run — the one reading of that question there is.
@@ -64,6 +65,10 @@ final class FormReach<A> {
     /** The one order a walk of a form's positions takes them in — see {@link CanonicalOrder}. */
     private final CanonicalOrder<A> order;
 
+    /** A rule's form walked in {@link #order}: the same walk as {@link CanonicalForm#entriesIn},
+     *  which a reader that keeps the walks of the forms it is asked about hands over. */
+    private final Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked;
+
     /** Every half-space of every rule, stated once for the round, and which of them name each
      *  position — see {@link #premises}. Null until the first form of two or more positions asks. */
     private Premises<A> premises;
@@ -77,11 +82,13 @@ final class FormReach<A> {
     private long heldAgainstTheEnds;
 
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
-                      DifferenceBounds<A> differences, CanonicalOrder<A> order) {
+                      DifferenceBounds<A> differences, CanonicalOrder<A> order,
+                      Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked) {
         this.rules = rules;
         this.ends = ends;
         this.differences = differences;
         this.order = order;
+        this.walked = walked;
     }
 
     /**
@@ -95,11 +102,24 @@ final class FormReach<A> {
      */
     static <A> FormReach<A> over(List<AffineConstraint<A>> rules, Box<A> ends,
                                  DifferenceBounds<A> differences, CanonicalOrder<A> order) {
+        return over(rules, ends, differences, order, form -> form.entriesIn(order));
+    }
+
+    /**
+     * The same, walking a rule's form through {@code walked} rather than sorting it each time it is
+     * asked: the walk of a form is settled by the form and the order, and a reading is asked about
+     * the same rules' forms for every form it is put.
+     *
+     * @param walked what {@link CanonicalForm#entriesIn} answers under {@code order}
+     */
+    static <A> FormReach<A> over(List<AffineConstraint<A>> rules, Box<A> ends,
+                                 DifferenceBounds<A> differences, CanonicalOrder<A> order,
+                                 Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked) {
         if (differences.holdsNothing()) {
             throw new IllegalStateException(
                     "nothing is left, so there is no reach to read; ask holdsNothing first");
         }
-        return new FormReach<>(rules, ends, differences, order);
+        return new FormReach<>(rules, ends, differences, order, walked);
     }
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
@@ -399,7 +419,7 @@ final class FormReach<A> {
      *  stands. */
     private Room roomOf(AffineConstraint.HalfSpace<A> half) {
         Map<A, ExactRatio> negated = new LinkedHashMap<>();
-        for (Map.Entry<A, ExactRatio> each : half.form().entriesIn(order)) {
+        for (Map.Entry<A, ExactRatio> each : walked.apply(half.form())) {
             ExactRatio weight = each.getValue().negated();
             ExactCut end = weight.signum() > 0 ? ends.mostOf(each.getKey())
                     : ends.leastOf(each.getKey());
@@ -463,7 +483,7 @@ final class FormReach<A> {
         }
         A at = null;
         ExactRatio weight = null;
-        for (Map.Entry<A, ExactRatio> each : half.form().entriesIn(order)) {
+        for (Map.Entry<A, ExactRatio> each : walked.apply(half.form())) {
             at = each.getKey();
             weight = each.getValue();
         }
@@ -557,8 +577,8 @@ final class FormReach<A> {
             for (AffineConstraint<A> rule : rules) {
                 for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
                     Premise<A> premise = new Premise<>(rule, half, out.size());
-                    for (A position : half.form().atomsIn(order)) {
-                        naming.computeIfAbsent(position, _ -> new ArrayList<>())
+                    for (Map.Entry<A, ExactRatio> weighed : walked.apply(half.form())) {
+                        naming.computeIfAbsent(weighed.getKey(), _ -> new ArrayList<>())
                                 .add(premise.place());
                     }
                     out.add(premise);
@@ -648,7 +668,7 @@ final class FormReach<A> {
         // same whichever order it is taken in, and the walk is what would let the next change here
         // start depending on one the premise does not hold.
         boolean[] everyMergeWasComposed = {true};
-        premise.form().entriesIn(order).forEach(each -> left.merge(each.getKey(),
+        walked.apply(premise.form()).forEach(each -> left.merge(each.getKey(),
                 each.getValue().negated(), (a, b) -> {
                     ExactAnswer<ExactRatio> sum = a.plus(b);
                     if (sum instanceof ExactAnswer.Held<ExactRatio> held) {

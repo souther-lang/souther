@@ -44,7 +44,7 @@ import java.util.function.Function;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null, null, false);
+    public static final ClosedStates NONE = new ClosedStates(null, null, null, false);
 
     /**
      * Nothing kept, and every set of rules closed in one run rather than a part at a time
@@ -55,11 +55,12 @@ public final class ClosedStates {
      * the closure, about forms over positions of two parts. Nothing else asks for this: the two are
      * one closure, and this one costs what the rules cost together.
      */
-    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, true);
+    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true);
 
     /** One closure per question, kept for as long as whatever holds this is held. */
     public static ClosedStates kept() {
-        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>(), false);
+        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+                new ConcurrentHashMap<>(), false);
     }
 
     private final Map<ClosureQuestion<?>, ClosedState<?>> answers;
@@ -78,7 +79,19 @@ public final class ClosedStates {
      */
     private final Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places;
 
+    /**
+     * How each form has been walked in each order it has been asked of ({@link CanonicalForm#entriesIn}).
+     *
+     * <p>Kept for the reason {@link #places} is: the walk of a form is settled by the form and the
+     * order alone, and the rules a reading is asked about are the same few forms for every form it is
+     * put. Keyed by the order as the object it is, so an order written apart that walks alike is a
+     * walk done again and nothing else. Null for a table that keeps nothing.
+     */
+    private final Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks;
+
     private final AtomicLong workedOut = new AtomicLong();
+
+    private final AtomicLong walkedOut = new AtomicLong();
 
     private final AtomicLong asked = new AtomicLong();
 
@@ -87,10 +100,50 @@ public final class ClosedStates {
 
     private ClosedStates(Map<ClosureQuestion<?>, ClosedState<?>> answers,
                          Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
+                         Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks,
                          boolean inOneRun) {
         this.answers = answers;
         this.places = places;
+        this.walks = walks;
         this.inOneRun = inOneRun;
+    }
+
+    /**
+     * How a form is walked under {@code order}: {@link CanonicalForm#entriesIn}, worked out once for
+     * each form where this keeps what it is asked, and worked out each time where it does not.
+     *
+     * <p>A walk that is refused is refused each time it is asked, and nothing of it is kept.
+     */
+    <A> Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walksIn(
+            CanonicalOrder<A> order) {
+        if (walks == null) {
+            return form -> form.entriesIn(order);
+        }
+        Map<CanonicalForm<?>, List<?>> kept = walks.computeIfAbsent(order,
+                _ -> new ConcurrentHashMap<>());
+        return form -> {
+            // The cast holds because an entry is only ever put under the form it is the walk of, in
+            // the order the table above is keyed by.
+            @SuppressWarnings("unchecked")
+            List<Map.Entry<A, ExactRatio>> had = (List<Map.Entry<A, ExactRatio>>) kept.get(form);
+            if (had != null) {
+                return had;
+            }
+            List<Map.Entry<A, ExactRatio>> made = form.entriesIn(order);
+            walkedOut.incrementAndGet();
+            kept.put(form, made);
+            return made;
+        };
+    }
+
+    /**
+     * How many walks of a form this has worked out rather than lent, for a test holding a reader to
+     * asking for the walk of a rule's form once however many readings are asked about it. Counted
+     * for the same reason {@link #workedOut} is: that a walk asked again is not done again is a
+     * shape and not a speed.
+     */
+    long walksWorkedOut() {
+        return walkedOut.get();
     }
 
     /** What {@code rules} leave, spaced by {@code spacing} and walked in {@code order}. */
@@ -148,11 +201,10 @@ public final class ClosedStates {
             questions.add(asked);
             closed.add(of(asked));
         }
-        if (everyPartLent && lent.state != null) {
+        if (everyPartLent && lent.complete) {
             return lent;
         }
-        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf,
-                ClosedState.product(closed));
+        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf, null, true);
     }
 
     /**
@@ -180,12 +232,18 @@ public final class ClosedStates {
 
         /** Which part weighs each position. */
         private final Map<A, Integer> partOf;
-        private final ClosedState<A> state;
+
+        /** The closures of the parts put together: worked out when asked for, since a question
+         *  about the positions of one part is answered by that part's closure alone. */
+        private volatile ClosedState<A> state;
+
+        /** Whether every part has its closure, which is what a closure of all the rules is. */
+        private final boolean complete;
 
         private Parted(ClosedStates owner, List<AffineConstraint<A>> rules,
                        List<List<AffineConstraint<A>>> parts, List<ClosureQuestion<A>> questions,
                        List<ClosedState<A>> closed, Map<A, Integer> partOf,
-                       ClosedState<A> state) {
+                       ClosedState<A> state, boolean complete) {
             this.owner = owner;
             this.rules = rules;
             this.parts = parts;
@@ -193,11 +251,13 @@ public final class ClosedStates {
             this.closed = closed;
             this.partOf = partOf;
             this.state = state;
+            this.complete = complete;
         }
 
         /** A closure worked out in one piece, with no parts to lend. */
         private static <A> Parted<A> whole(ClosedState<A> state) {
-            return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state);
+            return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state,
+                    true);
         }
 
         /** {@code parts} of {@code rules}, none of them asked yet. */
@@ -213,12 +273,67 @@ public final class ClosedStates {
                 unasked.add(null);
                 unclosed.add(null);
             }
-            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null);
+            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false);
         }
 
         /** What the rules leave. */
         public ClosedState<A> state() {
-            return state;
+            ClosedState<A> had = state;
+            if (had == null) {
+                had = ClosedState.product(closed);
+                state = had;
+            }
+            return had;
+        }
+
+        /**
+         * Whether the rules leave nothing, which is whether any part does: parts share no position,
+         * so one that leaves nothing leaves the rules together nothing, and none that does leaves
+         * them a value apiece.
+         */
+        public boolean holdsNothing() {
+            ClosedState<A> put = state;
+            if (put != null) {
+                return put.holdsNothing();
+            }
+            for (ClosedState<A> each : closed) {
+                if (each.holdsNothing()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** Whether every part composed every bound it tried to, which is what the parts put
+         *  together do — and nothing is left to compose where a part holds nothing. */
+        public boolean everyBoundWasComposed() {
+            ClosedState<A> put = state;
+            if (put != null) {
+                return put.everyBoundWasComposed();
+            }
+            boolean composed = true;
+            for (ClosedState<A> each : closed) {
+                if (each.holdsNothing()) {
+                    return true;
+                }
+                composed &= each.everyBoundWasComposed();
+            }
+            return composed;
+        }
+
+        /**
+         * What the part weighing {@code position} leaves, or null where no part does — which
+         * includes a closure worked out in one piece, whose state is the only one there is.
+         */
+        public ClosedState<A> partWeighing(A position) {
+            Integer at = partOf.get(position);
+            return at == null || !complete ? null : closed.get(at);
+        }
+
+        /** The rules of the part weighing {@code position}; null where {@link #partWeighing} is. */
+        public List<AffineConstraint<A>> rulesOfThePartWeighing(A position) {
+            Integer at = partOf.get(position);
+            return at == null || !complete ? null : parts.get(at);
         }
 
         /**
@@ -280,7 +395,7 @@ public final class ClosedStates {
             while (kept.size() < asked.size()) {
                 kept.add(null);
             }
-            return new Parted<>(owner, more, parted, asked, kept, into, null);
+            return new Parted<>(owner, more, parted, asked, kept, into, null, false);
         }
 
         /** What {@link #partWeighedBy} answers for a rule weighing no position of any part. */

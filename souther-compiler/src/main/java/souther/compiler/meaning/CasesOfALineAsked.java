@@ -5,8 +5,10 @@ import souther.compiler.partition.CompositionBudget;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -96,6 +98,10 @@ public final class CasesOfALineAsked {
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
 
+    /** The figures each case was never taken apart at, for the cases already asked of. */
+    private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
+            new IdentityHashMap<>();
+
     private CasesOfALineAsked(Predicate<Proposition> crossedIn) {
         this.crossedIn = crossedIn;
     }
@@ -173,7 +179,7 @@ public final class CasesOfALineAsked {
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
         if (said.standsFor().waysOfChoosing(most) > most) {
             stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-            notTakenApartAt(said.standsFor(), stopped);
+            addFiguresNotTakenApart(said.standsFor());
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
@@ -187,22 +193,18 @@ public final class CasesOfALineAsked {
             pastTheSteps(List.of(said.standsFor()));
             return new Found(List.of(), stopped);
         }
-        if (!crossedIn.test(said.standsFor().holdingInSome().orElse(said.condition()))) {
+        // Said as choices, the cases of a line that decides in more ways than are written out are
+        // as many as their product, and the condition holding in some one of them would be as long
+        // as they are many. They are not asked as one condition then, but by the condition they
+        // were said as, which holds exactly where one of them does; and they are not all asked,
+        // since a prefix with no row on one side of the line leaves every case past it unasked,
+        // and the steps bound the rest.
+        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+        if (!crossedIn.test(said.standsFor().holdingInSome(most).orElse(said.condition()))) {
             return IN_NONE;
         }
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
-        }
-        // More ways of choosing a case than cases are taken apart is more cases than were taken
-        // apart, however they were written: said as choices rather than written out, they are as
-        // many to ask, and asking them is the work that figure bounds. And every figure a case
-        // among them was already stopped at where it was never taken apart, read off the cases
-        // as they stand: that one figure stops the asking says nothing about the others.
-        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-        if (said.standsFor().waysOfChoosing(most) > most) {
-            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-            notTakenApartAt(said.standsFor(), stopped);
-            return new Found(List.of(), stopped);
         }
         chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> dividing.add(chosen));
@@ -228,33 +230,84 @@ public final class CasesOfALineAsked {
      * in it: each alternative is put in this order on its own. The choices keep the order they
      * were written in, since a choice nobody took apart ends the walk there.
      */
-    private static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
-        return switch (cases) {
-            case DecidingCase.Cases.One _, DecidingCase.Cases.NotTakenApart _ -> cases;
-            case DecidingCase.Cases.EachOf(var alternatives) -> new DecidingCase.Cases.EachOf(
-                    alternatives.stream().map(CasesOfALineAsked::heldFirst).toList());
-            case DecidingCase.Cases.Together(var factors) -> {
-                List<DecidingCase.Cases> held = new ArrayList<>();
-                List<DecidingCase.Cases> choices = new ArrayList<>();
-                gatherHeldFirst(factors, held, choices);
-                held.addAll(choices);
-                yield new DecidingCase.Cases.Together(held);
-            }
-        };
+    static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
+        return cases.fold(inThatOrder(cases.references())).cases();
     }
 
-    private static void gatherHeldFirst(List<DecidingCase.Cases> factors,
-                                        List<DecidingCase.Cases> held,
-                                        List<DecidingCase.Cases> choices) {
-        for (DecidingCase.Cases factor : factors) {
-            switch (factor) {
-                case DecidingCase.Cases.One _ -> held.add(factor);
-                case DecidingCase.Cases.Together(var inner) ->
-                        gatherHeldFirst(inner, held, choices);
-                case DecidingCase.Cases.EachOf _, DecidingCase.Cases.NotTakenApart _ ->
-                        choices.add(heldFirst(factor));
-            }
+    /**
+     * The cases put in that order, with what a group around them is given of them: the parts every
+     * case of them holds, and the choices, each in the order they come.
+     *
+     * @param source  the case that was put in order
+     * @param cases   the cases themselves, in that order
+     * @param held    the parts every case of them holds, which a group around them holds as well
+     * @param choices the choices among them, which a group around them has beside its own
+     */
+    private record InThatOrder(DecidingCase.Cases source, DecidingCase.Cases cases,
+                               List<DecidingCase.Cases> held, List<DecidingCase.Cases> choices) {
+
+        /** Whether a group around this one is given nothing of it. */
+        boolean holdsNothing() {
+            return held.isEmpty() && choices.isEmpty();
         }
+    }
+
+    /**
+     * What puts the cases in that order, a case that more than one case holds put in order once.
+     *
+     * <p>A group inside a group was put in order before the one it is in, so what it holds and
+     * what it chooses go into the group around it where they stand — if only one case holds it.
+     * A group that more cases hold stays a case of its own in each, and is not copied into them:
+     * what is copied is as long as the ways to it, so a group held twice by a group held twice by
+     * a group would be written out for every way down. Held by a group, it is chosen from there,
+     * and the cases a group stands for are the same either way, since choosing together is
+     * associative.
+     *
+     * @param references how many cases hold each case ({@link DecidingCase.Cases#references})
+     */
+    private static DecidingCase.Cases.Fold<InThatOrder> inThatOrder(
+            Map<DecidingCase.Cases, Integer> references) {
+        return new DecidingCase.Cases.Fold<>() {
+
+            @Override
+            public InThatOrder one(DecidingCase.Cases.One one) {
+                return new InThatOrder(one, one, List.of(one), List.of());
+            }
+
+            @Override
+            public InThatOrder eachOf(DecidingCase.Cases.EachOf node,
+                                      List<InThatOrder> alternatives) {
+                DecidingCase.Cases.EachOf each = new DecidingCase.Cases.EachOf(
+                        alternatives.stream().map(InThatOrder::cases).toList());
+                return new InThatOrder(node, each, List.of(), List.of(each));
+            }
+
+            @Override
+            public InThatOrder together(DecidingCase.Cases.Together node,
+                                        List<InThatOrder> factors) {
+                List<DecidingCase.Cases> held = new ArrayList<>();
+                List<DecidingCase.Cases> choices = new ArrayList<>();
+                for (InThatOrder factor : factors) {
+                    if (factor.source() instanceof DecidingCase.Cases.Together
+                            && references.get(factor.source()) > 1 && !factor.holdsNothing()) {
+                        choices.add(factor.cases());
+                    } else {
+                        held.addAll(factor.held());
+                        choices.addAll(factor.choices());
+                    }
+                }
+                List<DecidingCase.Cases> inOrder = new ArrayList<>(held);
+                inOrder.addAll(choices);
+                return new InThatOrder(node, new DecidingCase.Cases.Together(inOrder), held,
+                        choices);
+            }
+
+            @Override
+            public InThatOrder notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                return new InThatOrder(notTakenApart, notTakenApart, List.of(),
+                        List.of(notTakenApart));
+            }
+        };
     }
 
     /**
@@ -323,20 +376,15 @@ public final class CasesOfALineAsked {
      */
     private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
         stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
-        notWalked.forEach(each -> notTakenApartAt(each, stopped));
+        notWalked.forEach(this::addFiguresNotTakenApart);
     }
 
-    /** Adds to {@code figures} each figure a case {@code cases} stands for was stopped at, where
-     *  it was never taken apart. */
-    private static void notTakenApartAt(DecidingCase.Cases cases, Set<CompositionBudget> figures) {
-        switch (cases) {
-            case DecidingCase.Cases.One _ -> { }
-            case DecidingCase.Cases.EachOf(var alternatives) ->
-                    alternatives.forEach(each -> notTakenApartAt(each, figures));
-            case DecidingCase.Cases.Together(var factors) ->
-                    factors.forEach(each -> notTakenApartAt(each, figures));
-            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> figures.add(stoppedAt);
-        }
+    /** Adds to what stopped this each figure the cases {@code cases} stand for were stopped at,
+     *  where they were never taken apart. Out of steps is where this is asked, so it is asked of
+     *  each case once however many times the steps run out: what is asked is a visit to each case
+     *  and not a choice among them. */
+    private void addFiguresNotTakenApart(DecidingCase.Cases cases) {
+        stopped.addAll(cases.notTakenApartAt(figuresOf));
     }
 
     /** Whether one more step may be taken — an alternative chosen or a part asked — counting it

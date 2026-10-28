@@ -122,6 +122,19 @@ public final class ValueStanding {
         }
 
         /**
+         * That a name or a field was read at {@code place}, in {@code at}, and is about to be read
+         * through.
+         *
+         * <p>Told by the walk that follows names and takes fields off what was written, which is the
+         * one place either is done, and told before what it stands for is known: where the name is
+         * one of several values, or the field of a value written down, the place read is what says
+         * whose it was. For an environment that is asked what a value was made of; nothing
+         * otherwise.
+         */
+        default void noticed(Core place, E at) {
+        }
+
+        /**
          * These answers with no plurality in them, which is what the values a name stands for are
          * read with.
          *
@@ -210,6 +223,7 @@ public final class ValueStanding {
      * for itself is a second account of which names may be followed.
      */
     public static <E, N extends Names<E, N>> Named<E, N> named(Core.Read r, E at, N names) {
+        names.noticed(r, at);
         ReadThrough<E> through = names.readThrough(r, at);
         if (through != null) {
             return through.value() == r ? null
@@ -258,6 +272,7 @@ public final class ValueStanding {
             // A name with nothing written to stand against leaves the whole projection standing,
             // as it leaves every access above it standing when they are written out.
             case Core.FieldProjection p -> {
+                names.noticed(p, at);
                 List<Standing<E, N>> reached = of(p.base(), at, names, following);
                 // Asked before the names are written out: a base standing at no construction has
                 // nothing written against its first name, and the names are as many as the chain
@@ -323,10 +338,15 @@ public final class ValueStanding {
     static <E, N extends Names<E, N>> List<Standing<E, N>> eliminated(
             Core e, E at, N names, BindingWalk<?> following) {
         return switch (Core.withoutStanding(e)) {
-            case Core.FieldAccess fa -> given(of(fa.target(), at, names, following), fa.field());
+            case Core.FieldAccess fa -> {
+                names.noticed(fa, at);
+                yield given(of(fa.target(), at, names, following), fa.field());
+            }
             // Its last name against what the names before it reach.
-            case Core.FieldProjection p -> given(of(p.target(), at, names, following),
-                    p.steps().last().field());
+            case Core.FieldProjection p -> {
+                names.noticed(p, at);
+                yield given(of(p.target(), at, names, following), p.steps().last().field());
+            }
             case Core.TupleGet get -> {
                 List<Standing<E, N>> out = new ArrayList<>();
                 for (Standing<E, N> tuple : of(get.tuple(), at, names, following)) {

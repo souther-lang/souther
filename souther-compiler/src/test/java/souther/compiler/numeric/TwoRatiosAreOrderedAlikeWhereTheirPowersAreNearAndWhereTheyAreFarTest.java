@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -145,6 +146,41 @@ class TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest {
             assertEquals(Integer.signum(signedByWritingBothOut(each.a(), each.b())),
                     Integer.signum(each.a().compareTo(each.b())), () -> "the order of " + each);
         }
+    }
+
+    /**
+     * Pairs drawn across the widths at which a product stops fitting a long are ordered as writing
+     * both out orders them.
+     *
+     * <p>The order is read in longs where the integers and their products fit, and from brackets
+     * where they do not. Drawn here are integers of every width up to past a long, either sign,
+     * exponents a few places apart and as often equal, so that the products come to the edge of a long
+     * from both sides and the pair is answered by each way in turn.
+     */
+    @Test
+    void pairsDrawnAcrossTheWidthsAProductFitsInALongAreOrderedAlike() {
+        Random dice = new Random(2680);
+        int[] widths = {1, 7, 20, 31, 32, 40, 61, 62, 63, 64, 70};
+        for (int round = 0; round < 6000; round++) {
+            ExactRatio a = drawn(dice, widths);
+            ExactRatio b = round % 5 == 0 ? a.plus(ExactRatio.ZERO).orNull() : drawn(dice, widths);
+            assertEquals(Integer.signum(signedByWritingBothOut(a, b)),
+                    Integer.signum(a.compareTo(b)), () -> "the order of " + a + " against " + b);
+            assertEquals(Integer.signum(signedByWritingBothOut(b, a)),
+                    Integer.signum(b.compareTo(a)), () -> "the order of " + b + " against " + a);
+        }
+    }
+
+    private static ExactRatio drawn(Random dice, int[] widths) {
+        BigInteger numerator = new BigInteger(widths[dice.nextInt(widths.length)], dice)
+                .add(BigInteger.ONE);
+        BigInteger denominator = new BigInteger(widths[dice.nextInt(widths.length)], dice)
+                .add(BigInteger.ONE);
+        if (dice.nextBoolean()) {
+            numerator = numerator.negate();
+        }
+        return new ExactRatio(numerator, denominator, dice.nextInt(41) - 20,
+                dice.nextInt(41) - 20);
     }
 
     /**

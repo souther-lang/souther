@@ -384,7 +384,7 @@ class OneBorderReadTwiceIsOneReadingTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(ordinal, 0)), ElementsMetOn.EVERY,
-                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty()),
+                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(kept, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
