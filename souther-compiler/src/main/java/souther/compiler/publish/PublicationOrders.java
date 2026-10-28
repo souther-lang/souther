@@ -86,6 +86,7 @@ public final class PublicationOrders {
             Incompleteness.Code.VALUE_TRUNCATED,
             Incompleteness.Code.VALUE_NOT_WORKED_OUT,
             Incompleteness.Code.VALUE_ROOM_EXCEEDED,
+            Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN,
             Incompleteness.Code.ROW_UNDECIDED,
             Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED,
             Incompleteness.Code.ANSWERER_NOT_ESTABLISHED,

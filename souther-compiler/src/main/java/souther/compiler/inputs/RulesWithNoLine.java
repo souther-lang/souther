@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.types.ModelOccurrences;
+import souther.compiler.values.ValuesWithin;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -150,7 +151,13 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         /** A rule a run reaching it may stop in, which is what a report says of it. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
-            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt);
+            mayStopARun(cited, readAt, List.of());
+        }
+
+        /** The same, with the values at which every run getting to the rule stops. */
+        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
+                                List<EveryRunStops> everyRunStops) {
+            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt, everyRunStops);
             stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
         }
 
@@ -200,6 +207,21 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
                                          BlockReason.RuleReadingStopped why) {
             add(RuleWithoutALine.of(cited, readAt, at, why));
             asked(StandingQuestion.BoundaryUndetermined.of(cited, readAt, at, why));
+        }
+
+        /**
+         * A rule whose classes were shown over some of a position's values, and the finding
+         * beside it.
+         *
+         * <p>Both, for the reason {@link #boundaryUndetermined} gives: the finding tells a reader
+         * which values the classes do not hold, and the question holds the measure of classes open
+         * while any are left.
+         */
+        public void regionUndetermined(RuleCitation cited, ModelOccurrences readAt,
+                                       FilingCoordinate at, List<ValuesWithin> open) {
+            BlockReason.RelationShownOverARegion why = BlockReason.RelationShownOverARegion.of(open);
+            add(RuleWithoutALine.of(cited, readAt, at, why));
+            asked(StandingQuestion.RegionUndetermined.of(cited, readAt, at, why));
         }
 
         /** One a reader already made, which is how the findings of two readings meet. */

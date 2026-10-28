@@ -831,6 +831,13 @@ public final class Partitions {
                 case LEFT_TO_THE_WALK -> { }
             }
         }
+        // And the values each rule showed on neither of its sides, which no class holds. The
+        // classes stand over the rest, and the measure of them stays open while any are left.
+        for (Classing.LeftOpen each : answered.leftOpen()) {
+            PredicateOrigin origin = each.statement().origin();
+            found.regionUndetermined(origin.cited(), origin.readAt(),
+                    new FilingCoordinate.AtPosition(term.position()), each.open());
+        }
         // The answer's own population, and not what is left after taking the rest away. Subtracted
         // here, the same question is answered twice — and the day the two subtract differently the
         // classes are composed out of one list and recorded as composed out of another.
@@ -860,13 +867,17 @@ public final class Partitions {
             // row writes one of those values under every name the type puts on it. Left off, a
             // class drawn over strings is asked about a construction and holds none of them —
             // which is the classes of a position holding nothing the position holds.
+            // And the rules that left values open, whose values beside the classes are in none.
             case Classing.Classed.Composed(List<PartitionClass> it) ->
                     new Composition(it.stream().map(each -> each.under(view.wrappers())).toList(),
-                            composedFrom(dividing), false, null);
+                            composedFrom(dividing), false, null,
+                            answered.leftOpen().stream()
+                                    .<RuleEvidenceOrigin>map(each -> each.statement().origin())
+                                    .distinct().toList());
             // No classes and nothing they were composed from, and the cuts stand: they are
             // observations of their own rather than a projection of the classes.
             case Classing.Classed.NotComposed(var why) ->
-                    new Composition(List.of(), List.of(), true, why);
+                    new Composition(List.of(), List.of(), true, why, List.of());
         };
         // What a reader is told about the rules the classes were not composed out of. The account
         // for them is above, with every other rule's — this is the sentence, and only where the
@@ -877,7 +888,12 @@ public final class Partitions {
         // Into the gathering the whole stage answers with, and not a list of this method's own:
         // what a reader is told is assembled once, after every position has been measured, so a
         // finding kept here would be one nobody reads.
-        if (made.why() != null && blocked.isEmpty()) {
+        //
+        // Nor where what stopped the classes is the values the rules left open. Each rule that
+        // left some said which above, as it does beside classes; a rule beside them left none, and
+        // the reason copied onto it would name it for what another rule was not shown over.
+        if (made.why() != null && blocked.isEmpty()
+                && !(made.why() instanceof BlockReason.RelationShownOverARegion)) {
             RuleEvidence.statementsIn(answered.notComposed())
                     .forEach(each -> found.add(RuleWithoutALine.of(each.origin().cited(),
                             each.origin().readAt(),
@@ -939,7 +955,7 @@ public final class Partitions {
                 made.keepsCuts()
                         ? mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier)
                         : List.of(),
-                parted, narrowedOf(axis),
+                parted, narrowedOf(axis), made.leftOpenByFor(axis),
                 reachable.isEmpty() && points.isEmpty() ? null : new BodyCutInspection.Evidence(),
                 stated);
     }
@@ -976,11 +992,12 @@ public final class Partitions {
                                           List<PartitionClass> classes,
                                           List<RuleEvidenceOrigin> divides, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
+                                          List<RuleEvidenceOrigin> leftOpenBy,
                                           BodyCutInspection drew, RulesWithNoLine rules) {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
-        out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed));
+        out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -1020,13 +1037,16 @@ public final class Partitions {
      * @param keepsCuts whether the cuts stand. They do wherever the classes are not sets: a cut is
      *                  a place on the order and a set class has no answer to where it lies
      * @param why       what stopped the classes, or null where nothing did
+     * @param leftOpenBy the rules of {@code divides} that leave some values in none of
+     *                  {@code classes} ({@link Axis#leftOpenBy})
      */
     private record Composition(List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
-                               boolean keepsCuts, BlockReason.RuleWithoutLineReason why) {
+                               boolean keepsCuts, BlockReason.RuleWithoutLineReason why,
+                               List<RuleEvidenceOrigin> leftOpenBy) {
 
         /** The order is the vocabulary, so the run of classes the caller works out is the answer. */
         private static final Composition ON_AN_ORDER =
-                new Composition(List.of(), List.of(), true, null);
+                new Composition(List.of(), List.of(), true, null, List.of());
 
         boolean onAnOrder() {
             return this == ON_AN_ORDER;
@@ -1050,6 +1070,16 @@ public final class Partitions {
                 return List.of();
             }
             return classesOf(axis, onAnOrder() ? onTheOrder : this::classes);
+        }
+
+        /**
+         * The rules that leave values out of {@link #classesFor}'s classes: this answer's, where
+         * those are its own classes, and none where they are what the declarations already
+         * divide the number into, which hold every value.
+         */
+        List<RuleEvidenceOrigin> leftOpenByFor(Axis axis) {
+            return why != null || onAnOrder() || (axis != null && axis.derivable())
+                    ? List.of() : leftOpenBy;
         }
     }
 
@@ -1103,15 +1133,6 @@ public final class Partitions {
         found.addAll(rulesWithoutALine);
         unclassifiedIn(base.unanswered(), found);
         RulesWithNoLine gathered = found.found();
-        // And what these readers could not classify, beside the questions the base reading already
-        // had. One list of what holds a measure open, for the one reader of it.
-        //
-        // Taken from the same fold as the findings, because a rule both readers met is one rule
-        // however many of them say so. Concatenated instead, the reader of the report was told
-        // twice about one rule nothing worked out.
-        List<StandingQuestion> asked = new ArrayList<>(base.unanswered().stream()
-                .filter(each -> !(each instanceof StandingQuestion.Unclassified)).toList());
-        asked.addAll(gathered.unclassified());
         List<PositionMeasurements> measurements = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence, blocked);
         // A position at a time, so that what a body's rules add is added where the position already
@@ -1155,6 +1176,16 @@ public final class Partitions {
         }
         List<Axis> out = measurements.stream().flatMap(each -> each.axes().stream()).toList();
         account.everyPieceWasDisposedOf(out);
+        // And what these readers could not classify, beside the questions the base reading already
+        // had. One list of what holds a measure open, for the one reader of it.
+        //
+        // Taken from the same fold as the findings, because a rule both readers met is one rule
+        // however many of them say so. Concatenated instead, the reader of the report was told
+        // twice about one rule nothing worked out. And taken after every position was measured,
+        // since a rule whose classes stand over some of a position's values is found there.
+        List<StandingQuestion> asked = new ArrayList<>(base.unanswered().stream()
+                .filter(each -> !(each instanceof StandingQuestion.Unclassified)).toList());
+        asked.addAll(found.found().unclassified());
         // Both producers into the one account. A line that divides a position leaves its border on
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.

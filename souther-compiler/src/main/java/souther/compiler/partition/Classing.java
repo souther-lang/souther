@@ -13,13 +13,15 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
-import souther.compiler.values.TextExtents;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -130,7 +132,7 @@ final class Classing {
                     yield null;
                 }
                 Value one = new Value.Text(text.at());
-                yield new AsASet(new ValueSet.Finite(Set.of(one)),
+                yield new AsASet(ValuesWithin.all(new ValueSet.Finite(Set.of(one))),
                         new ValueSet.Cofinite(Set.of(one)),
                         new PredicateStatement.Equalling(text.at()));
             }
@@ -145,8 +147,11 @@ final class Classing {
      * evidence that can be said this way answers with one of these and the rest answer with
      * nothing, which is what makes the question about the distinction rather than about which
      * reader produced it.
+     *
+     * @param whenTrue the values shown on the side the rule holds on, a length and all: what is
+     *                 asked of that side is asked of the length as well
      */
-    private record AsASet(ValueSet whenTrue, ValueSet whenFalse, PredicateStatement states) {}
+    private record AsASet(ValuesWithin whenTrue, ValueSet whenFalse, PredicateStatement states) {}
 
     /**
      * What the rules of one position came to: the classes, and the rules that make none.
@@ -161,11 +166,16 @@ final class Classing {
      *                by construction: a rule this could not finish qualifying is in the same state
      *                as one it never reached, and both are things a reader is owed — so there is no
      *                way to answer here and leave a rule with nothing said about it
+     * @param leftOpen the values of the position each rule shows on neither of its sides, which no
+     *                 class holds; none where every rule shows every value on one. Carried by
+     *                 every answer, the classes composed or not: it is what the rules left, and
+     *                 is owed a question however the classes came out
      */
-    record Result(Classed classed, List<Disposed> forEach) {
+    record Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen) {
 
         Result {
             forEach = List.copyOf(forEach);
+            leftOpen = List.copyOf(leftOpen);
         }
 
         /** The rules the classes were made out of. */
@@ -195,10 +205,18 @@ final class Classing {
      */
     enum Outcome {
 
-        /** It tells two of the position's values apart, and the classes are made out of it. */
+        /**
+         * The classes are made out of it: it tells two of the position's values apart, or it
+         * leaves some of them open and its classes are drawn over the rest, which may be all on
+         * one side of it.
+         */
         DIVIDED,
 
-        /** It was read and tells none of them apart, so it makes no class and stops nothing. */
+        /**
+         * It was read and tells none of them apart, so it makes no class and stops nothing. Said
+         * only of a rule shown on one side or the other of every value here: one leaving values
+         * open may tell those apart from the rest.
+         */
         TOLD_NOTHING_APART,
 
         /** The position has no classes, so this rule is not among what made any. */
@@ -290,6 +308,25 @@ final class Classing {
         // algebra or the other, and would stand in every label the classes carry.
         List<RuleEvidence> active = new ArrayList<>();
         List<Disposed> told = new ArrayList<>();
+        // What each rule leaves open, asked of every rule before anything is composed. It is a
+        // fact about the rule and not about the classes: whether the classes come out, and
+        // however far this gets before it stops, the values a rule was shown on neither side of
+        // are owed a question, and every answer below carries them.
+        Map<RuleEvidence, LeftOpen> leaves = new LinkedHashMap<>();
+        for (RuleEvidence each : mine) {
+            if (!(each instanceof RuleEvidence.BySet set)) {
+                continue;
+            }
+            Worked<LeftOpen> left = leftOpen(term, admits, set.states(), allowance);
+            if (left.refused() != null) {
+                return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
+                        ofTheDistinctions(left.refused())), List.copyOf(leaves.values()));
+            }
+            if (left.answer() != null) {
+                leaves.put(each, left.answer());
+            }
+        }
+        List<LeftOpen> open = List.copyOf(leaves.values());
         for (RuleEvidence each : mine) {
             // Only a rule read as a set of the strings is asked. A line and a value singled out are
             // settled where they were read — the reader that makes one has already held it to what
@@ -306,7 +343,7 @@ final class Classing {
             Worked<Telling> worked = tellsApart(term, admits,
                     new AsASet(set.states().whenTrue(), set.states().whenFalse(),
                             set.states().statement()),
-                    allowance);
+                    leaves.get(each), allowance);
             // What was left to work out is what a run allowed more would have worked out, and the
             // rules already qualified are qualified all the same — but there are no classes for any
             // of them to be part of, so what became of every one of them is the same thing. Said as
@@ -314,12 +351,12 @@ final class Classing {
             // an answer about and got none.
             if (worked.refused() != null) {
                 return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
-                        ofTheDistinctions(worked.refused())));
+                        ofTheDistinctions(worked.refused())), open);
             }
             if (worked.answer() == Telling.UNSETTLED) {
-                return notComposed(mine, told, new BlockReason.ClassesNotComposed());
+                return notComposed(mine, told, new BlockReason.ClassesNotComposed(), open);
             }
-            boolean divides = worked.answer() == Telling.APART;
+            boolean divides = worked.answer() != Telling.NOTHING_APART;
             told.add(divides
                     ? new Disposed(each, Outcome.DIVIDED, null)
                     : new Disposed(each, Outcome.TOLD_NOTHING_APART,
@@ -332,15 +369,15 @@ final class Classing {
         // however the rules beside it are written, and what stopped it is a fact about that rule
         // rather than about what the position's rules come to together.
         if (!blocked.isEmpty()) {
-            return notComposed(mine, told, blocked.get(0).why());
+            return notComposed(mine, told, blocked.get(0).why(), open);
         }
         switch (vocabularyOf(active, carrier)) {
             case ON_AN_ORDER -> {
                 return new Result(new Classed.OnTheOrder(),
-                        filled(mine, told, Outcome.LEFT_TO_THE_WALK));
+                        filled(mine, told, Outcome.LEFT_TO_THE_WALK), open);
             }
             case NOT_ONE -> {
-                return notComposed(mine, told, new BlockReason.ClassesNotComposed());
+                return notComposed(mine, told, new BlockReason.ClassesNotComposed(), open);
             }
             default -> { }
         }
@@ -349,19 +386,68 @@ final class Classing {
         Worked<List<Cell>> refined = refined(term, admits, said, allowance);
         if (refined.refused() != null) {
             return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
-                    ofTheDistinctions(refined.refused())));
+                    ofTheDistinctions(refined.refused())), open);
         }
         if (refined.answer() == null) {
-            return notComposed(mine, told, new BlockReason.ClassesNotComposed());
+            return notComposed(mine, told, new BlockReason.ClassesNotComposed(), open);
         }
         List<Cell> cells = refined.answer();
+        // Every value the position holds left open by one rule or another, so no class stands
+        // over any of them. The position has no classes, and that is the reason. Each rule that
+        // left values open says which, as it does beside classes; the rules beside them left
+        // nothing open, and what stopped the classes is not theirs to be told of.
+        if (cells.isEmpty() && !open.isEmpty()) {
+            return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
+                    open.stream().flatMap(each -> each.open().stream()).toList()), open);
+        }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
             out.add(classOf(term, cell, carrier, perWitness, writing).ofTheNumber(term));
         }
         // The classes are sets, so everything that went into them went into them — a value singled
         // out of a string is one of these classes rather than a cut beside them.
-        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED));
+        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED), open);
+    }
+
+    /**
+     * The values of a position one rule shows on neither of its sides, which no class holds: the
+     * strings it shows nothing of at any length, and the strings of its true side longer than it
+     * is shown at ({@link SetStatement#leftOpen}), each met with what the position holds.
+     *
+     * @param statement the rule
+     * @param open      the values left open, each as long as it is left open at; none of them
+     *                  shown to hold nothing
+     */
+    record LeftOpen(SetStatement statement, List<ValuesWithin> open) {
+
+        LeftOpen {
+            if (statement == null || open == null || open.isEmpty()) {
+                throw new IllegalArgumentException("a rule leaves some values of a position open");
+            }
+            open = List.copyOf(open);
+        }
+    }
+
+    /**
+     * What {@code statement} leaves open of the values {@code term} holds, or nothing where it
+     * shows each of them on one side; or the limit the allowance refused working it out at.
+     */
+    private static Worked<LeftOpen> leftOpen(NumericTerm.FromOnePosition term, ValueSet admits,
+                                             SetStatement statement,
+                                             Allowance<NumericTerm.FromOnePosition> allowance) {
+        List<ValuesWithin> open = new ArrayList<>();
+        for (ValuesWithin each : statement.leftOpen()) {
+            Allowance.Composed held =
+                    allowance.meet(Sameness.Block.of(term), admits, each.values());
+            if (held.gaveUp()) {
+                return Worked.refusedAt(held.refused());
+            }
+            ValuesWithin here = each.over(held.set());
+            if (!here.shownToHoldNone()) {
+                open.add(here);
+            }
+        }
+        return Worked.to(open.isEmpty() ? null : new LeftOpen(statement, open));
     }
 
     /**
@@ -391,10 +477,12 @@ final class Classing {
      * singled out still cuts the position, and what became of it is settled where the cut is made.
      *
      * <p>Written here so that the places that say "no classes" say it the same way: one of them
-     * keeping its own list is one of them able to leave a rule out.
+     * keeping its own list is one of them able to leave a rule out. And with what the rules left
+     * open, which no class is the reason to drop.
      */
     private static Result notComposed(List<RuleEvidence> mine, List<Disposed> told,
-                                      BlockReason.RuleWithoutLineReason why) {
+                                      BlockReason.RuleWithoutLineReason why,
+                                      List<LeftOpen> open) {
         List<Disposed> out = new ArrayList<>();
         for (RuleEvidence each : mine) {
             Disposed already = told.stream().filter(one -> one.what().equals(each))
@@ -407,7 +495,7 @@ final class Classing {
                                 ? Outcome.NOT_COMPOSED : Outcome.LEFT_TO_THE_WALK, null));
             }
         }
-        return new Result(new Classed.NotComposed(why), out);
+        return new Result(new Classed.NotComposed(why), out, open);
     }
 
     /**
@@ -445,11 +533,21 @@ final class Classing {
      * <p>Both sides against what the position holds, and not against every value there is. A rule
      * can name strings on both sides and have the declarations leave nothing on one of them, which
      * is the position undivided by it however the strings fall.
+     *
+     * <p>And each side is what it was shown to hold, with {@code open} beside them: the values it
+     * was shown on neither side of, which may be on either. A side shown to hold nothing is one
+     * that does only where nothing is open, so a rule leaving values open is never one that tells
+     * nothing apart. Its classes are drawn over what it was shown on, which is a class to each
+     * side shown to hold a value there.
+     *
+     * @param open what the rule leaves open of the position's values, or null where it leaves
+     *             none
      */
     private static Worked<Telling> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
-                                              AsASet said,
+                                              AsASet said, LeftOpen open,
                                               Allowance<NumericTerm.FromOnePosition> allowance) {
-        Allowance.Composed yes = allowance.meet(Sameness.Block.of(term), admits, said.whenTrue());
+        Allowance.Composed yes =
+                allowance.meet(Sameness.Block.of(term), admits, said.whenTrue().values());
         if (yes.gaveUp()) {
             return Worked.refusedAt(yes.refused());
         }
@@ -457,20 +555,34 @@ final class Classing {
         if (no.gaveUp()) {
             return Worked.refusedAt(no.refused());
         }
-        if (TextExtents.shownToHoldNone(yes.set()) || TextExtents.shownToHoldNone(no.set())) {
+        ValuesWithin holding = said.whenTrue().over(yes.set());
+        ValuesWithin failing = ValuesWithin.all(no.set());
+        if (open == null && (holding.shownToHoldNone() || failing.shownToHoldNone())) {
             return Worked.to(Telling.NOTHING_APART);
         }
-        return Worked.to(TextExtents.shownToHoldAValue(yes.set())
-                && TextExtents.shownToHoldAValue(no.set())
-                ? Telling.APART : Telling.UNSETTLED);
+        if (holding.shownToHoldAValue() && failing.shownToHoldAValue()) {
+            return Worked.to(Telling.APART);
+        }
+        return Worked.to(open != null && settled(holding) && settled(failing)
+                ? Telling.OVER_WHAT_WAS_SHOWN : Telling.UNSETTLED);
+    }
+
+    /** Whether {@code side} is shown to hold a value or shown to hold none. */
+    private static boolean settled(ValuesWithin side) {
+        return side.shownToHoldAValue() || side.shownToHoldNone();
     }
 
     /**
      * What a rule did to the values of a position. A side whose strings are not shown to include a
      * value is neither one that holds nothing nor one that holds something, so it is not a rule
      * that tells nothing apart.
+     *
+     * <p>{@link #OVER_WHAT_WAS_SHOWN} is a rule that leaves values open and is shown to hold a
+     * value on one side at most of what it was shown on: whether it tells two values apart turns
+     * on the values it was not shown on. Its classes are drawn as any rule's are, over what it was
+     * shown on.
      */
-    private enum Telling { APART, NOTHING_APART, UNSETTLED }
+    private enum Telling { APART, OVER_WHAT_WAS_SHOWN, NOTHING_APART, UNSETTLED }
 
     /**
      * One class the rules about a position leave it divided into.
@@ -485,10 +597,10 @@ final class Classing {
      * cell from its neighbours — so the assignment is what a cell is, and a reader names the class
      * out of it.
      */
-    record Cell(ValueSet values, List<Answered> under) {
+    record Cell(ValuesWithin values, List<Answered> under) {
 
         Cell {
-            if (values == null || values.isEmpty()) {
+            if (values == null || values.values().isEmpty()) {
                 throw new IllegalArgumentException(
                         "a class of a position holds a value; an empty one is no class of it");
             }
@@ -496,7 +608,7 @@ final class Classing {
         }
 
         /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
-        Cell and(ValueSet narrowed, PredicateStatement states, boolean holding) {
+        Cell and(ValuesWithin narrowed, PredicateStatement states, boolean holding) {
             List<Answered> wider = new ArrayList<>(under);
             wider.add(new Answered(states, holding));
             return new Cell(narrowed, wider);
@@ -531,20 +643,22 @@ final class Classing {
         // strings instead, a rule would divide values the declarations already refused and the
         // position would come back with classes no run is ever in.
         List<Cell> cells = new ArrayList<>();
-        cells.add(new Cell(admits, List.of()));
+        cells.add(new Cell(ValuesWithin.all(admits), List.of()));
         for (AsASet each : said) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
                 for (boolean holding : new boolean[] {true, false}) {
-                    ValueSet side = holding ? each.whenTrue() : each.whenFalse();
-                    Allowance.Composed met =
-                            allowance.meet(Sameness.Block.of(term), cell.values(), side);
+                    ValuesWithin side = holding ? each.whenTrue()
+                            : ValuesWithin.all(each.whenFalse());
+                    Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
+                            cell.values().values(), side.values());
                     if (met.gaveUp()) {
                         return Worked.refusedAt(met.refused());
                     }
-                    if (TextExtents.shownToHoldAValue(met.set())) {
-                        narrower.add(cell.and(met.set(), each.states(), holding));
-                    } else if (!TextExtents.shownToHoldNone(met.set())) {
+                    ValuesWithin both = cell.values().meeting(side, met.set());
+                    if (both.shownToHoldAValue()) {
+                        narrower.add(cell.and(both, each.states(), holding));
+                    } else if (!both.shownToHoldNone()) {
                         // Neither a class nor none: the cell stands for strings no value may be.
                         return new Worked<>(null, null);
                     }
@@ -573,9 +687,13 @@ final class Classing {
         // Over the whole of the order and away from nothing: what the cell holds is already what
         // the rules leave, met together where the cells were refined. An allowance of this class's
         // own, because what one of them costs to write is nothing the class beside it should be
-        // short of.
-        Place stands = carrier.somewhereIn(cell.values(), new OrderedInterval(null, null),
-                PlacesApart.NONE, perWitness.get());
+        // short of. Looked for among the values of the cell's lengths, and a value found past them
+        // is in no class, so it stands for none.
+        Place stands = carrier.somewhereIn(cell.values().toLookIn(),
+                new OrderedInterval(null, null), PlacesApart.NONE, perWitness.get());
+        if (stands instanceof Text(String text) && !cell.values().has(new Value.Text(text))) {
+            stands = null;
+        }
         FixtureTemplate written =
                 stands == null ? null : writing.apply(stands);
         return written == null

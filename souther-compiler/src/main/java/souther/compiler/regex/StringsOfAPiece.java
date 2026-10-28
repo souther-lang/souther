@@ -2,6 +2,7 @@ package souther.compiler.regex;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Deque;
 import java.util.HashMap;
@@ -46,8 +47,8 @@ public final class StringsOfAPiece {
      * The pieces at {@code index} of the values of {@code whole} parted at {@code separator}, of
      * up to {@code longest} code points, or null where they are not worked out exactly: where
      * making the machines for them is more than {@code meter} allows, where a piece of that length
-     * may be that of no string a {@code String} holds ({@link #fitsAString}), or where the pieces
-     * of the strings of the language are not those of the strings it holds as written
+     * is not shown to be that of a string a {@code String} holds ({@link Shown#upTo}), or where
+     * the pieces of the strings of the language are not those of the strings it holds as written
      * ({@link StringsHeldAsWritten}), a subset of its values, so that a piece of some string of the
      * language may be the piece of no value.
      *
@@ -58,14 +59,196 @@ public final class StringsOfAPiece {
      */
     public static Language pieceOfAValueAt(Language whole, int separator, int index,
                                            long longest, Meter meter) {
-        Language ofTheStrings = pieceAt(whole, separator, index, longest, meter);
+        Shown shown = piecesOfValuesAt(whole, separator, index, meter);
+        return shown != null && shown.allUpTo(longest) ? shown.ofTheStrings() : null;
+    }
+
+    /**
+     * The pieces at {@code index} of the values of {@code whole} parted at {@code separator}, as
+     * far as each is shown to be one: no value has a piece outside {@link #ofTheStrings}, and
+     * every string of {@link #ofTheValues} no longer than {@link #upTo} is the piece of a value.
+     *
+     * <p>Shown by writing the value out. A piece of a string held as written is put between the
+     * shortest stretch that brings the machine to where the piece begins and the shortest that
+     * takes it on from where the piece ends to the end of some string, and the longest of those two
+     * together is what a piece gives up of the longest string. A piece longer than that may still
+     * be the piece of a value, and nothing here says whether it is.
+     *
+     * @param ofTheStrings the pieces of the strings of the language, which the pieces of its values
+     *                     are among
+     * @param ofTheValues  the pieces of the strings it holds as written, each of them the piece of a
+     *                     value where it is short enough
+     * @param upTo         the most code points a piece of {@code ofTheValues} is shown to be the
+     *                     piece of a value at; below nought where none is
+     */
+    public record Shown(Language ofTheStrings, Language ofTheValues, long upTo) {
+
+        public Shown {
+            if (ofTheStrings == null || ofTheValues == null) {
+                throw new IllegalArgumentException("pieces are shown of some strings");
+            }
+        }
+
+        /** Whether every piece of up to {@code longest} code points is shown one way or the
+         *  other: the pieces of the strings are the pieces of the values, and are as long. */
+        public boolean allUpTo(long longest) {
+            return longest <= upTo && ofTheStrings.equals(ofTheValues);
+        }
+    }
+
+    /**
+     * What is shown of the pieces at {@code index} of the values of {@code whole}
+     * ({@link Shown}), or null where making the machines for them is more than {@code meter}
+     * allows.
+     */
+    public static Shown piecesOfValuesAt(Language whole, int separator, int index, Meter meter) {
+        Language ofTheStrings = piecesAt(whole, separator, index, meter);
         if (ofTheStrings == null) {
             return null;
         }
         Language written = whole.heldAsWritten().language(meter);
-        Language ofTheWritten = written == null ? null
-                : pieceAt(written, separator, index, longest, meter);
-        return ofTheStrings.equals(ofTheWritten) ? ofTheStrings : null;
+        if (written == null) {
+            return null;
+        }
+        Language ofTheWritten = piecesAt(written, separator, index, meter);
+        if (ofTheWritten == null) {
+            return null;
+        }
+        long around = mostAround(written.machine(), separator, index);
+        return new Shown(ofTheStrings, ofTheWritten, Strings.LONGEST_TEXT - around);
+    }
+
+    /**
+     * The most code points a string of {@code machine} needs round a piece at {@code index} for
+     * the piece to stand there: the shortest stretch to each state a piece begins in, and the
+     * shortest from each state a piece reached from it ends in, the most of the two together.
+     *
+     * <p>Walked separator by separator where the index is no more than the machine's states, and
+     * otherwise bounded by {@code (index + 2) * (states + 1)}: from any state a machine reaches any
+     * other it can reach in fewer than {@code states} symbols, so the stretch before each
+     * separator, the separator, and the rest after the piece come to no more than that. Either way
+     * a string that has the piece there at all has one no longer than the piece and this.
+     */
+    static long mostAround(Automaton machine, int separator, int index) {
+        int states = machine.size();
+        if (index > states) {
+            return (index + 2L) * (states + 1L);
+        }
+        CodePoints apart = CodePoints.of(separator);
+        CodePoints within = apart.not();
+        long[] before = new long[states];
+        Arrays.fill(before, Long.MAX_VALUE);
+        before[Automaton.START] = 0;
+        for (int passed = 0; passed < index; passed++) {
+            long[] through = shortestWithin(machine, before, within);
+            long[] next = new long[states];
+            Arrays.fill(next, Long.MAX_VALUE);
+            for (int state = 0; state < states; state++) {
+                if (through[state] == Long.MAX_VALUE) {
+                    continue;
+                }
+                for (Automaton.Step each : machine.stepsFrom(state)) {
+                    if (!each.over().and(apart).isEmpty()) {
+                        next[each.to()] = Math.min(next[each.to()], through[state] + 1);
+                    }
+                }
+            }
+            before = next;
+        }
+        long[] toAnEnd = shortestToAnEnd(machine);
+        long most = 0;
+        for (int begin = 0; begin < states; begin++) {
+            if (before[begin] == Long.MAX_VALUE) {
+                continue;
+            }
+            long[] from = new long[states];
+            Arrays.fill(from, Long.MAX_VALUE);
+            from[begin] = 0;
+            long[] inThePiece = shortestWithin(machine, from, within);
+            for (int end = 0; end < states; end++) {
+                if (inThePiece[end] == Long.MAX_VALUE) {
+                    continue;
+                }
+                long after = afterAPieceEndingAt(machine, end, apart, toAnEnd);
+                if (after != Long.MAX_VALUE) {
+                    most = Math.max(most, before[begin] + after);
+                }
+            }
+        }
+        return most;
+    }
+
+    /** The fewest code points from where {@code from} has each state to each state reached on
+     *  symbols other than the separator. */
+    private static long[] shortestWithin(Automaton machine, long[] from, CodePoints within) {
+        long[] out = from.clone();
+        Deque<Integer> pending = new ArrayDeque<>();
+        for (int state = 0; state < out.length; state++) {
+            if (out[state] != Long.MAX_VALUE) {
+                pending.add(state);
+            }
+        }
+        while (!pending.isEmpty()) {
+            int state = pending.poll();
+            for (Automaton.Step each : machine.stepsFrom(state)) {
+                if (!each.over().and(within).isEmpty() && out[state] + 1 < out[each.to()]) {
+                    out[each.to()] = out[state] + 1;
+                    pending.add(each.to());
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The fewest code points from each state to the end of some string, or
+     *  {@link Long#MAX_VALUE} from a state no string ends past. */
+    private static long[] shortestToAnEnd(Automaton machine) {
+        int states = machine.size();
+        List<List<Integer>> into = new ArrayList<>();
+        for (int state = 0; state < states; state++) {
+            into.add(new ArrayList<>());
+        }
+        for (int state = 0; state < states; state++) {
+            for (Automaton.Step each : machine.stepsFrom(state)) {
+                into.get(each.to()).add(state);
+            }
+        }
+        long[] out = new long[states];
+        Arrays.fill(out, Long.MAX_VALUE);
+        Deque<Integer> pending = new ArrayDeque<>();
+        for (int state = 0; state < states; state++) {
+            if (machine.stopsAt(state)) {
+                out[state] = 0;
+                pending.add(state);
+            }
+        }
+        while (!pending.isEmpty()) {
+            int state = pending.poll();
+            for (int earlier : into.get(state)) {
+                if (out[earlier] == Long.MAX_VALUE) {
+                    out[earlier] = out[state] + 1;
+                    pending.add(earlier);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The fewest code points after a piece that leaves the machine in {@code state}: none where
+     *  a string ends there, and otherwise a separator and the shortest rest of some string, or
+     *  {@link Long#MAX_VALUE} where a piece cannot end there. */
+    private static long afterAPieceEndingAt(Automaton machine, int state, CodePoints apart,
+                                            long[] toAnEnd) {
+        if (machine.stopsAt(state)) {
+            return 0;
+        }
+        long out = Long.MAX_VALUE;
+        for (Automaton.Step each : machine.stepsFrom(state)) {
+            if (!each.over().and(apart).isEmpty() && toAnEnd[each.to()] != Long.MAX_VALUE) {
+                out = Math.min(out, 1 + toAnEnd[each.to()]);
+            }
+        }
+        return out;
     }
 
     /**
@@ -92,13 +275,23 @@ public final class StringsOfAPiece {
      */
     static Language pieceAt(Language whole, int separator, int index, long longest,
                                    Meter meter) {
+        if (!fitsAString(index, whole.machine().size(), longest)) {
+            return null;
+        }
+        return piecesAt(whole, separator, index, meter);
+    }
+
+    /**
+     * The pieces at {@code index} of the strings of {@code whole} parted at {@code separator},
+     * however long: a piece of a string of the language is among them, and one of them is the piece
+     * of some string of the language, which may be longer than any a {@code String} holds. Null
+     * where making the machine for them is more than {@code meter} allows.
+     */
+    static Language piecesAt(Language whole, int separator, int index, Meter meter) {
         if (index < 0) {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
         }
         Automaton machine = whole.machine();
-        if (!fitsAString(index, machine.size(), longest)) {
-            return null;
-        }
         meter.starting();
         Meter.Making making = meter.making();
         CodePoints apart = CodePoints.of(separator);

@@ -140,7 +140,7 @@ public final class InputClassifications {
             ids.add(each.id());
             answers.add(Recognitions.membershipOf(each.recognises(), value));
         }
-        return decided(axis.id(), ids, answers, value);
+        return decided(axis.id(), ids, answers, !axis.leftOpenBy().isEmpty(), value);
     }
 
     /**
@@ -158,11 +158,13 @@ public final class InputClassifications {
      *
      * @param ids     what each class is called, in the order they were asked
      * @param answers what each of them made of the value, in the same order
+     * @param leavesValuesOpen whether a rule left some of the position's values in no class
+     *                ({@link Axis#leftOpenBy})
      * @param about   the value they were asked about, for the sentence a broken contract prints, and
      *                for nothing else. Null where a caller has none to name
      */
     static Classification decided(AxisId at, List<String> ids, List<Membership> answers,
-                                  ObservedValue about) {
+                                  boolean leavesValuesOpen, ObservedValue about) {
         if (ids.size() != answers.size()) {
             throw new IllegalArgumentException(
                     "one answer per class: " + ids.size() + " classes, " + answers.size());
@@ -210,10 +212,18 @@ public final class InputClassifications {
         if (incomplete != null) {
             return Classification.unreadable(incomplete, at.behavior(), at.term());
         }
-        // Every class read the value and none holds it, which `Axis` says cannot happen: its classes
-        // are exhaustive over the position's values. So this is that contract broken rather than
-        // anything about the value, and saying it could not be read would be reporting a
-        // measurement failure for a defect in the partition.
+        // Every class read the value and none holds it. Where a rule left values open, the classes
+        // hold only the rest and this is one of those: which class it is in was not worked out,
+        // and the measure is short of it as of any value whose class nobody could say.
+        if (leavesValuesOpen) {
+            return Classification.unreadable(
+                    Incompleteness.Cause.of(Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN),
+                    at.behavior(), at.term());
+        }
+        // Elsewhere `Axis` says it cannot happen: its classes are exhaustive over the position's
+        // values. So this is that contract broken rather than anything about the value, and saying
+        // it could not be read would be reporting a measurement failure for a defect in the
+        // partition.
         throw new IllegalStateException("no class of " + at + " holds a value it read: " + about);
     }
 

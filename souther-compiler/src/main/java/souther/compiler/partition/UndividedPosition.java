@@ -279,6 +279,18 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
         /**
+         * What the rule states was read, and it relates the value here to another value; the
+         * classes it draws here hold the values it was shown over, and the rest are shown on
+         * neither side of it.
+         *
+         * <p>Its own word and not the two above, which leave the position no class of the rule's.
+         * Here the classes stand, and what a reader is told is which values they do not hold and
+         * what ended the showing: the longest {@code String}, past which nothing here wrote the
+         * other value out, or a value the other side holds only through a code point normalization
+         * changes.
+         */
+        RELATION_SHOWN_OVER_A_REGION,
+        /**
          * The rule says how the elements of the container here stand to each other, and which
          * containers it leaves is not worked out.
          *

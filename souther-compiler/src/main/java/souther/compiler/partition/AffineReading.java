@@ -420,10 +420,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     FormRange range = FormRange.of(form, ofTheInput, _ -> null);
                     UndividedByARelation.IntOperation operationTold =
                             new UndividedByARelation.IntOperation(form, held.least(),
-                                    held.greatest());
+                                    held.greatest(), told.workedOutOf(operation));
                     if ((range == null || !range.liesWithin(held.least(), held.greatest()))
                             && !told.operations.contains(operationTold)) {
-                        told.operations.add(operationTold);
+                        told.add(operation, operationTold);
                     }
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
                     told.exact = false;
@@ -670,7 +670,44 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
+        /** The node each of {@link #operations} was told at, by where it is among them. */
+        private final List<Core> at = new ArrayList<>();
         private boolean exact = true;
+
+        void add(Core node, UndividedByARelation.IntOperation operation) {
+            at.add(Core.withoutStanding(node));
+            operations.add(operation);
+        }
+
+        /**
+         * The operations already told that {@code node} is worked out of: those told at one of
+         * its operands, and theirs. The walk tells of an operand before what it is an operand of,
+         * so the last told at the operand is one this run works out before {@code node}. A node
+         * read twice — a definition, or a name bound once and read on both sides — is told twice,
+         * and the copy told first is missed. That leaves out only what comes after, never puts in
+         * what does not: a run is then taken to stop at either copy first, and the two are past
+         * their types at the same rows, which are said of neither. An operand worked out by a call
+         * is told at no node of its own and is missed the same way.
+         */
+        List<Integer> workedOutOf(Core node) {
+            List<Core> operands = switch (Core.withoutStanding(node)) {
+                case Core.Neg neg -> List.of(neg.operand());
+                case Core.Binary binary -> List.of(binary.left(), binary.right());
+                default -> List.of();
+            };
+            List<Integer> out = new ArrayList<>();
+            for (Core operand : operands) {
+                Core bare = Core.withoutStanding(operand);
+                for (int i = at.size() - 1; i >= 0; i--) {
+                    if (at.get(i) == bare) {
+                        out.add(i);
+                        out.addAll(operations.get(i).after());
+                        break;
+                    }
+                }
+            }
+            return out;
+        }
 
         UndividedByARelation.Working working() {
             return new UndividedByARelation.Working(operations, exact

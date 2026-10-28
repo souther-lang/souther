@@ -188,6 +188,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // every value here is shown to get to it, and a run allowed more stops where it stopped.
         table.put("RelationNotShownReachedAtEveryValue",
                 "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE/UNAFFECTED");
+        // Read to the end, and a relation whose classes here stand over the values it was shown
+        // over: what is open is fixed by the longest string and by normalization, and a run
+        // allowed more leaves the same values open.
+        table.put("RelationShownOverARegion",
+                "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
         // many parts a step states, or at how far a container is written out, is one a run
@@ -544,6 +549,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
+                new BlockReason.RelationShownOverARegion(false, 1L),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

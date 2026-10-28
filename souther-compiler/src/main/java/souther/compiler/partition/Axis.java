@@ -47,8 +47,8 @@ import java.util.List;
  *                a run of classes over the values of a number a row can be asked for somewhere. A
  *                number read from a run of a container has no such place, so it draws a line without
  *                dividing anything and never arrives here
- * @param classes exclusive and exhaustive over the term's values, or empty where the model does
- *                not divide them
+ * @param classes exclusive over the term's values, and exhaustive over them but for what
+ *                {@code leftOpenBy} leaves; or empty where the model does not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
  * @param divides which rules the classes were composed out of, each with which reading of it this
  *                is. The other half of what {@code cuts} is for a line: what a class is made of is
@@ -65,16 +65,29 @@ import java.util.List;
  *                position owes away from its line is a run of what these leave together, and the
  *                cuts alone are short of the lines that have no value. A bound's border reads none
  *                of them: its run is what the rules leave
+ * @param leftOpenBy the rules of {@code divides} each shown on neither of its sides of some values
+ *                here, which no class holds; empty where the classes hold every value. A value
+ *                no class holds is one of those, and which class it is in is not worked out —
+ *                where this is empty, no such value is, and one would be a broken partition
  */
 public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                    List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
-                   List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
+                   List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                   List<RuleEvidenceOrigin> leftOpenBy) {
 
     public Axis {
         classes = List.copyOf(classes);
         divides = List.copyOf(divides);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
+        leftOpenBy = List.copyOf(leftOpenBy);
+        // A rule leaves values out of the classes only where the classes were drawn out of it.
+        // One that drew none leaves nothing out of them, and naming it here would have a value
+        // the classes were meant to hold read as one nothing was shown about.
+        if (!divides.containsAll(leftOpenBy)) {
+            throw new IllegalArgumentException("`" + id + "` leaves values open by a rule its"
+                    + " classes were not composed out of");
+        }
         // A measure is what the rules divided a number into, cut on it, or parted it at, and one
         // with none of the three measured nothing. Such a one used to stand for a position still to
         // be answered for — which is a fact about the location and is held there
@@ -140,6 +153,13 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
         this(id, term, classes, List.of(), cuts, List.of(), NarrowedBounds.NOTHING);
     }
 
+    /** A measure whose classes hold every value of the number. */
+    public Axis(AxisId id, NumericTerm.FromOnePosition term,
+                List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
+        this(id, term, classes, divides, cuts, parted, narrowed, List.of());
+    }
+
     /**
      * One measure of {@code term}, named after it.
      *
@@ -151,7 +171,16 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
     public static Axis of(String behavior, NumericTerm.FromOnePosition term,
                           List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                           List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
-        return new Axis(AxisId.of(behavior, term), term, classes, divides, cuts, parted, narrowed);
+        return of(behavior, term, classes, divides, cuts, parted, narrowed, List.of());
+    }
+
+    /** The same, with the rules that leave some of the number's values in no class. */
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term,
+                          List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                          List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                          List<RuleEvidenceOrigin> leftOpenBy) {
+        return new Axis(AxisId.of(behavior, term), term, classes, divides, cuts, parted, narrowed,
+                leftOpenBy);
     }
 
 

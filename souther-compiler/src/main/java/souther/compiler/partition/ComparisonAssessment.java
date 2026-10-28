@@ -1673,6 +1673,30 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * The relations this comparison was read as, whose operations say where every run getting to
+     * it stops ({@link UndividedByARelation#everyRunStopsIn}); empty where it was read as no
+     * relation.
+     *
+     * <p>No {@code default}, for the reason {@link #whatEachPlaceIsLeftWith} has none.
+     */
+    default List<UndividedByARelation> relationsRead() {
+        return switch (this) {
+            case AcrossPositions across -> List.of(across.relation());
+            case AgainstAnotherValue against -> against.relations();
+            case Several several -> several.parts().stream()
+                    .flatMap(part -> part.line().relationsRead().stream())
+                    .distinct()
+                    .toList();
+            // A line on one position is read off its cut, and what the cut works out is not told
+            // of here; the rest are no relation of the input's numbers.
+            case AtAPosition _, AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _,
+                 NoInput _, CutsNothing _, AnswersNowhere _, OutsideTheDomain _,
+                 NothingArrivesAtItsLine _, TurnsNothing _, NothingArrivesAtItsRelation _,
+                 RelationTurnsNothing _, NoFeasibleInput _, Unread _ -> List.of();
+        };
+    }
+
+    /**
      * What the reading of lines leaves at each place this comparison is filed at, and empty where
      * it leaves nothing.
      *

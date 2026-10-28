@@ -25,6 +25,7 @@ import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -176,10 +177,24 @@ public final class BehaviorSetStatements {
         return Sameness.Block.of(term);
     }
 
-    /** One rule read as far as the plans for its two sides, waiting on its position's group. */
+    /**
+     * One rule read as far as the plans for its two sides, waiting on its position's group.
+     *
+     * @param notShown the plan for the strings shown on neither side, or null where every string
+     *                 is shown on one
+     * @param trueUpTo the most code points a value of {@code whenTrue} is shown to hold the rule
+     *                 at, or null where every one of them is
+     */
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
-                         AdmittedPlan whenTrue, AdmittedPlan whenFalse) {}
+                         AdmittedPlan whenTrue, AdmittedPlan whenFalse,
+                         AdmittedPlan notShown, Long trueUpTo) {
+
+        Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
+              AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
+            this(by, states, term, whenTrue, whenFalse, null, null);
+        }
+    }
 
     /**
      * What {@code read} states, built under {@code allowance}.
@@ -226,16 +241,23 @@ public final class BehaviorSetStatements {
      * rest and under the same allowance. Whether the position holds values on both sides of it is
      * settled where its values are known ({@link Classing}), as for any rule that states a set.
      *
-     * @param by     which reading of which comparison this is
-     * @param states what it states, called by the partner it is relative to
-     * @param term   the position it is about
-     * @param canBe  the strings the partner can hold
+     * <p>As far as each string is shown, which is the three regions {@code strings} holds: the
+     * strings shown to be the partner's, those shown to be none of its values, and the rest, told
+     * neither way, which are in no class this draws and are said to be left open
+     * ({@link SetStatement#notShown}). Held as the one value they are read off, so what is open is
+     * said in one place.
+     *
+     * @param by      which reading of which comparison this is
+     * @param states  what it states, called by the partner it is relative to
+     * @param term    the position it is about
+     * @param strings the strings the partner can hold, as far as each is shown
      */
     public record Partnered(PredicateOrigin by, PredicateStatement states,
-                            NumericTerm.FromOnePosition term, ValueSet canBe) {
+                            NumericTerm.FromOnePosition term,
+                            UndividedByARelation.StringsAPartnerCanHold strings) {
 
         public Partnered {
-            if (by == null || states == null || term == null || canBe == null) {
+            if (by == null || states == null || term == null || strings == null) {
                 throw new IllegalArgumentException(
                         "an equality states of a position the strings its partner can hold");
             }
@@ -267,8 +289,18 @@ public final class BehaviorSetStatements {
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         for (Partnered each : partnered) {
+            UndividedByARelation.StringsAPartnerCanHold strings = each.strings();
+            // A partner none of whose values is shown leaves the true side empty, and every string
+            // it may be told neither way.
+            AdmittedPlan shown = strings.canBe().isEmpty() ? AdmittedPlan.NONE
+                    : AdmittedPlan.of(strings.canBe());
             asked.add(new Asked(each.by(), each.states(), each.term(),
-                    AdmittedPlan.of(each.canBe()), AdmittedPlan.without(each.canBe())));
+                    shown, AdmittedPlan.without(strings.mayBe()),
+                    strings.leavesNoneOpen() ? null
+                            : AdmittedPlan.meeting(List.of(AdmittedPlan.of(strings.mayBe()),
+                                    strings.canBe().isEmpty() ? AdmittedPlan.ANY
+                                            : AdmittedPlan.without(strings.canBe()))),
+                    strings.upTo()));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -300,6 +332,9 @@ public final class BehaviorSetStatements {
                     byTerm.computeIfAbsent(each.term(), _ -> new LinkedHashSet<>());
             plans.add(each.whenTrue());
             plans.add(each.whenFalse());
+            if (each.notShown() != null) {
+                plans.add(each.notShown());
+            }
         }
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
         byTerm.forEach((term, plans) ->
@@ -543,8 +578,11 @@ public final class BehaviorSetStatements {
                     new BlockReason.BehaviorDistinctionsTooCostly(
                             Classing.ofTheDistinctions(it.refused()))));
             case Realizations.Exact built -> statements.add(new RuleEvidence.BySet(
-                    new SetStatement(each.term(), built.of(each.whenTrue()),
-                            built.of(each.whenFalse()), each.states(), each.by())));
+                    new SetStatement(each.term(),
+                            ValuesWithin.upTo(built.of(each.whenTrue()), each.trueUpTo()),
+                            built.of(each.whenFalse()), each.states(), each.by(),
+                            each.notShown() == null ? ValueSet.NONE
+                                    : built.of(each.notShown()))));
         }
     }
 

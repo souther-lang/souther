@@ -322,7 +322,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
             ids.add("c" + i);
         }
         return InputClassifications.decided(new AxisId("submit", "request.plain"),
-                ids, List.of(answers), null);
+                ids, List.of(answers), false, null);
     }
 
     /**

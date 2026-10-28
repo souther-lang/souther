@@ -311,6 +311,22 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     if a == b then Yes else No
                 }
                 """.formatted(ANSWER)));
+        // A relation shown over the values it can be shown over: a word with no bound on its
+        // length is the second piece of a pair as far as a pair can be written round it, and the
+        // longest words are shown neither way.
+        out.put(UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION, of("""
+                module m
+                %s
+                data Pair = String
+                    invariant String.matches("[a-z]+:[a-z]+", value)
+                data Word = String
+                    invariant String.matches("[a-z0-9]+", value)
+                behavior f : (p: Pair, w: Word) -> Answer
+                let f (p, w) =
+                    match List.get(1, String.split(":", p.value)) with
+                        | Some second -> if second == w.value then Yes else No
+                        | None -> No
+                """.formatted(ANSWER)));
         // A rule about how a list's elements stand to each other, offered as one alternative of a
         // choice: no builder keeps either of two such rules, and no set of the list's own values
         // holds it.
