@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -46,14 +47,18 @@ public final class ReportedReason {
      *                at, which the word does not say: several figures stop a reading under one
      *                word, and a reader told only the word cannot tell which one to raise. Empty
      *                where it stopped at none
+     * @param leftOpen where a relation was shown over some of the values here, which of them it
+     *                 was not shown over: no figure of this compiler's, and a reader told only the
+     *                 word cannot tell which values no class holds
      */
     public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo,
-                       List<Figure> figures) {
+                       List<Figure> figures,
+                       Optional<BlockReason.RelationShownOverARegion> leftOpen) {
 
         /**
          * These in a steady order, which two of them are equal in only where they are equal: the
          * word in the vocabulary's own order, then what it is about, then where it sends a reader,
-         * then the figures it stopped at.
+         * then the figures it stopped at, then what it leaves open.
          *
          * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
          * wrote is asked of the places.
@@ -62,10 +67,14 @@ public final class ReportedReason {
                 Comparator.comparing(Stop::reason)
                         .thenComparing(Stop::about, RuleSite.IN_A_STEADY_ORDER)
                         .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER)
-                        .thenComparing(Stop::figures, Figure::compare);
+                        .thenComparing(Stop::figures, Figure::compare)
+                        .thenComparing(each -> each.leftOpen().orElse(null),
+                                Comparator.nullsFirst(BlockReason.RuleReadingStopped
+                                        .IN_A_STEADY_ORDER));
 
         public Stop {
-            if (reason == null || about == null || sentTo == null || figures == null) {
+            if (reason == null || about == null || sentTo == null || figures == null
+                    || leftOpen == null) {
                 throw new IllegalArgumentException(
                         "a question stands on some reason, about something, somewhere in its rule");
             }
@@ -74,7 +83,9 @@ public final class ReportedReason {
     }
 
     private static Stop stop(RuleReasons.Said said) {
-        return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures());
+        return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures(),
+                said.reason() instanceof BlockReason.RelationShownOverARegion open
+                        ? Optional.of(open) : Optional.empty());
     }
 
     /**
@@ -317,6 +328,10 @@ public final class ReportedReason {
             // the rule, and a reader looks at what the run works out before it.
             case BlockReason.RelationNotShownReachedAtEveryValue _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
+            // Its own word again: the classes stand over what was shown, and what falls short is
+            // the values they do not hold.
+            case BlockReason.RelationShownOverARegion _ ->
+                    UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two

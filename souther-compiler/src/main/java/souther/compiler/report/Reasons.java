@@ -131,6 +131,9 @@ final class Reasons {
             case VALUE_ROOM_EXCEEDED -> String.format(
                     "a row's value at `%s` was read, and this host had no room to work out the"
                             + " number it comes to, so which class it is in is unknown", subject);
+            case VALUE_OUTSIDE_WHAT_WAS_SHOWN -> String.format(
+                    "a row's value at `%s` was read, and a rule there was shown on neither side"
+                            + " of it, so which class it is in is unknown", subject);
         };
     }
 

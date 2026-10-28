@@ -3,10 +3,12 @@ package souther.compiler.regex;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.pattern.Automaton;
@@ -37,9 +39,35 @@ public final class StringsHeldAsWritten {
         this.machine = machine;
     }
 
+    /**
+     * What has been made, for the machine it was made of. A function of the machine alone, asked by
+     * every reading of a string position, each of which would otherwise walk every step of the
+     * machine through {@link StableStarters} again.
+     *
+     * <p>Kept here and not on {@link Language}: a language is held by the answers the store keeps,
+     * and a field on it would put one more object that compares by address under every one of them.
+     * Keyed by the machine itself, which compares by address, and held weakly so that an entry goes
+     * with its machine.
+     */
+    private static final Map<Automaton, StringsHeldAsWritten> MADE =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
     /** The strings of {@code language} held as written. The machine is a {@link Language}'s, which
-     *  is canonical: deterministic, and every step of it takes a code point. */
+     *  is canonical: deterministic, and every step of it takes a code point. Two threads that ask
+     *  first make two equal values and keep one. */
     static StringsHeldAsWritten of(Automaton language) {
+        StringsHeldAsWritten had = MADE.get(language);
+        if (had == null) {
+            had = made(language);
+            StringsHeldAsWritten raced = MADE.putIfAbsent(language, had);
+            if (raced != null) {
+                had = raced;
+            }
+        }
+        return had;
+    }
+
+    private static StringsHeldAsWritten made(Automaton language) {
         List<List<Automaton.Step>> steps = new ArrayList<>();
         BitSet accepting = new BitSet();
         for (int state = 0; state < language.size(); state++) {
@@ -95,32 +123,37 @@ public final class StringsHeldAsWritten {
      * answer here does not say that no value exists.
      */
     public boolean isEmpty() {
-        return holdsNoneIn(machine);
+        return shortestIn(machine) < 0;
     }
 
     /**
-     * {@link #isEmpty} of the strings of {@code language}, without making their machine: a step
-     * is taken where it holds a stable starter, which stops at the first one, and the machine of
-     * these keeps every such code point of every step.
+     * The fewest code points one of the strings of {@code language} held as written has, or -1
+     * where it holds none, without making their machine: the language's walked a layer at a time
+     * from its start, a step taken where it holds a stable starter, to the first state that
+     * stops. The machine of these keeps every such code point of every step, so it is the same
+     * walk.
      */
-    static boolean holdsNoneIn(Automaton language) {
+    static long shortestIn(Automaton language) {
         BitSet reached = new BitSet();
-        Deque<Integer> pending = new ArrayDeque<>();
+        Deque<Integer> layer = new ArrayDeque<>();
         reached.set(Automaton.START);
-        pending.add(Automaton.START);
-        while (!pending.isEmpty()) {
-            int state = pending.poll();
-            if (language.stopsAt(state)) {
-                return false;
-            }
-            for (Automaton.Step step : language.stepsFrom(state)) {
-                if (!reached.get(step.to()) && StableStarters.anyWithin(step.over())) {
-                    reached.set(step.to());
-                    pending.add(step.to());
+        layer.add(Automaton.START);
+        for (long length = 0; !layer.isEmpty(); length++) {
+            Deque<Integer> next = new ArrayDeque<>();
+            for (int state : layer) {
+                if (language.stopsAt(state)) {
+                    return length;
+                }
+                for (Automaton.Step step : language.stepsFrom(state)) {
+                    if (!reached.get(step.to()) && StableStarters.anyWithin(step.over())) {
+                        reached.set(step.to());
+                        next.add(step.to());
+                    }
                 }
             }
+            layer = next;
         }
-        return true;
+        return -1;
     }
 
     /**

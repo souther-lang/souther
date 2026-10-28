@@ -169,7 +169,17 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
          * way: a value with no representation stays unheld on any host, and one this host had no
          * room for is a value a host with more room could still hold.
          */
-        VALUE_ROOM_EXCEEDED(false);
+        VALUE_ROOM_EXCEEDED(false),
+        /**
+         * A value was read, and it is one a rule about its position was shown on neither side of,
+         * so it is in none of the classes drawn over the rest.
+         *
+         * <p>Not {@link #VALUE_UNREADABLE}: the value came back whole, and every class read it.
+         * What stopped is the rule, which was shown over some of the values the position holds
+         * and not this one — a string past the longest one an address is written round, or one
+         * whose code points normalization leaves apart — and the report says which rule that is.
+         */
+        VALUE_OUTSIDE_WHAT_WAS_SHOWN(false);
 
         private final boolean leftNoRowRead;
 
@@ -224,6 +234,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
                 // compiler compared anything against; where no representation exists, no host has
                 // more of one to offer. Either way a wider run meets it again.
                 case VALUE_NOT_WORKED_OUT, VALUE_ROOM_EXCEEDED -> RunSensitivity.UNAFFECTED;
+                // What the rule was shown over is the model's and the longest string's, and no
+                // figure of a run's.
+                case VALUE_OUTSIDE_WHAT_WAS_SHOWN -> RunSensitivity.UNAFFECTED;
             };
         }
     }

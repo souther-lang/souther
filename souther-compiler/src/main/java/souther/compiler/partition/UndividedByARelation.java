@@ -23,6 +23,7 @@ import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
+import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -73,6 +74,7 @@ import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
 import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -80,6 +82,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -90,6 +93,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
@@ -187,8 +192,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * computed. What it is over is the comparison's own reading of it, and not the form the
      * comparison is cut as: {@code a + b - 100 >= 0} works out {@code a + b} and then the
      * difference, and {@code a + b >= 100} the sum alone.
+     *
+     * @param after the operations, by where they are among those the comparison works out, whose
+     *              value this one is worked out of, and theirs: each is worked out before it on
+     *              every run. Two operations neither of which is worked out of the other may come
+     *              in either order, and an operation worked out of one through a name is not
+     *              among these, which says less of the order and nothing false
      */
-    record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
+    record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest,
+                        List<Integer> after) {
+
+        IntOperation {
+            after = List.copyOf(new TreeSet<>(after));
+        }
+    }
 
     /**
      * The operations of whole numbers a comparison works out, and how much of what can stop a run
@@ -435,18 +452,39 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The strings the other side of an equality can hold, which are the only ones of this side that
-     * some row can have the equality come out true at.
+     * some row can have the equality come out true at, as far as each is shown.
      *
-     * @param canBe   the strings some value of the partner is; the rest are the strings no value
-     *                of it is, which whoever builds the classes asks for as a plan
+     * <p>Three regions of this side's strings, and none stands for another. A string of
+     * {@code canBe} no longer than {@code upTo} is shown to be some value of the partner, so a row
+     * has the equality true there. A string outside {@code mayBe} is shown to be none, so the
+     * equality is false there whatever the partner holds. Every other string — of {@code mayBe}
+     * and not of {@code canBe}, or of {@code canBe} and longer — is shown neither, and no class of
+     * this side is drawn over it.
+     *
+     * @param canBe   the strings shown to be some value of the partner, as far as {@code upTo}
+     *                goes; empty where none is
+     * @param mayBe   the strings outside which no value of the partner is, which hold
+     *                {@code canBe}
+     * @param upTo    the most code points a string of {@code canBe} is shown to be a value of the
+     *                partner at, or null where every one of them is
      * @param partner what the model calls the partner
      */
-    record StringsAPartnerCanHold(ValueSet canBe, String partner) {
+    record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo, String partner) {
 
         StringsAPartnerCanHold {
-            if (canBe == null || partner == null) {
+            if (canBe == null || mayBe == null || partner == null) {
                 throw new IllegalArgumentException("strings a partner can hold are some strings");
             }
+        }
+
+        /** Strings shown to be the partner's values exactly where {@code canBe} holds them. */
+        StringsAPartnerCanHold(ValueSet canBe, String partner) {
+            this(canBe, canBe, null, partner);
+        }
+
+        /** Whether every string is shown on one side or the other, so that none is open. */
+        boolean leavesNoneOpen() {
+            return upTo == null && canBe.equals(mayBe);
         }
     }
 
@@ -905,6 +943,231 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
+    }
+
+    /**
+     * Where every run getting to this relation stops in one of the operations the reading of the
+     * comparison told of, said only where every operation that can stop a run was told.
+     *
+     * <p>A run stops in the first operation it works out that is past its type. So the rows it
+     * stops in one are those at which that one is past its type and every operation it may work
+     * out before it is within its own: all the others but those worked out of its value, which
+     * come after it on every run. The rows are said as the forms of the operations between their
+     * ends, over as many numbers as each is over, and a form over one number as that number's
+     * run. Rows at which two operations either of which may come first are both past their types
+     * stop in one of them, and are said of neither.
+     *
+     * <p>Said where some region leaves such a row: none of what the ways to the comparison leave
+     * holds one, and every row there gets past.
+     *
+     * @param regions what the ways to the comparison leave, before what the rows that get past
+     *                its operations are narrowed to: a region a row got past them in holds none
+     *                of the rows a run stops at
+     */
+    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
+        if (!working.exact()) {
+            return List.of();
+        }
+        List<IntOperation> operations = working.operations();
+        Set<EveryRunStops> out = new LinkedHashSet<>();
+        for (int at = 0; at < operations.size(); at++) {
+            IntOperation it = operations.get(at);
+            List<Bounded> before = new ArrayList<>();
+            for (int other = 0; other < operations.size(); other++) {
+                IntOperation one = operations.get(other);
+                if (other != at && !one.after().contains(at)) {
+                    before.add(new Bounded(one.form(), one.least(), one.greatest()));
+                }
+            }
+            for (Bounded past : List.of(
+                    new Bounded(it.form(), it.greatest().add(BigInteger.ONE), null),
+                    new Bounded(it.form(), null, it.least().subtract(BigInteger.ONE)))) {
+                List<Bounded> rows = new ArrayList<>(before);
+                rows.add(past);
+                List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
+                if (where != null) {
+                    out.add(new EveryRunStops(written(it.form()), where));
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** A form over numbers of the input, constant and all, from {@code least} to
+     *  {@code greatest}, either of which may be null where nothing bounds it there. */
+    private record Bounded(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
+
+    /**
+     * The rows meeting every one of {@code bounds}, as each form of numbers they hold between two
+     * ends: the forms alike but for the constant met into one, a form of one number said as that
+     * number's run within its type, and an end that is the type's own left unsaid. Null where no
+     * row meets them, or no region leaves one that does.
+     */
+    private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
+                                                        List<SearchRegion> regions) {
+        Map<Map<NumericTerm, ExactRatio>, BigInteger[]> met = new LinkedHashMap<>();
+        Set<NumericTerm.ValueOf> numbers = new LinkedHashSet<>();
+        for (Bounded each : bounds) {
+            Map<NumericTerm, ExactRatio> coefs = each.form().coefs();
+            BigInteger weight = coefs.size() == 1 ? wholeOf(coefs.values().iterator().next())
+                    : BigInteger.ONE;
+            BigInteger shift = wholeOf(each.form().constant());
+            if (coefs.isEmpty() || weight == null || shift == null
+                    || !coefs.keySet().stream().allMatch(term ->
+                            term instanceof NumericTerm.ValueOf)) {
+                return null;
+            }
+            coefs.keySet().forEach(term -> numbers.add((NumericTerm.ValueOf) term));
+            BigInteger least = each.least() == null ? null : each.least().subtract(shift);
+            BigInteger greatest = each.greatest() == null ? null
+                    : each.greatest().subtract(shift);
+            Map<NumericTerm, ExactRatio> shape = coefs;
+            if (coefs.size() == 1) {
+                // One number weighed: its own run, the ends divided by the weight.
+                shape = Map.of(coefs.keySet().iterator().next(), ExactRatio.ONE);
+                BigInteger low = least == null ? null : weight.signum() > 0
+                        ? ceilingOf(least, weight) : floorOf(least, weight);
+                BigInteger high = greatest == null ? null : weight.signum() > 0
+                        ? floorOf(greatest, weight) : ceilingOf(greatest, weight);
+                least = weight.signum() > 0 ? low : high;
+                greatest = weight.signum() > 0 ? high : low;
+            }
+            BigInteger[] ends = met.computeIfAbsent(shape, _ -> new BigInteger[2]);
+            if (least != null) {
+                ends[0] = ends[0] == null ? least : ends[0].max(least);
+            }
+            if (greatest != null) {
+                ends[1] = ends[1] == null ? greatest : ends[1].min(greatest);
+            }
+        }
+        List<EveryRunStops.Within> out = new ArrayList<>();
+        List<Bounded> asked = new ArrayList<>();
+        for (Map.Entry<Map<NumericTerm, ExactRatio>, BigInteger[]> each : met.entrySet()) {
+            LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, each.getKey());
+            BigInteger least = each.getValue()[0];
+            BigInteger greatest = each.getValue()[1];
+            BigInteger typeLeast = typeEndOf(form, true, read);
+            BigInteger typeGreatest = typeEndOf(form, false, read);
+            if (form.coefs().size() == 1) {
+                least = least == null ? typeLeast : typeLeast == null ? least : least.max(typeLeast);
+                greatest = greatest == null ? typeGreatest
+                        : typeGreatest == null ? greatest : greatest.min(typeGreatest);
+            }
+            if (least != null && greatest != null && least.compareTo(greatest) > 0) {
+                return null;
+            }
+            asked.add(new Bounded(form, least, greatest));
+            BigInteger shownLeast = least != null && least.equals(typeLeast) ? null : least;
+            BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
+                    : greatest;
+            if (shownLeast != null || shownGreatest != null) {
+                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest));
+            }
+        }
+        // And every number of them within its type, which every row is, for the regions: a
+        // region need not say where a type stops.
+        for (NumericTerm.ValueOf number : numbers) {
+            LinearForm<NumericTerm> alone = LinearForm.atom(number);
+            asked.add(new Bounded(alone, typeEndOf(alone, true, read),
+                    typeEndOf(alone, false, read)));
+        }
+        // In the order of what they are written as, which is what a report is compared by.
+        out.sort(Comparator.comparing(EveryRunStops.Within::form));
+        return out.isEmpty() || regions.stream().noneMatch(region -> holdsARow(region, asked))
+                ? null : out;
+    }
+
+    /** Whether {@code region}, narrowed to {@code bounds}, is not shown to hold no row. A bound
+     *  it cannot carry narrows nothing, which leaves a row where there may be none. */
+    private static boolean holdsARow(SearchRegion region, List<Bounded> bounds) {
+        SearchRegion narrowed = region;
+        for (Bounded each : bounds) {
+            if (each.least() != null) {
+                narrowed = narrowedBy(narrowed, each.form(), each.least(), Rel.GE);
+            }
+            if (each.greatest() != null) {
+                narrowed = narrowedBy(narrowed, each.form(), each.greatest(), Rel.LE);
+            }
+        }
+        LinearForm<NumericTerm> any = bounds.getFirst().form();
+        return !(narrowed.projectionOf(any)
+                instanceof NumericDomain.FormProjection.NothingIsLeft);
+    }
+
+    /** {@code region} with {@code form rel end} taken in, or as it was where it cannot be. */
+    private static SearchRegion narrowedBy(SearchRegion region, LinearForm<NumericTerm> form,
+                                           BigInteger end, Rel rel) {
+        LinearForm<NumericTerm> moved = new LinearForm<>(
+                form.constant().minus(ExactRatio.of(end)).orNull(), form.coefs());
+        return moved.constant() != null
+                && region.assuming(moved, rel) instanceof SearchRegion.Assumption.Taken(
+                        SearchRegion taken) ? taken : region;
+    }
+
+    /** {@code ratio} where it is a whole number, or null. */
+    private static BigInteger wholeOf(ExactRatio ratio) {
+        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(
+                BigInteger whole) ? whole : null;
+    }
+
+    /**
+     * The least {@code form} comes to where each number in it is at an end of its type — or the
+     * most, where {@code least} is false — or null where a number of it has no such end or is no
+     * whole number.
+     */
+    private static BigInteger typeEndOf(LinearForm<NumericTerm> form, boolean least,
+                                        InputReading read) {
+        if (!(form.constant().floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger sum))
+                || !form.constant().isWhole()) {
+            return null;
+        }
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof NumericTerm.ValueOf place) || !each.getValue().isWhole()
+                    || !(each.getValue().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger weight))) {
+                return null;
+            }
+            Carrier carrier = read.quantities().ordersOf(place).answered();
+            BigInteger end = least == (weight.signum() > 0) ? leastOf(carrier)
+                    : greatestOf(carrier);
+            if (end == null) {
+                return null;
+            }
+            sum = sum.add(weight.multiply(end));
+        }
+        return sum;
+    }
+
+    private static BigInteger floorOf(BigInteger numerator, BigInteger denominator) {
+        BigInteger[] parts = numerator.divideAndRemainder(denominator);
+        return parts[1].signum() != 0 && parts[1].signum() != denominator.signum()
+                ? parts[0].subtract(BigInteger.ONE) : parts[0];
+    }
+
+    private static BigInteger ceilingOf(BigInteger numerator, BigInteger denominator) {
+        return floorOf(numerator.negate(), denominator).negate();
+    }
+
+    /** {@code form} as an author would write it: each number weighed, in the order of their
+     *  names, and the constant last. */
+    private static String written(LinearForm<NumericTerm> form) {
+        Map<String, ExactRatio> named = new TreeMap<>();
+        form.coefs().forEach((term, weight) -> named.put(term.toString(), weight));
+        StringBuilder out = new StringBuilder();
+        named.forEach((name, weight) -> {
+            boolean below = weight.signum() < 0;
+            ExactRatio size = below ? weight.negated() : weight;
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.equals(ExactRatio.ONE) ? "" : size.spelled() + " * ")
+                    .append(name);
+        });
+        if (!form.constant().isZero() || out.isEmpty()) {
+            boolean below = form.constant().signum() < 0;
+            ExactRatio size = below ? form.constant().negated() : form.constant();
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.spelled());
+        }
+        return out.toString();
     }
 
     /**
@@ -1612,22 +1875,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             ValueSet theirStrings = partner.admitted().approximation();
-            ValueSet canBe = here.piece() != null
-                    ? stringsWithAPiece(here.piece(), theirStrings)
-                    : there.piece() != null
-                    ? stringsThatAreThePiece(there.piece(), theirStrings,
-                            longestStringAt(mine.subjectPath(), read))
-                    : theirStrings;
-            if (canBe == null || canBe.isAny() || canBe.isEmpty()
-                    || canBe instanceof ValueSet.WholeRuns) {
+            String called = there.piece() == null ? theirs.subjectPath().toString()
+                    : "piece " + there.piece().index() + " of " + theirs.subjectPath();
+            StringsAPartnerCanHold strings;
+            if (there.piece() != null) {
+                strings = stringsThatAreThePiece(there.piece(), theirStrings,
+                        read.domain().at(mine.subjectPath()), called);
+            } else {
+                ValueSet canBe = here.piece() != null
+                        ? stringsWithAPiece(here.piece(), theirStrings) : theirStrings;
+                strings = canBe == null || canBe.isEmpty() ? null
+                        : new StringsAPartnerCanHold(canBe, called);
+            }
+            // Nothing to part where every string is shown on one side: none may be the partner's,
+            // or every one is shown to be. Where every one only may be, some are open, and the
+            // strings shown on a side are still parted from them.
+            if (strings == null || strings.mayBe().isEmpty()
+                    || strings.mayBe() instanceof ValueSet.WholeRuns
+                    || (strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
             if (!runGetsThere.getAsBoolean()) {
                 continue;
             }
-            out.put(mine, new StringsAPartnerCanHold(canBe, there.piece() == null
-                    ? theirs.subjectPath().toString()
-                    : "piece " + there.piece().index() + " of " + theirs.subjectPath()));
+            out.put(mine, strings);
         }
         return out;
     }
@@ -1667,35 +1938,62 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The strings that are {@code piece} of some value of {@code whole}, for the strings of up
-     * to {@code longest} code points, or null where {@code whole} is not a language of strings,
-     * the machine for them is more than a piece's allowance, or the pieces of that length are not
-     * all the pieces of values ({@link StringsOfAPiece#pieceOfAValueAt}).
+     * The strings at {@code mine} shown to be {@code piece} of some value of {@code whole}, and
+     * those shown to be that of none, or null where {@code whole} is not a language of strings or
+     * the machines for them are more than a piece's allowance
+     * ({@link StringsOfAPiece#piecesOfValuesAt}).
+     *
+     * <p>Told exactly where every string {@code mine} holds is short enough, and its pieces of the
+     * strings are its pieces of the values. Otherwise what is shown is kept apart from what is not:
+     * the pieces of the strings held as written, up to the length a value is written round each,
+     * are values' pieces, and nothing outside the pieces of the strings is — and the strings
+     * between are told neither way.
      */
-    private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole,
-                                                   long longest) {
+    private static StringsAPartnerCanHold stringsThatAreThePiece(Quantity.ThePieceAt piece,
+                                                                 ValueSet whole, Position mine,
+                                                                 String called) {
         if (!(whole instanceof ValueSet.Matching(Language language))) {
             return null;
         }
-        Language image = StringsOfAPiece.pieceOfAValueAt(language, piece.separator(),
-                piece.index(), longest, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
-        return image == null ? null : ValueSet.matching(image);
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        StringsOfAPiece.Shown shown = StringsOfAPiece.piecesOfValuesAt(language,
+                piece.separator(), piece.index(), meter);
+        if (shown == null) {
+            return null;
+        }
+        Language held = mine == null ? null
+                : mine.admitted().approximation() instanceof ValueSet.Matching(Language strings)
+                ? strings : null;
+        long longest = longestOf(held);
+        if (shown.allUpTo(longest)) {
+            return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheStrings()), called);
+        }
+        // No piece is shorter than what is written round it, so none is shown a value's piece.
+        if (shown.upTo() < 0) {
+            return new StringsAPartnerCanHold(ValueSet.NONE,
+                    ValueSet.matching(shown.ofTheStrings()), null, called);
+        }
+        // Only what this side holds is asked about, so the pieces of strings no value is written
+        // as are no gap where this side holds none of them.
+        boolean alike = shown.ofTheStrings().equals(shown.ofTheValues());
+        if (!alike && held != null) {
+            Language between = shown.ofTheStrings().and(shown.ofTheValues().not(meter), meter);
+            Language heldBetween = between == null ? null : between.and(held, meter);
+            alike = heldBetween != null && heldBetween.isEmpty();
+        }
+        return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheValues()),
+                ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()),
+                longest <= shown.upTo() ? null : shown.upTo(), called);
     }
 
     /**
-     * The most code points a string at {@code place} has as the declarations leave it: what its
-     * language bounds, and the most a {@code String} holds where that is no bound.
+     * The most code points a string of {@code held} has: what the language bounds, and the most a
+     * {@code String} holds where that is no bound or the strings are not a language.
      */
-    private static long longestStringAt(TermPath place, InputReading read) {
-        Position at = read.domain().at(place);
-        if (at != null && at.admitted().approximation() instanceof ValueSet.Matching(
-                Language language)) {
-            Language.Ends lengths = language.lengths();
-            if (lengths != null && lengths.most() != null) {
-                return lengths.most();
-            }
-        }
-        return TextExtents.LONGEST_STRING;
+    private static long longestOf(Language held) {
+        Language.Ends lengths = held == null ? null : held.lengths();
+        return lengths != null && lengths.most() != null ? lengths.most()
+                : TextExtents.LONGEST_STRING;
     }
 
     /**
