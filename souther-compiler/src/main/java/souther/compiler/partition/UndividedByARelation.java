@@ -1503,19 +1503,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         : placesOfTheFormLeftEveryRemainder(read, conditions, heldWhole));
             }
         }
-        // How far apart two sides are is asked of the relation as it stands, line and all. The
-        // differences are answered for by the sizes of the form's addends, which they check
-        // against the operations they are given.
+        // How far apart two sides are is asked of the relation as it stands, line and all. A row
+        // on each side is shown by the sizes of the form's addends, which is so only where a row
+        // within them is computed, asked of every side of the relation and not of the two. The
+        // values a difference settles are asked of the operations as well, which check themselves.
+        boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);
         if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    declared, independent, operations));
+                    declared, independent, operations, sizesAreRowsComputed));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
             List<WhatARelationLeavesUndivided.Leaves> apart =
                     leftByTheirDifference(sources, carriers, stating, heldWhole, read, along,
-                            independent, operations);
+                            independent, operations, sizesAreRowsComputed);
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -3643,7 +3645,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          WhatARelationLeavesUndivided.Independence
                                                                  independent,
                                                          WhatARelationLeavesUndivided.Operations
-                                                                 operations) {
+                                                                 operations,
+                                                         boolean sizesAreRowsComputed) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -3693,7 +3696,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : on.whereItStops();
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.constant(), relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
-                UndividedByARelation::overlap, greatestOf(on), operations);
+                UndividedByARelation::overlap, greatestOf(on), operations, sizesAreRowsComputed);
     }
 
     /**
@@ -3713,7 +3716,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
             boolean heldWhole, InputReading read, SearchRegion along,
             WhatARelationLeavesUndivided.Independence independent,
-            WhatARelationLeavesUndivided.Operations operations) {
+            WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -3751,10 +3754,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
                 pair.constant(), relation, held, UndividedByARelation::overlap, greatestOf(on),
-                operations));
+                operations, sizesAreRowsComputed));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
                 pair.constant(), relation, held, UndividedByARelation::overlap, greatestOf(on),
-                operations));
+                operations, sizesAreRowsComputed));
         return out;
     }
 

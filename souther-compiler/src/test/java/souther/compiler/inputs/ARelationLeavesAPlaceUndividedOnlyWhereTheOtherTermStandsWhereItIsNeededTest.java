@@ -264,7 +264,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                                      WhatARelationLeavesUndivided.OnTheDifference... held) {
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
                 relation, List.of(held), DATES, String::equals, GREATEST_INT,
-                WhatARelationLeavesUndivided.Operations.NONE);
+                WhatARelationLeavesUndivided.Operations.NONE, true);
     }
 
     /**
@@ -312,7 +312,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
                         .leavesByTheirDifference(terms, 0, ExactRatio.of(k), Rel.GT, List.of(),
                                 String::equals, GREATEST_INT,
-                                WhatARelationLeavesUndivided.Operations.NONE);
+                                WhatARelationLeavesUndivided.Operations.NONE, true);
         assertEquals(List.of(), a.linesOfTheModel());
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
                 ExactRatio.of(Long.MAX_VALUE - k + 1))), a.ofTheTypeAlone());
@@ -321,7 +321,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
                         .leavesByTheirDifference(terms, 1, ExactRatio.of(k), Rel.GT, List.of(),
                                 String::equals, GREATEST_INT,
-                                WhatARelationLeavesUndivided.Operations.NONE);
+                                WhatARelationLeavesUndivided.Operations.NONE, true);
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.LE, ExactRatio.of(k - 1))),
                 b.linesOfTheModel());
         // At the greatest Int itself {@code a} would have to pass the greatest less K for the
@@ -346,7 +346,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
 
         assertNull(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
                 ExactRatio.of(k), Rel.GT, List.of(), String::equals, GREATEST_INT,
-                WhatARelationLeavesUndivided.Operations.NONE));
+                WhatARelationLeavesUndivided.Operations.NONE, true));
     }
 
     /**
@@ -368,7 +368,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                                 List.of(new WhatARelationLeavesUndivided.OnTheDifference(
                                         ExactRatio.ONE, ExactRatio.ZERO, Rel.GE)),
                                 String::equals, GREATEST_INT,
-                                WhatARelationLeavesUndivided.Operations.NONE);
+                                WhatARelationLeavesUndivided.Operations.NONE, true);
 
         assertEquals(List.of(), w.linesOfTheModel());
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
@@ -395,7 +395,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
             WhatARelationLeavesUndivided.Leaves t = WhatARelationLeavesUndivided
                     .leavesByTheirDifference(terms, 1, ExactRatio.ZERO, Rel.GT, atLeast,
                             String::equals, GREATEST_INT,
-                            WhatARelationLeavesUndivided.Operations.NONE);
+                            WhatARelationLeavesUndivided.Operations.NONE, true);
             if (held == amounts) {
                 assertNull(t);
             } else {
@@ -503,7 +503,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
                         NumericDomain.Bounds.OPEN), String::equals, GREATEST_INT,
-                WhatARelationLeavesUndivided.Operations.NONE));
+                WhatARelationLeavesUndivided.Operations.NONE, true));
     }
 
     /**
@@ -658,7 +658,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                             Rel.LT, List.of(),
                             new WhatARelationLeavesUndivided.WhereTheRepresentationStops(INTS),
                             String::equals, GREATEST_INT,
-                            WhatARelationLeavesUndivided.Operations.NONE),
+                            WhatARelationLeavesUndivided.Operations.NONE, true),
                     "Ints weighed " + weight);
         }
         assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), 0, Rel.LT));

@@ -203,10 +203,12 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 for (Rel relation : RELATIONS) {
                     for (int at = 0; at < 2; at++) {
                         List<Term<String>> terms = termsOf(program);
+                        Operations operations =
+                                new Operations(program.sums(), program.state());
                         Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(terms,
                                 at, ExactRatio.of(constant), relation, List.of(),
-                                String::equals, BigInteger.valueOf(GREATEST),
-                                new Operations(program.sums(), program.state()));
+                                String::equals, BigInteger.valueOf(GREATEST), operations,
+                                operations.theSizesAreRowsComputed(terms, ExactRatio.of(constant)));
                         verify(program, program.sums(), constant, relation, at, said);
                     }
                 }

@@ -176,7 +176,7 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                                                         String::equals,
                                                         BigInteger.valueOf(GREATEST),
                                                         WhatARelationLeavesUndivided
-                                                                .Operations.NONE);
+                                                                .Operations.NONE, true);
                                         if (leaves == null) {
                                             continue;
                                         }
@@ -253,7 +253,7 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                         Leaves leaves = WhatARelationLeavesUndivided.leavesByTheirDifference(
                                 terms, at, ExactRatio.of(constant), relation, List.of(),
                                 String::equals, BigInteger.valueOf(GREATEST),
-                                WhatARelationLeavesUndivided.Operations.NONE);
+                                WhatARelationLeavesUndivided.Operations.NONE, true);
                         if (leaves instanceof Leaves.Settled settled) {
                             assertEquals(List.of(), settled.linesOfTheModel(),
                                     leaves + " for " + weights[0] + "," + weights[1] + " at " + at
@@ -285,7 +285,7 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                             ExactRatio.of(constant), relation, List.of(),
                             new WhatARelationLeavesUndivided.WhereTheRepresentationStops(TYPE),
                             String::equals, BigInteger.valueOf(GREATEST),
-                            WhatARelationLeavesUndivided.Operations.NONE);
+                            WhatARelationLeavesUndivided.Operations.NONE, true);
                     if (out.isEmpty()) {
                         continue;
                     }

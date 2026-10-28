@@ -244,15 +244,33 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /**
-         * Whether the sizes of the form's addends answer for a row, which is where nothing but
-         * the form can stop one. Where an operation is told, the rows computed are the
-         * operation's own and the sizes are a bound of them and no more: they count a constant
-         * the program may only compare the sum with, and take a value of the type below what a
-         * sum reaches to be no addend, though a sum of terms weighed one is worked out at it.
-         * An analysis that names the values no row computes at, or settles a value by the rows
-         * that do, asks this and is silent otherwise.
+         * Whether every row within the sizes of the form's addends is computed: nothing beyond
+         * the form can stop a row, or every operation is told and each is a sum of some of the
+         * form's terms, so that the sizes taken once keep inside what the operations are worked
+         * out over. An analysis that shows a row on each side of a relation, which a row inside
+         * the sizes is enough for, asks this.
          */
-        public boolean theSizesOfTheFormAnswer() {
+        public <P> boolean theSizesAreRowsComputed(List<Term<P>> terms, ExactRatio constant) {
+            if (!canStopARow()) {
+                return true;
+            }
+            if (told != Told.EVERY) {
+                return false;
+            }
+            ExactRatio multiple = multipleOfTheForm(terms, constant);
+            return multiple != null && multiple.compareTo(ExactRatio.ONE) == 0;
+        }
+
+        /**
+         * Whether every row computed is within the sizes of the form's addends, which is where
+         * nothing but the form can stop a row. Where an operation is told, the rows computed are
+         * the operation's own and the sizes are a bound of them and no more: they count a
+         * constant the program may only compare the sum with, and take a value of the type below
+         * what a sum reaches to be no addend, though a sum of terms weighed one is worked out at
+         * it. An analysis that names the values no row computes at, or settles a value by the
+         * rows that do, asks this and is silent otherwise.
+         */
+        public boolean theSizesAreEveryRowComputed() {
             return !canStopARow();
         }
 
@@ -2880,17 +2898,21 @@ public final class WhatARelationLeavesUndivided {
      * @param overlap  whether two places are one, or one is part of the other
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
-     * @param operations what the program works out: nothing is shown where the sizes of the
-     *                 form's addends are not the sizes it works them out over
-     *                 ({@link Operations#theSizesOfTheFormAnswer})
+     * @param operations what the program works out
+     * @param sizesAreRowsComputed whether every row within the sizes of the form's addends is
+     *                 computed ({@link Operations#theSizesAreRowsComputed}), asked of the whole
+     *                 relation and not of the two terms here, since an operation may read a third
+     *                 held still; nothing is shown otherwise, as a row on each side is what this
+     *                 shows
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, ExactRatio constant,
                                                Rel relation, List<OnTheDifference> held,
                                                WhereTheRepresentationStops extent,
                                                BiPredicate<P, P> overlap, BigInteger greatest,
-                                               Operations operations) {
+                                               Operations operations,
+                                               boolean sizesAreRowsComputed) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
-        if (combination == null || constant == null || !operations.theSizesOfTheFormAnswer()
+        if (combination == null || constant == null || !sizesAreRowsComputed
                 || !apart(terms, 0, overlap)
                 || !bothTakeTheWholeType(terms.get(0), terms.get(1), extent.run())) {
             return Set.of();
@@ -2978,19 +3000,24 @@ public final class WhatARelationLeavesUndivided {
      * @param overlap  whether two places are one, or one is part of the other
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
-     * @param operations what the program works out: nothing is said where the sizes of the
-     *                 form's addends are not the sizes it works them out over
-     *                 ({@link Operations#theSizesOfTheFormAnswer}), since the rows computed
-     *                 here are told by those sizes alone
+     * @param operations what the program works out. A value is settled here by the rows the
+     *                 sizes of the form's addends leave, and a run past them is said to have
+     *                 none, so nothing is settled where a row computed may lie outside them
+     *                 ({@link Operations#theSizesAreEveryRowComputed}); that a row is on each
+     *                 side needs only a row within them
+     * @param sizesAreRowsComputed whether every row within those sizes is computed
+     *                 ({@link Operations#theSizesAreRowsComputed}), asked of the whole relation
+     *                 and not of the two terms here; nothing is said otherwise
      */
     public static <P> Leaves leavesByTheirDifference(List<Term<P>> terms, int at,
                                                      ExactRatio constant, Rel relation,
                                                      List<OnTheDifference> held,
                                                      BiPredicate<P, P> overlap,
                                                      BigInteger greatest,
-                                                     Operations operations) {
+                                                     Operations operations,
+                                                     boolean sizesAreRowsComputed) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
-        if (combination == null || constant == null || !operations.theSizesOfTheFormAnswer()
+        if (combination == null || constant == null || !sizesAreRowsComputed
                 || !constant.isWhole()
                 || !apart(terms, 0, overlap)
                 || !terms.get(0).weight().abs().equals(ExactRatio.ONE)) {
@@ -3126,8 +3153,12 @@ public final class WhatARelationLeavesUndivided {
                 : Leaves.Settled.ofWhole(inOrder(model, true), holds.low(), holds.high()).lines();
         List<SettledRun> every = new ArrayList<>(model);
         every.addAll(ofTheType);
-        return Leaves.Settled.ofWhole(inOrder(every, true), holds.low(), holds.high())
-                .besideWhatTheModelDraws(drawn);
+        // A value settled is told by every row computed being within the sizes; a value left
+        // either way needed only a row within them.
+        return operations.theSizesAreEveryRowComputed()
+                ? Leaves.Settled.ofWhole(inOrder(every, true), holds.low(), holds.high())
+                        .besideWhatTheModelDraws(drawn)
+                : null;
     }
 
     /**
