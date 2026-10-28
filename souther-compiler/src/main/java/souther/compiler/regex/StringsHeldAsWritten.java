@@ -3,10 +3,12 @@ package souther.compiler.regex;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.pattern.Automaton;
@@ -37,9 +39,35 @@ public final class StringsHeldAsWritten {
         this.machine = machine;
     }
 
+    /**
+     * What has been made, for the machine it was made of. A function of the machine alone, asked by
+     * every reading of a string position, each of which would otherwise walk every step of the
+     * machine through {@link StableStarters} again.
+     *
+     * <p>Kept here and not on {@link Language}: a language is held by the answers the store keeps,
+     * and a field on it would put one more object that compares by address under every one of them.
+     * Keyed by the machine itself, which compares by address, and held weakly so that an entry goes
+     * with its machine.
+     */
+    private static final Map<Automaton, StringsHeldAsWritten> MADE =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
     /** The strings of {@code language} held as written. The machine is a {@link Language}'s, which
-     *  is canonical: deterministic, and every step of it takes a code point. */
+     *  is canonical: deterministic, and every step of it takes a code point. Two threads that ask
+     *  first make two equal values and keep one. */
     static StringsHeldAsWritten of(Automaton language) {
+        StringsHeldAsWritten had = MADE.get(language);
+        if (had == null) {
+            had = made(language);
+            StringsHeldAsWritten raced = MADE.putIfAbsent(language, had);
+            if (raced != null) {
+                had = raced;
+            }
+        }
+        return had;
+    }
+
+    private static StringsHeldAsWritten made(Automaton language) {
         List<List<Automaton.Step>> steps = new ArrayList<>();
         BitSet accepting = new BitSet();
         for (int state = 0; state < language.size(); state++) {

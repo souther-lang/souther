@@ -48,14 +48,6 @@ public final class Language {
      */
     private final Automaton machine;
 
-    /**
-     * The strings of this one held as written, made on the first ask. A function of the machine
-     * alone, and asked by every reading of a string position, each of which would otherwise walk
-     * every step of the machine through {@link StableStarters} again. Two threads that ask first
-     * make two equal values and keep either.
-     */
-    private volatile StringsHeldAsWritten heldAsWritten;
-
     Language(Automaton canonical) {
         if (canonical == null) {
             throw new IllegalArgumentException("a language is some machine");
@@ -253,12 +245,7 @@ public final class Language {
      * ({@link StringsHeldAsWritten}).
      */
     public StringsHeldAsWritten heldAsWritten() {
-        StringsHeldAsWritten had = heldAsWritten;
-        if (had == null) {
-            had = StringsHeldAsWritten.of(machine);
-            heldAsWritten = had;
-        }
-        return had;
+        return StringsHeldAsWritten.of(machine);
     }
 
     /**
