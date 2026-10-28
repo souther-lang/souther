@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -58,6 +59,115 @@ public final class ElementsMet {
     /** For each element of a container, the name that stands for it in this comparison. */
     private final Map<Slot, BindingId> standingFor = new LinkedHashMap<>();
     private boolean crowded;
+    /** The elements asked of while a reading is being noted ({@link #noting}), shared by every
+     *  copy made meanwhile; null when none is. */
+    private Set<Slot> asked;
+
+    /**
+     * What a reading asked of the elements met and the names it left standing for them: the
+     * elements it asked of, what stood for each when it began, and what stands for each when it
+     * ended.
+     *
+     * <p>Another comparison whose elements stand as these did ({@link #agrees}) is asked the same
+     * of each, in the same order, and answers the same; what it is left with is what this left
+     * ({@link #takes}).
+     */
+    public static final class Footprint {
+
+        private final boolean holding;
+        private final Set<Slot> asked;
+        private final Map<Slot, BindingId> began;
+        private final Map<Slot, BindingId> ended;
+
+        private Footprint(boolean holding, Set<Slot> asked, Map<Slot, BindingId> began,
+                          Map<Slot, BindingId> ended) {
+            this.holding = holding;
+            this.asked = asked;
+            this.began = began;
+            this.ended = ended;
+        }
+    }
+
+    /** A reading being noted, which says what it left once it has ended. */
+    public static final class Noting {
+
+        private final ElementsMet owner;
+        private final ElementsMet began;
+        private final Set<Slot> asked;
+        private final Set<Slot> outer;
+
+        private Noting(ElementsMet owner, ElementsMet began, Set<Slot> asked, Set<Slot> outer) {
+            this.owner = owner;
+            this.began = began;
+            this.asked = asked;
+            this.outer = outer;
+        }
+
+        /**
+         * What the reading left of the elements, where it ended with {@code ended} met — or null
+         * where a name was refused on the way, since that reading is not one to take from
+         * another.
+         */
+        public Footprint ended(ElementsMet ended) {
+            owner.asked = outer;
+            if (ended != owner && ended.holding) {
+                ended.asked = outer;
+            }
+            if (outer != null) {
+                outer.addAll(asked);
+            }
+            if (!began.holding) {
+                return new Footprint(false, Set.of(), Map.of(), Map.of());
+            }
+            if (ended.crowded || began.crowded) {
+                return null;
+            }
+            Map<Slot, BindingId> from = new LinkedHashMap<>();
+            Map<Slot, BindingId> to = new LinkedHashMap<>();
+            for (Slot each : asked) {
+                BindingId was = began.standingFor.get(each);
+                if (was != null) {
+                    from.put(each, was);
+                }
+                BindingId is = ended.standingFor.get(each);
+                if (is != null) {
+                    to.put(each, is);
+                }
+            }
+            return new Footprint(true, Set.copyOf(asked), from, to);
+        }
+    }
+
+    /** Begins noting which elements the reading that follows asks of, until {@link
+     *  Noting#ended}. */
+    public Noting noting() {
+        Set<Slot> outer = asked;
+        Set<Slot> mine = new LinkedHashSet<>();
+        ElementsMet began = copied();
+        if (holding) {
+            asked = mine;
+        }
+        return new Noting(this, began, mine, outer);
+    }
+
+    /** Whether the elements stand here as they did when {@code footprint} began, in each that it
+     *  asked of. */
+    public boolean agrees(Footprint footprint) {
+        if (holding != footprint.holding || crowded) {
+            return false;
+        }
+        for (Slot each : footprint.asked) {
+            if (!Objects.equals(standingFor.get(each), footprint.began.get(each))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Leaves the elements as {@code footprint} left them, which {@link #agrees}. */
+    public void takes(Footprint footprint) {
+        standingFor.putAll(footprint.ended);
+    }
 
     /** A comparison's own, which nothing has been met of. */
     public ElementsMet() {
@@ -78,8 +188,11 @@ public final class ElementsMet {
             return true;
         }
         for (InputReads.ElementStood stood : at.elementsStoodForIn(node, newtypes)) {
-            BindingId had = standingFor.putIfAbsent(new Slot(stood.container(), stood.part()),
-                    stood.name());
+            Slot slot = new Slot(stood.container(), stood.part());
+            if (asked != null) {
+                asked.add(slot);
+            }
+            BindingId had = standingFor.putIfAbsent(slot, stood.name());
             if (had != null && !had.equals(stood.name())) {
                 crowded = true;
                 return false;
@@ -99,6 +212,7 @@ public final class ElementsMet {
         ElementsMet copy = new ElementsMet(true);
         copy.standingFor.putAll(standingFor);
         copy.crowded = crowded;
+        copy.asked = asked;
         return copy;
     }
 

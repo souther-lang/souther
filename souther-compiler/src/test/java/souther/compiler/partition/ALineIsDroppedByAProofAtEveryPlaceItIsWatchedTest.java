@@ -458,7 +458,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             each.add(new DecidingCase.Cases.Together(parts));
         }
         DecidingCase.Cases deep = new DecidingCase.Cases.EachOf(each);
-        DecidingCase tooMany = new DecidingCase(deep.holdingInSome().orElseThrow(), deep);
+        DecidingCase tooMany = new DecidingCase(deep.holdingInSome(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum()).orElseThrow(), deep);
         Function<Proposition, Reachability> reachingOnlyEveryRow = condition ->
                 condition instanceof Proposition.All all && all.parts().size() == depth
                         ? new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(N))

@@ -434,29 +434,29 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
             CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
 
     /**
-     * More ways of choosing a case than cases are taken apart are more cases than were taken
-     * apart, and none is asked: where some one holds is the one question, and the figure is the
-     * one bounding how many cases are taken apart.
+     * More ways of choosing a case than cases are written out are asked as they are chosen, and
+     * not as one condition holding where some one of them does, which would be as long as they
+     * are many: where some one holds is asked of the condition they were said as, which holds
+     * exactly there, and then each case part by part.
      */
     @Test
-    void moreWaysOfChoosingThanCasesAreTakenApartAreNotAsked() {
+    void moreWaysOfChoosingThanCasesAreWrittenOutAreAskedByTheConditionTheyWereSaidAs() {
         DecidingCase.Cases many = manyCases(TAKEN_APART + 1);
-        Proposition someOne = many.holdingInSome().orElseThrow();
         Asking asking = new Asking(_ -> true);
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
-                asking.of(many));
-        assertEquals(List.of(someOne), asking.asked(), "where some one holds, and nothing else");
+        assertEquals(new CasesOfALineAsked.Found(List.of(new DecidingCase(SAID, many)), Set.of()),
+                asking.of(many), "every case divides rows, so the case is as it was said");
+        assertEquals(SAID, asking.asked().getFirst(), "where some one holds, as it was said");
+        assertEquals(TAKEN_APART + 2, asking.asked().size(), "and then each case");
     }
 
     /**
-     * Ways of choosing written as choices are counted as the cases they make, without choosing
-     * any: forty choices of two, one below the other, are more ways than are taken apart, and the
-     * choosing is not begun.
+     * Ways of choosing written as choices are chosen only as far as the steps allow: forty choices
+     * of two, one below the other, are more ways than any steps walk, and the choosing stops at
+     * the steps, saying also the figure the cases at the bottom were never taken apart at.
      */
     @Test
-    void waysWrittenAsChoicesAreCountedWithoutChoosing() {
+    void waysWrittenAsChoicesAreChosenOnlyAsFarAsTheStepsAllow() {
         DecidingCase.Cases cases = new DecidingCase.Cases.NotTakenApart(
                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         for (int i = 0; i < 40; i++) {
@@ -470,9 +470,10 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking asking = new Asking(_ -> true);
 
         CasesOfALineAsked.Found found = assertTimeoutPreemptively(Duration.ofSeconds(10),
-                () -> asking.of(deep), "nothing is chosen");
-        assertEquals(new CasesOfALineAsked.Found(List.of(),
-                Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)), found);
+                () -> asking.of(deep), "the steps bound the choosing");
+        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                CompositionBudget.CASES_A_LINE_IS_ASKED_IN)), found);
         assertEquals(List.of(SAID), asking.asked(), "and nothing asked but the condition");
     }
 
@@ -503,18 +504,19 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         List<DecidingCase.Cases> many = new ArrayList<>(
                 ((DecidingCase.Cases.EachOf) manyCases(TAKEN_APART)).alternatives());
         many.add(readTooLong);
-        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
-                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+        assertEquals(new CasesOfALineAsked.Found(
+                        DecidingCases.eachOf(manyCases(TAKEN_APART)).stream()
+                                .map(DecidingCase::alone).toList(),
+                        Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
                 new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(many)),
-                "among more ways of choosing than are taken apart");
+                "met as it walks among more ways of choosing than are written out");
     }
 
     /** And as many cases as are taken apart are asked to the end. */
     @Test
     void asManyCasesAsAreTakenApartAreAskedToTheEnd() {
         DecidingCase.Cases many = manyCases(TAKEN_APART);
-        Proposition someOne = many.holdingInSome().orElseThrow();
+        Proposition someOne = many.holdingInSome(TAKEN_APART).orElseThrow();
         Asking asking = new Asking(someOne::equals);
 
         assertEquals(IN_NONE, asking.of(many));

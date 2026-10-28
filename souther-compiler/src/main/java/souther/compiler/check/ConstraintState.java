@@ -401,7 +401,12 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
 
     /** This, with {@code f rel 0} taken as holding. */
     public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
-        return new ConstraintState<>(numbers.assume(f, rel, spaces), facts, confinement, shown);
+        return withNumbers(numbers.assume(f, rel, spaces));
+    }
+
+    /** This, or the state with {@code taken} for its numbers where they are not the same. */
+    private ConstraintState<A> withNumbers(NumericDomain<A> taken) {
+        return taken == numbers ? this : new ConstraintState<>(taken, facts, confinement, shown);
     }
 
     /**
@@ -415,8 +420,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      */
     public ConstraintState<A> taking(A atom, NumericDomain.Bounds bounds,
                                      Map<A, NumberSpace> spaces) {
-        return new ConstraintState<>(numbers.assuming(atom, bounds, spaces), facts,
-                confinement, shown);
+        return withNumbers(numbers.assuming(atom, bounds, spaces));
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */

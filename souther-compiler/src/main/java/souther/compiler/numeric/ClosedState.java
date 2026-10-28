@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
@@ -102,6 +103,14 @@ public final class ClosedState<A> {
      */
     static final int ROUNDS = 16;
 
+    /** How many closures of several parts have been put together, for a test holding a question
+     *  about one part to being answered without them: that is a shape and not a speed. */
+    private static final AtomicLong PRODUCTS_MADE = new AtomicLong();
+
+    static long productsMade() {
+        return PRODUCTS_MADE.get();
+    }
+
     /** Whether the rounds ran out before the box stopped moving. */
     public enum Status {
 
@@ -169,6 +178,7 @@ public final class ClosedState<A> {
         if (closures.size() == 1) {
             return closures.getFirst();
         }
+        PRODUCTS_MADE.incrementAndGet();
         List<DifferenceBounds<A>> each = new ArrayList<>(closures.size());
         closures.forEach(closure -> each.add(closure.differences));
         DifferenceBounds<A> differences = DifferenceBounds.product(each);
