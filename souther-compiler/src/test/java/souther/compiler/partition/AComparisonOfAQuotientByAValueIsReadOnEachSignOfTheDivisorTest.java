@@ -692,9 +692,13 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         }
         BigInteger value = new BigInteger(at.group(1)).abs();
         return value.compareTo(WHERE_THE_PRODUCT_STOPS) >= 0
-                || (value.compareTo(BigInteger.valueOf(99)) >= 0
-                && value.compareTo(BigInteger.valueOf(101)) <= 0);
+                || value.subtract(THE_LEAST_PRODUCT).abs().compareTo(BigInteger.ONE) <= 0;
     }
+
+    /** The product the comparison is written with, at the least divisor the declarations allow:
+     *  a hundred times one. A pay a whole number beside it is where the lines of the pays that
+     *  fail whatever the divisor is end. */
+    private static final BigInteger THE_LEAST_PRODUCT = BigInteger.valueOf(100);
 
     /** {@code lines} but for those the comparison written out draws only because it works the
      *  product out ({@link #drawnWhereTheProductStops}). */

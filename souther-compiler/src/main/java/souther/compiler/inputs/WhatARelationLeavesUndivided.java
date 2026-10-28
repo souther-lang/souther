@@ -879,13 +879,14 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>A row is computed where the sizes it adds up are, in whatever order and with whichever
      * sign ({@link Arithmetic#computes}); or, where the operations of the relation are all told,
-     * where each of them holds at it ({@link Operations}). Asked of the row the other terms
-     * nearest nought make with the value of the run nearest nought, and of the rows at its two
-     * ends ({@link #computedAtBothEnds}), which is the whole run, each operation being with the
-     * others held still a straight function of the term's value.
+     * where each of them holds at it ({@link Operations}). The row is found in one of two
+     * ways: the other terms each nearest nought with the value of the run nearest nought; or the
+     * rows at the two ends of the run, which are rows of every value between, each operation
+     * being with the others held still a straight function of the term's value.
      *
-     * <p>Not accepted from the value nearest nought alone where the run is the least value of the
-     * type alone ({@link #isTheLeastValueOfTheTypeAlone}).
+     * <p>The first is not accepted where the run is the least value of the type alone
+     * ({@link #isTheLeastValueOfTheTypeAlone}); the second is not asked of a run open at an end
+     * the term holds no end at.
      */
     private static <P> boolean aRowOfTheRunComputes(Arithmetic arithmetic, List<Term<P>> terms,
                                                     int at, SettledRun run, WholeRun held,
