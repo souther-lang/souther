@@ -2082,17 +2082,16 @@ final class DemandReading {
      */
     private static Read ofAFormOfTheInput(LinearForm<NumericTerm> against, Rel met,
                                           InputReading read) {
-        return switch (FormsTakenIn.of(read).assuming(against, met)) {
-            case SearchRegion.Assumption.Taken _ -> new Read.Demands(
+        Optional<SearchRegion.Refusal> refused = FormsTakenIn.of(read).refusalOf(against, met);
+        if (refused.isEmpty()) {
+            return new Read.Demands(
                     new RowDemand.Relational(new TakenConstraint.Affine(against, met)));
-            // Two values on no order held equal or unequal, which is what a row writes
-            // and not a relation a region places. Held one above the other, they are a
-            // distance on nothing, and the region's word for why is what is said.
-            case SearchRegion.Assumption.Refused(var why) -> {
-                RowDemand.OneValueAtBoth both = oneValueAtBoth(against, met);
-                yield both != null ? new Read.Demands(both) : new Read.Unread(whyDeclined(why));
-            }
-        };
+        }
+        // Two values on no order held equal or unequal, which is what a row writes
+        // and not a relation a region places. Held one above the other, they are a
+        // distance on nothing, and the region's word for why is what is said.
+        RowDemand.OneValueAtBoth both = oneValueAtBoth(against, met);
+        return both != null ? new Read.Demands(both) : new Read.Unread(whyDeclined(refused.get()));
     }
 
     /**
