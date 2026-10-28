@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleReadingContext;
@@ -176,7 +175,7 @@ public final class KeyOrderCandidates {
             return Stream.empty();
         }
         MeasuredInput subject = writing.subject();
-        Pool pool = Pool.of(seen, prim -> composedAt(subject, prim), subject.ruleReading());
+        Pool pool = Pool.of(seen, prim -> composedAt(subject, writing.check(), prim), subject.ruleReading());
         List<List<String>> apart = subject.keptApartAt(plan.container());
         ObservedValue held = seen.get(plan.parameter());
         Admitted admitted = new Admitted(subject, writing);
@@ -481,31 +480,17 @@ public final class KeyOrderCandidates {
         return out;
     }
 
-    /** What a composer would write at a scalar type, as the values an observation holds: the
-     *  literals of the values it offers, and none that is not a literal. */
-    private static List<ObservedValue> composedAt(MeasuredInput subject, Type.Prim prim) {
+    /** What a composer would write at a scalar type, as the values an observation holds: what the
+     *  type's own decoder makes of each value it offers. */
+    private static List<ObservedValue> composedAt(MeasuredInput subject,
+                                                  Generator.CandidateCheck check, Type.Prim prim) {
         List<ObservedValue> out = new ArrayList<>();
         for (FixtureTemplate each : subject.representativesHolding(prim,
                 FieldDomains.ConstructionLimits.NONE).values()) {
-            ObservedValue value = literalOf(each.value());
-            if (value != null && !out.contains(value)) {
-                out.add(value);
-            }
+            check.builtAlone(prim, each).filter(value -> !out.contains(value))
+                    .ifPresent(out::add);
         }
         return out;
-    }
-
-    private static ObservedValue literalOf(Hir.Expr written) {
-        return switch (written) {
-            case Hir.IntLit lit -> new ObservedValue.Integer(lit.value());
-            case Hir.StringLit lit -> new ObservedValue.Text(lit.value());
-            case Hir.DecimalLit lit -> new ObservedValue.Decimal(lit.value());
-            case Hir.Neg(Hir.IntLit lit, var _, var _) ->
-                    new ObservedValue.Integer(-lit.value());
-            case Hir.Neg(Hir.DecimalLit lit, var _, var _) ->
-                    new ObservedValue.Decimal(lit.value().negate());
-            default -> null;
-        };
     }
 
     /**

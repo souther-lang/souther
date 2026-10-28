@@ -1918,21 +1918,17 @@ public final class FixtureReader {
         try {
             shape = FixtureShape.of(type, symbols);
         } catch (FixtureException e) {
-            return BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN;
+            return new BoundaryValues.OnItsOwn.NoDecoderOfItsOwn();
         }
         try {
             String method = emittedFor(fixture);
-            if (method != null) {
-                ran(method);
-            } else {
-                built(fixture, shape);
-            }
-            return BoundaryValues.OnItsOwn.BUILT;
+            Object decoded = method != null ? ran(method) : built(fixture, shape);
+            return new BoundaryValues.OnItsOwn.Built(observed(decoded));
         } catch (FixtureException e) {
-            return BoundaryValues.OnItsOwn.REFUSED;
+            return new BoundaryValues.OnItsOwn.Refused();
         } catch (RuntimeException e) {
             EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out; whether the fixture is refused is still unread
-            return BoundaryValues.OnItsOwn.REFUSED;
+            return new BoundaryValues.OnItsOwn.Refused();
         }
     }
 }

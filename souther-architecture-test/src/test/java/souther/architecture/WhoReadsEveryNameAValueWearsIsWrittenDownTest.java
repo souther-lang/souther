@@ -209,9 +209,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Lsouther/compiler/core/Core;Lsouther/compiler/core/Core$Block;" + CONTEXT
                             + ")Z",
                     THE_POSITION),
-            row(PARTITION + "ElementsOfAType", "of",
-                    "(L" + PARTITION + "MeasuredInput;" + TYPE + ")Ljava/util/List;",
-                    THE_POSITION),
             row(PARTITION + "NearbyValues", "of",
                     "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + "L" + INPUTS
                             + "TermPath;Ljava/util/List;L" + PARTITION

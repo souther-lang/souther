@@ -10,6 +10,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.Type;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,6 +26,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * The values one step from a value a run was seen taking, for a search that looks beside where it
@@ -68,9 +70,33 @@ final class NearbyValues {
             prim == Type.Prim.INT && leaf instanceof ObservedValue.Integer whole
                     ? stepsOf(whole) : none();
 
+    /**
+     * A whole number is one apart from the next, and a decimal is one unit of its own scale apart
+     * from the next it can write; the other leaves have no such step. Not {@link #WHOLE_NUMBERS}:
+     * that is where a number seen taking a value is moved, and a decimal there has no value directly
+     * beside it. This is where a value is wanted that is not the one in hand, and any value a
+     * decimal can write at its scale is one.
+     */
+    private static final Leaves ONE_UNIT = (prim, leaf, _, _, _) -> switch (leaf) {
+        case ObservedValue.Integer whole when prim == Type.Prim.INT -> stepsOf(whole);
+        case ObservedValue.Decimal decimal when prim == Type.Prim.DECIMAL -> unitsOf(decimal);
+        default -> none();
+    };
+
     /** The values one step from {@code value}, standing at a position of {@code type}. */
     static Iterator<ObservedValue> of(ObservedValue value, Type type, RuleReadingContext reading) {
         return of(value, type, reading, null, List.of(), WHOLE_NUMBERS);
+    }
+
+    /**
+     * The values a unit away from {@code value}, standing at a position of {@code type}: the next
+     * whole number either way, and the next decimal of its scale either way. For a search that
+     * wants a value other than a representative of the type, which a decimal's neighbours
+     * ({@link #of}) are not.
+     */
+    static Iterator<ObservedValue> oneUnitFrom(ObservedValue value, Type type,
+                                               RuleReadingContext reading) {
+        return of(value, type, reading, null, List.of(), ONE_UNIT);
     }
 
     /**
@@ -98,8 +124,11 @@ final class NearbyValues {
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
                                                   Shape.Sequence sequence) {
-                return mapped(filtered(flat(List.of(ranWith.of(sequence.element()),
-                                stoodFor.apply(sequence.element())).iterator(), List::iterator),
+                // One of the rows' and one of the type's in turn, so that however many values the
+                // rows ran with, the type's are reached within the runs the search is given. The
+                // type's are asked for when the second is.
+                return mapped(filtered(alternating(ranWith.of(sequence.element()).iterator(),
+                                () -> stoodFor.apply(sequence.element()).iterator()),
                                 new HashSet<ObservedValue>()::add),
                         more -> {
                             List<ObservedValue> elements = new ArrayList<>(held.elements());
@@ -370,6 +399,18 @@ final class NearbyValues {
         };
     }
 
+    private static Iterator<ObservedValue> unitsOf(ObservedValue.Decimal decimal) {
+        // A decimal written to more places than the host can step by one of is one with no unit
+        // step to offer.
+        try {
+            BigDecimal unit = BigDecimal.ONE.movePointLeft(Math.max(decimal.value().scale(), 0));
+            return List.<ObservedValue>of(new ObservedValue.Decimal(decimal.value().add(unit)),
+                    new ObservedValue.Decimal(decimal.value().subtract(unit))).iterator();
+        } catch (ArithmeticException tooWide) {
+            return none();
+        }
+    }
+
     private static Iterator<ObservedValue> stepsOf(ObservedValue.Integer whole) {
         List<ObservedValue> out = new ArrayList<>(2);
         if (whole.value() != Long.MAX_VALUE) {
@@ -512,6 +553,41 @@ final class NearbyValues {
                     throw new NoSuchElementException();
                 }
                 return inner.next();
+            }
+        };
+    }
+
+    /**
+     * The elements of {@code first} and of {@code second} one from each in turn, {@code first}'s
+     * first; what is left of the longer one after the shorter is used up. {@code second} is made
+     * the first time it is wanted.
+     */
+    private static <A> Iterator<A> alternating(Iterator<A> first, Supplier<Iterator<A>> second) {
+        return new Iterator<>() {
+            private Iterator<A> later;
+
+            private boolean firstsTurn = true;
+
+            @Override
+            public boolean hasNext() {
+                return first.hasNext() || later().hasNext();
+            }
+
+            @Override
+            public A next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                boolean fromFirst = first.hasNext() && (firstsTurn || !later().hasNext());
+                firstsTurn = !fromFirst;
+                return fromFirst ? first.next() : later().next();
+            }
+
+            private Iterator<A> later() {
+                if (later == null) {
+                    later = second.get();
+                }
+                return later;
             }
         };
     }

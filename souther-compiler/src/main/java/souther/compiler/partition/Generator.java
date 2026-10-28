@@ -1173,6 +1173,18 @@ public final class Generator {
             return Admissibility.UNKNOWN;
         }
 
+        /**
+         * The value the decoder of {@code type} makes of {@code candidate} on its own, read the way
+         * a built row's input is: empty where it refuses it, where the type has no decoder of its
+         * own, or where nothing here can build.
+         *
+         * <p>The one way a value written as a fixture becomes a value a search walks. A reader of
+         * the fixture's text or tree would be a second reading of what the decoder already says.
+         */
+        default Optional<ObservedValue> builtAlone(Type type, FixtureTemplate candidate) {
+            return Optional.empty();
+        }
+
         /** What a type's own decoder said of a value, or that nothing asked it. */
         enum Admissibility {
             ADMITTED,
@@ -2217,7 +2229,7 @@ public final class Generator {
                                     axes, purposes, looking, check, answers,
                                     read.piecesAttempted(), pieces)),
                             inOrder(through, at -> candidatesBeside(arm.seenThrough().get(at),
-                                    axes, purposes, check, answers, aListGrown(arm.ranWith(), axes.subject()),
+                                    axes, purposes, check, answers, aListGrown(arm.ranWith(), axes.subject(), check),
                                     lists)),
                             inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
                                     purposes, looking, check, answers))));
@@ -2265,7 +2277,7 @@ public final class Generator {
                                     purposes, looking, check, answers, read.piecesAttempted(),
                                     pieces)),
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
-                                    purposes, check, answers, aListGrown(one.ranWith(), axes.subject()),
+                                    purposes, check, answers, aListGrown(one.ranWith(), axes.subject(), check),
                                     lists))));
                 }
             };
@@ -2399,9 +2411,13 @@ public final class Generator {
      * ({@link NearbyValues#grown}). Which candidate answers, and whether it answers differently,
      * is what running it says.
      */
-    private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject) {
+    private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
+                                     CandidateCheck check) {
+        // What stands for a type is the same for every row and list the search grows, so it is
+        // made the first time an element type is asked for.
+        Map<Type, List<ObservedValue>> stood = new HashMap<>();
         return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
-                element -> ElementsOfAType.of(subject, element));
+                element -> stood.computeIfAbsent(element, each -> ElementsOfAType.of(subject, check, each)));
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
