@@ -538,15 +538,46 @@ final class Pullback {
      * number by it: a table bound held against an average of three months is the bound where it was
      * written and three times it on the total. Nothing where both sides are numbers or neither is,
      * since neither is then the bound.
+     *
+     * <p>And the data that number is read out of ({@link TheBound#heldIn}).
      */
-    static Optional<ExactRatio> writtenAgainst(StatedComparison comparison, InputReading read,
-                                               InputReads reads) {
-        TheSignOfAnOrder.Sides<InputReads> sides =
-                new Pullback(read, Optional.empty()).sides();
+    static TheBound boundOf(StatedComparison comparison, InputReading read, InputReads reads,
+                            boolean inACopy) {
+        Pullback pullback = new Pullback(read, Optional.empty());
+        TheSignOfAnOrder.Sides<InputReads> sides = pullback.sides();
         ExactRatio left = sides.constant(comparison.left(), reads);
         ExactRatio right = sides.constant(comparison.right(), reads);
-        return left == null == (right == null) ? Optional.empty()
-                : Optional.of(left == null ? right : left);
+        if (left == null == (right == null)) {
+            return TheBound.NONE;
+        }
+        // What data a bound is read out of tells the lines of one comparison apart only where the
+        // comparison is a copy of a helper's: written in a body of its own it is one line with one
+        // data, and its place is what names it. Asked nowhere else, so what is not asked is not
+        // walked.
+        if (!inACopy) {
+            return new TheBound(Optional.of(left == null ? right : left), Optional.empty());
+        }
+        BoundHeldIn data = new DataOrigins(read, pullback.quantities()).ofTheNumbersIn(
+                left == null ? comparison.right() : comparison.left(), reads);
+        return new TheBound(Optional.of(left == null ? right : left), Optional.ofNullable(data));
+    }
+
+    /**
+     * What a comparison is held against, where one side is a number the same on every run.
+     *
+     * <p>Both answers from one reading of the two sides, which is what asking for them one after
+     * the other would do twice.
+     *
+     * @param written the number, as it is read before the quantity it is held against is weighed
+     * @param heldIn  the data it is read out of, where it is read out of data: a number the
+     *                comparison or a call writes outright is none, so a helper applied to
+     *                different values is not told apart by them, while a field read is, because
+     *                what it stands for is written once in the table and the same table reached by
+     *                two calls, or under another name, is the same data
+     */
+    record TheBound(Optional<ExactRatio> written, Optional<BoundHeldIn> heldIn) {
+
+        static final TheBound NONE = new TheBound(Optional.empty(), Optional.empty());
     }
 
     /**

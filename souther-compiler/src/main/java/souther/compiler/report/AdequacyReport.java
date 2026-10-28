@@ -37,6 +37,7 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
+import souther.compiler.partition.BoundHeldIn;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ChoicePattern;
 import souther.compiler.partition.InteractionRequirements;
@@ -3789,14 +3790,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * The bound a table holds, where the reading is a threshold of one: the number the reading is
      * cut at is the bound weighed by the positions it was made of, and it is the bound a reader
-     * changes in the table.
+     * changes in the table. And where the bound is read out of data, which data, since that is what
+     * tells the bound of one table from the alike bound of another.
      */
     private static String boundWritten(BorderAssessment reading) {
         return reading.border().threshold().map(each -> switch (each) {
             case ThresholdOfADerivedValue.WrittenAt written ->
-                    ", the bound written is " + written.level().spelled();
+                    ", the bound written is " + written.level().spelled()
+                            + written.heldIn().map(AdequacyReport::boundHeldIn).orElse("");
             case ThresholdOfADerivedValue.CutAt _ -> "";
+            case ThresholdOfADerivedValue.HeldIn held -> boundHeldIn(held.data());
         }).orElse("");
+    }
+
+    private static String boundHeldIn(BoundHeldIn data) {
+        return data.said().stream()
+                .collect(Collectors.joining(", ", ", the bound is read out of ", ""));
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
@@ -6708,11 +6717,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static void thresholdId(ObjectNode into, ThresholdOfADerivedValue threshold) {
         switch (threshold) {
-            case ThresholdOfADerivedValue.WrittenAt(var value, var level) -> {
+            case ThresholdOfADerivedValue.WrittenAt(var value, var level, var heldIn) -> {
                 into.put("kind", "written_at");
                 ArrayNode copies = into.putArray("copies");
                 value.copies().forEach(copy -> copyId(copies.addObject(), copy));
                 into.put("bound", level.spelled());
+                heldIn.ifPresent(data -> heldIn(into, data));
+            }
+            case ThresholdOfADerivedValue.HeldIn(var data) -> {
+                into.put("kind", "held_in");
+                heldIn(into, data);
             }
             case ThresholdOfADerivedValue.CutAt(var value, var place) -> {
                 into.put("kind", "cut_at");
@@ -6722,6 +6736,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 level(into.putObject("level"), place.at().at());
             }
         }
+    }
+
+    /** The data the bound of a threshold is read out of, in one order whatever the walk was. */
+    private static void heldIn(ObjectNode into, BoundHeldIn held) {
+        ArrayNode data = into.putArray("heldIn");
+        held.locations().forEach(data::add);
     }
 
     /**

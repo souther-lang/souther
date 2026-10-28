@@ -93,6 +93,20 @@ public sealed interface Criterion {
         }
 
         /**
+         * Whether {@code other} is a run beside the same line, on the same side of it and apart
+         * from the same value, which two readings of one line ask a row for.
+         *
+         * <p>A reading reaches the other lines of the quantity that are on the way to it, so the run
+         * beside a line stops at the nearest of those and can differ from one reading to the
+         * other. That is the same point asked for under two ways, and not two points.
+         */
+        public boolean besideTheSameLineAs(Within other) {
+            return away == other.away && (except == null ? other.except == null
+                    : other.except != null
+                            && except.canonical().equals(other.except.canonical()));
+        }
+
+        /**
          * A place of {@code carrier} this item accepts, or null where nothing composed one.
          *
          * <p>The item's own values, held to what the rules leave the position, asked of the order
