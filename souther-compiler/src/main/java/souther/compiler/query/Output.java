@@ -1163,7 +1163,12 @@ public final class Output {
                 gaps = List.copyOf(gaps);
             }
 
-            /** The rows something came back for, which is what a measurement is counted over. */
+            /**
+             * The rows something came back for, which is what a measurement is counted over.
+             *
+             * <p>Worked out from all the rows on each call, so a caller that asks more than once
+             * of one behavior holds the answer.
+             */
             public List<souther.compiler.observe.RowOutcome> ran() {
                 List<souther.compiler.observe.RowOutcome> out = new ArrayList<>();
                 for (ReadRow row : rows) {

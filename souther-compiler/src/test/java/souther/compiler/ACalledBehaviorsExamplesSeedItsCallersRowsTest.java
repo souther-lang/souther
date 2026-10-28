@@ -72,6 +72,8 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
             assertTrue(offered.contains("[" + throwText + "]"),
                     () -> "a list holding " + throwText + " is offered: " + offered);
         }
+        assertEquals(offered.stream().distinct().toList(), offered,
+                "a row a seed and the fill both arrive at is offered once");
     }
 
     @Test
@@ -222,6 +224,24 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
         assertEquals(1, seeded.size(), () -> "scale's row is total's: " + rows);
         assertEquals(1, seeded.getFirst().answers().size(),
                 "and total's dependency is answered in it, as it is in every row");
+    }
+
+    @Test
+    void oneInputHandedToTwoArgumentsIsSeededWhenTheRowGivesThemTheSameValue() {
+        String twice = ADD.replace("(3, 7) -> 10", "(3, 3) -> 6") + """
+                behavior double : (x: Int) -> Int
+
+                let double (x) = add(x, x)
+                """;
+        assertEquals(List.of("3"), seededOnly(twice, "repro.add", "double"),
+                "double(3) calls add(3, 3), which is add's row");
+        String apart = ADD + """
+                behavior double : (x: Int) -> Int
+
+                let double (x) = add(x, x)
+                """;
+        assertEquals(List.of(), seededOnly(apart, "repro.add", "double"),
+                "no value of x is both 3 and 7");
     }
 
     @Test

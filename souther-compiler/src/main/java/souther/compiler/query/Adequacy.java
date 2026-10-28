@@ -6184,7 +6184,7 @@ public final class Adequacy {
                 if (input == null || analysis == null || building == null) {
                     return List.of();
                 }
-                return CallExampleSeeds.rowsFor(db, name, sig, subject, input, analysis,
+                return CallExampleSeeds.rowsFor(db, name, subject, input, analysis,
                         checkAgainst(building, sig), bases,
                         RequiredDependencies.of(db, name, behavior).none(),
                         db.ask(new Front.Adequacy()).value().generation().rowLimit());

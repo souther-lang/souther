@@ -21,10 +21,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -66,9 +68,10 @@ final class CallExampleSeeds {
     }
 
     /**
-     * The calls of behaviors that {@code analysis} makes, in the order the body makes them,
-     * keeping those of a callee that {@code worthReading} takes. Nothing is read of the input
-     * where there is none.
+     * The calls of behaviors that {@code analysis} makes, each once, in the order the body first
+     * makes it, keeping those of a callee that {@code worthReading} takes. A call written twice
+     * with the same arguments hands its callee the same rows twice, so it is one call. Nothing is
+     * read of the input where there is none.
      */
     static List<Call> callsIn(AnalysisBody analysis, InputReading input,
                               Predicate<ValueName.Behavior> worthReading) {
@@ -80,7 +83,7 @@ final class CallExampleSeeds {
         InputReads reads = InputReads.ofParametersWhereCallsStand(
                 input.domain().parameterReads(), input.declared(),
                 ElementBindings.of(analysis, input.newtypes()), input.domain().dependencies());
-        List<Call> out = new ArrayList<>();
+        Set<Call> out = new LinkedHashSet<>();
         for (AnOperationApplied each : calls) {
             List<Optional<TermPath>> at = new ArrayList<>();
             for (Core argument : each.args()) {
@@ -89,7 +92,7 @@ final class CallExampleSeeds {
             }
             out.add(new Call((ValueName.Behavior) each.operation(), at));
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
@@ -116,9 +119,9 @@ final class CallExampleSeeds {
      *                       row be composed without a base to take the stand-ins from
      * @param limit          how many rows of callees at most are tried
      */
-    static List<Generator.GeneratedRow> rowsFor(Db db, String module, Sig sig,
-                                                MeasuredInput subject, InputReading input,
-                                                AnalysisBody analysis, Generator.CandidateCheck check,
+    static List<Generator.GeneratedRow> rowsFor(Db db, String module, MeasuredInput subject,
+                                                InputReading input, AnalysisBody analysis,
+                                                Generator.CandidateCheck check,
                                                 List<Generator.GeneratedRow> bases,
                                                 boolean standsNothingIn, int limit) {
         Generator.GeneratedRow base = bases.isEmpty() ? null : bases.getFirst();
@@ -130,9 +133,14 @@ final class CallExampleSeeds {
         if (read == null || sigs == null) {
             return List.of();
         }
+        // The rows that ran, worked out from a callee's rows once however many calls name it:
+        // that is a walk over all of them each time it is asked.
+        Map<String, List<RowOutcome>> ran = new HashMap<>();
+        Function<String, List<RowOutcome>> ranOf = name -> ran.computeIfAbsent(name,
+                _ -> read.byBehavior().get(name) == null ? List.of()
+                        : read.byBehavior().get(name).ran());
         List<Call> calls = callsIn(analysis, input, callee -> callee.module().equals(module)
-                && sigs.containsKey(callee.name()) && read.byBehavior().get(callee.name()) != null
-                && !read.byBehavior().get(callee.name()).ran().isEmpty());
+                && sigs.containsKey(callee.name()) && !ranOf.apply(callee.name()).isEmpty());
         Map<List<String>, Generator.GeneratedRow> out = new LinkedHashMap<>();
         Set<List<String>> considered = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
@@ -142,7 +150,7 @@ final class CallExampleSeeds {
                 continue;
             }
             Sig callee = sigs.get(call.callee().name());
-            List<RowOutcome> rows = read.byBehavior().get(call.callee().name()).ran();
+            List<RowOutcome> rows = ranOf.apply(call.callee().name());
             for (int at = 0; at < rows.size(); at++) {
                 RowOutcome row = rows.get(at);
                 if (row.inputs().size() != call.at().size()) {
@@ -193,8 +201,9 @@ final class CallExampleSeeds {
     /**
      * What each parameter of the caller is to hold for the call to be handed {@code written}: the
      * value an argument stands at the parameter itself for, and a list of one of it for each
-     * element it stands under. Nothing where an argument stands anywhere else, where two stand
-     * at one parameter, or where an input could not be written.
+     * element it stands under. Nothing where an argument stands anywhere else, where two
+     * arguments stand at one parameter and the row gives them different values, or where an input
+     * could not be written.
      */
     private static Optional<Map<Integer, FixtureTemplate>> lifted(
             Call call, List<Optional<FixtureTemplate>> written, MeasuredInput subject) {
@@ -210,7 +219,10 @@ final class CallExampleSeeds {
             for (int depth = 0; depth < at.steps().size(); depth++) {
                 held = FixtureTemplate.collection(List.of(held));
             }
-            if (out.putIfAbsent(parameter, held) != null) {
+            // One position holds one value: two arguments standing at it are served by it when the
+            // row gives them the same, and by no value when it gives them two.
+            FixtureTemplate already = out.putIfAbsent(parameter, held);
+            if (already != null && !already.text().equals(held.text())) {
                 return Optional.empty();
             }
         }

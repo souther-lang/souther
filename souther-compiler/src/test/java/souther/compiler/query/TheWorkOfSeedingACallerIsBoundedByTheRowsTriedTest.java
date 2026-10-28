@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.AnalysisBody;
-import souther.compiler.check.Sig;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
@@ -56,7 +55,6 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
         InputReading input = Adequacy.inputReadingOf(db, "repro.bound", behavior);
         AnalysisBody analysis = db.ask(new Bodies.Observable("repro.bound")).value()
                 .analysisBodies().get("g");
-        Sig sig = db.ask(new Bodies.Signatures("repro.bound")).value().get("g");
         MeasuredInput subject = Adequacy.subjectOf(db, "repro.bound", behavior, input);
         AtomicInteger built = new AtomicInteger();
         Generator.CandidateCheck check = (_, _) -> {
@@ -64,7 +62,7 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
             return refuseAll ? new Generator.CandidateCheck.Built.Refused("no")
                     : new Generator.CandidateCheck.Built.NothingBuiltIt();
         };
-        List<Generator.GeneratedRow> rows = CallExampleSeeds.rowsFor(db, "repro.bound", sig,
+        List<Generator.GeneratedRow> rows = CallExampleSeeds.rowsFor(db, "repro.bound",
                 subject, input, analysis, check, List.of(), true, limit);
         return new Seeded(built.get(), rows);
     }
@@ -81,6 +79,38 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
         Seeded taken = seeded(model(true), false, 5);
         assertEquals(5, taken.rows().size());
         assertEquals(5, taken.built());
+    }
+
+    @Test
+    void aCallWrittenTwiceIsTriedOnce() {
+        String twice = """
+                module repro.bound
+
+                behavior f : (n: Int) -> Int
+
+                let f (n) = n
+
+                example f
+                    | (1) -> 1
+                    | (2) -> 2
+                    | (3) -> 3
+
+                behavior h : (n: Int) -> Int
+
+                let h (n) = n
+
+                example h
+                    | (100) -> 100
+                    | (101) -> 101
+
+                behavior g : (xs: List<Int>) -> Int
+
+                let g (xs) = List.fold((acc, x) -> acc + f(x) + f(x) + h(x), 0, xs)
+                """;
+        Seeded seeded = seeded(twice, false, 5);
+        assertTrue(seeded.rows().stream().anyMatch(row -> row.inputs().getFirst().text()
+                        .equals("[100]")),
+                () -> "f's three rows and h's first are tried within five: " + seeded.rows());
     }
 
     @Test
