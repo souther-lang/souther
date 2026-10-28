@@ -864,7 +864,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
      * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross.
+     * takes, and nothing is shown of the gross. Nor is the doubled total shown left either way:
+     * the value of a total each element of which is made into another is read from the elements
+     * and asks the operations of the comparison for a row beside an end of the total, which it
+     * has no end to ask.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
@@ -874,7 +877,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", NOT_SHOWN,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
@@ -1355,11 +1358,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * not nought; where it may lie is still read from nought, so a gross of nought is neither
      * shown to fail nor shown to be left either way, and nothing is shown of the gross. Elements
      * that are even are not every value from nought, and the total is shown to take nothing, so
-     * nothing is shown of the gross. Nor is the total shown left either way by a gross taking every
-     * value: a total of a list is a number worked out by a run that may stop and that no operation
-     * of the comparison tells of, so a row at an end of the type is not shown computed and the
-     * gross at the least {@code Int}, which fails whatever the total is, is not a value it is left
-     * either way at.
+     * nothing is shown of the gross; the total is left either way by a gross taking every value,
+     * wherever it may lie, as the totals above are.
      */
     @Test
     void aTotalTakesWhatOneElementTakesAndNoughtWhereTheListMayBeEmpty() {
@@ -1369,7 +1369,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ps",
                 positive + "data Ps = List<Pos> invariant List.length(value) >= 1",
                 "gross >= List.sum(List.map(n -> n.value, ns.value))", 27).get("gross"));
-        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Even>",
                         "data Even = Int invariant Int.floorMod(value, 2) == 0",
                         "gross >= " + TOTAL, 27));
@@ -1544,14 +1544,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** Beside a total, two positions are each a term of the relation and not of the run. The
-     *  adjustment held at nought, the gross stands at every value the total takes. The gross and
-     *  the adjustment are not left either way over the whole type: at the least {@code Int} the
-     *  gross fails whatever they hold, since the adjustment would have to pass the greatest to
-     *  make up for it, and a row at an end of the type is not shown computed beside a total. */
+     *  adjustment held at nought, the gross stands at every value the total takes; and the total
+     *  held at nought, the gross and the adjustment stand at each other's values wherever a row is
+     *  computed, which leaves out only those beside the ends of the type. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", NOT_SHOWN,
-                        "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "adjustment", RELATES,
+                        "gross", RELATES),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));
     }
@@ -3160,14 +3159,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(g.value - c.value)
                 }
                 """;
-        assertEquals(Map.of("a", RELATES, "b", RELATES),
+        // The sum of two amounts is built into a Yen, whose invariant stops a run that no
+        // operation of the comparison tells of: no row is shown computed beside an end of the
+        // type, and a is not shown left either way.
+        assertEquals(Map.of("a", NOT_SHOWN, "b", RELATES),
                 leftIn(named, whereWritten(named, ">= c")));
         assertEquals(List.of("c/0 <= x <= 0", "c/0 < x"), classesIn(named, "c"));
-        assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
+        assertEquals(Set.of("a"), notReadIn(named, whereWritten(named, ">= c")));
 
         String writtenOut = named.replace("let g = a + b\n    guard g >= c",
                 "guard a + b >= c").replace("g.value", "a.value + b.value");
-        assertEquals(Set.of(), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
+        assertEquals(Set.of("a"), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
 
         String payroll = """
                 module w1

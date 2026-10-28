@@ -185,19 +185,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
 
     /**
-     * The operations of whole numbers a comparison works out, and whether they are every operation
-     * a run can stop at in working it out.
+     * The operations of whole numbers a comparison works out, and how much of what can stop a run
+     * in working it out they are.
      *
-     * @param exact whether the reading of the comparison told of every operation that can stop a
-     *              run, so that a row getting past those is a row of the comparison
+     * @param told whether the reading of the comparison told of every operation that can stop a
+     *             run, only some, or was not made
      */
-    record Working(List<IntOperation> operations, boolean exact) {
+    record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
 
-        /** Nothing told of a comparison, and so nothing known of what a row has to get past. */
-        static final Working NOTHING = new Working(List.of(), false);
+        /** No reading of the comparison was made. */
+        static final Working NOTHING =
+                new Working(List.of(), WhatARelationLeavesUndivided.Told.NOTHING_SAID);
 
         Working {
             operations = List.copyOf(operations);
+            Objects.requireNonNull(told, "what the reading told, or that there was none");
+        }
+
+        /** Whether every operation that can stop a run is told. */
+        boolean exact() {
+            return told == WhatARelationLeavesUndivided.Told.EVERY;
         }
     }
 
@@ -721,7 +728,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatARelationLeavesUndivided.Operations operationsOverTheSides() {
         if (working.operations().isEmpty()) {
-            return new WhatARelationLeavesUndivided.Operations(List.of(), working.exact());
+            return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
         }
         Map<NumericTerm, Integer> named = new LinkedHashMap<>();
         for (Side each : sides) {
@@ -730,19 +737,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         List<WhatARelationLeavesUndivided.IntSum> sums = new ArrayList<>();
-        boolean every = working.exact();
+        boolean leftOut = false;
         for (IntOperation each : working.operations()) {
             boolean overTheSides = each.form().coefs().keySet().stream()
                     .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
             if (!overTheSides || each.form().coefs().isEmpty()) {
-                every = false;
+                leftOut = true;
                 continue;
             }
             sums.add(new WhatARelationLeavesUndivided.IntSum(
                     new LinkedHashMap<Object, ExactRatio>(each.form().coefs()),
                     each.form().constant(), each.least(), each.greatest()));
         }
-        return new WhatARelationLeavesUndivided.Operations(sums, every);
+        // An operation left out is one a row is not asked to get past here: not every one told.
+        return new WhatARelationLeavesUndivided.Operations(sums,
+                leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
+                        : working.told());
     }
 
     /** The places shown undivided over what the declarations leave. */

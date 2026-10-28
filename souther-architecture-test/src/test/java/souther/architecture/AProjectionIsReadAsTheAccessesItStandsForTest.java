@@ -626,6 +626,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
+        row(out, c + "partition/AffineReading", "endsNoRunBeneath", "(" + core + ")Z",
+                Reading.STRUCTURE,
+                "asks each node what it ends a run for, and goes down to its parts: a name read"
+                        + " off a value ends none, so what a projection may end one for is what"
+                        + " its base may");
+        row(out, c + "partition/AffineReading", "stopsOnlyWhereItsAnswerHasNoPlace",
+                "(" + core + ")Z", Reading.STRUCTURE,
+                "asks a node what it ends a run for, and each part under it: a projection ends"
+                        + " none beyond what its base does");
         row(out, c + "partition/Pullback", "chosenField", "(" + core + reads + ")L" + c
                         + "partition/Pullback$ChosenField;", Reading.STRUCTURE,
                 "takes the field accesses over the call of a walk one at a time, and asks of the"

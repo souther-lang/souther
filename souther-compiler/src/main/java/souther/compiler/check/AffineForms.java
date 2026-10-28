@@ -891,6 +891,17 @@ public final class AffineForms {
     }
 
     /**
+     * The reading told that {@code call}, read as arithmetic over its arguments, was read without
+     * telling of what it works out — where its owners say working it out may end a run, or do not
+     * say. A call that ends none is the arithmetic and nothing else.
+     */
+    private static <A, E> void unobservedIfItCanStop(Core call, Reading<A, E> reading) {
+        if (!WhatARunMayEndFor.itself(call).endsNone()) {
+            reading.unobserved(call);
+        }
+    }
+
+    /**
      * {@code form}, the quotient {@code division} came to, with the reading told when a run may
      * still stop at it: the quotient is by a number that is not nought, which the form being one
      * says, and stops for no other reason only where it is not of a {@code Rational}
@@ -1183,7 +1194,7 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> overTheValues(Core call, LinearForm<Core> says, E at,
                                                       Reading<A, E> reading, Walk<A, E> following,
                                                       Stop<A, E> stopped) {
-        reading.unobserved(call);
+        unobservedIfItCanStop(call, reading);
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
         for (Map.Entry<Core, ExactRatio> each : says.coefs().entrySet()) {
@@ -1214,7 +1225,7 @@ public final class AffineForms {
                                                  E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
-        reading.unobserved(call);
+        unobservedIfItCanStop(call, reading);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the

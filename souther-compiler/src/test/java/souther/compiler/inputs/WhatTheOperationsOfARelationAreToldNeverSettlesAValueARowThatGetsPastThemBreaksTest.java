@@ -5,6 +5,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided.IntSum;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Leaves;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Operations;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
+import souther.compiler.inputs.WhatARelationLeavesUndivided.Told;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Term;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -66,12 +67,29 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     /**
      * What the program works out, and the weights the relation is cut with: each of {@code weights}
      * times {@code scale}, which a quotient by a number makes of the sum it divides.
+     *
+     * @param sums   the operations the reading told of
+     * @param hidden the operations the program works out and the reading did not tell of: a row
+     *               gets past those as well, and the code is not given them
+     * @param state  how much of what can stop a run the reading told
      */
     private record Program(String name, List<Integer> weights, ExactRatio scale,
-                           List<IntSum> sums, boolean exact) {
+                           List<IntSum> sums, List<IntSum> hidden, Told state) {
+
+        Program(String name, List<Integer> weights, ExactRatio scale, List<IntSum> sums,
+                boolean exact) {
+            this(name, weights, scale, sums, List.of(), exact ? Told.EVERY : Told.SOME);
+        }
 
         Program(String name, List<Integer> weights, List<IntSum> sums, boolean exact) {
             this(name, weights, ExactRatio.ONE, sums, exact);
+        }
+
+        /** Every operation the program works out, told or not. */
+        List<IntSum> allOperations() {
+            List<IntSum> all = new ArrayList<>(sums);
+            all.addAll(hidden);
+            return all;
         }
 
         ExactRatio weightOf(int term) {
@@ -115,7 +133,32 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                             sum(0, "a", 1, "b", 1, "c", 1)), true),
             new Program("(a + b) + c, the others not told", List.of(1, 1, 1),
                     List.of(sum(0, "a", 1, "b", 1), sum(0, "a", 1, "b", 1, "c", 1)), false),
-            new Program("a + b + c, nothing told", List.of(1, 1, 1), List.of(), false));
+            // No reading was made, and the program adds the form up: the sizes of the form say it.
+            new Program("a + b + c, no reading", List.of(1, 1, 1), ExactRatio.ONE, List.of(),
+                    List.of(sum(0, "a", 1, "b", 1), sum(0, "a", 1, "b", 1, "c", 1)),
+                    Told.NOTHING_SAID),
+            // The reading met something that can stop a run and told of nothing for it: what a
+            // row has to get past is more than the form shows, and no row is shown computed.
+            new Program("a >= b, an untold a + 1", List.of(1, -1), ExactRatio.ONE, List.of(),
+                    List.of(sum(1, "a", 1)), Told.SOME),
+            new Program("a >= b, an untold a + 4", List.of(1, -1), ExactRatio.ONE, List.of(),
+                    List.of(sum(4, "a", 1)), Told.SOME),
+            new Program("a + b, an untold a + 4", List.of(1, 1), ExactRatio.ONE, List.of(),
+                    List.of(sum(4, "a", 1), sum(0, "a", 1, "b", 1)), Told.SOME),
+            new Program("a + b, a + b told and an untold b + 4", List.of(1, 1), ExactRatio.ONE,
+                    List.of(sum(0, "a", 1, "b", 1)), List.of(sum(4, "b", 1)), Told.SOME),
+            new Program("(a + b) + c, an untold c + 1", List.of(1, 1, 1), ExactRatio.ONE,
+                    List.of(sum(0, "a", 1, "b", 1), sum(0, "a", 1, "b", 1, "c", 1)),
+                    List.of(sum(1, "c", 1)), Told.SOME),
+            // Compared with each other and nothing added is a fact of the form, and not of the
+            // program: this one stops at the greatest a.
+            new Program("(a + 1) - 1 >= b", List.of(1, -1),
+                    List.of(sum(1, "a", 1), sum(0, "a", 1)), true));
+
+    /** Every relation, the equalities among them: two terms compared with each other and nothing
+     *  added are asked of a witness only for those. */
+    private static final List<Rel> RELATIONS =
+            List.of(Rel.LE, Rel.LT, Rel.GE, Rel.GT, Rel.EQ, Rel.NE);
 
     private static boolean holds(Rel relation, int signOfTheForm) {
         return relation.holds(signOfTheForm);
@@ -125,7 +168,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     void whatIsSaidOfATermIsTrueOfEveryRowThatGetsPastTheOperations() {
         for (Program program : PROGRAMS) {
             for (int constant = -3; constant <= 3; constant++) {
-                for (Rel relation : List.of(Rel.LE, Rel.LT, Rel.GE, Rel.GT)) {
+                for (Rel relation : RELATIONS) {
                     for (int at = 0; at < program.weights().size(); at++) {
                         check(program, program.sums(), constant, relation, at);
                     }
@@ -143,7 +186,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         for (int constant = -3; constant <= 3; constant++) {
             List<IntSum> adding = new ArrayList<>(compared.sums());
             adding.add(sum(constant, "a", 1, "b", 1, "c", 1));
-            for (Rel relation : List.of(Rel.LE, Rel.LT, Rel.GE, Rel.GT)) {
+            for (Rel relation : RELATIONS) {
                 for (int at = 0; at < 3; at++) {
                     check(compared, adding, constant, relation, at);
                 }
@@ -160,10 +203,14 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         }
         Leaves said = WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant),
                 relation, String::equals, (one, other) -> true, Granularity.DISCRETE,
-                BigInteger.valueOf(GREATEST), List.of(), new Operations(sums, program.exact()));
+                BigInteger.valueOf(GREATEST), List.of(), new Operations(sums, program.state()));
         String where = program.name() + ", constant " + constant + " " + relation + " 0, term "
                 + at + ": " + said;
         int range = GREATEST - LEAST + 1;
+        // A row is a row of the program where it gets past every operation the program works out,
+        // told or not: the code was given those it was told of.
+        List<IntSum> everyOperation = new ArrayList<>(sums);
+        everyOperation.addAll(program.hidden());
         // For each run it says, whether some value of it has a row that gets past the operations:
         // a run no row stands in settles nothing and is settled for want of one.
         int runsSaid = said instanceof Leaves.Settled settled ? settled.runs().size() : 0;
@@ -183,7 +230,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                         rest /= range;
                     }
                 }
-                if (!getsPast(sums, row)) {
+                if (!getsPast(everyOperation, row)) {
                     continue;
                 }
                 ExactRatio form = ExactRatio.of(constant);
@@ -197,7 +244,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                     sawFalse = true;
                 }
             }
-            if (said instanceof Leaves.Undivided && program.exact()) {
+            if (said instanceof Leaves.Undivided) {
                 assertTrue(!(sawTrue || sawFalse) || (sawTrue && sawFalse),
                         "undivided, yet only one side has a row at " + value + ": " + where);
             }

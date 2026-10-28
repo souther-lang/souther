@@ -529,7 +529,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 term("d", 1, amount, amount), term("s", -1, amount, amount)), 0,
                 ExactRatio.of(-150000L), Rel.GE, String::equals, (one, other) -> true,
                 Granularity.DISCRETE, GREATEST_INT, List.of(),
-                new WhatARelationLeavesUndivided.Operations(List.of(sums), exact));
+                WhatARelationLeavesUndivided.Operations.read(List.of(sums), exact));
     }
 
     /**
@@ -540,7 +540,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
      */
     @Test
     void aSumTheProgramWorksOutCutsTheTermsItAdds() {
-        Leaves.Settled whole = (Leaves.Settled) ofTheAmountsAddedUp(false,
+        Leaves.Settled whole = (Leaves.Settled) ofTheAmountsAddedUp(true,
                 anIntSum(0, "a", 1, "b", 1), anIntSum(0, "a", 1, "b", 1, "d", 1),
                 anIntSum(150000, "s", 1));
         assertEquals(List.of(settled(Long.MAX_VALUE, Long.MAX_VALUE, true)), whole.runs());
@@ -578,11 +578,11 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 term("a", 1, either, either), term("b", 1, either, either));
         Leaves plain = WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
                 String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT,
-                List.of(), new WhatARelationLeavesUndivided.Operations(
+                List.of(), WhatARelationLeavesUndivided.Operations.read(
                         List.of(anIntSum(0, "a", 1, "b", 1)), true));
         Leaves shifted = WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
                 String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT,
-                List.of(), new WhatARelationLeavesUndivided.Operations(
+                List.of(), WhatARelationLeavesUndivided.Operations.read(
                         List.of(anIntSum(1, "a", 1), anIntSum(-1, "b", 1),
                                 anIntSum(0, "a", 1, "b", 1)), true));
         assertNotEquals(plain, shifted);
@@ -1204,8 +1204,8 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         Leaves.Settled settled = (Leaves.Settled) WhatARelationLeavesUndivided.leavesOf(
                 List.of(a, b), 0, ExactRatio.ZERO, Rel.GE, String::equals,
                 (one, other) -> true, Granularity.DISCRETE, GREATEST_INT, List.of(),
-                new WhatARelationLeavesUndivided.Operations(
-                        List.of(anIntSum(0, "b", 100)), false));
+                WhatARelationLeavesUndivided.Operations.read(
+                        List.of(anIntSum(0, "b", 100)), true));
         long lastWhole = Long.MAX_VALUE / 100 * 100;
         assertEquals(List.of(new Line(Rel.GE, ExactRatio.of(lastWhole))),
                 settled.ofTheTypeAlone());

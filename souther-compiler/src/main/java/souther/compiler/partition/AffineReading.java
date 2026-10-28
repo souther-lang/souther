@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.abort.AbortKind;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
@@ -11,6 +12,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementsMet;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -178,7 +180,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
         AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
                 reads, reading(read.domain(), read.rules(), KeptTruths.readIn(read),
-                        new LinkedHashSet<>(), new ElementsMet(), new Told()));
+                        new LinkedHashSet<>(), new ElementsMet(), new WhatWasTold()));
         return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }
@@ -198,7 +200,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         // One element of each container for the whole comparison, whichever side names it.
         ElementsMet met = new ElementsMet();
         // What the two sides work out, as they are written.
-        Told told = new Told();
+        WhatWasTold told = new WhatWasTold();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
@@ -314,7 +316,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
             InputDomain inputs, RuleReadingSource ruleSource, ReadMeaning.WhereKept kept,
-            Set<NumericTerm> named, ElementsMet met, Told told) {
+            Set<NumericTerm> named, ElementsMet met, WhatWasTold told) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             /**
@@ -366,7 +368,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // A number worked out by a run that may stop, and no operation here tells
                     // where. What may stop one is its owners' to say, and a node they do not say
                     // of is one that may.
-                    if (!WhatARunMayEndFor.of(node).endsNone()) {
+                    if (!stopsOnlyWhereItsAnswerHasNoPlace(node)) {
                         told.exact = false;
                     }
                 }
@@ -436,15 +438,47 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         };
     }
 
+    /**
+     * Whether working {@code node} out ends a run only where its own answer has no place in its
+     * type, and nothing under it ends one: an operation refuses only what its own answer has no
+     * place for. A number that is the value of such a node is a value of its type, and a row
+     * standing at it is not stopped by working the node out; what is under it that ends a run is
+     * not the number's, and is not told.
+     */
+    private static boolean stopsOnlyWhereItsAnswerHasNoPlace(Core node) {
+        if (!(WhatARunMayEndFor.itself(node) instanceof WhatARunMayEndFor.Endings.Known own)
+                || !own.kinds().kinds().stream()
+                .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE)) {
+            return false;
+        }
+        boolean[] under = {true};
+        Core.forEachChild(Core.withoutStanding(node), child -> under[0] &= endsNoRunBeneath(child));
+        return under[0];
+    }
+
+    /** Whether working {@code node} out, and everything under it, ends no run: a call handed a
+     *  closure written at it is asked apart from the closure, whose body is under it. */
+    private static boolean endsNoRunBeneath(Core node) {
+        Core here = Core.withoutStanding(node);
+        if (!WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(here).endsNone()) {
+            return false;
+        }
+        boolean[] under = {true};
+        Core.forEachChild(here, child -> under[0] &= endsNoRunBeneath(child));
+        return under[0];
+    }
+
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
      *  whether nothing it read could stop a run without telling. */
-    private static final class Told {
+    private static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         private boolean exact = true;
 
         UndividedByARelation.Working working() {
-            return new UndividedByARelation.Working(operations, exact);
+            return new UndividedByARelation.Working(operations, exact
+                    ? WhatARelationLeavesUndivided.Told.EVERY
+                    : WhatARelationLeavesUndivided.Told.SOME);
         }
     }
 
