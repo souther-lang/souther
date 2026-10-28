@@ -76,10 +76,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * that was not read as a sum the walk composed says nothing of what the program works
          * out, which is not that the program adds the form up.
          *
-         * <p>The one exception is a reading that stopped at an expression of its own analysis's
-         * (a product, a remainder, a quotient by an input): the lines drawn from it are that
-         * analysis's, built from the statement's form and not from this walk, and it answers for
-         * its rows by the form's sizes ({@link UndividedByARelation.Working#NOTHING}).
+         * <p>The one exception is a reading that stopped, whatever it stopped at: the lines drawn
+         * from it are another analysis's (a product, a remainder, a date, a fold, a lookup, the
+         * arms of a branch), built from the statement's form and not from this walk, and they are
+         * answered for their rows by the form's sizes
+         * ({@link UndividedByARelation.Working#NOTHING}). That takes the program to add the form
+         * up, which holds of those analyses only so far as no operation beside the expression it
+         * stopped at can stop a row; the walk keeps nothing of what it composed before it stopped,
+         * so this cannot be told, and the cost of saying otherwise is that none of those lines is
+         * read. A stop that names the analysis it belongs to would narrow this.
          */
         static UndividedByARelation.Working workingOf(OfAComparison read) {
             return switch (read) {
