@@ -676,29 +676,20 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
     /**
      * Whether {@code line} is a line of {@code a.pay} that the comparison written out draws
      * because it works the product out: at a value its product with the divisor has no
-     * {@code Int} for, or beside the hundred the least divisor multiplies.
+     * {@code Int} for.
      *
      * <p>The product is an operation the comparison works out, so a pay far out is shown to have
-     * a divisor on either side of the line, and the pays below the hundred are shown to fail
-     * whatever the divisor is. A quotient works out no product and tells of no operation a run
-     * stops at, so a row at an end of the type is not shown computed and the pays beyond the
-     * hundred are not shown reached: the quotient draws no line there, which says nothing of a
-     * row that exists.
+     * a divisor on either side of the line. A quotient works out no product, and the dividend and
+     * the divisor it works out are the positions themselves: every pay and divisor the types hold
+     * is a row of it, so it draws no line where the product stops.
      */
     private static boolean drawnWhereTheProductStops(String line) {
         Matcher at = AT.matcher(line);
         if (!line.contains("term=a.pay") || !at.find()) {
             return false;
         }
-        BigInteger value = new BigInteger(at.group(1)).abs();
-        return value.compareTo(WHERE_THE_PRODUCT_STOPS) >= 0
-                || value.subtract(THE_LEAST_PRODUCT).abs().compareTo(BigInteger.ONE) <= 0;
+        return new BigInteger(at.group(1)).abs().compareTo(WHERE_THE_PRODUCT_STOPS) >= 0;
     }
-
-    /** The product the comparison is written with, at the least divisor the declarations allow:
-     *  a hundred times one. A pay a whole number beside it is where the lines of the pays that
-     *  fail whatever the divisor is end. */
-    private static final BigInteger THE_LEAST_PRODUCT = BigInteger.valueOf(100);
 
     /** {@code lines} but for those the comparison written out draws only because it works the
      *  product out ({@link #drawnWhereTheProductStops}). */

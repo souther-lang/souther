@@ -115,16 +115,15 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         let f (xs) = List.any(i -> i.q / i.p >= i.q, xs)
                         """));
         // Written out, the product is an operation the comparison tells of, so a row is computed
-        // where it keeps inside the type and the relation is read. The quotient is no form the
-        // walk composes, so nothing is told of what it stops at and the relation stays unread.
+        // where it keeps inside the type and the relation is read. The quotient works out no
+        // product: its dividend and divisor are the positions, and the divisor away from nought
+        // keeps every row computed, so the relation is read as well.
         assertEquals(List.of(), stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> if i.p > 0 then i.q >= 10 * i.p
                             else if i.p < 0 then i.q <= 10 * i.p else false, xs)
                         """));
-        assertEquals(List.of("xs[*].p: RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE",
-                        "xs[*].q: RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE"),
-                stopped("""
+        assertEquals(List.of(), stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= 10, xs)
                         """));

@@ -135,11 +135,13 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -364,6 +366,34 @@ final class Pullback {
      * here: nothing here names the one expression it is the size of.
      */
     private final Map<Quantity.HowManyMeet, Core> readOff = new LinkedHashMap<>();
+    /**
+     * The comparison a reading is of as the source wrote it, which is the one whose rows
+     * {@link #workingOfTheRule} is told of.
+     */
+    private StatedComparison theComparisonRead;
+    /** What the arithmetic over the input made of {@link #theComparisonRead}. */
+    private Supplier<AffineReading.OfAComparison> theArithmeticRead;
+    /**
+     * Whether the comparison being read states what {@link #theComparisonRead} does, over the
+     * same rows, in other words: a rounded number read as the number it is rounded from.
+     */
+    private boolean restatingTheComparisonRead;
+    /** Whether the comparisons being read are the parts of a quotient's statement, which work out
+     *  a product the quotient does not. */
+    private boolean restatingAQuotient;
+    /**
+     * What the rule that took {@link #theComparisonRead} tells of the operations its rows get
+     * past, where that rule knows more than the reading of the comparison does; null otherwise.
+     */
+    private UndividedByARelation.Working workingOfTheRule;
+    /**
+     * What each relation read under an arm of a choice works out, off the comparison read with the
+     * choice standing as that arm ({@link #tellWhatItWorksOut}).
+     */
+    private final Map<Relation, UndividedByARelation.Working> workingOfRelation =
+            new LinkedHashMap<>();
+    /** What decided the arms being read, outermost first: worked out before any arm is. */
+    private final Deque<UndividedByARelation.Working> beforeTheFork = new ArrayDeque<>();
     /**
      * Whether an element being added up over takes an arm, as the statement read of it, with the
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
@@ -685,6 +715,8 @@ final class Pullback {
      *                   none for a count read any other way, rather than looking for one
      */
     record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic,
+                      Supplier<UndividedByARelation.Working> working,
+                      Function<Relation, UndividedByARelation.Working> workingOfRelation,
                       Map<Quantity.HowManyMeet, Core> readOff) {
 
         OnTheInput {
@@ -697,11 +729,16 @@ final class Pullback {
                                               InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty());
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
+        reading.theComparisonRead = comparison;
+        reading.theArithmeticRead = arithmetic;
         Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(
                 reading.firstThatReadsIt(
                         reading.rulesFor(comparison, null, false, reads, arithmetic)),
                 comparison, reads));
-        return new OnTheInput(stated, arithmetic, reading.readOff);
+        return new OnTheInput(stated, arithmetic,
+                () -> reading.workingOfTheRule != null ? reading.workingOfTheRule
+                        : AffineReading.OfAComparison.workingOf(arithmetic.get()),
+                reading.workingOfRelation::get, reading.readOff);
     }
 
     /**
@@ -8917,10 +8954,10 @@ final class Pullback {
      * <p>Off the same reading a border on it is drawn from everywhere a comparison is, so what it
      * states here is what a border on it is drawn at.
      */
-    private static Derivation asACut(StatedComparison comparison,
-                                     AffineReading.OfAComparison arithmetic, boolean fixed) {
+    private Derivation asACut(StatedComparison comparison,
+                              AffineReading.OfAComparison arithmetic, boolean fixed) {
         return switch (arithmetic) {
-            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, _) -> {
+            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, var working) -> {
                 Rel states = affine.claim().statedRelation();
                 LinearForm<NumericTerm> against;
                 switch (affine.form().minus(LinearForm.constant(affine.cut()))) {
@@ -8929,10 +8966,12 @@ final class Pullback {
                         yield new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed);
                     }
                 }
-                yield aRelation(Derivation.ComparisonReading.AS_A_CUT,
+                Derivation cut = aRelation(Derivation.ComparisonReading.AS_A_CUT,
                         asQuantities(DecisionAtom.ofTheInput(against)), states,
                         mirrored ? Derivation.AComparisonRead.Facing.TURNED
                                 : Derivation.AComparisonRead.Facing.AS_WRITTEN);
+                tellWhatItWorksOut(cut, working);
+                yield cut;
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(
@@ -8940,6 +8979,36 @@ final class Pullback {
             case AffineReading.OfAComparison.NotHeld _, AffineReading.OfAComparison.Stopped _ ->
                     null;
         };
+    }
+
+    /** {@code reading}, with {@code before} worked out by every run before it takes an arm. */
+    private <T> T underTheFork(UndividedByARelation.Working before, Supplier<T> reading) {
+        beforeTheFork.push(before);
+        try {
+            return reading.get();
+        } finally {
+            beforeTheFork.pop();
+        }
+    }
+
+    /**
+     * That the relation {@code cut} is read where a run has taken an arm of a choice, off a
+     * comparison that works out {@code working} with the choice standing as that arm: its rows
+     * get past that and what decided the arm. Kept for the relation, since the comparison as
+     * written works out the operations of whichever arm is taken.
+     */
+    private void tellWhatItWorksOut(Derivation cut, UndividedByARelation.Working working) {
+        if (beforeTheFork.isEmpty() || restatingAQuotient
+                || !(cut instanceof Derivation.AComparisonRead made)) {
+            return;
+        }
+        UndividedByARelation.Working told = working;
+        for (UndividedByARelation.Working earlier : beforeTheFork) {
+            told = told.after(earlier);
+        }
+        UndividedByARelation.Working already = workingOfRelation.get(made.relation());
+        workingOfRelation.put(made.relation(), already == null ? told
+                : UndividedByARelation.Working.together(List.of(already, told)));
     }
 
     /**
@@ -9133,8 +9202,10 @@ final class Pullback {
                 // Taken as the if itself and not as whatever stood for it here: a name for the
                 // choice read again elsewhere on this reading is the same choice, taken.
                 Core choice = choiceAt.value();
-                yield new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff, choiceAt.at(),
-                        condition, left, arm -> again.apply(on -> on.taking(choice, arm, 1)))));
+                yield new Derivation.AComparisonOfAChoice(madeBy(iff, underTheFork(
+                        AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read),
+                        () -> armsOf(iff, choiceAt.at(), condition, left,
+                                arm -> again.apply(on -> on.taking(choice, arm, 1))))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -9143,8 +9214,11 @@ final class Pullback {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Core choice = chosen.value();
-                yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at,
-                        arm -> again.apply(on -> on.taking(choice, arm, arms))));
+                yield new Derivation.AComparisonOfAChoice(underTheFork(
+                        AffineReading.workingOfWhatDecides(
+                                Core.withoutStanding(chosen.value()), chosen.at(), read),
+                        () -> byItsCases(chosen, at,
+                                arm -> again.apply(on -> on.taking(choice, arm, arms)))));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
@@ -10428,9 +10502,17 @@ final class Pullback {
                                         InputReads reads) {
         RoundedToAWholeNumber.Read<InputReads> rounded =
                 RoundedToAWholeNumber.read(stated, reads, sides());
-        return rounded == null ? null
-                : theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
-                        rounded.at());
+        if (rounded == null) {
+            return null;
+        }
+        boolean outer = restatingTheComparisonRead;
+        restatingTheComparisonRead = outer || stated == theComparisonRead;
+        try {
+            return theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
+                    rounded.at());
+        } finally {
+            restatingTheComparisonRead = outer;
+        }
     }
 
     /**
@@ -10456,6 +10538,12 @@ final class Pullback {
      * <p>Not one whose divisor is a value written out read once for every application of a closure
      * it stands in ({@link #readOnceForEveryValue}): which of the values a run is on is no part of
      * that reading, and neither is whether one before it stopped the run.
+     *
+     * <p>The lines it draws are over the dividend and the divisor, and the program works out no
+     * product of the divisor with the number: the operations its rows get past are those of the
+     * dividend and the divisor, and the quotient answers wherever the divisor is not nought, which
+     * the statement keeps its rows to ({@link QuotientByAValue.Read#answers}). That is what the
+     * comparison written as the product does not say, which works the product out.
      */
     private Derivation ofAQuotientByAValue(StatedComparison stated, Denotation at, boolean fixed,
                                            InputReads reads) {
@@ -10465,16 +10553,50 @@ final class Pullback {
                 || readOnceForEveryValue(quotient.divisor(), quotient.at(), new HashSet<>())) {
             return null;
         }
-        Derivation answers = restated(quotient.answers(), at, fixed, quotient.at());
-        Derivation signed = restated(quotient.signed(), at, fixed, quotient.at());
-        Derivation states = joined(ConditionJoin.EITHER,
-                joined(ConditionJoin.BOTH, signed,
-                        restated(quotient.above(), at, fixed, quotient.at())),
-                joined(ConditionJoin.BOTH,
-                        signed == null ? null : new Derivation.UnderADenial(signed, true),
-                        restated(quotient.below(), at, fixed, quotient.at())));
-        return answers == null || states == null ? null
-                : new Derivation.WhereItAnswers(answers, states);
+        UndividedByARelation.Working told = null;
+        if ((stated == theComparisonRead || restatingTheComparisonRead)
+                && theArithmeticRead.get() instanceof AffineReading.OfAComparison.Stopped stopped
+                && divisionBy(quotient.divisor(), stopped.node()) instanceof Core division) {
+            told = stopped.ofTheQuotientAwayFromNought(division);
+        }
+        Derivation answers;
+        Derivation signed;
+        Derivation states;
+        restatingAQuotient = true;
+        try {
+            answers = restated(quotient.answers(), at, fixed, quotient.at());
+            signed = restated(quotient.signed(), at, fixed, quotient.at());
+            states = joined(ConditionJoin.EITHER,
+                    joined(ConditionJoin.BOTH, signed,
+                            restated(quotient.above(), at, fixed, quotient.at())),
+                    joined(ConditionJoin.BOTH,
+                            signed == null ? null : new Derivation.UnderADenial(signed, true),
+                            restated(quotient.below(), at, fixed, quotient.at())));
+        } finally {
+            restatingAQuotient = false;
+        }
+        if (answers == null || states == null) {
+            return null;
+        }
+        if (told != null) {
+            workingOfTheRule = told;
+        }
+        return new Derivation.WhereItAnswers(answers, states);
+    }
+
+    /** The quotient by {@code divisor} written in {@code within}, or null where there is none. */
+    private static Core divisionBy(Core divisor, Core within) {
+        if (Core.withoutStanding(within) instanceof Core.Binary division
+                && division.op() == BinOp.DIV && division.right().equals(divisor)) {
+            return division;
+        }
+        Core[] found = {null};
+        Core.forEachChild(Core.withoutStanding(within), child -> {
+            if (found[0] == null) {
+                found[0] = divisionBy(divisor, child);
+            }
+        });
+        return found[0];
     }
 
     /**

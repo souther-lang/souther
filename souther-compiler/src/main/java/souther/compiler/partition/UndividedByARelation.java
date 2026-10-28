@@ -227,6 +227,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Objects.requireNonNull(told, "what the reading told, or that there was none");
         }
 
+        /**
+         * What a row gets past in working this out after {@code earlier}: both their operations,
+         * and every one told only where both tell every one. A row of an arm of a choice has
+         * worked out what decided the arm before it works out the arm.
+         */
+        Working after(Working earlier) {
+            if (earlier.equals(NOTHING)) {
+                return this;
+            }
+            if (equals(NOTHING)) {
+                return earlier;
+            }
+            List<IntOperation> both = new ArrayList<>(earlier.operations);
+            both.addAll(operations);
+            return new Working(both, earlier.exact() && exact()
+                    ? WhatARelationLeavesUndivided.Told.EVERY
+                    : WhatARelationLeavesUndivided.Told.SOME);
+        }
+
         /** Whether every operation that can stop a run is told. */
         boolean exact() {
             return told == WhatARelationLeavesUndivided.Told.EVERY;
@@ -759,9 +778,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * The operations the comparison works out, each weighing the numbers it is over by name. An
      * operation over a number that is no side of this relation, or is two sides, is left out,
      * which cuts less and says nothing false — and is an operation a row is not asked to get past
-     * here, so the operations are then not every one.
+     * here, so the operations are then not every one, unless no row of the places it is over
+     * could stop at it.
      */
-    private WhatARelationLeavesUndivided.Operations operationsOverTheSides() {
+    private WhatARelationLeavesUndivided.Operations operationsOverTheSides(InputReading read) {
         if (working.operations().isEmpty()) {
             return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
         }
@@ -777,7 +797,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean overTheSides = each.form().coefs().keySet().stream()
                     .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
             if (!overTheSides) {
-                leftOut = true;
+                leftOut |= !stopsNoRow(each, read);
                 continue;
             }
             sums.add(new WhatARelationLeavesUndivided.IntSum(
@@ -788,6 +808,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new WhatARelationLeavesUndivided.Operations(sums,
                 leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
                         : working.told());
+    }
+
+    /**
+     * Whether no row stops at {@code operation}: the number it comes to lies from {@code least} to
+     * {@code greatest} whatever its places hold, each between the ends of the order its values are
+     * counted on. False where a place has no end to give.
+     */
+    private static boolean stopsNoRow(IntOperation operation, InputReading read) {
+        FormRange range = FormRange.of(operation.form(), read, _ -> null);
+        return range != null && range.liesWithin(operation.least(), operation.greatest());
     }
 
     /** The places shown undivided over what the declarations leave. */
@@ -1494,7 +1524,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
         List<WhatARelationLeavesUndivided.JointSupport> supports =
                 datePartsTogether(sources, stating, heldWhole, left.years());
-        WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides();
+        WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read);
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
