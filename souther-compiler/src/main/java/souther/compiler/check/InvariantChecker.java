@@ -3760,7 +3760,8 @@ public final class InvariantChecker {
                 first == null ? null : first.greatestWholeNumber()));
         out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
                 List.of(), new WhatARelationLeavesUndivided.WhereTheRepresentationStops(extent),
-                overlap, first == null ? null : first.greatestWholeNumber()));
+                overlap, first == null ? null : first.greatestWholeNumber(),
+                WhatARelationLeavesUndivided.Operations.NONE));
         for (int i = 0; i < terms.size(); i++) {
             Carrier carrier = weighed.get(i).getKey().carrier();
             if (!out.containsAll(terms.get(i).madeOf()) && carrier != null

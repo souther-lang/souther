@@ -244,19 +244,60 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /**
-         * Whether the sizes of the form's addends answer for a row: nothing beyond the form can
-         * stop one, or every operation is told and each is a sum of the form's own terms, so
-         * that the sizes are the sizes the operations are worked out over.
+         * Whether the sizes of the form's addends answer for a row, which is where nothing but
+         * the form can stop one. Where an operation is told, the rows computed are the
+         * operation's own and the sizes are a bound of them and no more: they count a constant
+         * the program may only compare the sum with, and take a value of the type below what a
+         * sum reaches to be no addend, though a sum of terms weighed one is worked out at it.
+         * An analysis that names the values no row computes at, or settles a value by the rows
+         * that do, asks this and is silent otherwise.
          */
-        public <P> boolean theSizesOfTheFormAnswer(List<Term<P>> terms, ExactRatio constant) {
-            if (!canStopARow()) {
-                return true;
+        public boolean theSizesOfTheFormAnswer() {
+            return !canStopARow();
+        }
+
+        /**
+         * The greatest value the sizes of the form's addends are held to, for an analysis that
+         * tells the rows computed by those sizes alone: none where every operation is told and
+         * there is none, since then nothing stops a row at a size, and {@code greatest} otherwise.
+         */
+        public BigInteger sizesStopAt(BigInteger greatest) {
+            return told == Told.EVERY && sums.isEmpty() ? null : greatest;
+        }
+
+        /** The weight the relation gives each term by key, or null where a term has no key or
+         *  two share one. */
+        private static <P> Map<Object, ExactRatio> weightsOf(List<Term<P>> terms) {
+            Map<Object, ExactRatio> weights = new LinkedHashMap<>();
+            for (Term<P> each : terms) {
+                if (each.key() == null || weights.put(each.key(), each.weight()) != null) {
+                    return null;
+                }
             }
-            if (told != Told.EVERY) {
-                return false;
+            return weights;
+        }
+
+        /**
+         * How many times the form's weights the coefficients of {@code sum} are, or null where
+         * they are not all the same multiple of them, a coefficient is on no term of the form, or
+         * the sum reads no term.
+         */
+        private static ExactRatio multipleOf(IntSum sum, Map<Object, ExactRatio> weights) {
+            if (weights == null || sum.coefs().isEmpty()) {
+                return null;
             }
-            ExactRatio multiple = multipleOfTheForm(terms, constant);
-            return multiple != null && multiple.compareTo(ExactRatio.ONE) == 0;
+            ExactRatio multiple = null;
+            for (Map.Entry<Object, ExactRatio> weighed : sum.coefs().entrySet()) {
+                ExactRatio weight = weights.get(weighed.getKey());
+                ExactRatio here = weight == null ? null
+                        : weighed.getValue().dividedBy(weight).orNull();
+                if (here == null || here.signum() == 0
+                        || (multiple != null && multiple.compareTo(here) != 0)) {
+                    return null;
+                }
+                multiple = here;
+            }
+            return multiple;
         }
 
         /**
@@ -273,35 +314,19 @@ public final class WhatARelationLeavesUndivided {
          * operations are worked out over.
          */
         <P> ExactRatio multipleOfTheForm(List<Term<P>> terms, ExactRatio constant) {
-            Map<Object, ExactRatio> weights = new LinkedHashMap<>();
-            for (Term<P> each : terms) {
-                if (each.key() == null) {
-                    return null;
-                }
-                weights.put(each.key(), each.weight());
-            }
+            Map<Object, ExactRatio> weights = weightsOf(terms);
             ExactRatio most = ExactRatio.ONE;
             for (IntSum each : sums) {
-                if (each.coefs().isEmpty()) {
+                ExactRatio multiple = multipleOf(each, weights);
+                if (multiple == null) {
                     return null;
-                }
-                ExactRatio multiple = null;
-                for (Map.Entry<Object, ExactRatio> weighed : each.coefs().entrySet()) {
-                    ExactRatio weight = weights.get(weighed.getKey());
-                    ExactRatio here = weight == null ? null
-                            : weighed.getValue().dividedBy(weight).orNull();
-                    if (here == null || here.signum() == 0
-                            || (multiple != null && multiple.compareTo(here) != 0)) {
-                        return null;
-                    }
-                    multiple = here;
                 }
                 ExactRatio added = each.constant();
-                if (added.signum() != 0 && (multiple == null || added.compareTo(
-                        constant.times(multiple).orNull()) != 0)) {
+                if (added.signum() != 0
+                        && added.compareTo(constant.times(multiple).orNull()) != 0) {
                     return null;
                 }
-                if (multiple != null && multiple.abs().compareTo(most) > 0) {
+                if (multiple.abs().compareTo(most) > 0) {
                     most = multiple.abs();
                 }
             }
@@ -2855,22 +2880,28 @@ public final class WhatARelationLeavesUndivided {
      * @param overlap  whether two places are one, or one is part of the other
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
+     * @param operations what the program works out: nothing is shown where the sizes of the
+     *                 form's addends are not the sizes it works them out over
+     *                 ({@link Operations#theSizesOfTheFormAnswer})
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, ExactRatio constant,
                                                Rel relation, List<OnTheDifference> held,
                                                WhereTheRepresentationStops extent,
-                                               BiPredicate<P, P> overlap, BigInteger greatest) {
+                                               BiPredicate<P, P> overlap, BigInteger greatest,
+                                               Operations operations) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
-        if (combination == null || constant == null || !apart(terms, 0, overlap)
+        if (combination == null || constant == null || !operations.theSizesOfTheFormAnswer()
+                || !apart(terms, 0, overlap)
                 || !bothTakeTheWholeType(terms.get(0), terms.get(1), extent.run())) {
             return Set.of();
         }
         ExactRatio first = terms.get(0).weight();
         ExactRatio second = terms.get(1).weight();
         List<WholeRun> middles = new ArrayList<>();
+        BigInteger stopsAt = operations.sizesStopAt(greatest);
         if (first.abs().equals(ExactRatio.ONE)) {
-            WholeRun ofTheFirst = computedBeside(first, constant, greatest);
-            WholeRun ofTheSecond = computedBeside(second, constant, greatest);
+            WholeRun ofTheFirst = computedBeside(first, constant, stopsAt);
+            WholeRun ofTheSecond = computedBeside(second, constant, stopsAt);
             if (ofTheFirst == null || ofTheSecond == null) {
                 return Set.of();
             }
@@ -2881,7 +2912,7 @@ public final class WhatARelationLeavesUndivided {
                     new Computed(ofTheSecond, ofTheFirst, ofTheFirst)));
         } else if (combination == Combination.DIFFERENCE
                 && rowsComputeAtTheEnds(first, constant, extent.run(),
-                        RowsComputed.upTo(greatest))) {
+                        RowsComputed.upTo(stopsAt))) {
             middles.add(WholeRun.reachedFromTheMiddleOf(extent.run(), combination, true,
                     Computed.ANYWHERE));
         } else {
@@ -2947,14 +2978,20 @@ public final class WhatARelationLeavesUndivided {
      * @param overlap  whether two places are one, or one is part of the other
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
+     * @param operations what the program works out: nothing is said where the sizes of the
+     *                 form's addends are not the sizes it works them out over
+     *                 ({@link Operations#theSizesOfTheFormAnswer}), since the rows computed
+     *                 here are told by those sizes alone
      */
     public static <P> Leaves leavesByTheirDifference(List<Term<P>> terms, int at,
                                                      ExactRatio constant, Rel relation,
                                                      List<OnTheDifference> held,
                                                      BiPredicate<P, P> overlap,
-                                                     BigInteger greatest) {
+                                                     BigInteger greatest,
+                                                     Operations operations) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
-        if (combination == null || constant == null || !constant.isWhole()
+        if (combination == null || constant == null || !operations.theSizesOfTheFormAnswer()
+                || !constant.isWhole()
                 || !apart(terms, 0, overlap)
                 || !terms.get(0).weight().abs().equals(ExactRatio.ONE)) {
             return null;
@@ -2988,9 +3025,10 @@ public final class WhatARelationLeavesUndivided {
         if (holding == null || failing == null) {
             return null;
         }
-        WholeRun computed = computedBeside(it.weight(), constant, greatest);
-        WholeRun partnerComputed = computedBeside(other.weight(), constant, greatest);
-        WholeRun combinedComputed = computedBeside(weight, constant, greatest);
+        BigInteger stopsAt = operations.sizesStopAt(greatest);
+        WholeRun computed = computedBeside(it.weight(), constant, stopsAt);
+        WholeRun partnerComputed = computedBeside(other.weight(), constant, stopsAt);
+        WholeRun combinedComputed = computedBeside(weight, constant, stopsAt);
         if (computed == null || partnerComputed == null || combinedComputed == null) {
             return null;
         }

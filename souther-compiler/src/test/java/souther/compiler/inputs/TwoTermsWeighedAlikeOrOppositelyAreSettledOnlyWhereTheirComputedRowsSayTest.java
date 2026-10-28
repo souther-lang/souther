@@ -174,7 +174,9 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                                                 .leavesByTheirDifference(terms, at,
                                                         ExactRatio.of(constant), relation, held,
                                                         String::equals,
-                                                        BigInteger.valueOf(GREATEST));
+                                                        BigInteger.valueOf(GREATEST),
+                                                        WhatARelationLeavesUndivided
+                                                                .Operations.NONE);
                                         if (leaves == null) {
                                             continue;
                                         }
@@ -250,7 +252,8 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                                 term("b", weights[1], TYPE, OPEN));
                         Leaves leaves = WhatARelationLeavesUndivided.leavesByTheirDifference(
                                 terms, at, ExactRatio.of(constant), relation, List.of(),
-                                String::equals, BigInteger.valueOf(GREATEST));
+                                String::equals, BigInteger.valueOf(GREATEST),
+                                WhatARelationLeavesUndivided.Operations.NONE);
                         if (leaves instanceof Leaves.Settled settled) {
                             assertEquals(List.of(), settled.linesOfTheModel(),
                                     leaves + " for " + weights[0] + "," + weights[1] + " at " + at
@@ -281,7 +284,8 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                     Set<String> out = WhatARelationLeavesUndivided.ofTheirDifference(terms,
                             ExactRatio.of(constant), relation, List.of(),
                             new WhatARelationLeavesUndivided.WhereTheRepresentationStops(TYPE),
-                            String::equals, BigInteger.valueOf(GREATEST));
+                            String::equals, BigInteger.valueOf(GREATEST),
+                            WhatARelationLeavesUndivided.Operations.NONE);
                     if (out.isEmpty()) {
                         continue;
                     }

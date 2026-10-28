@@ -187,16 +187,53 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         }
     }
 
-    private static void check(Program program, List<IntSum> sums, int constant, Rel relation,
-                              int at) {
-        int size = program.weights().size();
+    /**
+     * The two-term programs again, asked of what two terms stand apart by instead of each term
+     * alone ({@code a + b >= 2} compares the sum with 2 and adds no 2): the answer is the same
+     * claim about the rows, so the same count of them holds it to account.
+     */
+    @Test
+    void whatIsSaidOfATermByTheirDifferenceIsTrueOfEveryRowThatGetsPastTheOperations() {
+        for (Program program : PROGRAMS) {
+            if (program.weights().size() != 2 || program.weightOf(0).abs().compareTo(
+                    ExactRatio.ONE) != 0) {
+                continue;
+            }
+            for (int constant = -3; constant <= 3; constant++) {
+                for (Rel relation : RELATIONS) {
+                    for (int at = 0; at < 2; at++) {
+                        List<Term<String>> terms = termsOf(program);
+                        Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(terms,
+                                at, ExactRatio.of(constant), relation, List.of(),
+                                String::equals, BigInteger.valueOf(GREATEST),
+                                new Operations(program.sums(), program.state()));
+                        verify(program, program.sums(), constant, relation, at, said);
+                    }
+                }
+            }
+        }
+    }
+
+    private static List<Term<String>> termsOf(Program program) {
         List<Term<String>> terms = new ArrayList<>();
-        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < program.weights().size(); i++) {
             terms.add(term(NAMES.get(i), program.weightOf(i)));
         }
-        Leaves said = WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant),
-                relation, String::equals, (one, other) -> true, Granularity.DISCRETE,
-                BigInteger.valueOf(GREATEST), List.of(), new Operations(sums, program.state()));
+        return terms;
+    }
+
+    private static void check(Program program, List<IntSum> sums, int constant, Rel relation,
+                              int at) {
+        Leaves said = WhatARelationLeavesUndivided.leavesOf(termsOf(program), at,
+                ExactRatio.of(constant), relation, String::equals, (one, other) -> true,
+                Granularity.DISCRETE, BigInteger.valueOf(GREATEST), List.of(),
+                new Operations(sums, program.state()));
+        verify(program, sums, constant, relation, at, said);
+    }
+
+    private static void verify(Program program, List<IntSum> sums, int constant, Rel relation,
+                               int at, Leaves said) {
+        int size = program.weights().size();
         String where = program.name() + ", constant " + constant + " " + relation + " 0, term "
                 + at + ": " + said;
         int range = GREATEST - LEAST + 1;
