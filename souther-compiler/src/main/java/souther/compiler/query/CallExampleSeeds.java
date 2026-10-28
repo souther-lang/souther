@@ -108,8 +108,11 @@ final class CallExampleSeeds {
      * what the first of {@code bases} has there, or nothing is composed where there is no base and
      * the callee's row does not fill them all.
      *
-     * <p>A row whose inputs are the inputs of a row the caller has written is not offered: it is
-     * that row.
+     * <p>A row the caller has written is not offered again, and takes none of the rows tried: it
+     * costs no build. It is the same row when its inputs are the inputs of the written one and
+     * both are answered by the module's table for each dependency; a written row with a
+     * {@code with} of its own, or a base that answers with a value of its own, is not compared
+     * and the row is offered.
      *
      * <p>What the callee's row answers is no part of this, and neither is what the caller owes:
      * these rows are inputs to try. A candidate the decoder refuses, an input nothing can write,
