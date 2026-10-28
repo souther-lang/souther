@@ -14,6 +14,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,23 +30,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * check and the code do not share the account of what a row that is computed is. A value is said
  * settled only where every such row at it comes out as the run says, and left either way only
  * where such rows come out both.
+ *
+ * <p>The programs differ in what they work out for a relation that is one form: a sum added from
+ * the left, from the right, with the constant added to it or only compared with it, and with
+ * signs. The least value of the type is among the values, and the type holds one more below
+ * nought than above it.
  */
 class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemBreaksTest {
 
     private static final int LEAST = -5;
     private static final int GREATEST = 4;
+    private static final List<String> NAMES = List.of("a", "b", "c");
 
     private static NumericDomain.Bounds run(int low, int high) {
         return new NumericDomain.Bounds(Endpoint.inclusive(Count.of((long) low)),
                 Endpoint.inclusive(Count.of((long) high)));
     }
 
-    private static Term<String> term(String place, int weight) {
+    private static Term<String> term(String place, ExactRatio weight) {
         NumericDomain.Bounds held = run(LEAST, GREATEST);
-        return new Term<>(List.of(place), ExactRatio.of(weight), held, held, null, true,
+        return new Term<>(List.of(place), weight, held, held, null, true,
                 Granularity.DISCRETE, held, place);
     }
 
+    /** An operation over the named terms, each weighed by the number after it, and a constant. */
     private static IntSum sum(int constant, Object... namesAndWeights) {
         Map<Object, ExactRatio> coefs = new LinkedHashMap<>();
         for (int i = 0; i < namesAndWeights.length; i += 2) {
@@ -55,23 +63,53 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 BigInteger.valueOf(GREATEST));
     }
 
-    /** What the program works out for a relation of two terms, and the weights it is cut with. */
-    private record Program(String name, int first, int second, List<IntSum> sums, boolean exact) { }
+    /**
+     * What the program works out, and the weights the relation is cut with: each of {@code weights}
+     * times {@code scale}, which a quotient by a number makes of the sum it divides.
+     */
+    private record Program(String name, List<Integer> weights, ExactRatio scale,
+                           List<IntSum> sums, boolean exact) {
+
+        Program(String name, List<Integer> weights, List<IntSum> sums, boolean exact) {
+            this(name, weights, ExactRatio.ONE, sums, exact);
+        }
+
+        ExactRatio weightOf(int term) {
+            return ExactRatio.of(weights.get(term)).times(scale).orNull();
+        }
+    }
 
     private static final List<Program> PROGRAMS = List.of(
-            new Program("a >= b, nothing worked out", 1, -1, List.of(), true),
-            new Program("a + b", 1, 1, List.of(sum(0, "a", 1, "b", 1)), true),
-            new Program("a - b", 1, -1, List.of(sum(0, "a", 1, "b", -1)), true),
-            new Program("2 * a, then a - b with b doubled", 2, -1,
-                    List.of(sum(0, "a", 2), sum(0, "a", 2, "b", -1)), true),
-            new Program("2 * a + b", 2, 1,
+            new Program("a >= b, nothing worked out", List.of(1, -1), List.of(), true),
+            new Program("a + b", List.of(1, 1), List.of(sum(0, "a", 1, "b", 1)), true),
+            new Program("a - b", List.of(1, -1), List.of(sum(0, "a", 1, "b", -1)), true),
+            new Program("2 * a, then 2 * a + b", List.of(2, 1),
                     List.of(sum(0, "a", 2), sum(0, "a", 2, "b", 1)), true),
-            new Program("a + 3, then b - that", -1, 1,
+            new Program("a + 3, then b less that", List.of(-1, 1),
                     List.of(sum(3, "a", 1), sum(0, "a", -1, "b", 1)), true),
-            new Program("a + b, others not told", 1, 1, List.of(sum(0, "a", 1, "b", 1)), false));
+            new Program("(a + b) + c", List.of(1, 1, 1),
+                    List.of(sum(0, "a", 1, "b", 1), sum(0, "a", 1, "b", 1, "c", 1)), true),
+            new Program("a + (b + c)", List.of(1, 1, 1),
+                    List.of(sum(0, "b", 1, "c", 1), sum(0, "a", 1, "b", 1, "c", 1)), true),
+            new Program("(a - b) - c", List.of(1, -1, -1),
+                    List.of(sum(0, "a", 1, "b", -1), sum(0, "a", 1, "b", -1, "c", -1)), true),
+            new Program("a - (b + c)", List.of(1, -1, -1),
+                    List.of(sum(0, "b", 1, "c", 1), sum(0, "a", 1, "b", -1, "c", -1)), true),
+            new Program("(a + b + c) / 3", List.of(1, 1, 1),
+                    ExactRatio.of(1).dividedBy(ExactRatio.of(3)).orNull(),
+                    List.of(sum(0, "a", 1, "b", 1), sum(0, "a", 1, "b", 1, "c", 1)), true),
+            new Program("a + 4 - 4 + b + c", List.of(1, 1, 1),
+                    List.of(sum(4, "a", 1), sum(0, "a", 1), sum(0, "a", 1, "b", 1),
+                            sum(0, "a", 1, "b", 1, "c", 1)), true),
+            new Program("a - 4 + 4 + b + c", List.of(1, 1, 1),
+                    List.of(sum(-4, "a", 1), sum(0, "a", 1), sum(0, "a", 1, "b", 1),
+                            sum(0, "a", 1, "b", 1, "c", 1)), true),
+            new Program("(a + b) + c, the others not told", List.of(1, 1, 1),
+                    List.of(sum(0, "a", 1, "b", 1), sum(0, "a", 1, "b", 1, "c", 1)), false),
+            new Program("a + b + c, nothing told", List.of(1, 1, 1), List.of(), false));
 
-    private static boolean holds(Rel relation, int form) {
-        return relation.holds(Integer.signum(form));
+    private static boolean holds(Rel relation, int signOfTheForm) {
+        return relation.holds(signOfTheForm);
     }
 
     @Test
@@ -79,35 +117,72 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         for (Program program : PROGRAMS) {
             for (int constant = -3; constant <= 3; constant++) {
                 for (Rel relation : List.of(Rel.LE, Rel.LT, Rel.GE, Rel.GT)) {
-                    for (int at = 0; at < 2; at++) {
-                        check(program, constant, relation, at);
+                    for (int at = 0; at < program.weights().size(); at++) {
+                        check(program, program.sums(), constant, relation, at);
                     }
                 }
             }
         }
     }
 
-    private static void check(Program program, int constant, Rel relation, int at) {
-        List<Term<String>> terms = List.of(term("a", program.first()), term("b", program.second()));
+    /** The form {@code a + b + c + k} held against nought as a program that adds {@code k} to the
+     *  sum as one more operation, and as one that compares the sum with {@code -k}: the same
+     *  form, and not the same rows. */
+    @Test
+    void aConstantTheProgramAddsIsNotOneItOnlyComparesTheSumWith() {
+        Program compared = PROGRAMS.get(5);
+        for (int constant = -3; constant <= 3; constant++) {
+            List<IntSum> adding = new ArrayList<>(compared.sums());
+            adding.add(sum(constant, "a", 1, "b", 1, "c", 1));
+            for (Rel relation : List.of(Rel.LE, Rel.LT, Rel.GE, Rel.GT)) {
+                for (int at = 0; at < 3; at++) {
+                    check(compared, adding, constant, relation, at);
+                }
+            }
+        }
+    }
+
+    private static void check(Program program, List<IntSum> sums, int constant, Rel relation,
+                              int at) {
+        int size = program.weights().size();
+        List<Term<String>> terms = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            terms.add(term(NAMES.get(i), program.weightOf(i)));
+        }
         Leaves said = WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant),
                 relation, String::equals, (one, other) -> true, Granularity.DISCRETE,
-                BigInteger.valueOf(GREATEST), List.of(),
-                new Operations(program.sums(), program.exact()));
+                BigInteger.valueOf(GREATEST), List.of(), new Operations(sums, program.exact()));
         String where = program.name() + ", constant " + constant + " " + relation + " 0, term "
                 + at + ": " + said;
-        // Each value of the term at `at`, the outcomes of the rows at it that get past the
-        // operations — all of them where the program tells every operation, and where it does not,
-        // only those the told ones stop.
+        int range = GREATEST - LEAST + 1;
+        // For each run it says, whether some value of it has a row that gets past the operations:
+        // a run no row stands in settles nothing and is settled for want of one.
+        int runsSaid = said instanceof Leaves.Settled settled ? settled.runs().size() : 0;
+        boolean[] aRowStandsIn = new boolean[runsSaid];
         for (int value = LEAST; value <= GREATEST; value++) {
             boolean sawTrue = false;
             boolean sawFalse = false;
-            for (int other = LEAST; other <= GREATEST; other++) {
-                int a = at == 0 ? value : other;
-                int b = at == 0 ? other : value;
-                if (!getsPast(program, a, b)) {
+            int others = (int) Math.pow(range, size - 1);
+            for (int code = 0; code < others; code++) {
+                int[] row = new int[size];
+                int rest = code;
+                for (int i = 0; i < size; i++) {
+                    if (i == at) {
+                        row[i] = value;
+                    } else {
+                        row[i] = LEAST + rest % range;
+                        rest /= range;
+                    }
+                }
+                if (!getsPast(sums, row)) {
                     continue;
                 }
-                if (holds(relation, program.first() * a + program.second() * b + constant)) {
+                ExactRatio form = ExactRatio.of(constant);
+                for (int i = 0; i < size; i++) {
+                    form = form.plus(program.weightOf(i).times(ExactRatio.of(row[i])).orNull())
+                            .orNull();
+                }
+                if (holds(relation, form.signum())) {
                     sawTrue = true;
                 } else {
                     sawFalse = true;
@@ -118,23 +193,35 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                         "undivided, yet only one side has a row at " + value + ": " + where);
             }
             if (said instanceof Leaves.Settled settled) {
-                for (SettledRun each : settled.runs()) {
+                for (int i = 0; i < settled.runs().size(); i++) {
+                    SettledRun each = settled.runs().get(i);
                     if (contains(each, value)) {
                         assertTrue(each.holds() ? !sawFalse : !sawTrue,
                                 "settled " + each.holds() + " at " + value
                                         + ", yet a row that gets past the operations breaks it: "
                                         + where);
+                        aRowStandsIn[i] |= sawTrue || sawFalse;
                     }
                 }
             }
         }
+        // The values past the rows that are computed are settled on purpose, as lines of the type
+        // alone ({@code ofTheTypeAlone}); every other run has a row.
+        boolean ofTheModel = said instanceof Leaves.Settled settled
+                && settled.ofTheTypeAlone().isEmpty();
+        for (int i = 0; i < runsSaid && ofTheModel; i++) {
+            assertTrue(aRowStandsIn[i], "a run is settled that no row gets past the operations"
+                    + " in: " + where);
+        }
     }
 
-    private static boolean getsPast(Program program, int a, int b) {
-        for (IntSum each : program.sums()) {
-            Map<Object, ExactRatio> values = new LinkedHashMap<>();
-            values.put("a", ExactRatio.of(a));
-            values.put("b", ExactRatio.of(b));
+    /** Whether every operation holds at the row, worked out and held to the ends of the type. */
+    private static boolean getsPast(List<IntSum> sums, int[] row) {
+        Map<Object, ExactRatio> values = new LinkedHashMap<>();
+        for (int i = 0; i < row.length; i++) {
+            values.put(NAMES.get(i), ExactRatio.of(row[i]));
+        }
+        for (IntSum each : sums) {
             ExactRatio at = each.at(values);
             if (at == null || at.compareTo(ExactRatio.of(LEAST)) < 0
                     || at.compareTo(ExactRatio.of(GREATEST)) > 0) {
