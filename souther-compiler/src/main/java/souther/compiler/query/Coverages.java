@@ -2396,7 +2396,15 @@ final class Coverages {
             // under both — and there is nothing about it to put together.
             return a;
         }
-        if (!one.criterion().equals(two.criterion())) {
+        // Two readings of one line reach other lines of the position, so the run beside it stops at
+        // a different one in each: the same point asked for under two ways. It is kept as the first
+        // reading asks it, the border it is a point of being that reading's, and what each reading
+        // found is put together below. A point asking for a different side or value is another
+        // point, which two readings of one line do not owe.
+        if (!one.criterion().equals(two.criterion())
+                && !(one.criterion() instanceof Criterion.Within in
+                        && two.criterion() instanceof Criterion.Within also
+                        && in.besideTheSameLineAs(also))) {
             throw new IllegalStateException("two searches of one point asking for different"
                     + " values: " + one.criterion() + " and " + two.criterion());
         }

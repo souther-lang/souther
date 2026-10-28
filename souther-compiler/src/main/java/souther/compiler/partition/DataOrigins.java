@@ -36,11 +36,12 @@ import java.util.Set;
  * condition or a {@code match} chooses is one of the values its arms are, which is more than one
  * origin and is said so — unless an arm is no place, and then it is a value of its own.
  *
- * <p>What a number is made of is the arithmetic's to say ({@link AffineForms#partsOf}): an operator's
- * operands, an operation's declared arguments and the value a newtype wraps are followed, and
- * nothing else is. A name given a value that is no place — a literal, a call — is the root: it is
- * the data, and there is nothing further to follow. A value that names none is no origin, and a
- * number with no origin is told apart from nothing.
+ * <p>What a number is made of is the arithmetic's to say ({@link AffineForms.Consumed}): it tells
+ * where it took a value, written or folded, and this answers where each of those is read out of.
+ * What the arithmetic can take as a value is its own list, and this keeps none. A name given a
+ * value that is no place — a literal, a call — is the root: it is the data, and there is nothing
+ * further to follow. A value that names none is no origin, and a number with no origin is told
+ * apart from nothing.
  */
 final class DataOrigins {
 
@@ -51,9 +52,6 @@ final class DataOrigins {
 
     /** The arithmetic a bound is read as a number by, which says what a number is made of. */
     private final AffineForms.Reading<Quantity, InputReads> arithmetic;
-
-    /** The names whose numbers have been read, in the one bound this is asked of. */
-    private final Set<BindingId> numbered = new HashSet<>();
 
     /** What each root binding is called, for a reader; no part of which data it is. */
     private final Map<BindingId, String> called = new LinkedHashMap<>();
@@ -67,48 +65,67 @@ final class DataOrigins {
      *  is read out of none. */
     BoundHeldIn ofTheNumbersIn(Core number, InputReads reads) {
         Set<Location> origins = new LinkedHashSet<>();
-        numbersIn(number, reads, Set.of(), origins);
+        // What the number was made of is what the arithmetic that decided it took as a value, so it
+        // is asked of that and this answers only where each of those was read out of.
+        AffineForms.outcome(number, reads, arithmetic, new AffineForms.Consumed<>() {
+            @Override
+            public void written(Core expression, InputReads at) {
+                origins.addAll(placeOf(expression, at, Set.of()));
+            }
+
+            @Override
+            public void folded(Core expression, InputReads at) {
+                collectIn(expression, at, origins);
+            }
+        });
         return origins.isEmpty() ? null : new BoundHeldIn(List.copyOf(origins), called);
     }
 
     /**
-     * A number is data where it is a field of some, or an element of a container. A name is what
-     * it was given, so a number named by a {@code let} or handed to a helper is read out of what
-     * it was made of, and a name given a literal is made of none.
+     * Where the value written at {@code leaf} is read out of: a field of some data, an element of a
+     * container, or what a name was given — and nothing where it is a value of no place, which a
+     * literal is.
      *
-     * <p>{@code onPath} is the bindings this walk is inside of, which is what a cycle is. What
-     * another branch of the walk met is no part of it.
+     * <p>{@code onPath} is the bindings this is inside of, which is what a cycle is. What another
+     * branch of the walk met is no part of it.
      */
-    private void numbersIn(Core number, InputReads reads, Set<BindingId> onPath,
-                           Set<Location> into) {
-        switch (Core.withoutStanding(number)) {
-            case Core.FieldAccess field -> into.addAll(originsOf(field, reads, onPath));
-            case Core.FieldProjection projection ->
-                    into.addAll(originsOf(projection, reads, onPath));
+    private Set<Location> placeOf(Core leaf, InputReads at, Set<BindingId> onPath) {
+        switch (Core.withoutStanding(leaf)) {
+            case Core.FieldAccess field -> {
+                return originsOf(field, at, onPath);
+            }
+            case Core.FieldProjection projection -> {
+                return originsOf(projection, at, onPath);
+            }
             case Core.Read name -> {
-                // Read once: what a name was made of is the same wherever it is read from, and a
-                // value that names the same binding twice would otherwise be walked once for each
-                // way down to it, which doubles with every name that names another twice.
-                if (onPath.contains(name.binding()) || !numbered.add(name.binding())) {
-                    return;
+                if (onPath.contains(name.binding())) {
+                    return Set.of();
                 }
-                if (!reads.containersTheElementCameFrom(name).isEmpty()) {
-                    into.addAll(originsOf(name, reads, onPath));
-                } else if (reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                if (!at.containersTheElementCameFrom(name).isEmpty()) {
+                    return originsOf(name, at, onPath);
+                }
+                if (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
                         instanceof ReadMeaning.Through through) {
-                    numbersIn(through.denotes().value(), through.denotes().at(),
-                            with(onPath, name.binding()), into);
+                    return placeOf(through.denotes().value(), through.denotes().at(),
+                            with(onPath, name.binding()));
                 }
+                return Set.of();
             }
-            // What else a number is made of is the arithmetic's to say: the same parts it composes
-            // the number out of, so an operation it reads a number through is one this reads the
-            // data of.
             default -> {
-                for (AffineForms.Part<InputReads> part
-                        : AffineForms.partsOf(number, reads, arithmetic)) {
-                    numbersIn(part.expression(), part.at(), onPath, into);
-                }
+                return Set.of();
             }
+        }
+    }
+
+    /** Where every place inside {@code expression} is read out of: a number folded from an
+     *  expression is made of whatever is in it. */
+    private void collectIn(Core expression, InputReads at, Set<Location> into) {
+        Core node = Core.withoutStanding(expression);
+        switch (node) {
+            case Core.FieldAccess _, Core.FieldProjection _, Core.Read _ ->
+                    into.addAll(placeOf(node, at, Set.of()));
+            default -> ScopeStep.forEachChild(node, (child, step) -> collectIn(child,
+                    at.entering(step, read.rules().symbols(), read.rules().newtypes()), into));
         }
     }
 

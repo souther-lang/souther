@@ -14,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -118,6 +119,19 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                 + " else gradeIn({ let t = first\n        if useFirst then t else t }, a.v)");
     }
 
+    /** The readings of one line reached under other lines of the compared position stand in
+     *  other runs beside it, and the point beside the line is one: the report is made, and a
+     *  row through the one reading meets the points of the table both readings read. */
+    @Test
+    void readingsOfOneLineBesideOtherLinesOfThePositionAreOneLine() {
+        String report = reportOf(model(Shape.FLAT, "if useFirst then gradeIn(first, a.v)"
+                + " else gradeIn({ let t = first\n        if a.v > 5 then t else t }, a.v)"));
+        // The line of the table is met; what is left owed is the line the argument writes itself.
+        assertFalse(isOwedAt(report, "ON point", "= 100"), report);
+        assertFalse(isOwedAt(report, "OFF point", "= 99"), report);
+        assertTrue(isOwedAt(report, "ON point", "= 6"), report);
+    }
+
     /** A helper over a limit, applied to two limits whose bounds are alike. */
     private static String helperOver(String body, String call) {
         return """
@@ -178,6 +192,17 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                         + " else atLeast(second, Decimal.fromInt(a.v))")
                 .replace("(l: Limit, m: Int)", "(l: Limit, m: Decimal)");
         assertEquals(2, placesInTheDocument(source).size());
+    }
+
+    /** A bound the compiler folds to a number, from a string a record holds. */
+    @Test
+    void aBoundFoldedFromAStringIsReadOutOfTheDataItIsAFieldOf() {
+        String source = helperOver("if String.length(l.label) <= m then 2 else 1", TWO_LIMITS)
+                .replace("data Limit = { lowerBound: Int }", "data Limit = { label: String }")
+                .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
+                .replace("let second: Limit = Limit { label = \"aaaa\" }",
+                        "let second: Limit = Limit { label = \"bbbb\" }");
+        assertEquals(2, placesInTheDocument(source).size(), placesInTheDocument(source).toString());
     }
 
     /** A number handed to a helper is read out of what the caller read it out of: a field of a

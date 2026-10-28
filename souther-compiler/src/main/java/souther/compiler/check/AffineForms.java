@@ -203,6 +203,30 @@ public final class AffineForms {
     }
 
     /**
+     * Where the reading of a number ended in a value, told to whoever asks what the number was made
+     * of.
+     *
+     * <p>Told by the walk that decides the number and not worked out again beside it: what it takes
+     * as a value without reading further is the one list of what a number can be made of, and a
+     * reader keeping its own would be a second list nothing compares.
+     */
+    public interface Consumed<E> {
+
+        /** A value a carrier writes was found at {@code expression}, read in {@code at}. */
+        void written(Core expression, E at);
+
+        /** {@code expression} folded to the number it is, from whatever is inside it. */
+        void folded(Core expression, E at);
+    }
+
+    /** {@link #outcome(Core, Object, Reading)}, telling {@code told} where each part of the number
+     *  ended in a value. */
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
+                                               Consumed<E> told) {
+        return of(raw, at, reading, new Walk<>(told));
+    }
+
+    /**
      * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
      * the caller keeps for as long as it reads with {@code reading}.
      *
@@ -225,13 +249,35 @@ public final class AffineForms {
          *  read came to — or null where nobody keeps it, and each fold is its own. */
         private final FoldedValue.Kept folds;
 
+        /** Who is told where the reading ended in a value, or null where nobody asked. */
+        private final Consumed<E> told;
+
         Walk() {
             this.folds = null;
+            this.told = null;
+        }
+
+        Walk(Consumed<E> told) {
+            this.folds = null;
+            this.told = told;
         }
 
         Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept folds) {
             super(answered);
             this.folds = folds;
+            this.told = null;
+        }
+
+        void written(Core expression, E at) {
+            if (told != null) {
+                told.written(expression, at);
+            }
+        }
+
+        void folded(Core expression, E at) {
+            if (told != null) {
+                told.folded(expression, at);
+            }
         }
     }
 
@@ -389,6 +435,7 @@ public final class AffineForms {
         // the operators, and each of those is arithmetic this composes.
         BigDecimal folded = foldedNumber(e, at, reading, following);
         if (folded != null) {
+            following.folded(e, at);
             return new Outcome.Composed<>(
                     LinearForm.constant(ExactRatio.of(folded)));
         }
@@ -756,6 +803,7 @@ public final class AffineForms {
         Core e = Core.withoutStanding(asPlaced);
         LinearForm<A> written = literal(e, at, reading);
         if (written != null) {
+            following.written(e, at);
             return written;
         }
         return switch (e) {
@@ -834,6 +882,9 @@ public final class AffineForms {
             // eliminate, the reading's own evidence that the projection keeps what it reads —
             // which is how a name a call was given is read through with no construction in sight.
             case Core.FieldAccess fa -> {
+                // The place read, told before it is read through: what it comes to is the value
+                // written where the data was built, which no longer says whose field it was.
+                following.written(fa, at);
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
@@ -865,59 +916,6 @@ public final class AffineForms {
         };
     }
 
-    /** One expression {@link #partsOf} says another is composed of, and the names in force at it. */
-    public record Part<E>(Core expression, E at) {}
-
-    /**
-     * What {@code asPlaced} is arithmetic over, which is what {@link #composed} reads the form of:
-     * the operands of an operator, the arguments the library says an operation answers a form of,
-     * the arguments the environment takes a call as a form of, the value a newtype's construction
-     * wraps, and the body of a binding. Nothing for what the walk takes as a leaf.
-     *
-     * <p>Written beside {@link #composed} and answering for at least the expressions it composes, so
-     * a reader after what a number was made of — where it was read out of — asks the arithmetic
-     * which parts count and keeps no list of its own. An operation added to one that is not added to
-     * the other is a number the walk computes and the reader cannot trace.
-     *
-     * <p>More than the form composes where the number is made of the same parts all the same: a
-     * number worked out from a table's field by an operator the form cannot carry is still read out
-     * of the table, so every operand of an operator counts, whichever operator it is.
-     */
-    public static <A, E> List<Part<E>> partsOf(Core asPlaced, E at, Reading<A, E> reading) {
-        Core e = Core.withoutStanding(asPlaced);
-        return switch (e) {
-            case Core.Neg n -> List.of(new Part<>(n.operand(), at));
-            case Core.Binary b -> List.of(new Part<>(b.left(), at), new Part<>(b.right(), at));
-            case Core.PreservedCall _, Core.Call _ -> {
-                LinearForm<Core> taken = e instanceof Core.PreservedCall
-                        ? reading.takenAsAForm(e, at) : null;
-                if (taken != null) {
-                    yield taken.coefs().keySet().stream().map(each -> new Part<>(each, at))
-                            .toList();
-                }
-                LinearForm<DeclaredArgument> says = formSaidOf(e);
-                List<Core> args = says == null ? List.of() : Terms.argsOf(e);
-                List<Part<E>> out = new ArrayList<>();
-                if (says != null) {
-                    for (DeclaredArgument each : says.coefs().keySet()) {
-                        int position = CallArguments.positionOf(each, Terms.operationOf(e));
-                        if (position >= 0 && position < args.size()) {
-                            out.add(new Part<>(args.get(position), at));
-                        }
-                    }
-                }
-                yield out;
-            }
-            case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                            reading.declarations().kinds(), reading.declarations().sums())
-                            .isWrapped() ->
-                    List.of(new Part<>(nd.values().get(0).value(), at));
-            case Core.LetIn li -> List.of(new Part<>(li.body(), reading.inside(li, at)));
-            default -> List.of();
-        };
-    }
-
     /**
      * {@code p} read as arithmetic: the arm above for a field access, asked of each of its names in
      * turn from the last one down.
@@ -933,6 +931,7 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> projected(Core.FieldProjection p, E at,
                                                   Reading<A, E> reading, Walk<A, E> following,
                                                   Stop<A, E> stopped) {
+        following.written(p, at);
         // The projections the reading went down through, below `p`, and the stop each one's own
         // arm records — the first being the caller's.
         List<Core.FieldProjection> through = new ArrayList<>();
@@ -946,6 +945,7 @@ public final class AffineForms {
             // any expression ({@link #composed}).
             LinearForm<A> written = literal(here, at, reading);
             if (written != null) {
+                following.written(here, at);
                 form = written;
                 break;
             }
@@ -1003,6 +1003,7 @@ public final class AffineForms {
                                                Walk<A, E> following, Stop<A, E> stopped) {
         BigDecimal folded = foldedNumber(p, at, reading, following);
         if (folded != null) {
+            following.folded(p, at);
             return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
         }
         LinearForm<A> leaf = reading.leafOf(p, at, stopped.at);
