@@ -490,7 +490,7 @@ final class DemandReading {
                     Optional<ModelOccurrence> copy = copyOf(leaf);
                     if (copy.isPresent()) {
                         for (String key : List.of(leaf.part().key(),
-                                leaf.part().denied().key())) {
+                                leaf.part().deniedKey())) {
                             found.computeIfAbsent(key, _ -> new ModelOccurrences.Gathering())
                                     .add(copy.get());
                         }
