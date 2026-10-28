@@ -85,13 +85,6 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             this(name, weights, ExactRatio.ONE, sums, exact);
         }
 
-        /** Every operation the program works out, told or not. */
-        List<IntSum> allOperations() {
-            List<IntSum> all = new ArrayList<>(sums);
-            all.addAll(hidden);
-            return all;
-        }
-
         ExactRatio weightOf(int term) {
             return ExactRatio.of(weights.get(term)).times(scale).orNull();
         }
