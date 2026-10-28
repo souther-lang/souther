@@ -313,7 +313,7 @@ final class Pullback {
                      Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _ -> {
                     into.add(stated.key());
-                    into.add(stated.denied().key());
+                    into.add(stated.deniedKey());
                 }
             }
         }

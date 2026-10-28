@@ -2082,7 +2082,7 @@ final class DemandReading {
      */
     private static Read ofAFormOfTheInput(LinearForm<NumericTerm> against, Rel met,
                                           InputReading read) {
-        return switch (read.quantities().region().assuming(against, met)) {
+        return switch (FormsTakenIn.of(read).assuming(against, met)) {
             case SearchRegion.Assumption.Taken _ -> new Read.Demands(
                     new RowDemand.Relational(new TakenConstraint.Affine(against, met)));
             // Two values on no order held equal or unequal, which is what a row writes
