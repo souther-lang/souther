@@ -87,6 +87,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -1429,9 +1430,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
-        if (sides.size() == 2 && heldWhole && written.isEmpty()
-                && past.equals(DemandReading.Answered.NOTHING) && independent.between(0, 1)) {
-            shown = shown.partnered(stringsAPartnerCanHold(carriers, out, read));
+        if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
+            shown = shown.partnered(stringsAPartnerCanHold(carriers, out, read, written,
+                    past.narrowing(), () -> !mayStopOnWhatItReads(past, read, along, written,
+                            declined)));
         }
         return reachedAlong(shown, past, read, along, written, declined);
     }
@@ -1447,10 +1449,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * is written at the other. Nothing is said where the other's strings are not worked out
      * exactly, since a value it cannot hold would then be counted among those it can.
      *
-     * @param shown the places already shown undivided, which need no other word
+     * <p>Along a way that states something or works something out before the relation, only where
+     * none of that reaches the strings of either side: a statement about the container an element
+     * is in, or about whether a value is there, leaves the strings of both as they were, and a
+     * stop on a value that is no string of theirs does too.
+     *
+     * @param shown      the places already shown undivided, which need no other word
+     * @param written    what the way states
+     * @param narrowing  what the numbers of places outside a container say along the run
+     * @param runGetsThere whether the run is shown to get to the relation at every value it
+     *                   reads, asked only once a pair of strings is otherwise parted
      */
     private Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> stringsAPartnerCanHold(
-            List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read) {
+            List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read,
+            List<OnAWay> written, List<TakenConstraint> narrowing, BooleanSupplier runGetsThere) {
         if (kind != Kind.AFFINE || remainder != null || sides.size() != 2
                 || (relation != Rel.EQ && relation != Rel.NE)
                 || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
@@ -1465,7 +1477,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || !(there.number() instanceof NumericTerm.ValueOf theirs)
                     || !(carriers.get(at) instanceof Carrier.Text)
                     || !(carriers.get(1 - at) instanceof Carrier.Text)
-                    || shown.contains(FilingCoordinate.of(mine))) {
+                    || shown.contains(FilingCoordinate.of(mine))
+                    || !leavesTheStringsOf(mine.subjectPath(), theirs.subjectPath(), written,
+                            narrowing)) {
                 continue;
             }
             Position partner = read.domain().at(theirs.subjectPath());
@@ -1477,9 +1491,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (canBe.isAny() || canBe.isEmpty() || canBe instanceof ValueSet.WholeRuns) {
                 continue;
             }
+            if (!runGetsThere.getAsBoolean()) {
+                continue;
+            }
             out.put(mine, new StringsAPartnerCanHold(canBe, theirs.subjectPath().toString()));
         }
         return out;
+    }
+
+    /**
+     * Whether what a way states, and what the numbers outside a container say along the run,
+     * leave the strings at {@code mine} and {@code theirs} as the declarations hold them.
+     *
+     * <p>A statement of which case a value is, or of how many a container holds, says nothing of
+     * the values there; any other statement does not reach them only where it names neither
+     * place.
+     */
+    private static boolean leavesTheStringsOf(TermPath mine, TermPath theirs,
+                                              List<OnAWay> written,
+                                              List<TakenConstraint> narrowing) {
+        for (OnAWay each : written) {
+            boolean saysNothingOfValues = each.whatStands() && each.relation() == null
+                    && each.elementsOf() == null;
+            if (!saysNothingOfValues
+                    && (each.positions().contains(mine) || each.positions().contains(theirs)
+                    || each.elementsOf() != null)) {
+                return false;
+            }
+        }
+        return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
+                .anyMatch(term -> term.subjectPath().equals(mine)
+                        || term.subjectPath().equals(theirs)));
     }
 
     /**

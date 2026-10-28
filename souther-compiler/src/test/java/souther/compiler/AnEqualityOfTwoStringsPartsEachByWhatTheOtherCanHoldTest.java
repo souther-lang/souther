@@ -53,6 +53,95 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         return out;
     }
 
+    /** The classes of {@code a} and {@code b} of {@code f} over the two and a number {@code n}. */
+    private static Map<String, List<String>> classesOfTheStringsBehind(String guard) {
+        Compilation compilation = Compilation.ofSource("""
+                module example.equal
+
+                data L = String
+                    invariant String.matches("%s", value)
+
+                data M = String
+                    invariant String.matches("%s", value)
+
+                behavior f : (a: L, b: M, n: Int) -> Bool
+
+                let f (a, b, n) = {
+                    %s
+                    a.value == b.value
+                }
+                """.formatted(LETTERS, LETTERS_AND_DIGITS, guard), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, PartitionEvidence> all = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        Map<String, List<String>> out = new java.util.TreeMap<>();
+        all.get("f").axes().stream()
+                .filter(axis -> axis.path().equals("a") || axis.path().equals("b"))
+                .forEach(axis -> out.put(axis.path(), axis.classes()));
+        return out;
+    }
+
+    /** The places of {@code f} whose equality is not shown to reach every value of them. */
+    private static List<String> notShownToReachEveryValue(String lets) {
+        Compilation compilation = Compilation.ofSource("""
+                module example.equal
+
+                data L = String
+                    invariant String.matches("%s", value)
+
+                data Row = { id: String, tag: String? }
+
+                let tagIs (text: String, r: Row): Bool =
+                    match r.tag with
+                        | Some own -> own == text
+                        | None -> false
+
+                behavior f : (a: L, rows: List<Row>) -> List<Row>
+
+                %s
+                """.formatted(LETTERS, lets), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        PartitionEvidence evidence = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get("f");
+        assertNotNull(evidence, "the model under test compiles");
+        return evidence.notRead().stream()
+                .filter(each -> each.reason().name()
+                        .equals("RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE"))
+                .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
+    }
+
+    /** A tag of a row, read in a filter beside a string, is parted by what that string can be. */
+    @Test
+    void theStringsOfAListsElementsAreParted() {
+        assertEquals(List.of(), notShownToReachEveryValue(
+                "let f (a, rows) = List.filter(r -> tagIs(a.value, r), rows)"));
+    }
+
+    /** The same, where the string reaches the filter as the one element of a list it is applied to. */
+    @Test
+    void theSameFilterAppliedFromAListOfTheStringIsParted() {
+        assertEquals(List.of(), notShownToReachEveryValue(
+                "let f (a, rows) = List.flatMap(t -> List.filter(r -> tagIs(t, r), rows),"
+                        + " [ a.value ])"));
+    }
+
+    /** A guard on a number beside the two says nothing of their strings. */
+    @Test
+    void aGuardOnAnotherPositionLeavesTheStringsPartedAsTheyWere() {
+        assertEquals(Map.of("b", List.of("b/x can be a", "b/x is never a")),
+                classesOfTheStringsBehind("guard n >= 1 else false"));
+    }
+
+    /** A guard on the string itself narrows it before the equality, and nothing is said. */
+    @Test
+    void aGuardOnTheStringItselfPartsNothing() {
+        assertEquals(Map.of(),
+                classesOfTheStringsBehind("guard String.length(b.value) >= 2 else false"));
+    }
+
     /** The strings of {@code b} that {@code a} cannot hold are a class of {@code b}'s own. */
     @Test
     void theStringsThePartnerCannotHoldAreAClassOfTheOther() {
