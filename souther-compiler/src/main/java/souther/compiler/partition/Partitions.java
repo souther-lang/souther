@@ -867,13 +867,17 @@ public final class Partitions {
             // row writes one of those values under every name the type puts on it. Left off, a
             // class drawn over strings is asked about a construction and holds none of them —
             // which is the classes of a position holding nothing the position holds.
+            // And the rules that left values open, whose values beside the classes are in none.
             case Classing.Classed.Composed(List<PartitionClass> it) ->
                     new Composition(it.stream().map(each -> each.under(view.wrappers())).toList(),
-                            composedFrom(dividing), false, null);
+                            composedFrom(dividing), false, null,
+                            answered.leftOpen().stream()
+                                    .<RuleEvidenceOrigin>map(each -> each.statement().origin())
+                                    .distinct().toList());
             // No classes and nothing they were composed from, and the cuts stand: they are
             // observations of their own rather than a projection of the classes.
             case Classing.Classed.NotComposed(var why) ->
-                    new Composition(List.of(), List.of(), true, why);
+                    new Composition(List.of(), List.of(), true, why, List.of());
         };
         // What a reader is told about the rules the classes were not composed out of. The account
         // for them is above, with every other rule's — this is the sentence, and only where the
@@ -946,7 +950,7 @@ public final class Partitions {
                 made.keepsCuts()
                         ? mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier)
                         : List.of(),
-                parted, narrowedOf(axis),
+                parted, narrowedOf(axis), made.leftOpenByFor(axis),
                 reachable.isEmpty() && points.isEmpty() ? null : new BodyCutInspection.Evidence(),
                 stated);
     }
@@ -983,11 +987,12 @@ public final class Partitions {
                                           List<PartitionClass> classes,
                                           List<RuleEvidenceOrigin> divides, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
+                                          List<RuleEvidenceOrigin> leftOpenBy,
                                           BodyCutInspection drew, RulesWithNoLine rules) {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
-        out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed));
+        out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -1027,13 +1032,16 @@ public final class Partitions {
      * @param keepsCuts whether the cuts stand. They do wherever the classes are not sets: a cut is
      *                  a place on the order and a set class has no answer to where it lies
      * @param why       what stopped the classes, or null where nothing did
+     * @param leftOpenBy the rules of {@code divides} that leave some values in none of
+     *                  {@code classes} ({@link Axis#leftOpenBy})
      */
     private record Composition(List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
-                               boolean keepsCuts, BlockReason.RuleWithoutLineReason why) {
+                               boolean keepsCuts, BlockReason.RuleWithoutLineReason why,
+                               List<RuleEvidenceOrigin> leftOpenBy) {
 
         /** The order is the vocabulary, so the run of classes the caller works out is the answer. */
         private static final Composition ON_AN_ORDER =
-                new Composition(List.of(), List.of(), true, null);
+                new Composition(List.of(), List.of(), true, null, List.of());
 
         boolean onAnOrder() {
             return this == ON_AN_ORDER;
@@ -1057,6 +1065,16 @@ public final class Partitions {
                 return List.of();
             }
             return classesOf(axis, onAnOrder() ? onTheOrder : this::classes);
+        }
+
+        /**
+         * The rules that leave values out of {@link #classesFor}'s classes: this answer's, where
+         * those are its own classes, and none where they are what the declarations already
+         * divide the number into, which hold every value.
+         */
+        List<RuleEvidenceOrigin> leftOpenByFor(Axis axis) {
+            return why != null || onAnOrder() || (axis != null && axis.derivable())
+                    ? List.of() : leftOpenBy;
         }
     }
 

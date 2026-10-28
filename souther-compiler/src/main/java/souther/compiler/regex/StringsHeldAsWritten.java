@@ -123,15 +123,17 @@ public final class StringsHeldAsWritten {
      * answer here does not say that no value exists.
      */
     public boolean isEmpty() {
-        return holdsNoneIn(machine);
+        return shortestIn(machine) < 0;
     }
 
     /**
-     * The fewest code points one of these has, or -1 where there are none: the machine walked a
-     * layer at a time from its start, each step taking one code point, to the first state that
-     * stops.
+     * The fewest code points one of the strings of {@code language} held as written has, or -1
+     * where it holds none, without making their machine: the language's walked a layer at a time
+     * from its start, a step taken where it holds a stable starter, to the first state that
+     * stops. The machine of these keeps every such code point of every step, so it is the same
+     * walk.
      */
-    public long shortest() {
+    static long shortestIn(Automaton language) {
         BitSet reached = new BitSet();
         Deque<Integer> layer = new ArrayDeque<>();
         reached.set(Automaton.START);
@@ -139,11 +141,11 @@ public final class StringsHeldAsWritten {
         for (long length = 0; !layer.isEmpty(); length++) {
             Deque<Integer> next = new ArrayDeque<>();
             for (int state : layer) {
-                if (machine.stopsAt(state)) {
+                if (language.stopsAt(state)) {
                     return length;
                 }
-                for (Automaton.Step step : machine.stepsFrom(state)) {
-                    if (!reached.get(step.to())) {
+                for (Automaton.Step step : language.stepsFrom(state)) {
+                    if (!reached.get(step.to()) && StableStarters.anyWithin(step.over())) {
                         reached.set(step.to());
                         next.add(step.to());
                     }
@@ -152,31 +154,6 @@ public final class StringsHeldAsWritten {
             layer = next;
         }
         return -1;
-    }
-
-    /**
-     * {@link #isEmpty} of the strings of {@code language}, without making their machine: a step
-     * is taken where it holds a stable starter, which stops at the first one, and the machine of
-     * these keeps every such code point of every step.
-     */
-    static boolean holdsNoneIn(Automaton language) {
-        BitSet reached = new BitSet();
-        Deque<Integer> pending = new ArrayDeque<>();
-        reached.set(Automaton.START);
-        pending.add(Automaton.START);
-        while (!pending.isEmpty()) {
-            int state = pending.poll();
-            if (language.stopsAt(state)) {
-                return false;
-            }
-            for (Automaton.Step step : language.stepsFrom(state)) {
-                if (!reached.get(step.to()) && StableStarters.anyWithin(step.over())) {
-                    reached.set(step.to());
-                    pending.add(step.to());
-                }
-            }
-        }
-        return true;
     }
 
     /**

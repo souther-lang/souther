@@ -67,7 +67,7 @@ class ANumberTheExactArithmeticCouldNotHoldIsNeverReadAsADecidedAnswerTest {
 
         Classification at = InputClassifications.decided(axis, List.of("over", "under"),
                 List.of(new Membership.NotWorkedOut(why), new Membership.NotWorkedOut(why)),
-                new ObservedValue.Integer(0));
+                false, new ObservedValue.Integer(0));
 
         assertTrue(at instanceof Classification.Unclassified,
                 "a count the exact arithmetic could not work out settles no class, and is not"

@@ -13,7 +13,6 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
-import souther.compiler.values.TextExtents;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -206,10 +205,18 @@ final class Classing {
      */
     enum Outcome {
 
-        /** It tells two of the position's values apart, and the classes are made out of it. */
+        /**
+         * The classes are made out of it: it tells two of the position's values apart, or it
+         * leaves some of them open and its classes are drawn over the rest, which may be all on
+         * one side of it.
+         */
         DIVIDED,
 
-        /** It was read and tells none of them apart, so it makes no class and stops nothing. */
+        /**
+         * It was read and tells none of them apart, so it makes no class and stops nothing. Said
+         * only of a rule shown on one side or the other of every value here: one leaving values
+         * open may tell those apart from the rest.
+         */
         TOLD_NOTHING_APART,
 
         /** The position has no classes, so this rule is not among what made any. */
@@ -315,10 +322,6 @@ final class Classing {
                 active.add(each);
                 continue;   // filled in below, once it is known whether the classes took it up
             }
-            Worked<Telling> worked = tellsApart(term, admits,
-                    new AsASet(set.states().whenTrue(), set.states().whenFalse(),
-                            set.states().statement()),
-                    allowance);
             Worked<LeftOpen> left = leftOpen(term, admits, set.states(), allowance);
             if (left.refused() != null) {
                 return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
@@ -327,6 +330,10 @@ final class Classing {
             if (left.answer() != null) {
                 open.add(left.answer());
             }
+            Worked<Telling> worked = tellsApart(term, admits,
+                    new AsASet(set.states().whenTrue(), set.states().whenFalse(),
+                            set.states().statement()),
+                    left.answer(), allowance);
             // What was left to work out is what a run allowed more would have worked out, and the
             // rules already qualified are qualified all the same — but there are no classes for any
             // of them to be part of, so what became of every one of them is the same thing. Said as
@@ -339,7 +346,7 @@ final class Classing {
             if (worked.answer() == Telling.UNSETTLED) {
                 return notComposed(mine, told, new BlockReason.ClassesNotComposed());
             }
-            boolean divides = worked.answer() == Telling.APART;
+            boolean divides = worked.answer() != Telling.NOTHING_APART;
             told.add(divides
                     ? new Disposed(each, Outcome.DIVIDED, null)
                     : new Disposed(each, Outcome.TOLD_NOTHING_APART,
@@ -375,6 +382,13 @@ final class Classing {
             return notComposed(mine, told, new BlockReason.ClassesNotComposed());
         }
         List<Cell> cells = refined.answer();
+        // Every value the position holds left open by one rule or another, so no class stands
+        // over any of them. The position has no classes, and that is the reason: what was open
+        // stands beside no class, and is said as why there are none.
+        if (cells.isEmpty() && !open.isEmpty()) {
+            return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
+                    open.stream().flatMap(each -> each.open().stream()).toList()));
+        }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
             out.add(classOf(term, cell, carrier, perWitness, writing).ofTheNumber(term));
@@ -506,9 +520,18 @@ final class Classing {
      * <p>Both sides against what the position holds, and not against every value there is. A rule
      * can name strings on both sides and have the declarations leave nothing on one of them, which
      * is the position undivided by it however the strings fall.
+     *
+     * <p>And each side is what it was shown to hold, with {@code open} beside them: the values it
+     * was shown on neither side of, which may be on either. A side shown to hold nothing is one
+     * that does only where nothing is open, so a rule leaving values open is never one that tells
+     * nothing apart. Its classes are drawn over what it was shown on, which is a class to each
+     * side shown to hold a value there.
+     *
+     * @param open what the rule leaves open of the position's values, or null where it leaves
+     *             none
      */
     private static Worked<Telling> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
-                                              AsASet said,
+                                              AsASet said, LeftOpen open,
                                               Allowance<NumericTerm.FromOnePosition> allowance) {
         Allowance.Composed yes =
                 allowance.meet(Sameness.Block.of(term), admits, said.whenTrue().values());
@@ -520,19 +543,33 @@ final class Classing {
             return Worked.refusedAt(no.refused());
         }
         ValuesWithin holding = said.whenTrue().over(yes.set());
-        if (holding.shownToHoldNone() || TextExtents.shownToHoldNone(no.set())) {
+        ValuesWithin failing = ValuesWithin.all(no.set());
+        if (open == null && (holding.shownToHoldNone() || failing.shownToHoldNone())) {
             return Worked.to(Telling.NOTHING_APART);
         }
-        return Worked.to(holding.shownToHoldAValue() && TextExtents.shownToHoldAValue(no.set())
-                ? Telling.APART : Telling.UNSETTLED);
+        if (holding.shownToHoldAValue() && failing.shownToHoldAValue()) {
+            return Worked.to(Telling.APART);
+        }
+        return Worked.to(open != null && settled(holding) && settled(failing)
+                ? Telling.OVER_WHAT_WAS_SHOWN : Telling.UNSETTLED);
+    }
+
+    /** Whether {@code side} is shown to hold a value or shown to hold none. */
+    private static boolean settled(ValuesWithin side) {
+        return side.shownToHoldAValue() || side.shownToHoldNone();
     }
 
     /**
      * What a rule did to the values of a position. A side whose strings are not shown to include a
      * value is neither one that holds nothing nor one that holds something, so it is not a rule
      * that tells nothing apart.
+     *
+     * <p>{@link #OVER_WHAT_WAS_SHOWN} is a rule that leaves values open and is shown to hold a
+     * value on one side at most of what it was shown on: whether it tells two values apart turns
+     * on the values it was not shown on. Its classes are drawn as any rule's are, over what it was
+     * shown on.
      */
-    private enum Telling { APART, NOTHING_APART, UNSETTLED }
+    private enum Telling { APART, OVER_WHAT_WAS_SHOWN, NOTHING_APART, UNSETTLED }
 
     /**
      * One class the rules about a position leave it divided into.

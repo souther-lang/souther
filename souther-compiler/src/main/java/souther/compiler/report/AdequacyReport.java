@@ -6095,9 +6095,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * Which values a relation shown over some of them was not shown over, as an entry of a
-     * question's {@code stopped} writes it: those past a length, said by the most code points the
-     * classes were shown at, and whether some are open whatever their length.
+     * Where the values a relation shown over some of them was not shown over lie, as an entry of a
+     * question's {@code stopped} writes it: past which length some are, and whether some are open
+     * whatever their length. A bound on them, as {@link BlockReason.RelationShownOverARegion}
+     * says, and not which they are.
      */
     private static void leftOpen(ObjectNode into, BlockReason.RelationShownOverARegion open) {
         ObjectNode left = into.putObject("leftOpen");

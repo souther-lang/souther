@@ -324,27 +324,77 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
     /**
      * A rule shown on its true side only as far as two code points, at a position whose values on
-     * that side are all three long: no value is shown to hold the rule, so the rule tells none of
-     * them apart, and the one it does not show is left open rather than made a class no value is
-     * in.
+     * that side are all three long. No value is shown to hold the rule, and that is not that none
+     * does: {@code abc} holds it and {@code ABC} does not, so the rule tells the two apart. It is
+     * never one that tells nothing apart. Its classes are drawn over what it was shown on, which is
+     * {@code ABC} alone, and {@code abc} is in none of them and left open.
      */
     @Test
-    void aTrueSideShownOnlyShorterThanEveryValueOnItMakesNoClassThere() {
-        SetStatement read = divisionIn(readingsOf("""
-                behavior f : (code: String) -> Answer
-                let f (code) = if String.matches("[a-z]+", code) then Yes else No
-                """));
-        Classing.Result answered = classedShownUpTo(read, 2L, ValueSet.oneOf(
+    void aTrueSideShownOnlyShorterThanEveryValueOnItLeavesThemOpenAndNotUndivided() {
+        Classing.Result answered = classedShownUpTo(matchingLowerCase(), 2L, ValueSet.oneOf(
                 new LinkedHashSet<>(List.of(new Value.Text("abc"), new Value.Text("ABC")))),
                 place -> null);
 
-        assertEquals(List.of(Classing.Outcome.TOLD_NOTHING_APART),
+        assertEquals(List.of(Classing.Outcome.DIVIDED),
                 answered.forEach().stream().map(Classing.Disposed::outcome).toList(),
-                "no value is shown on the side the rule holds on");
+                "a value open may be on the side no value is shown on");
+        List<PartitionClass> classes = assertInstanceOf(Classing.Classed.Composed.class,
+                answered.classed()).classes();
+        assertEquals(1, classes.size(), "one class, of what was shown: " + classes);
+        assertEquals(Membership.MATCH, Recognitions.membershipOf(
+                classes.getFirst().recognises(), new ObservedValue.Text("ABC")));
+        assertEquals(Membership.NO_MATCH, Recognitions.membershipOf(
+                classes.getFirst().recognises(), new ObservedValue.Text("abc")));
         assertEquals(1, answered.leftOpen().size(), "and the one past the length is left open");
         assertTrue(answered.leftOpen().getFirst().open().stream()
                         .anyMatch(each -> each.has(new Value.Text("abc"))),
                 "it is the value past the length: " + answered.leftOpen());
+    }
+
+    /**
+     * The other way round: every value of the position is shown on the true side but one past the
+     * length, and none on the false side. The rule may tell that one from the rest, so it is not
+     * one that tells nothing apart, and its one class is the values it was shown to hold on.
+     */
+    @Test
+    void aFalseSideHoldingNothingBesideValuesLeftOpenIsNotUndividedEither() {
+        Classing.Result answered = classedShownUpTo(matchingLowerCase(), 3L, ValueSet.oneOf(
+                new LinkedHashSet<>(List.of(new Value.Text("ab"), new Value.Text("abcd")))),
+                place -> null);
+
+        assertEquals(List.of(Classing.Outcome.DIVIDED),
+                answered.forEach().stream().map(Classing.Disposed::outcome).toList());
+        List<PartitionClass> classes = assertInstanceOf(Classing.Classed.Composed.class,
+                answered.classed()).classes();
+        assertEquals(1, classes.size(), "one class, of what was shown: " + classes);
+        assertEquals(Membership.MATCH, Recognitions.membershipOf(
+                classes.getFirst().recognises(), new ObservedValue.Text("ab")));
+        assertEquals(1, answered.leftOpen().size());
+    }
+
+    /**
+     * Every value of the position past the length the rule was shown to: none is shown on either
+     * side, so there is no class to draw, and that is why the position has none. Nothing says the
+     * rule tells nothing apart.
+     */
+    @Test
+    void aPositionWhoseEveryValueIsLeftOpenHasNoClassForThatReason() {
+        Classing.Result answered = classedShownUpTo(matchingLowerCase(), 2L, ValueSet.oneOf(
+                new LinkedHashSet<>(List.of(new Value.Text("abc")))), place -> null);
+
+        Classing.Classed.NotComposed none = assertInstanceOf(Classing.Classed.NotComposed.class,
+                answered.classed());
+        assertEquals(new BlockReason.RelationShownOverARegion(false, 2L), none.why());
+        assertEquals(List.of(Classing.Outcome.NOT_COMPOSED),
+                answered.forEach().stream().map(Classing.Disposed::outcome).toList());
+    }
+
+    /** The one division a rule that a code is lower case states. */
+    private static SetStatement matchingLowerCase() {
+        return divisionIn(readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) = if String.matches("[a-z]+", code) then Yes else No
+                """));
     }
 
     /**

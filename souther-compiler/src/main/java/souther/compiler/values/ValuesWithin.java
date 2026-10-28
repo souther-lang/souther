@@ -15,8 +15,9 @@ import souther.compiler.regex.Language;
  * with something else, which value stands for it — asks the length with the set, and none of them
  * can ask the set alone.
  *
- * <p>A length bounds strings and nothing else: a value that is no string is in this where it is in
- * the set.
+ * <p>A length is a string's. Where one bounds these they are strings, each no longer than a
+ * {@code String} can be, and a value that is no string is none of them; where none does they are
+ * whatever the set holds.
  *
  * @param values   the set
  * @param shortest the fewest code points a string of this has
@@ -79,7 +80,7 @@ public record ValuesWithin(ValueSet values, long shortest, Long longest) {
     }
 
     private boolean fits(Value value) {
-        return TextExtents.ofALengthWithin(value, shortest, longest);
+        return !bounded() || TextExtents.ofALengthWithin(value, shortest, longest);
     }
 
     /** Whether one of these is shown to be a value, as {@link TextExtents#shownToHoldAValue}

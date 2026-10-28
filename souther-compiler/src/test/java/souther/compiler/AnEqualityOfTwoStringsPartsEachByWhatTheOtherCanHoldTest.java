@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -277,22 +278,27 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     /**
      * A piece so far into a string that what is written before it is longer than any string is
      * shown the piece of no value, so no domain is shown on the side where it is one. Those that
-     * are no piece of any string are still shown on the other, which parts nothing, and every
-     * other domain is open whatever its length.
+     * are no piece of any string are still shown on the other, and every other domain is open
+     * whatever its length. The domains are not shown undivided by it, since one open may be on the
+     * side none is shown on: the one class is those shown on the other side, and the rest are in
+     * none.
      */
     @Test
     void aPieceNothingCanBeWrittenBeforeLeavesEveryDomainItMayBeOpen() {
-        PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*", """
+        String lets = """
                 let f (email, book) =
                     match List.get(300000000, String.split("@", email.value)) with
                         | Some d -> List.filter(r -> hasDomain(d, r), book.value)
                         | None -> []
-                """);
+                """;
+        PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*", lets);
 
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
                 leftOpenAt(evidence, "book[*].domain@Some"));
-        assertEquals(List.of(), evidence.axes().stream()
-                .filter(axis -> axis.path().equals("book[*].domain@Some")).toList());
+        assertEquals(Map.of("book[*].domain@Some",
+                        List.of("book[*].domain@Some/x is never piece 300000000 of email")),
+                classesAtOf("book[*].domain@Some", "[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*",
+                        lets));
     }
 
     private static final Map<String, List<String>> THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN =
@@ -337,16 +343,48 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     }
 
     /**
-     * A language holds sequences of code points, and a String holds only those in Normalization
-     * Form C. The second piece of the one email the language reads as {@code e}, a combining acute
-     * and {@code @b} is {@code b}, and no value has it: an email arrives as {@code é@b}, which the
-     * language does not hold. So no domain is the second piece of an email but {@code a}, and
-     * neither of the two domains the book can hold is parted by it.
+     * Every domain is shown to be the second piece of an email but those holding a code point that
+     * is no stable starter and those too long for an address round them, which are open: a domain
+     * of them may be one no email has. So the
+     * domains are never said to come out on one side of the equality — the one class is those
+     * shown on the side they are, and the rest are in none.
      */
     @Test
-    void aPieceOfAStringNoValueIsIsNoPieceOfAValue() {
-        assertEquals(Map.of(), classesAtOf("book[*].domain@Some", "a@a|e\\\\u0301@b",
-                "b|c", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+    void domainsShownOnOneSideBesideOpenOnesAreNotSaidToComeOutOnOneSide() {
+        String emails = "[^@\\\\s]+@[^@\\\\s]+";
+        PartitionEvidence evidence = evidenceOf(emails, "[^@\\\\s]+",
+                THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK);
+
+        assertEquals(Map.of("book[*].domain@Some",
+                        List.of("book[*].domain@Some/x can be piece 1 of email")),
+                classesAtOf("book[*].domain@Some", emails, "[^@\\\\s]+",
+                        THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true,
+                        LONGEST_DOMAIN_OF_AN_ADDRESS)),
+                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertFalse(notReadAt(evidence, "book[*].domain@Some").contains(
+                UndividedPosition.Reason.RULE_TELLS_NOTHING_APART),
+                notReadAt(evidence, "book[*].domain@Some").toString());
+    }
+
+    /**
+     * A language holds sequences of code points, and a String holds only those in Normalization
+     * Form C. The second piece of the one email the language reads as {@code e}, a combining acute
+     * and {@code @b} is {@code b}, which is a piece only of a string not held as written. Whether a
+     * value has it as a piece is not shown either way — a string not held as written may still be
+     * a value, where its code points compose with nothing — so {@code b} is open, and {@code c},
+     * the piece of no string, is shown on the false side. The class is of what was shown, and
+     * nothing says the domains are undivided.
+     */
+    @Test
+    void aPieceOnlyOfAStringNotHeldAsWrittenIsLeftOpen() {
+        assertEquals(Map.of("book[*].domain@Some",
+                        List.of("book[*].domain@Some/x is never piece 1 of email")),
+                classesAtOf("book[*].domain@Some", "a@a|e\\\\u0301@b", "b|c",
+                        THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+                leftOpenAt(evidenceOf("a@a|e\\\\u0301@b", "b|c",
+                        THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK), "book[*].domain@Some"));
     }
 
     /** And the emails are not parted by a piece only a string no value is has. */

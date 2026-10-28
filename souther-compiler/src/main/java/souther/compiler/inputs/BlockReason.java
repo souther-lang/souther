@@ -1321,12 +1321,20 @@ public sealed interface BlockReason {
      * domains are neither, and no class here holds them.
      *
      * <p>Apart from {@link RelationNotShownToReachEveryValue}, which leaves the position no class
-     * of the rule's. Here the classes stand over what was shown, and what this says is what they do
-     * not hold.
+     * of the rule's. Here the classes stand over what was shown, and what this says is where the
+     * values they do not hold lie.
+     *
+     * <p>A bound on those values and not the values. Of the strings longer than {@code longerThan},
+     * those the relation is shown of at every length are in a class all the same — a domain no
+     * address has is shown to be none whatever its length — and which of them are open is the
+     * relation's to say, and the classes say which values they hold. What a reader is told is
+     * where to look, and the one value a question carries is this summary: the values themselves
+     * are a language, which no answer the store keeps holds.
      *
      * @param atAnyLength whether some values here are shown on neither side whatever their length
-     * @param longerThan  where values here longer than some number of code points are shown on
-     *                    neither side, that number; null otherwise
+     * @param longerThan  the fewest code points less one of a value left open for its length: some
+     *                    longer may be in no class, and none shorter is for that; null where no
+     *                    value is left open for its length
      */
     record RelationShownOverARegion(boolean atAnyLength, Long longerThan)
             implements RuleReadingStopped {
