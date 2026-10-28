@@ -702,10 +702,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
     /**
      * The expression a reading stopped at, held aside while the rest of the comparison is read.
-     *
-     * @param quotientAwayFromNought whether the stop is read as a quotient by a value on the rows
-     *                               whose divisor is not nought, so that the dividend and the
-     *                               divisor are worked out on them and told
+     * It is read as a quotient by a value on the rows whose divisor is not nought where
+     * {@code quotientAwayFromNought} says so, and then the dividend and the divisor are worked
+     * out on them and told.
      */
     private static final class StoppedValue {
 
