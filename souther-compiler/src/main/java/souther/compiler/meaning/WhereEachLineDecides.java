@@ -964,6 +964,9 @@ public final class WhereEachLineDecides {
             if (ofAValue != null) {
                 return List.of(new DecidingCase(said, DecidingCase.eachOf(ofAValue)));
             }
+            if (taken instanceof TakenApart.Shared(var choices)) {
+                return List.of(new DecidingCase(said, choices));
+            }
             return List.of(new DecidingCase(said, new DecidingCase.Cases.NotTakenApart(
                     switch (taken) {
                         case TakenApart.MoreThan _ ->
@@ -975,7 +978,8 @@ public final class WhereEachLineDecides {
                         // canBe leaves out joins any two possible ways by ways each one part apart
                         // from the last, every one of them possible, so where the line decides at
                         // one end and not at the other some part tells the two apart.
-                        case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
+                        case TakenApart.ByNoOnePart _, TakenApart.Taken _,
+                             TakenApart.Shared _ ->
                                 throw new IllegalStateException("where " + part + " decides in "
                                         + stated + " was told apart by no one part, and the"
                                         + " statement asks no value's case twice");
@@ -1088,10 +1092,15 @@ public final class WhereEachLineDecides {
             int decides = asking.both(asking.oneNotTheOther(asking.with(whole, at, true),
                     asking.with(whole, at, false)), asking.both(held, failing));
             List<List<Proposition>> cases = new ArrayList<>();
-            return switch (split(asking, decides, asking.either(held, failing), new ArrayList<>(),
-                    most, cases)) {
+            int possibleHere = asking.either(held, failing);
+            return switch (split(asking, decides, possibleHere, new ArrayList<>(), most, cases)) {
                 case NOT -> new TakenApart.Taken(cases);
-                case PAST_THE_FIGURE -> new TakenApart.MoreThan();
+                case PAST_THE_FIGURE -> {
+                    DecidingCase.Cases shared = shared(asking, decides, possibleHere,
+                            new HashMap<>());
+                    yield shared == null ? new TakenApart.MoreThan()
+                            : new TakenApart.Shared(shared);
+                }
                 case BY_NO_ONE_PART -> new TakenApart.ByNoOnePart();
                 case OUT_OF_STEPS -> new TakenApart.RanOut();
             };
@@ -1154,6 +1163,67 @@ public final class WhereEachLineDecides {
                         asking.with(possible, part, false), failing, most, into);
             }
             return Stopped.BY_NO_ONE_PART;
+        }
+
+        /**
+         * The cases {@link #split} would write out, kept as the choices they are made of: a part
+         * asked, held and failing, and under each what is left to choose. The same state of the
+         * choosing — what the line decides in, and what is possible, once the parts asked are
+         * fixed — comes to the same choices however the parts were reached, so it is one value
+         * every way to it shares; the cases it stands for are as many as the ways to its ends,
+         * and the states are as many as the graph holds. Null where the taking apart stopped
+         * short for steps or for no one part telling the ways apart, as {@code split} stops.
+         */
+        private DecidingCase.Cases shared(WhatAStatementComesTo.Asking asking, int decides,
+                                          int possible, Map<Long, DecidingCase.Cases> states) {
+            long state = ((long) decides << 32) | (possible & 0xffffffffL);
+            DecidingCase.Cases known = states.get(state);
+            if (known != null) {
+                return known;
+            }
+            int some = asking.both(decides, possible);
+            int notEvery = asking.both(asking.not(decides), possible);
+            if (some < 0 || notEvery < 0) {
+                return null;
+            }
+            DecidingCase.Cases choices = null;
+            if (some == WhatAStatementComesTo.NEVER) {
+                choices = new DecidingCase.Cases.EachOf(List.of());
+            } else if (notEvery == WhatAStatementComesTo.NEVER) {
+                choices = new DecidingCase.Cases.Together(List.of());
+            } else {
+                BitSet parts = possible == WhatAStatementComesTo.ALWAYS
+                        ? ways.firstPartAsked(decides) : ways.partsAsked(decides);
+                for (int part = parts.nextSetBit(0); part >= 0;
+                        part = parts.nextSetBit(part + 1)) {
+                    int turns = splitsOn(asking, decides, possible, part);
+                    if (turns < 0) {
+                        return null;
+                    }
+                    if (turns == WhatAStatementComesTo.NEVER) {
+                        continue;
+                    }
+                    DecidingCase.Cases holding = shared(asking, asking.with(decides, part, true),
+                            asking.with(possible, part, true), states);
+                    DecidingCase.Cases failing = shared(asking, asking.with(decides, part, false),
+                            asking.with(possible, part, false), states);
+                    if (holding == null || failing == null) {
+                        return null;
+                    }
+                    choices = new DecidingCase.Cases.EachOf(List.of(
+                            new DecidingCase.Cases.Together(List.of(
+                                    new DecidingCase.Cases.One(named.get(part)), holding)),
+                            new DecidingCase.Cases.Together(List.of(
+                                    new DecidingCase.Cases.One(named.get(part).denied()),
+                                    failing))));
+                    break;
+                }
+                if (choices == null) {
+                    return null;
+                }
+            }
+            states.put(state, choices);
+            return choices;
         }
 
         /** Where, between two ways both possible that differ in {@code part} alone, whether the
@@ -1381,6 +1451,12 @@ public final class WhereEachLineDecides {
 
         /** More cases than were taken apart. */
         record MoreThan() implements TakenApart {}
+
+        /**
+         * More cases than were taken apart, kept as the choices they are made of, each state
+         * the choosing comes to shared by every way to it ({@link Reading#shared}).
+         */
+        record Shared(DecidingCase.Cases cases) implements TakenApart {}
 
         /** No one part tells where the line decides from the rest ({@link Reading#split}). */
         record ByNoOnePart() implements TakenApart {}

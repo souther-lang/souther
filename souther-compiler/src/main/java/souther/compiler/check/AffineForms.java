@@ -218,6 +218,122 @@ public final class AffineForms {
     }
 
     /**
+     * What the reading of a number read, told to whoever asks what the number was made of.
+     *
+     * <p>Told by the evaluations that decide the number — this walk and the fold ({@link
+     * FoldedValue}) — at the moment each reads a name or a place, and not worked out again from the
+     * expression afterwards. What was read is the one account of what the number was made of: an
+     * expression holds parts that nothing evaluated, and a reader walking it would count them, and
+     * an evaluation that goes on from a name does so past the place it was read at.
+     */
+    public interface Consumed<E> {
+
+        /**
+         * A name or a place, a field of something, was read at {@code expression}, in {@code at},
+         * and the evaluation went on from what it stands for: what that is made of is told as it is
+         * read.
+         */
+        void read(Core expression, E at);
+
+        /**
+         * The reading ended in a value a carrier writes, found by following the names from
+         * {@code expression}. Nothing was evaluated past it, so where it was written is for the
+         * reader to follow.
+         */
+        void written(Core expression, E at);
+    }
+
+    /** {@link #outcome(Core, Object, Reading)}, telling {@code told} where each part of the number
+     *  ended in a value. */
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
+                                               Consumed<E> told) {
+        return of(raw, at, new Noticing<>(reading, told), new Walk<>(told));
+    }
+
+    /**
+     * {@code of} telling {@code told} each name and field read through it: the one environment
+     * every evaluation of the number — this walk and the fold — reads names with, so that what
+     * either of them reads is told and nothing else is.
+     */
+    private record Noticing<A, E>(Reading<A, E> of, Consumed<E> told) implements Reading<A, E> {
+
+        @Override
+        public void noticed(Core place, E at) {
+            told.read(place, at);
+        }
+
+        @Override
+        public Reading<A, E> oneAtATime() {
+            return new Noticing<>(of.oneAtATime(), told);
+        }
+
+        @Override
+        public Symbols symbols() {
+            return of.symbols();
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return of.declarations();
+        }
+
+        @Override
+        public LinearForm<A> leafOf(Core e, E at) {
+            return of.leafOf(e, at);
+        }
+
+        @Override
+        public LinearForm<A> leafOf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leafOf(e, at, inside);
+        }
+
+        @Override
+        public E inside(Core.LetIn li, E at) {
+            return of.inside(li, at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<E> readThrough(Core.Read read, E at) {
+            return of.readThrough(read, at);
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<E>> alternativesOf(Core.Read read, E at) {
+            return of.alternativesOf(read, at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<E> taken(Core node, E at) {
+            return of.taken(node, at);
+        }
+
+        @Override
+        public Object standingOf(Core.Read read, E at) {
+            return of.standingOf(read, at);
+        }
+
+        @Override
+        public LinearForm<Core> takenAsAForm(Core node, E at) {
+            return of.takenAsAForm(node, at);
+        }
+
+        @Override
+        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
+            return of.productOf(left, right);
+        }
+
+        @Override
+        public void composed(Core operation, LinearForm<A> form) {
+            of.composed(operation, form);
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, E at) {
+            return of.readsThrough(fa, at);
+        }
+    }
+
+    /**
      * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
      * the caller keeps for as long as it reads with {@code reading}.
      *
@@ -240,14 +356,31 @@ public final class AffineForms {
          *  read came to — or null where nobody keeps it, and each fold is its own. */
         private final FoldedValue.Kept folds;
 
+        /** Who is told where the reading ended in a value, or null where nobody asked. */
+        private final Consumed<E> told;
+
         Walk() {
             this.folds = null;
+            this.told = null;
+        }
+
+        Walk(Consumed<E> told) {
+            this.folds = null;
+            this.told = told;
         }
 
         Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept folds) {
             super(answered);
             this.folds = folds;
+            this.told = null;
         }
+
+        void written(Core expression, E at) {
+            if (told != null) {
+                told.written(expression, at);
+            }
+        }
+
     }
 
     /**
@@ -790,6 +923,7 @@ public final class AffineForms {
         Core e = Core.withoutStanding(asPlaced);
         LinearForm<A> written = literal(e, at, reading);
         if (written != null) {
+            following.written(e, at);
             return written;
         }
         return switch (e) {
@@ -937,6 +1071,7 @@ public final class AffineForms {
             // any expression ({@link #composed}).
             LinearForm<A> written = literal(here, at, reading);
             if (written != null) {
+                following.written(here, at);
                 form = written;
                 break;
             }

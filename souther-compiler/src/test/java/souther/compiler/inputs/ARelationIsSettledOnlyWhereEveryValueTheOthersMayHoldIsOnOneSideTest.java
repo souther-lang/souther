@@ -307,6 +307,9 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertNull(ofTheAmounts(0L, Long.MAX_VALUE, 2));
     }
 
+    /** A greatest value no row of the small runs comes near. */
+    private static final long LET_GO = 1000;
+
     private static final NumericDomain.Bounds[] SMALL_RUNS = {
         run(0L, 4L), run(-2L, 2L), run(1L, 4L), run(0L, 1L)};
 
@@ -389,8 +392,15 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         for (long each = endOf(held.min()); each <= endOf(held.max()); each++) {
             long value = each;
             boolean[] sides = sidesOf(terms, at, value, constant, relation, greatest);
+            // Left undivided says the relation draws no line on the term, and not that every value
+            // has a computed row on each side: at an end of the type the size alone may leave a
+            // side without one, where the sum is computed and compared with the constant and not
+            // added up with it. So a side a row is missing from is the arithmetic's only where
+            // rows on each side stand once the arithmetic is let go.
+            // Asked only where the computed rows leave a side out, which is rare.
             switch (leaves) {
-                case Leaves.Undivided _ -> assertTrue(sides[0] && sides[1],
+                case Leaves.Undivided _ -> assertTrue((sides[0] && sides[1])
+                                || bothSidesOnceLetGo(terms, at, value, constant, relation),
                         "left either way at " + value + ": " + where);
                 case Leaves.Settled settled -> {
                     // A value no row computes is outside what is said of the term.
@@ -401,7 +411,8 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                     SettledRun inside = settled.runs().stream()
                             .filter(run -> within(run, value)).findFirst().orElse(null);
                     if (inside == null) {
-                        assertTrue(sides[0] && sides[1],
+                        assertTrue((sides[0] && sides[1])
+                                        || bothSidesOnceLetGo(terms, at, value, constant, relation),
                                 "left either way at " + value + ": " + where);
                     } else {
                         // Settled is that no computed row is on the other side. A value no row
@@ -422,6 +433,14 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 || (run.from().inclusive() && at.compareTo(run.from().at()) == 0))
                 && (run.to() == null || at.compareTo(run.to().at()) < 0
                 || (run.to().inclusive() && at.compareTo(run.to().at()) == 0));
+    }
+
+    /** Whether, with the arithmetic let go, some row holds the relation and some row fails it. */
+    private static boolean bothSidesOnceLetGo(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, long value,
+            long constant, Rel relation) {
+        boolean[] sides = sidesOf(terms, at, value, constant, relation, LET_GO);
+        return sides[0] && sides[1];
     }
 
     /** Whether some computed row holds the relation, and whether some computed row fails it. */

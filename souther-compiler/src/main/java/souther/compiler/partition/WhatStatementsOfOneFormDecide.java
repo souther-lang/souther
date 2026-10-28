@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
+import java.util.TreeMap;
 
 /**
  * What the statements of a way that weigh the same terms alike come to together.
@@ -135,26 +135,6 @@ final class WhatStatementsOfOneFormDecide {
         return bounds.stream().map(Bound::statement).toList();
     }
 
-    /**
-     * The statements of {@code stated} that weigh the same terms as {@code added} alike, and
-     * {@code added} with them.
-     *
-     * <p>What statements of one form leave is not changed by statements of another. The ones
-     * before {@code added} have not been proved to leave none, which is all that is known of
-     * them, so only the group of {@code added} can be newly proved to.
-     */
-    static List<TakenConstraint.Affine> ofTheFormOf(List<TakenConstraint.Affine> stated,
-                                                    TakenConstraint.Affine added) {
-        List<TakenConstraint.Affine> out = new ArrayList<>();
-        for (TakenConstraint.Affine each : stated) {
-            if (factorBetween(added.form().coefs(), each.form().coefs()) != null) {
-                out.add(each);
-            }
-        }
-        out.add(added);
-        return out;
-    }
-
     /** One statement, as its form is {@code factor} times the form of its group. */
     private record Bound(ExactRatio factor, TakenConstraint.Affine statement) {
 
@@ -178,47 +158,68 @@ final class WhatStatementsOfOneFormDecide {
      * for the points that do, whether the asked relation holds at each.
      */
     private static Boolean pointsLeft(List<Bound> bounds, Bound asked, List<Boolean> askedAt) {
-        TreeSet<ExactRatio> crossings = new TreeSet<>(ExactRatio::compareTo);
-        for (Bound each : bounds) {
-            ExactRatio at = each.crossing();
-            if (at == null) {
+        TreeMap<ExactRatio, Integer> crossings = new TreeMap<>(ExactRatio::compareTo);
+        ExactRatio[] crossingOf = new ExactRatio[bounds.size()];
+        for (int i = 0; i < crossingOf.length; i++) {
+            crossingOf[i] = bounds.get(i).crossing();
+            if (crossingOf[i] == null) {
                 return null;
             }
-            crossings.add(at);
+            crossings.put(crossingOf[i], 0);
         }
+        ExactRatio askedCrossing = null;
         if (asked != null) {
-            ExactRatio at = asked.crossing();
-            if (at == null) {
+            askedCrossing = asked.crossing();
+            if (askedCrossing == null) {
                 return null;
             }
-            crossings.add(at);
+            crossings.put(askedCrossing, 0);
         }
-        List<ExactRatio> points = pointsAround(crossings);
+        List<ExactRatio> points = pointsAround(crossings.keySet());
         if (points == null) {
             return null;
         }
+        // The points are in order, each crossing at an odd place, so which side of a statement's
+        // crossing a point is on is where it stands beside that place: a statement holds on one
+        // side, at the crossing and on the other side as its relation says of the sign of its form.
+        int place = 1;
+        for (Map.Entry<ExactRatio, Integer> each : crossings.entrySet()) {
+            each.setValue(place);
+            place += 2;
+        }
+        int[] holding = new int[points.size() + 1];
+        for (int i = 0; i < crossingOf.length; i++) {
+            Bound bound = bounds.get(i);
+            int at = crossings.get(crossingOf[i]);
+            int sign = bound.factor().signum();
+            holdOver(holding, 0, at, bound.statement().rel().holds(-sign));
+            holdOver(holding, at, at + 1, bound.statement().rel().holds(0));
+            holdOver(holding, at + 1, points.size(), bound.statement().rel().holds(sign));
+        }
         boolean any = false;
-        for (ExactRatio point : points) {
-            boolean holdsAll = true;
-            for (Bound each : bounds) {
-                Boolean holds = each.holdsAt(point);
-                if (holds == null) {
-                    return null;
-                }
-                holdsAll &= holds;
-            }
-            if (holdsAll) {
+        int count = 0;
+        for (int at = 0; at < points.size(); at++) {
+            count += holding[at];
+            if (count == bounds.size()) {
                 any = true;
                 if (asked != null) {
-                    Boolean holds = asked.holdsAt(point);
-                    if (holds == null) {
-                        return null;
-                    }
-                    askedAt.add(holds);
+                    int askedAtCrossing = crossings.get(askedCrossing);
+                    int sign = asked.factor().signum();
+                    askedAt.add(asked.statement().rel().holds(
+                            at < askedAtCrossing ? -sign : at == askedAtCrossing ? 0 : sign));
                 }
             }
         }
         return !any;
+    }
+
+    /** Counts a statement as holding at the places from {@code from} up to {@code to}, where it
+     *  does. */
+    private static void holdOver(int[] holding, int from, int to, boolean holds) {
+        if (holds && from < to) {
+            holding[from]++;
+            holding[to]--;
+        }
     }
 
     /** Each crossing, a point between each two, and one beyond each end: the line is the same
@@ -245,7 +246,7 @@ final class WhatStatementsOfOneFormDecide {
     }
 
     /** {@code other} as a number times {@code form}, or null where it is not one. */
-    private static ExactRatio factorBetween(Map<NumericTerm, ExactRatio> form,
+    static ExactRatio factorBetween(Map<NumericTerm, ExactRatio> form,
                                             Map<NumericTerm, ExactRatio> other) {
         if (!form.keySet().equals(other.keySet())) {
             return null;
@@ -261,7 +262,7 @@ final class WhatStatementsOfOneFormDecide {
         return factor;
     }
 
-    private static boolean outsideEveryContainer(TakenConstraint.Affine statement) {
+    static boolean outsideEveryContainer(TakenConstraint.Affine statement) {
         for (NumericTerm each : statement.form().coefs().keySet()) {
             if (!(each instanceof NumericTerm.FromOnePosition one)
                     || one.position().insideAContainer()) {

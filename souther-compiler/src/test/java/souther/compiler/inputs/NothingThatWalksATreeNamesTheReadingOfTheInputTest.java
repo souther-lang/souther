@@ -141,11 +141,13 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         // Every naming of the ways through a body is here, the answers a walk over what a truth
         // turns on asks of the names, and the search for a call in the tree the language's
         // operations stand in, which has to be under the names of the place it stands at, and
-        // nothing else is. Each is scoped like the environment by contract — it answers under a
-        // binding and inside an arm — so moving one along is what it does rather than a shape one
-        // of them happens to have.
+        // the reading of which data a number is read out of, which follows a name to what it was
+        // given under the names in force where it was given, and nothing else is. Each is scoped
+        // like the environment by contract — it answers under a binding and inside an arm — so
+        // moving one along is what it does rather than a shape one of them happens to have.
         assertEquals(List.of(
                         "souther/compiler/partition/AnOperationsTruthComesOutAsItCan",
+                        "souther/compiler/partition/DataOrigins",
                         "souther/compiler/partition/DecisionNaming",
                         "souther/compiler/partition/WhatNamesStandFor$In",
                         "souther/compiler/reading/CoverageNaming",

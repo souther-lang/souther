@@ -54,6 +54,7 @@ import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
@@ -1666,7 +1667,9 @@ final class Coverages {
         // placed it. The weights of that computation are owed once for it, so this border is asked
         // nothing about them, and that comes before whether the rows were read: what is owed
         // elsewhere cannot be left unsettled here.
-        if (ofOneLine.getFirst().border().threshold().isPresent()) {
+        if (ofOneLine.getFirst().border().threshold()
+                .filter(ThresholdOfADerivedValue::isOfAComputation)
+                .isPresent()) {
             return new AnotherLineTheRowsAllow.OwedByTheComputation();
         }
         // Nothing was read against the line, which is the line's and not one reading's: what says
@@ -2393,7 +2396,15 @@ final class Coverages {
             // under both — and there is nothing about it to put together.
             return a;
         }
-        if (!one.criterion().equals(two.criterion())) {
+        // Two readings of one line reach other lines of the position, so the run beside it stops at
+        // a different one in each: the same point asked for under two ways. It is kept as the first
+        // reading asks it, the border it is a point of being that reading's, and what each reading
+        // found is put together below. A point asking for a different side or value is another
+        // point, which two readings of one line do not owe.
+        if (!one.criterion().equals(two.criterion())
+                && !(one.criterion() instanceof Criterion.Within in
+                        && two.criterion() instanceof Criterion.Within also
+                        && in.besideTheSameLineAs(also))) {
             throw new IllegalStateException("two searches of one point asking for different"
                     + " values: " + one.criterion() + " and " + two.criterion());
         }

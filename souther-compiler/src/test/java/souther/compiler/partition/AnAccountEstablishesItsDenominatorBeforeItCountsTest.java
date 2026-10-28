@@ -139,7 +139,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY,
-                        Optional.empty()),
+                        Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

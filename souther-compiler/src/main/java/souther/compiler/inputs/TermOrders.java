@@ -42,6 +42,7 @@ public final class TermOrders {
     private final Carrier answered;
     private final Map<ElementProjection, Carrier> fields;
     private final Map<ElementProjection, List<TypeSymbol>> worn;
+    private int hash;
 
     /**
      * @param term     the number these are the orders of. Carried, because an answer that leaves
@@ -322,7 +323,11 @@ public final class TermOrders {
      */
     @Override
     public boolean equals(Object other) {
+        if (other == this) {
+            return true;
+        }
         return other instanceof TermOrders that
+                && hashCode() == that.hashCode()
                 && term.equals(that.term)
                 && Objects.equals(observed, that.observed)
                 && Objects.equals(answered, that.answered)
@@ -330,9 +335,21 @@ public final class TermOrders {
                 && worn.equals(that.worn);
     }
 
+    /**
+     * Worked out once. These are keys of the tables a reading keeps, and what they hash is the
+     * term, both orders and two maps, each of them hashed through its own parts; a table asks again
+     * for every entry it copies and every one it looks up. One word, so a thread that sees it sees
+     * all of it, with nought standing for not worked out: a hash that is nought is worked out each
+     * time, which is the same answer without the saving.
+     */
     @Override
     public int hashCode() {
-        return Objects.hash(term, observed, answered, fields, worn);
+        int had = hash;
+        if (had == 0) {
+            had = Objects.hash(term, observed, answered, fields, worn);
+            hash = had;
+        }
+        return had;
     }
 
     @Override

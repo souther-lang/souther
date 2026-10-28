@@ -246,16 +246,19 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          *              side is a number the same on every run and the other is not: the bound of a
          *              table as the table holds it, before the quantity it is held against was
          *              weighed and divided into the level the line is cut at
+         * @param heldIn the data that number is read out of, where it is read out of data: two
+         *              calls of one helper given two tables read two lines, however alike the
+         *              bounds
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
                            List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn,
                            CanonicalSelection<WhatMayStopARun> stopsBefore,
-                           Optional<ExactRatio> writtenAgainst) {
+                           Optional<ExactRatio> writtenAgainst, Optional<BoundHeldIn> heldIn) {
 
             public Read {
                 if (rule == null || states == null || anchor == null || metOn == null
-                        || stopsBefore == null || writtenAgainst == null) {
+                        || stopsBefore == null || writtenAgainst == null || heldIn == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");

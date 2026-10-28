@@ -160,8 +160,30 @@ public record TermPath(String head, List<Step> steps) {
         private final List<Step> of;
         private int hash;
 
+        /** How a path under one head spells these, kept for the last head asked: a path is spelled
+         *  to be put in an order or into a message far more often than it is made, and one value
+         *  holds head and text together so that a thread sees both or neither. */
+        private volatile Spelling spelling;
+
+        private record Spelling(String head, String text) {}
+
         private Steps(List<Step> of) {
             this.of = of;
+        }
+
+        /** The path under {@code head} written out, as {@link TermPath#toString} writes it. */
+        String spelledUnder(String head) {
+            Spelling had = spelling;
+            if (had != null && had.head().equals(head)) {
+                return had.text();
+            }
+            StringBuilder out = new StringBuilder(head);
+            for (Step step : of) {
+                spell(out, step, false);
+            }
+            String text = out.toString();
+            spelling = new Spelling(head, text);
+            return text;
         }
 
         @Override
@@ -270,6 +292,19 @@ public record TermPath(String head, List<Step> steps) {
     /** The same path, one field further in. */
     public TermPath then(String field) {
         return append(new Step.Field(field));
+    }
+
+    /** The same path, each of {@code fields} further in, made once rather than once per field. */
+    public TermPath then(List<String> fields) {
+        if (fields.isEmpty()) {
+            return this;
+        }
+        List<Step> longer = new ArrayList<>(steps.size() + fields.size());
+        longer.addAll(steps);
+        for (String field : fields) {
+            longer.add(new Step.Field(field));
+        }
+        return new TermPath(head, longer);
     }
 
     /**
@@ -612,10 +647,6 @@ public record TermPath(String head, List<Step> steps) {
 
     @Override
     public String toString() {
-        StringBuilder out = new StringBuilder(head);
-        for (Step step : steps) {
-            spell(out, step, false);
-        }
-        return out.toString();
+        return ((Steps) steps).spelledUnder(head);
     }
 }

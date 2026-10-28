@@ -183,6 +183,34 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 "x held apart from 5 holds 6");
     }
 
+    /**
+     * Where the fixed numbers stand is the numbers' and not the values': a search fixing the same
+     * term at one value after another asks it once, and terms that are not the same are not mixed.
+     */
+    @Test
+    void regionsFixingTheSameTermsAtOtherValuesAreAskedWhereTheyStandOnce() {
+        SearchRegion base = region();
+        long before = ReadQuantities.standingsWorkedOut();
+
+        for (int value = 0; value < 5; value++) {
+            base.given(term("x"), Count.of(BigDecimal.valueOf(value))).emptiness();
+        }
+        assertEquals(1, ReadQuantities.standingsWorkedOut() - before,
+                "the same term at five values was worked out more than once");
+
+        for (int value = 0; value < 5; value++) {
+            base.given(term("x"), Count.of(BigDecimal.valueOf(value)))
+                    .given(term("y"), Count.of(BigDecimal.valueOf(value))).emptiness();
+        }
+        assertEquals(2, ReadQuantities.standingsWorkedOut() - before,
+                "two terms were taken for the one that was asked before, or asked more than once");
+
+        base.given(term("y"), Count.of(BigDecimal.ONE))
+                .given(term("x"), Count.of(BigDecimal.ONE)).emptiness();
+        assertEquals(3, ReadQuantities.standingsWorkedOut() - before,
+                "the terms listed in the other order were taken for the same list");
+    }
+
     /** Where the term runs, of a region that holds something — which every region here does. */
     private static NumericDomain.Bounds runsBetween(SearchRegion within,
                                                     NumericTerm.FromOnePosition term) {
