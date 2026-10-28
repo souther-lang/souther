@@ -14,6 +14,8 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -24,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What a list may be grown by where no row ran its element: the values that stand for the element,
  * the same with one more element where the element is a collection, a number a unit away from
- * those, and what the building of them met.
+ * those, and a list grown in a list already made, each made as far as it is asked for.
  *
  * <p>A value of {@code Huge} holds more elements than a proposal holds, so none is built, and that
  * is a figure the compiler declined at and not a type with no values.
@@ -40,12 +42,13 @@ class ElementsOfATypeTest {
             data Huge = List<Bool>
               invariant List.length(value) >= 65
 
+            data Bag = List<Int>
+            data Sack = Bag
+
             data N0 = { value: Int }
             """ + nested();
 
-    /** {@code N1} holds two lists of {@code N0}, {@code N2} two lists of {@code N1}, and so on: a
-     *  walk that goes into each of the two at every level goes into {@code N0} twice
-     *  {@link #DEPTH} times over. */
+    /** {@code N1} holds two lists of {@code N0}, {@code N2} two lists of {@code N1}, and so on. */
     private static String nested() {
         StringBuilder out = new StringBuilder();
         for (int level = 1; level <= DEPTH; level++) {
@@ -97,25 +100,43 @@ class ElementsOfATypeTest {
         }
     };
 
-    /** What was asked for, so that how much of the types was gone into can be said. */
-    private static final class Asked {
+    /** What was asked for and what was said, so that how much of the types was gone into can be
+     *  told. */
+    private static final class Seen implements ElementsOfAType.Stops {
         final List<Type> representatives = new ArrayList<>();
         final List<Type> withOneElement = new ArrayList<>();
+        final Set<CompositionBudget> figures = new HashSet<>();
+        final List<Integer> limits = new ArrayList<>();
+
+        @Override
+        public void met(CompositionShortfall shortfall) {
+            figures.addAll(shortfall.figures());
+        }
+
+        @Override
+        public void limitedAt(int most) {
+            limits.add(most);
+        }
     }
 
-    private static ElementsOfAType.Elements elementsOf(Type element, Asked asked) {
-        return ElementsOfAType.of(type -> {
-            asked.representatives.add(type);
+    private static ElementsOfAType elements(int most, Seen seen) {
+        return new ElementsOfAType(type -> {
+            seen.representatives.add(type);
             return Partitions.representativesHolding(type, READING,
                     FieldDomains.ConstructionLimits.NONE);
         }, type -> {
-            asked.withOneElement.add(type);
+            seen.withOneElement.add(type);
             return ElementsOfAType.withOneElement(type, READING);
-        }, READING, BUILDS, element);
+        }, READING, BUILDS, most, seen);
     }
 
-    private static ElementsOfAType.Elements elementsOf(Type element) {
-        return elementsOf(element, new Asked());
+    private static List<ObservedValue> first(int many, Type element, ElementsOfAType elements) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (Iterator<ObservedValue> each = elements.of(element);
+             out.size() < many && each.hasNext(); ) {
+            out.add(each.next());
+        }
+        return out;
     }
 
     private static Type named(String name) {
@@ -132,48 +153,92 @@ class ElementsOfATypeTest {
 
     @Test
     void aNumberIsOfferedWithTheNumbersAUnitAway() {
-        ElementsOfAType.Elements elements = elementsOf(Type.INT);
+        List<ObservedValue> values = first(10, Type.INT, elements(64, new Seen()));
 
-        assertTrue(elements.values().containsAll(List.of(whole(0), whole(1), whole(-1))),
-                elements.values().toString());
-        assertTrue(elements.met().nothing());
+        assertEquals(List.of(whole(0), whole(1), whole(-1)), values);
     }
 
     /** An empty list is the same at an empty list as at none, so the list is offered with an
      *  element in it, and that element a unit away. */
     @Test
     void aListIsOfferedEmptyAndWithAnElementAndTheElementAUnitAway() {
-        ElementsOfAType.Elements elements = elementsOf(Type.list(Type.INT));
+        List<ObservedValue> values = first(20, Type.list(Type.INT), elements(64, new Seen()));
 
-        assertTrue(elements.values().containsAll(List.of(listOf(), listOf(whole(0)),
-                listOf(whole(1)), listOf(whole(-1)))), elements.values().toString());
-        assertTrue(elements.met().nothing());
+        assertTrue(values.containsAll(List.of(listOf(), listOf(whole(0)), listOf(whole(1)),
+                listOf(whole(-1)))), values.toString());
     }
 
-    /** What stopped the values of the element inside the element is what the elements met. */
+    /** A list in a list in a list is grown in the list that was grown, as far as it is asked. */
     @Test
-    void whatStoppedTheValuesOfAnElementsElementIsMetByTheElement() {
-        ElementsOfAType.Elements elements = elementsOf(Type.list(named("Huge")));
+    void aListIsGrownInTheListThatWasGrown() {
+        List<ObservedValue> values = first(30, Type.list(Type.list(Type.INT)),
+                elements(64, new Seen()));
 
-        assertEquals(List.of(listOf()), elements.values());
-        assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), elements.met().figures());
+        assertTrue(values.contains(listOf(listOf(whole(0)))), values.toString());
+        assertTrue(values.contains(listOf(listOf(whole(1)))), values.toString());
+    }
+
+    /** Asked for one value, the proposals of the element are asked for and nothing past the first
+     *  that gave one. */
+    @Test
+    void aValueIsMadeOnlyWhenItIsAskedFor() {
+        Seen seen = new Seen();
+        Type list = Type.list(Type.INT);
+
+        List<ObservedValue> values = first(1, list, elements(64, seen));
+
+        assertEquals(List.of(listOf()), values);
+        assertEquals(List.of(list), seen.representatives);
+        assertEquals(List.of(), seen.withOneElement);
     }
 
     /**
-     * The types are asked about once, however deep the element goes.
-     *
-     * <p>A walk into each field of a value, asking for the values of the element of each list it
-     * finds, asks about {@code N0} twice for every level above it: past anything a search is given
-     * to spend, before it has a first candidate to try.
+     * However deep the element goes, the types are asked about once each, and asked for every
+     * value there is: a walk into each field of a value, asking for the values of the element of
+     * each list it finds, asks about {@code N0} twice for every level above it.
      */
     @Test
-    void theTypesAreAskedAboutOnceHoweverDeepTheElementGoes() {
-        Asked asked = new Asked();
+    void aTypeIsAskedAboutOnceHoweverDeepItGoes() {
+        Seen seen = new Seen();
+        Type deepest = named("N" + DEPTH);
 
-        ElementsOfAType.Elements elements = elementsOf(named("N" + DEPTH), asked);
+        first(1000, deepest, elements(64, seen));
 
-        assertEquals(List.of(named("N" + DEPTH)), asked.representatives);
-        assertEquals(List.of(named("N" + DEPTH)), asked.withOneElement);
-        assertTrue(elements.met().nothing(), elements.met().toString());
+        assertEquals(List.of(deepest), seen.representatives);
+        assertEquals(List.of(deepest), seen.withOneElement);
+    }
+
+    /** Past what the bound lets be made, nothing more is, and the bound is said. */
+    @Test
+    void theValuesOfATypeAreBoundedAndTheBoundIsSaid() {
+        Seen seen = new Seen();
+        ElementsOfAType elements = elements(3, seen);
+
+        List<ObservedValue> values = first(100, Type.list(Type.list(Type.INT)), elements);
+
+        assertEquals(3, values.size());
+        assertEquals(List.of(3), seen.limits);
+    }
+
+    /** What stopped the values of the element inside the element is said. */
+    @Test
+    void whatStoppedTheValuesOfAnElementsElementIsSaid() {
+        Seen seen = new Seen();
+
+        List<ObservedValue> values = first(100, Type.list(named("Huge")), elements(64, seen));
+
+        assertEquals(List.of(listOf()), values);
+        assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), seen.figures);
+    }
+
+    /** The collection of one stands inside the names the position wears: a {@code Bag} is not
+     *  a list. */
+    @Test
+    void aCollectionOfOneWearsTheNamesOfThePosition() {
+        assertEquals(List.of("Bag([0])"), ElementsOfAType.withOneElement(named("Bag"), READING)
+                .values().stream().map(FixtureTemplate::text).toList());
+        assertEquals(List.of("Sack(Bag([0]))"), ElementsOfAType.withOneElement(named("Sack"),
+                READING).values().stream().map(FixtureTemplate::text).toList());
+        assertEquals(List.of(), ElementsOfAType.withOneElement(Type.INT, READING).values());
     }
 }

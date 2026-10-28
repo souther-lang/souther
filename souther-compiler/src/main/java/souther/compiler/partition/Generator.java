@@ -2413,20 +2413,29 @@ public final class Generator {
      */
     private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
                                      CandidateCheck check, ReplacementWitness looking) {
-        // What stands for a type is the same for every row and list the search grows, so this is
-        // made once for the search, and what building it met is said once, the first time the
-        // type's values are asked for.
-        Map<Type, List<ObservedValue>> stood = new HashMap<>();
+        // What stands for a type is the same for every row and list the search grows, so it is one
+        // for the search and made as far as the search asks, its stops said as they are met. A
+        // type's values are bounded as a composing's candidates are, and the bound is said as that
+        // figure.
+        ElementsOfAType elements = new ElementsOfAType(
+                standingFor -> subject.representativesHolding(standingFor,
+                        FieldDomains.ConstructionLimits.NONE),
+                ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
+                subject.ruleReading(), check, MOST_REPAIRS, new ElementsOfAType.Stops() {
+
+                    @Override
+                    public void met(CompositionShortfall shortfall) {
+                        looking.composingMet(shortfall);
+                    }
+
+                    @Override
+                    public void limitedAt(int most) {
+                        looking.composingStopped(List.of(
+                                WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
+                    }
+                });
         return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
-                element -> stood.computeIfAbsent(element, each -> {
-                    ElementsOfAType.Elements made = ElementsOfAType.of(
-                            standingFor -> subject.representativesHolding(standingFor,
-                                    FieldDomains.ConstructionLimits.NONE),
-                            ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
-                            subject.ruleReading(), check, each);
-                    looking.composingMet(made.met());
-                    return made.values();
-                }));
+                elements::of);
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had

@@ -112,7 +112,7 @@ final class NearbyValues {
      */
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
-                                         Function<Type, List<ObservedValue>> stoodFor) {
+                                         Function<Type, Iterator<ObservedValue>> stoodFor) {
         return of(value, type, reading, null, List.of(), new Leaves() {
 
             @Override
@@ -128,7 +128,7 @@ final class NearbyValues {
                 // rows ran with, the type's are reached within the runs the search is given. The
                 // type's are asked for when the second is.
                 return mapped(filtered(alternating(ranWith.of(sequence.element()).iterator(),
-                                () -> stoodFor.apply(sequence.element()).iterator()),
+                                () -> stoodFor.apply(sequence.element())),
                                 new HashSet<ObservedValue>()::add),
                         more -> {
                             List<ObservedValue> elements = new ArrayList<>(held.elements());

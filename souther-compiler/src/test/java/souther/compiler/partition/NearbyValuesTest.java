@@ -218,7 +218,7 @@ class NearbyValuesTest {
                                              java.util.function.Function<Type, List<ObservedValue>> stoodFor) {
         List<ObservedValue> out = new ArrayList<>();
         NearbyValues.grown(new ObservedValue.Sequence(List.of()), Type.list(Type.INT), READING,
-                ranWith, stoodFor).forEachRemaining(out::add);
+                ranWith, type -> stoodFor.apply(type).iterator()).forEachRemaining(out::add);
         return out;
     }
 
@@ -259,7 +259,7 @@ class NearbyValuesTest {
         Iterator<ObservedValue> grown = NearbyValues.grown(new ObservedValue.Sequence(List.of()),
                 Type.list(Type.INT), READING, ranWithInts(3), _ -> {
                     asked[0]++;
-                    return List.of(whole(0));
+                    return List.of(whole(0)).iterator();
                 });
 
         grown.next();

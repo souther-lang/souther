@@ -48,6 +48,15 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
             new Case("", "List<Int>", "Int",
                     "List.fold((acc, x) -> acc + List.length(x), 0, xs)", "0"),
             new Case(deeplyNested(12), "N12", "Int", "List.length(xs)", "0"),
+            new Case("data Bag = List<Int>\n", "Bag", "Int",
+                    "List.fold((acc, b) -> acc + List.length(b.value), 0, xs)", "0"),
+            new Case("data Bag = List<Int>\ndata Sack = Bag\n", "Sack", "Int",
+                    "List.fold((acc, b) -> acc + List.length(b.value.value), 0, xs)", "0"),
+            new Case("", "List<List<Int>>", "Int",
+                    "List.fold((acc, x) -> acc + List.length(List.concat(x)), 0, xs)", "0"),
+            new Case("", "List<List<List<Int>>>", "Int",
+                    "List.fold((acc, x) -> acc + List.length(List.concat(List.concat(x))), 0, xs)",
+                    "0"),
             new Case("""
                     data Node = { kids: List<Node> }
                     """, "Node", "Int", "List.length(xs)", "0"),
