@@ -594,11 +594,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "readOnceForEveryValue", "(" + core + reads
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
-        row(out, c + "partition/Pullback", "readOutOf", "(" + core + reads + "L" + c
-                + "inputs/InputReading;Ljava/util/Set;)V", Reading.STRUCTURE,
-                "asks which table the element a number is read off came from: a name read off a"
-                        + " value is read off what its base is, so a projection is what its base"
-                        + " is");
+        row(out, c + "partition/DataOrigins", "originsOf",
+                "(" + core + reads + "Ljava/util/Set;)Ljava/util/Set;", Reading.NAMES,
+                READS_THE_NAMES);
         row(out, c + "partition/Pullback", "comparisonHolding",
                 "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",

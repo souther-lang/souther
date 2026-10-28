@@ -547,10 +547,9 @@ final class Pullback {
         if (left == null == (right == null)) {
             return TheBound.NONE;
         }
-        Set<BoundHeldIn.Data> data = new LinkedHashSet<>();
-        readOutOf(left == null ? comparison.right() : comparison.left(), reads, read, data);
-        return new TheBound(Optional.of(left == null ? right : left),
-                data.isEmpty() ? Optional.empty() : Optional.of(new BoundHeldIn(data)));
+        BoundHeldIn data = new DataOrigins(read).ofTheNumbersIn(
+                left == null ? comparison.right() : comparison.left(), reads);
+        return new TheBound(Optional.of(left == null ? right : left), Optional.ofNullable(data));
     }
 
     /**
@@ -569,65 +568,6 @@ final class Pullback {
     record TheBound(Optional<ExactRatio> written, Optional<BoundHeldIn> heldIn) {
 
         static final TheBound NONE = new TheBound(Optional.empty(), Optional.empty());
-    }
-
-    /** The values the numbers of {@code number} are fields of an element of, into {@code into}. */
-    private static void readOutOf(Core number, InputReads reads, InputReading read,
-                                  Set<BoundHeldIn.Data> into) {
-        switch (Core.withoutStanding(number)) {
-            case Core.FieldAccess field
-                    when Core.withoutStanding(field.target()) instanceof Core.Read value ->
-                    heldByWhatItIsReadOff(value, reads, read, into);
-            case Core.FieldProjection projection
-                    when Core.withoutStanding(projection.base()) instanceof Core.Read value ->
-                    heldByWhatItIsReadOff(value, reads, read, into);
-            case Core.Binary binary -> {
-                readOutOf(binary.left(), reads, read, into);
-                readOutOf(binary.right(), reads, read, into);
-            }
-            case Core.Neg negated -> readOutOf(negated.operand(), reads, read, into);
-            default -> { }
-        }
-    }
-
-    /**
-     * The data {@code value} is read off: the container it is an element of where a walk handed it
-     * one, and the value itself where it is a record a call was given.
-     */
-    private static void heldByWhatItIsReadOff(Core.Read value, InputReads reads,
-                                              InputReading read, Set<BoundHeldIn.Data> into) {
-        List<Core> containers = reads.containersTheElementCameFrom(value);
-        if (containers.isEmpty()) {
-            heldBy(value, reads, read, into);
-        }
-        containers.forEach(container -> heldBy(container, reads, read, into));
-    }
-
-    /**
-     * The binding {@code container} comes to, which is the last name on the way to the table: a
-     * parameter of a helper is the name its call gave it, and that one the name of what it is a
-     * copy of, so the table under two names is one binding and a table written at each call is one
-     * binding for each.
-     */
-    private static void heldBy(Core container, InputReads reads, InputReading read,
-                               Set<BoundHeldIn.Data> into) {
-        Set<BindingId> met = new HashSet<>();
-        Core under = container;
-        InputReads at = reads;
-        Core.Read last = null;
-        while (Core.withoutStanding(under) instanceof Core.Read name && met.add(name.binding())) {
-            last = name;
-            if (!(at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
-                    instanceof ReadMeaning.Through through)) {
-                break;
-            }
-            under = through.denotes().value();
-            at = through.denotes().at();
-        }
-        if (last != null) {
-            into.add(new BoundHeldIn.Data(last.binding(),
-                    last.name().replaceFirst("^\\$v\\d+_", "")));
-        }
     }
 
     /**

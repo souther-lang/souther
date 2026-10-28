@@ -3804,7 +3804,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     private static String boundHeldIn(BoundHeldIn data) {
-        return data.data().stream().map(BoundHeldIn.Data::name).sorted()
+        return data.said().stream()
                 .collect(Collectors.joining(", ", ", the bound is read out of ", ""));
     }
 
@@ -6740,10 +6740,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** The data the bound of a threshold is read out of, in one order whatever the walk was. */
     private static void heldIn(ObjectNode into, BoundHeldIn held) {
         ArrayNode data = into.putArray("heldIn");
-        held.data().stream()
-                .map(each -> each.name() + "#" + each.binding().ordinal() + " in "
-                        + each.binding().owner())
-                .sorted().forEach(data::add);
+        held.identified().forEach(data::add);
     }
 
     /**

@@ -96,7 +96,8 @@ class TwoTablesWithAlikeBoundsAreTwoLinesTest {
     @Test
     void theSameTableUnderAnotherNameIsOneLine() {
         String report = reportOf(model(ALIKE,
-                "let alias = first in if useFirst then gradeIn(first, a.v) else gradeIn(alias, a.v)")
+                "{ let alias = first\n        if useFirst then gradeIn(first, a.v)"
+                        + " else gradeIn(alias, a.v) }")
                 + HEAD + rowsThrough(true));
         assertEquals(List.of(), owedAtTheComparison(report), report);
     }
@@ -178,7 +179,9 @@ class TwoTablesWithAlikeBoundsAreTwoLinesTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation)
+        String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("1 behavior:"), "the model was measured: " + report);
+        return report;
     }
 }
