@@ -169,19 +169,86 @@ import java.util.stream.Stream;
  *                        against nought
  * @param remainder       where the first side is what a division by a written number leaves of a
  *                        form of the input's numbers, the form and the divisor; null otherwise
+ * @param working         what the comparison this relation was read from works out, which a
+ *                        row has to get past to be a row of it
  */
 record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             List<FilingCoordinate> amongThemselves, Kind kind,
-                            RemainderSide remainder) {
+                            RemainderSide remainder, Working working) {
 
     /** A relation that shows no place undivided: one nothing here takes apart. */
     static final UndividedByARelation SHOWING_NOTHING =
             new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of(), Kind.AFFINE,
                     null);
 
+    /**
+     * An operation of whole numbers a comparison works out: the numbers it is over, weighed, and a
+     * constant come to a number from {@code least} to {@code greatest} in every row that is
+     * computed. What it is over is the comparison's own reading of it, and not the form the
+     * comparison is cut as: {@code a + b - 100 >= 0} works out {@code a + b} and then the
+     * difference, and {@code a + b >= 100} the sum alone.
+     */
+    record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
+
+    /**
+     * The operations of whole numbers a comparison works out, and how much of what can stop a run
+     * in working it out they are.
+     *
+     * @param told whether the reading of the comparison told of every operation that can stop a
+     *             run, only some, or was not made
+     */
+    record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
+
+        /** No reading of the comparison was made, and the program is taken to add the form up.
+         *  That holds for the relations read from the cut of a comparison (a product, a whole and
+         *  its part, a difference, a remainder or quotient, and the lines drawn from them), whose
+         *  form is the program's own expression and not a sum the walk composed. A relation read
+         *  by the affine walk carries what that walk told instead. */
+        static final Working NOTHING =
+                new Working(List.of(), WhatARelationLeavesUndivided.Told.NOTHING_SAID);
+
+        /** A comparison was read and nothing it told is known to belong to this relation: no row
+         *  is shown computed. */
+        static final Working UNREAD =
+                new Working(List.of(), WhatARelationLeavesUndivided.Told.SOME);
+
+        /**
+         * What several readings of one relation tell together: the same where they agree, and
+         * otherwise nothing that holds of the rows of every one of them. A row arrives along one
+         * reading, and an operation told by another is not one it is asked to get past.
+         */
+        static Working together(List<Working> readings) {
+            Working first = readings.getFirst();
+            return readings.stream().allMatch(first::equals) ? first : UNREAD;
+        }
+
+        Working {
+            operations = List.copyOf(operations);
+            Objects.requireNonNull(told, "what the reading told, or that there was none");
+        }
+
+        /** Whether every operation that can stop a run is told. */
+        boolean exact() {
+            return told == WhatARelationLeavesUndivided.Told.EVERY;
+        }
+    }
+
+    UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
+                         List<FilingCoordinate> amongThemselves, Kind kind,
+                         RemainderSide remainder) {
+        this(sides, constant, relation, amongThemselves, kind, remainder, Working.NOTHING);
+    }
+
+    /** The same relation, read from a comparison that works out {@code working}. */
+    UndividedByARelation workingOut(Working working) {
+        return new UndividedByARelation(sides, constant, relation, amongThemselves, kind,
+                remainder, working);
+    }
+
     UndividedByARelation {
         sides = List.copyOf(sides);
         amongThemselves = List.copyOf(amongThemselves);
+        Objects.requireNonNull(working, "a relation says what its comparison works out");
         if (kind != Kind.AFFINE && (sides.size() != 2 || constant == null)) {
             throw new IllegalArgumentException("a product or a remainder is of two numbers, held"
                     + " against a number: " + sides);
@@ -686,6 +753,41 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
         return new Side(List.of(FilingCoordinate.of(term)), weight, term, null, null);
+    }
+
+    /**
+     * The operations the comparison works out, each weighing the numbers it is over by name. An
+     * operation over a number that is no side of this relation, or is two sides, is left out,
+     * which cuts less and says nothing false — and is an operation a row is not asked to get past
+     * here, so the operations are then not every one.
+     */
+    private WhatARelationLeavesUndivided.Operations operationsOverTheSides() {
+        if (working.operations().isEmpty()) {
+            return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
+        }
+        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
+        for (Side each : sides) {
+            if (each.number() != null) {
+                named.merge(each.number(), 1, Integer::sum);
+            }
+        }
+        List<WhatARelationLeavesUndivided.IntSum> sums = new ArrayList<>();
+        boolean leftOut = false;
+        for (IntOperation each : working.operations()) {
+            boolean overTheSides = each.form().coefs().keySet().stream()
+                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
+            if (!overTheSides) {
+                leftOut = true;
+                continue;
+            }
+            sums.add(new WhatARelationLeavesUndivided.IntSum(
+                    new LinkedHashMap<Object, ExactRatio>(each.form().coefs()),
+                    each.form().constant(), each.least(), each.greatest()));
+        }
+        // An operation left out is one a row is not asked to get past here: not every one told.
+        return new WhatARelationLeavesUndivided.Operations(sums,
+                leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
+                        : working.told());
     }
 
     /** The places shown undivided over what the declarations leave. */
@@ -1392,16 +1494,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
         List<WhatARelationLeavesUndivided.JointSupport> supports =
                 datePartsTogether(sources, stating, heldWhole, left.years());
+        WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides();
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
                             overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
-                            supports)
+                            supports, operations)
                     : WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
                             overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
-                            supports);
+                            supports, operations);
             leaves.add(each);
             if (settledAtEveryValue(each)) {
                 out.addAll(places());
@@ -1416,17 +1519,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         : placesOfTheFormLeftEveryRemainder(read, conditions, heldWhole));
             }
         }
-        // How far apart two sides are is asked of the relation as it stands, line and all.
+        // How far apart two sides are is asked of the relation as it stands, line and all. A row
+        // on each side is shown by the sizes of the form's addends, which is so only where a row
+        // within them is computed, asked of every side of the relation and not of the two. The
+        // values a difference settles are asked of the operations as well, which check themselves.
+        boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);
         if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    declared, independent));
+                    declared, independent, operations, sizesAreRowsComputed));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
             List<WhatARelationLeavesUndivided.Leaves> apart =
                     leftByTheirDifference(sources, carriers, stating, heldWhole, read, along,
-                            independent);
+                            independent, operations, sizesAreRowsComputed);
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -3011,7 +3118,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, takes, each.number() instanceof NumericTerm.ValueOf,
-                    spacingOf(carriers.get(i)), whereItStops(carriers.get(i))));
+                    spacingOf(carriers.get(i)), whereItStops(carriers.get(i)), each.number()));
         }
         return terms;
     }
@@ -3712,7 +3819,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          boolean heldWhole, InputReading read,
                                                          SearchRegion region,
                                                          WhatARelationLeavesUndivided.Independence
-                                                                 independent) {
+                                                                 independent,
+                                                         WhatARelationLeavesUndivided.Operations
+                                                                 operations,
+                                                         boolean sizesAreRowsComputed) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -3748,7 +3858,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.number() instanceof NumericTerm.ValueOf
                             || each.number() instanceof NumericTerm.ExtremeOfItsKey
                             || each.number() instanceof NumericTerm.GatheredUnderItsKey,
-                    on.spacingBetweenValues(), on.whereItStops()));
+                    on.spacingBetweenValues(), on.whereItStops(), each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
                 stating);
@@ -3760,9 +3870,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds run = sides.get(pair.first()).number() instanceof NumericTerm.TakenOf
                 ? terms.get(0).realizes()
                 : on.whereItStops();
-        return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.constant(), relation, held,
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.beside(), relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
-                UndividedByARelation::overlap, greatestOf(on));
+                UndividedByARelation::overlap, greatestOf(on), operations, sizesAreRowsComputed);
     }
 
     /**
@@ -3781,7 +3891,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private List<WhatARelationLeavesUndivided.Leaves> leftByTheirDifference(
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
             boolean heldWhole, InputReading read, SearchRegion along,
-            WhatARelationLeavesUndivided.Independence independent) {
+            WhatARelationLeavesUndivided.Independence independent,
+            WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -3804,7 +3915,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return List.of();
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
-                    realizes, null, true, on.spacingBetweenValues(), on.whereItStops()));
+                    realizes, null, true, on.spacingBetweenValues(), on.whereItStops(),
+                    each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
                 stating);
@@ -3817,9 +3929,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.add(null);
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
-                pair.constant(), relation, held, UndividedByARelation::overlap, greatestOf(on)));
+                pair.beside(), relation, held, UndividedByARelation::overlap, greatestOf(on),
+                operations, sizesAreRowsComputed));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
-                pair.constant(), relation, held, UndividedByARelation::overlap, greatestOf(on)));
+                pair.beside(), relation, held, UndividedByARelation::overlap, greatestOf(on),
+                operations, sizesAreRowsComputed));
         return out;
     }
 
@@ -3828,10 +3942,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param first    the first side's place in the relation's sides
      * @param second   the second side's
-     * @param constant the constant the two are held against: the relation's own, and with a third
-     *                 side held still, what that comes to at the value it is held at
+     * @param beside   the addends the two are held against, each apart: the relation's constant,
+     *                 and with a third side held still, that side's weighed value at the value it
+     *                 is held at. Null where the relation's constant is no number.
      */
-    private record TwoSides(int first, int second, ExactRatio constant) {}
+    private record TwoSides(int first, int second, WhatARelationLeavesUndivided.Beside beside) {}
 
     /**
      * The two sides that stand apart by a difference, where the relation is over two sides of one
@@ -3851,7 +3966,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             SearchRegion region, WhatARelationLeavesUndivided.Independence independent) {
         if (sides.size() == 2) {
             return carriers.get(0) != null && carriers.get(0).equals(carriers.get(1))
-                    ? new TwoSides(0, 1, constant) : null;
+                    ? new TwoSides(0, 1, constant == null ? null
+                            : WhatARelationLeavesUndivided.Beside.just(constant)) : null;
         }
         if (sides.size() != 3 || kind != Kind.AFFINE || remainder != null) {
             return null;
@@ -3874,9 +3990,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             ExactRatio weighed = at == null || (carriers.get(held).spacingBetweenValues()
                     == Granularity.DISCRETE && !at.isWhole()) ? null
                     : at.times(sides.get(held).weight()).orNull();
-            ExactRatio moved = weighed == null ? null : constant.plus(weighed).orNull();
-            if (moved != null) {
-                return new TwoSides(first, second, moved);
+            if (weighed != null && constant != null) {
+                return new TwoSides(first, second,
+                        new WhatARelationLeavesUndivided.Beside(List.of(constant, weighed)));
             }
         }
         return null;

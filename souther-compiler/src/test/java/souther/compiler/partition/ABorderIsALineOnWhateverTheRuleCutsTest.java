@@ -485,10 +485,10 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(rows.contains("D(0m), D(2.25m)"),
                 "the point where the form comes to nine:\n" + rows);
-        assertTrue(rows.contains("D(0m), D(0m)"),
+        assertTrue(rows.contains("D(0m), D(2m)"),
                 "a pair inside it, which is what stands for the side the rows leave open:\n"
                         + rows);
-        assertTrue(rows.contains("D(52.25m), D(51.125m)"),
+        assertTrue(rows.contains("D(100m), D(0m)"),
                 "and a pair past it, on the other side:\n" + rows);
     }
 

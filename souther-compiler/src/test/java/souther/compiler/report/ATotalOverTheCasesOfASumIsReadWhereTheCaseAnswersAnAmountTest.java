@@ -83,14 +83,22 @@ class ATotalOverTheCasesOfASumIsReadWhereTheCaseAnswersAnAmountTest {
         assertFalse(report.contains("no row is at the OFF point"), report);
     }
 
-    /** And the numbers of the input are read as relating to the total, and divided no way. */
+    /**
+     * And the numbers of the input are read as relating to the total. They are not shown to be
+     * divided no way: the sums of an amount are worked out into a {@code Yen} whose invariant is
+     * a stop no operation of the comparison tells of, so a row at an end of the type is not shown
+     * computed beside them, and the report says the other value is not shown to reach every
+     * value there.
+     */
     @Test
     void theNumbersOfTheInputAreReadAsRelatedToTheTotal() {
         String report = report();
 
-        assertTrue(report.contains("it relates the value here to another value rather than"
-                + " dividing the values here, about `earnings.fixed`"), report);
-        assertTrue(report.contains("it relates the value here to another value rather than"
-                + " dividing the values here, about `earnings.uplift`"), report);
+        assertTrue(report.contains("it relates the value here to another value not shown to reach"
+                + " every value here, so which values here settle it on their own is not worked"
+                + " out, about `earnings.fixed`"), report);
+        assertTrue(report.contains("it relates the value here to another value not shown to reach"
+                + " every value here, so which values here settle it on their own is not worked"
+                + " out, about `earnings.uplift`"), report);
     }
 }

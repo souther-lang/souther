@@ -132,6 +132,29 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code node} as a form without telling of every operation a run
+         * works out for it: a library call it took as arithmetic over its arguments, a
+         * construction or a projection it read through, a quotient whose operands may not have
+         * room for it, a value read through several members that agree on a form and not on the
+         * operations that make it. A run may stop at such a node, and no {@link #composed} says
+         * where.
+         *
+         * <p>A caller that asks whether the operations it was told of are all a run works out
+         * asks it of this: no call, and they are. A call is not an operation that stops, and
+         * says only that the walk does not know.
+         */
+        default void unobserved(Core node) {
+        }
+
+        /**
+         * Whether making {@code construct} ends no run: no clause is checked when it is made. A
+         * reader that does not know says it may.
+         */
+        default boolean makingEndsNoRun(Core.Construct construct) {
+            return false;
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -623,6 +646,9 @@ public final class AffineForms {
                             () -> of(one.value(), one.at(), one.names(), following));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
+                // Several values the name may stand for, each read apart from the operations the
+                // run works out to give it: which of them it is, is not said.
+                reading.unobserved(e);
                 Stop<A, E> stopped = new Stop<>();
                 LinearForm<A> agreed = commonForm(members, e, at, following, stopped);
                 yield agreed != null ? new Outcome.Composed<>(agreed) : stopped.at;
@@ -872,6 +898,33 @@ public final class AffineForms {
         return form;
     }
 
+    /**
+     * The reading told that {@code call}, read as arithmetic over its arguments, was read without
+     * telling of what it works out — where its owners say working it out may end a run, or do not
+     * say. A call that ends none is the arithmetic and nothing else.
+     */
+    private static <A, E> void unobservedIfItCanStop(Core call, Reading<A, E> reading) {
+        if (!WhatARunMayEndFor.itself(call).endsNone()) {
+            reading.unobserved(call);
+        }
+    }
+
+    /**
+     * {@code form}, the quotient {@code division} came to, with the reading told when a run may
+     * still stop at it: the quotient is by a number that is not nought, which the form being one
+     * says, and stops for no other reason only where it is not of a {@code Rational}
+     * ({@link WhereAnOperatorAnswers}).
+     */
+    private static <A, E> LinearForm<A> quotientTold(Core.Binary division, LinearForm<A> form,
+                                                     Reading<A, E> reading) {
+        if (form != null && !(WhereAnOperatorAnswers.ofAnOperator(division.op(), division.type(),
+                List.of(division.left().type(), division.right().type()))
+                instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
+            reading.unobserved(division);
+        }
+        return form;
+    }
+
     /** No form, and {@code e} recorded as where the reading stopped and why — where nothing
      *  stopped it first. */
     private static <A, E> LinearForm<A> halted(Core e, E at, Halt<A, E> why, Stop<A, E> stopped) {
@@ -920,10 +973,10 @@ public final class AffineForms {
             // either operand's type writes — which is why this is arithmetic over a position at all
             // rather than a value whose fraction went somewhere the form could not say. Which
             // divisors are constant, and why `1 / x` is none of them, is `Terms.quotient`'s.
-            case Core.Binary b when b.op() == BinOp.DIV ->
+            case Core.Binary b when b.op() == BinOp.DIV -> quotientTold(b,
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped), Terms::quotient,
-                            stopped);
+                            stopped), reading);
             // An operation the library says answers arithmetic over what it was given is that
             // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,
             // and a rule about the arguments is a rule about the call. Composed here beside the
@@ -958,8 +1011,12 @@ public final class AffineForms {
             case Core.Construct nd when !nd.values().isEmpty()
                     && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
                             reading.declarations().kinds(), reading.declarations().sums())
-                            .isWrapped() ->
-                    formOf(nd.values().get(0).value(), at, reading, following, stopped);
+                            .isWrapped() -> {
+                // The construction checks the invariant of the type it makes, which stops a run
+                // that no operation here tells of.
+                reading.unobserved(e);
+                yield formOf(nd.values().get(0).value(), at, reading, following, stopped);
+            }
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather
             // than as what kind of node was standing there: a construction without the field asked
@@ -971,6 +1028,12 @@ public final class AffineForms {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
+                    // Read off the construction that gave the value, whose other parts are worked
+                    // out all the same: untold where one of them can end a run.
+                    if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
+                            following, reading::makingEndsNoRun)) {
+                        reading.unobserved(e);
+                    }
                     yield commonForm(eliminated, e, at, following, stopped);
                 }
                 yield reading.readsThrough(fa, at)
@@ -985,6 +1048,9 @@ public final class AffineForms {
             case Core.TupleGet get -> {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(get, at, reading, following);
+                if (eliminated != null) {
+                    reading.unobserved(e);
+                }
                 yield eliminated == null ? null
                         : commonForm(eliminated, e, at, following, stopped);
             }
@@ -1034,6 +1100,7 @@ public final class AffineForms {
             List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                     ValueStanding.eliminated(here, at, reading, following);
             if (eliminated != null) {
+                reading.unobserved(here);
                 form = commonForm(eliminated, here, at, following, stop);
                 break;
             }
@@ -1138,6 +1205,7 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> overTheValues(Core call, LinearForm<Core> says, E at,
                                                       Reading<A, E> reading, Walk<A, E> following,
                                                       Stop<A, E> stopped) {
+        unobservedIfItCanStop(call, reading);
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
         for (Map.Entry<Core, ExactRatio> each : says.coefs().entrySet()) {
@@ -1168,6 +1236,7 @@ public final class AffineForms {
                                                  E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
+        unobservedIfItCanStop(call, reading);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the

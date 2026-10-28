@@ -3758,9 +3758,12 @@ public final class InvariantChecker {
         Set<RuleKey> out = new LinkedHashSet<>(WhatARelationLeavesUndivided.of(terms,
                 over.constant(), relation, overlap, (one, other) -> true,
                 first == null ? null : first.greatestWholeNumber()));
-        out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
+        out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart,
+                over.constant() == null ? null
+                        : WhatARelationLeavesUndivided.Beside.just(over.constant()), relation,
                 List.of(), new WhatARelationLeavesUndivided.WhereTheRepresentationStops(extent),
-                overlap, first == null ? null : first.greatestWholeNumber()));
+                overlap, first == null ? null : first.greatestWholeNumber(),
+                WhatARelationLeavesUndivided.Operations.NONE, true));
         for (int i = 0; i < terms.size(); i++) {
             Carrier carrier = weighed.get(i).getKey().carrier();
             if (!out.containsAll(terms.get(i).madeOf()) && carrier != null

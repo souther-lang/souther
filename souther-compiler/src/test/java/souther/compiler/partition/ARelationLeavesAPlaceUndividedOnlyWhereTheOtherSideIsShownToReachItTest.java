@@ -864,7 +864,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
      * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross.
+     * takes, and nothing is shown of the gross. Nor is the doubled total shown left either way:
+     * the value of a total each element of which is made into another is read from the elements
+     * and asks the operations of the comparison for a row beside an end of the total, which it
+     * has no end to ask.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
@@ -874,7 +877,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", NOT_SHOWN,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
@@ -1546,7 +1549,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  computed, which leaves out only those beside the ends of the type. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", RELATES, "gross", RELATES),
+        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "adjustment", RELATES,
+                        "gross", RELATES),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));
     }
@@ -3034,21 +3038,24 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * every one from it, and run out at 42: from there on no standard is above four times them.
      * A standard past nought has hours below a quarter of it, which a decimal from nought has, so
      * only the standard of nought settles the comparison. Weighed three to four, the hours run out
-     * at 126.
+     * at 126. A decimal product may have no room for its digits or scale, which no operation of
+     * the comparison tells of, so the other's reaching is not shown computed and the places are
+     * not shown, though the line is drawn.
      */
     @Test
     void aWeightOnADecimalDrawsTheLineWhereTheOtherRunsOut() {
         String inputs = "h: Hours, s: Hours";
         for (String body : List.of("h.value * 4.0m >= s.value",
                 "h.value * 4.0m >= s.value * 3.0m")) {
-            assertEquals(Map.of(), left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)),
-                    body);
-            assertEquals(List.of("s/0 <= x <= 0", "s/0 < x <= 168"),
-                    classesAt(inputs, HOURS, body, "s"), body);
+            assertEquals(Map.of("h", NOT_SHOWN, "s", NOT_SHOWN),
+                    left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)), body);
+            // The boundary is where the product meets the other, and a row on either side of it
+            // is one only if the product is worked out there, which a decimal product need not
+            // be: no class is drawn until a row on each side is shown to compute.
+            assertEquals(List.of(), classesAt(inputs, HOURS, body, "s"), body);
         }
-        assertEquals(List.of("h/0 <= x < 42", "h/42 <= x <= 168"),
-                classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
-        assertEquals(List.of("h/0 <= x < 126", "h/126 <= x <= 168"),
+        assertEquals(List.of(), classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
+        assertEquals(List.of(),
                 classesAt(inputs, HOURS, "h.value * 4.0m >= s.value * 3.0m", "h"));
     }
 
@@ -3109,6 +3116,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * {@code c} from 150001. Held there, {@code c} leaves {@code a} against {@code s} one apart,
      * and each {@code a} has an {@code s} at one above it and two above it. Where nothing shows the
      * allowance takes a value above its cap, nothing is shown of {@code a} along that arm.
+     *
+     * <p>The arm is expanded into a relation of its own, which carries none of the operations the
+     * comparison works out, so a row at an end of the type is not shown computed and nothing is
+     * shown of {@code a}, {@code c} or {@code s} along either arm. That is a reading short of
+     * what the comparison states and says nothing of a row that exists.
      */
     @Test
     void aTermHeldAboveItsCapAlongAnArmIsHeldWhereItStarts() {
@@ -3124,8 +3136,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         String written = capped.formatted("data Unused = Int", "Yen");
         String at = "7:" + (written.lines().toList().get(6).indexOf(">=") + 1);
-        assertEquals(Set.of(), notReadIn(written, at));
-        assertEquals(RELATES, leftIn(written, at).get("a"));
+        assertEquals(Set.of("a", "c", "s"), notReadIn(written, at));
         String unshown = capped.formatted(
                 "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
         assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());
@@ -3151,14 +3162,19 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(g.value - c.value)
                 }
                 """;
-        assertEquals(Map.of("a", RELATES, "b", RELATES),
+        // The sum of two amounts is built into a Yen, whose invariant stops a run that no
+        // operation of the comparison tells of: no row is shown computed beside an end of the
+        // type, and no term is shown left either way: the difference of two terms is answered by
+        // the sizes of the form's addends, which say nothing of that invariant.
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "c", NOT_SHOWN),
                 leftIn(named, whereWritten(named, ">= c")));
-        assertEquals(List.of("c/0 <= x <= 0", "c/0 < x"), classesIn(named, "c"));
-        assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
+        assertEquals(List.of(), classesIn(named, "c"));
+        assertEquals(Set.of("a", "b", "c"), notReadIn(named, whereWritten(named, ">= c")));
 
         String writtenOut = named.replace("let g = a + b\n    guard g >= c",
                 "guard a + b >= c").replace("g.value", "a.value + b.value");
-        assertEquals(Set.of(), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
+        assertEquals(Set.of("a", "b", "c"),
+                notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
 
         String payroll = """
                 module w1
@@ -3175,7 +3191,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(gross.value - subtracted.value)
                 }
                 """;
-        assertEquals(Set.of(), notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
+        // The capped allowance is a call whose arms are expanded into relations of their own,
+        // which carry none of the operations the comparison works out: nothing is shown of the
+        // places, and that is a reading short of what the comparison states.
+        assertEquals(Set.of("insurance", "p.base", "p.commuting", "p.other", "uplift"),
+                notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
     }
 
     /**
@@ -3279,16 +3299,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * Over decimals from nought, {@code a >= s + 5}: every {@code s} has an {@code a} at five
      * above it and one below, the {@code a} needed running on without end on an order that has
-     * none, and an {@code a} below five holds it for no {@code s}.
+     * none, and an {@code a} below five holds it for no {@code s}. The addition of decimals can
+     * stop a run at a scale, which no operation of the comparison tells of, so the run past every
+     * value is not taken as rows the program computes, and the relation is not shown to reach.
      */
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
         String body = "a.value >= s.value + 5.0m";
-        assertEquals(Map.of("s", RELATES), left("a: Amount, s: Amount", amount, body,
+        assertEquals(Map.of("a", NOT_SHOWN, "s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
                 atThe(">=", amount, "a: Amount, s: Amount", body)));
-        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
-                classesAt("a: Amount, s: Amount", amount, body, "a"));
+        // The boundary at five is the arithmetic's, and the sum past it need not be worked out.
+        assertEquals(List.of(), classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 
     private static final String KEYED = """
