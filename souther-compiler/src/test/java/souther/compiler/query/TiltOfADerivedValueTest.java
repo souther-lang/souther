@@ -7,6 +7,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.TiltOfADerivedValue.RowsOnABorder;
 import souther.compiler.query.TiltOfADerivedValue.Rule;
 import souther.compiler.query.TiltOfADerivedValue.Standing;
@@ -22,6 +24,7 @@ import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What the evidence of the borders of each call of a computation comes to, per position.
@@ -221,6 +224,96 @@ class TiltOfADerivedValueTest {
         SequencedMap<NumericTerm, Standing> standings = oneCall(first, second);
         assertEquals(Standing.Shown.class, of(standings, A));
         assertEquals(Standing.Shown.class, of(standings, B));
+    }
+
+    private static final Weakening A_STOP = new Weakening.BorderReadingsNotExhausted(
+            OneBorder.border(), WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(4));
+
+    private static Standing.Undecided undecided(SequencedMap<NumericTerm, Standing> standings,
+                                                NumericTerm place) {
+        return assertInstanceOf(Standing.Undecided.class, standings.get(place));
+    }
+
+    /** A call with no border says it read none, in the weights' own words. */
+    @Test
+    void aCallWithNoBorderIsUndecidedForWantingOne() {
+        Standing.Undecided said = undecided(TiltOfADerivedValue.standingsOf(PLACES,
+                List.of(List.of())), A);
+        assertEquals(List.of(Weakening.AWeightNotDecided.Why.NO_BORDER_OF_IT_WAS_READ),
+                said.own().written());
+        assertTrue(said.carried().isEmpty());
+    }
+
+    /** What a border's reading went without is that border's word, and is carried as it was said
+     *  and not said again. */
+    @Test
+    void whatABordersReadingWentWithoutIsCarriedAsTheBorderSaidIt() {
+        RowsOnABorder stopped = new RowsOnABorder(UNIT_WEIGHTS, reaches(100), held(row(100, 0)),
+                false, WeakeningSet.of(A_STOP), false);
+        Standing.Undecided said = undecided(oneCall(stopped), A);
+        assertEquals(WeakeningSet.of(A_STOP), said.carried());
+        assertTrue(said.own().isEmpty());
+    }
+
+    /** A border short with no word of its own is the weights' to say, so a weight is never
+     *  undecided for nothing. */
+    @Test
+    void aBorderShortWithNoWordOfItsOwnIsSaidByTheWeights() {
+        Standing.Undecided said = undecided(oneCall(border(100, false, List.of(row(100, 0)),
+                List.of(row(99, 0)))), B);
+        assertEquals(List.of(Weakening.AWeightNotDecided.Why.A_BORDER_WAS_NOT_READ_IN_FULL),
+                said.own().written());
+    }
+
+    /** A run nothing watched is a way of running, which a wider run answers. */
+    @Test
+    void aRunNothingWatchedIsSaidAsThatAndAnswersToAWiderRun() {
+        RowsOnABorder unwatched = new RowsOnABorder(UNIT_WEIGHTS, reaches(100), held(row(100, 0)),
+                false, WeakeningSet.none(), true);
+        Standing.Undecided said = undecided(oneCall(unwatched), A);
+        assertEquals(List.of(Weakening.AWeightNotDecided.Why.A_RUN_WAS_NOT_WATCHED),
+                said.own().written());
+        assertEquals(RunSensitivity.MAY_CHANGE, new Weakening.AWeightNotDecided("b",
+                OneBorder.derivedValue(), A, Weakening.AWeightNotDecided.Why.A_RUN_WAS_NOT_WATCHED)
+                .runSensitivity());
+    }
+
+    /** The exact arithmetic giving out is first a fact of the weights. */
+    @Test
+    void theArithmeticGivingOutIsSaidByTheWeights() {
+        Rule overflowsAtB = (weights, values) -> Count.number(values.get(B)).exactly().isZero()
+                ? reaches(100).holdsAt(weights, values) : Optional.empty();
+        RowsOnABorder border = new RowsOnABorder(UNIT_WEIGHTS, overflowsAtB,
+                held(row(100, 0), row(0, 100), row(99, 0), row(0, 99)), true);
+        assertEquals(List.of(Weakening.AWeightNotDecided.Why.THE_ARITHMETIC_GAVE_OUT),
+                undecided(oneCall(border), B).own().written());
+    }
+
+    /** Two calls leave a weight undecided between them for what each went without. */
+    @Test
+    void callsLeaveAWeightUndecidedForWhatEachWentWithout() {
+        RowsOnABorder stopped = new RowsOnABorder(UNIT_WEIGHTS, reaches(100), held(row(100, 0)),
+                false, WeakeningSet.of(A_STOP), false);
+        Standing.Undecided said = undecided(TiltOfADerivedValue.standingsOf(PLACES,
+                List.of(List.of(), List.of(stopped))), A);
+        assertEquals(WeakeningSet.of(A_STOP), said.carried());
+        assertEquals(List.of(Weakening.AWeightNotDecided.Why.NO_BORDER_OF_IT_WAS_READ),
+                said.own().written());
+    }
+
+    /** Only the undecided positions weaken a measure: a weight fixed, or shown unfixed, is a claim
+     *  about the rows. */
+    @Test
+    void onlyAnUndecidedPositionWeakensAMeasure() {
+        SequencedMap<NumericTerm, Standing> settled = new LinkedHashMap<>();
+        settled.put(A, new Standing.Shown());
+        settled.put(B, new Standing.NotShown());
+        assertTrue(new TiltOfADerivedValue(OneBorder.derivedValue(), settled, List.of(),
+                List.of()).notDecided("b").isEmpty());
+
+        TiltOfADerivedValue unread = new TiltOfADerivedValue(OneBorder.derivedValue(),
+                TiltOfADerivedValue.standingsOf(PLACES, List.of(List.of())), List.of(), List.of());
+        assertEquals(2, unread.notDecided("b").causes().size());
     }
 
     @Test

@@ -122,7 +122,10 @@ public final class BoundaryDerivation {
         // A switch over the three, for the reason the partition beside it is one.
         return switch (closure) {
             case MeasureClosure.OfTheBorder.Closed closed -> {
-                if (at.isEmpty()) {
+                // No line drawn is a settled answer only where the weights went without nothing:
+                // a computation is owed its weights whether or not a border of it was drawn, and a
+                // not-applicable measure has nowhere to say what they went without.
+                if (at.isEmpty() && weightsNotDecided.isEmpty()) {
                     yield new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
                 }
                 WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at)
@@ -138,22 +141,22 @@ public final class BoundaryDerivation {
                 // were made found beside it. Those are theirs to name and are not about the body.
                 WeakeningSet without = WeakeningSet.of(
                         new Weakening.BodyNotInEvaluation(unread.behavior()))
-                        .union(PartitionDerivation.weakening(unread.besides()));
+                        .union(PartitionDerivation.weakening(unread.besides()))
+                        .union(weightsNotDecided);
                 yield at.isEmpty()
                         ? new Measurement.FailedToMeasure<>(
                                 BodyWasNotRead.BODY_WAS_NOT_READ, without)
                         : new Measurement.Partial<>(List.copyOf(at), without.union(
-                                whatHoldingThemAgainstTheirNeighboursWentWithout(at))
-                                .union(weightsNotDecided));
+                                whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
             }
             case MeasureClosure.OfTheBorder.Open open -> {
-                WeakeningSet by = PartitionDerivation.weakening(open.by());
+                WeakeningSet by = PartitionDerivation.weakening(open.by())
+                        .union(weightsNotDecided);
                 yield at.isEmpty()
                         ? new Measurement.FailedToMeasure<>(
                                 TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
                         : new Measurement.Partial<>(List.copyOf(at),
-                                by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at))
-                                        .union(weightsNotDecided));
+                                by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
             }
         };
     }

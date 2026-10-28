@@ -31,7 +31,7 @@ import java.util.List;
 
 /** One border, for a test that needs a value of that type and for which border it is is no part
  *  of what it is about. */
-final class OneBorder {
+public final class OneBorder {
 
     private OneBorder() {
     }
@@ -52,7 +52,7 @@ final class OneBorder {
     }
 
     /** One computation of a comparison a body wrote, read at one call. */
-    static DerivedValue derivedValue() {
+    public static DerivedValue derivedValue() {
         SourceConstructOrigin comparison = new SourceConstructOrigin(
                 new WrittenOwner.Body("m", "b"), 0, 0, SourceConstruct.BINARY);
         AuthoredLine line = new AuthoredLine(

@@ -127,9 +127,18 @@ it (`Border.threshold`), and the answer is `OwedByTheComputation` whatever the w
 unfixed weight is said under E1940 and does not bring the lines beside the threshold back.
 
 What the weights are short of is the weights' to say, since no border carries it any longer. A weight
-the rows neither fix nor show unfixed is `undecided` in the document and is a weakening of the
-behavior's border measure (`a_weight_not_decided`), so a verdict does not rest on a weight nobody
-established.
+the rows neither fix nor show unfixed is `undecided` in the document, and what it went without is a
+weakening of the behavior's border measure, so a verdict does not rest on a weight nobody
+established. It is said whatever the measure came to, including a reading that drew no line: a
+computation is owed its weights whether or not a border of it was drawn.
+
+An undecided weight says what it went without in two parts and states no fact twice. What a border's
+reading went without (rows read in part, a limit a reading stopped at, a measurement that read
+nothing) is that border's own weakening, carried as the border said it, with its own answer about a
+wider run. Only what is first a fact of the weights is the weights' own word, `a_weight_not_decided`:
+no border of the computation was read, a border was short with no word of its own, a run nothing
+watched, and the exact arithmetic giving out on a changed weight. A run nothing watched is answered by
+a wider run and names no figure; the others are not.
 
 ### What each threshold is owed
 

@@ -1520,31 +1520,40 @@ final class Coverages {
                 return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, List.of(),
                         noRowIsOnAndTheyWereRead);
             }
-            StandingsRead read = readAt(near, shape, rows);
+            StandingsRead read = readAt(border, near, shape, rows);
             return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, read.readings(),
-                    pointsWorkedOut && read.complete());
+                    pointsWorkedOut && read.complete(), read.wentWithout(), read.unwatched());
         }));
     }
 
-    /** The readings of the rows that stand at the points {@code at}, and whether they are all. */
-    private record StandingsRead(List<Map<NumericTerm, Place>> readings, boolean complete) {}
+    /**
+     * The readings of the rows that stand at the points {@code at}, whether they are all, and what
+     * reading them went without in the words the border's own reading says it in.
+     */
+    private record StandingsRead(List<Map<NumericTerm, Place>> readings, boolean complete,
+                                 WeakeningSet wentWithout, boolean unwatched) {}
 
     /**
      * The readings of the rows that stand at a point, asked of the walk that says whether a row
      * does, and no others: a reading of the same row away from the point holds numbers that are
      * not at it.
      */
-    private static StandingsRead readAt(List<Criterion> at, OneShapeOfBorder shape,
+    private static StandingsRead readAt(Border border, List<Criterion> at, OneShapeOfBorder shape,
                                         List<ObservedInputs> rows) {
         List<Map<NumericTerm, Place>> each = new ArrayList<>();
         boolean complete = true;
+        boolean unwatched = false;
+        WeakeningSet wentWithout = WeakeningSet.none();
         for (Criterion criterion : at) {
             StandingAtAPoint.RowsRead read = shape.valuesAt(criterion, rows);
             each.addAll(read.each());
-            complete &= read.why().isEmpty() && !read.unwatched()
-                    && read.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne;
+            complete &= read.everyOne();
+            unwatched |= read.unwatched();
+            wentWithout = wentWithout.union(
+                    BorderAssessment.rowsIncomplete(border,
+                            ReadingReasons.of(read.why(), read.tried())));
         }
-        return new StandingsRead(each, complete);
+        return new StandingsRead(each, complete, wentWithout, unwatched);
     }
 
     /**
@@ -1609,8 +1618,12 @@ final class Coverages {
                         // A border nothing was read against says nothing, and is not left out of
                         // the call: the call's weights are fixed by the rows on every border of it,
                         // and not by the ones that happened to be read.
+                        // What nothing was read against it is the border's own measurement to
+                        // say, and it is carried as that measurement says it.
                         ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
-                                .orElseGet(TiltOfADerivedValue.RowsOnABorder::unread));
+                                .orElseGet(() -> TiltOfADerivedValue.RowsOnABorder.unread(
+                                        reading.absent() == null ? WeakeningSet.none()
+                                                : reading.absent().weakening())));
                     }
                 }
                 byCall.put(copy, ofOneCall);

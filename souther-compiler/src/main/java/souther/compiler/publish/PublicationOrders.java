@@ -16,6 +16,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.query.Weakening;
 import souther.compiler.reach.WhatMayStopARun;
 
 import tools.jackson.databind.node.ObjectNode;
@@ -285,6 +286,21 @@ public final class PublicationOrders {
                     ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY,
                     ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED,
                     ReplacementEvidence.Undecided.Why.NOTHING_RAN));
+
+    /**
+     * Why a weight of a derived value is neither fixed nor shown unfixed, for a reason that is first
+     * a fact of the weights, from what a reader can do something about to what no row changes.
+     *
+     * <p>A run nothing watched first, since recording the runs is a thing a reader can do. Then no
+     * border read, and a border short with no word of its own, which are about the rows; and last
+     * the exact arithmetic, which no row and no run changes.
+     */
+    public static final CanonicalSelection.Order<Weakening.AWeightNotDecided.Why>
+            WEIGHT_NOT_DECIDED_REASONS = CanonicalSelection.Order.overValues(List.of(
+                    Weakening.AWeightNotDecided.Why.A_RUN_WAS_NOT_WATCHED,
+                    Weakening.AWeightNotDecided.Why.NO_BORDER_OF_IT_WAS_READ,
+                    Weakening.AWeightNotDecided.Why.A_BORDER_WAS_NOT_READ_IN_FULL,
+                    Weakening.AWeightNotDecided.Why.THE_ARITHMETIC_GAVE_OUT));
 
     /**
      * What this compiler declined to do, from what bounds one value to what bounds a whole search.

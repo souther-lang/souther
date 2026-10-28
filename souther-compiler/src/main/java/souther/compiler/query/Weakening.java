@@ -86,8 +86,9 @@ public sealed interface Weakening {
      * <p>Not every {@link RunSensitivity#MAY_CHANGE} has one. A border left out because nothing
      * watched the runs ({@link ABorderNotHeldAgainstTheLinesBesideIt.Why#NOTHING_WATCHED_THE_RUNS})
      * was stopped by what this build was asked to record, which is a way of running and not a
-     * figure. It is the one: every other stop a wider run may get past was compared against a
-     * figure, and carries it.
+     * figure, and so is a weight left undecided by the same
+     * ({@link AWeightNotDecided.Why#A_RUN_WAS_NOT_WATCHED}). They are the two: every other stop a
+     * wider run may get past was compared against a figure, and carries it.
      */
     default List<Figure> figures() {
         return switch (this) {
@@ -200,33 +201,60 @@ public sealed interface Weakening {
 
     /**
      * The rows neither fix nor leave unfixed how one position weighs into a value derived from
-     * several positions.
+     * several positions, for a reason that exists first in the weights.
      *
-     * <p>Nothing was read against the computation, a border of it was not read in full, or the exact
-     * arithmetic gave out on a changed weight or on a row. None of them is a claim about the rows,
-     * so the weight is no finding, and none of them is a weight fixed either: what the weights are
-     * owed was not established, and a verdict that rested on it would rest on nothing.
+     * <p>None of the reasons is a claim about the rows, so the weight is no finding, and none of
+     * them is a weight fixed either: a verdict that rested on it would rest on nothing.
+     *
+     * <p>Only what is first a fact of the weights is said here. A border whose rows were read in
+     * part, or stopped at a figure, already says so in its own words, with its own answer about a
+     * wider run, and the undecided weight carries those as they are rather than answering for them
+     * a second time. What is left for this is the weights' own: nothing of the computation was read,
+     * a border was left short with no word of its own, a run nothing watched, and the exact
+     * arithmetic giving out on a changed weight.
      *
      * <p>Owned by the weights and not by a border. The computation is one however many borders cut
      * it, and the borders of a computation cut at several places are not asked for the lines beside
-     * them, so no border carries what the weights went without.
-     *
-     * <p>Unaffected by a wider run: no allowance of its own stopped it. Where an allowance did stop
-     * the reading of a border of the computation, that border says so with the figure it stopped
-     * at, and a run that allows more is told by it.
+     * them.
      */
-    record AWeightNotDecided(String behavior, DerivedValue value, NumericTerm position)
+    record AWeightNotDecided(String behavior, DerivedValue value, NumericTerm position, Why why)
             implements Weakening {
+
+        /** Why the weight is neither fixed nor shown unfixed. */
+        public enum Why {
+            /** No border of the computation was read against the rows. */
+            NO_BORDER_OF_IT_WAS_READ(RunSensitivity.UNAFFECTED),
+            /** A border was read short and nothing else says how: its rows are not all read. */
+            A_BORDER_WAS_NOT_READ_IN_FULL(RunSensitivity.UNAFFECTED),
+            /** A row was left out because nothing watched its run. What watched it is what this
+             *  build asked to record, so a build that records more reads the row. */
+            A_RUN_WAS_NOT_WATCHED(RunSensitivity.MAY_CHANGE),
+            /** A model's own decimals put a changed weight, or a row under it, out of the exact
+             *  arithmetic's reach. No allowance stopped the working out. */
+            THE_ARITHMETIC_GAVE_OUT(RunSensitivity.UNAFFECTED);
+
+            private final RunSensitivity sensitivity;
+
+            Why(RunSensitivity sensitivity) {
+                this.sensitivity = sensitivity;
+            }
+
+            RunSensitivity sensitivity() {
+                return sensitivity;
+            }
+        }
 
         public AWeightNotDecided {
             Objects.requireNonNull(behavior, "a weight not decided is a behavior's");
             Objects.requireNonNull(value, "a weight is a weight in some computation");
             Objects.requireNonNull(position, "a weight is the weight of some position");
+            Objects.requireNonNull(why, "a weight not decided says why");
         }
 
+        /** Asked of the reason: the ways to be undecided do not answer alike. */
         @Override
         public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
+            return why.sensitivity();
         }
     }
 
