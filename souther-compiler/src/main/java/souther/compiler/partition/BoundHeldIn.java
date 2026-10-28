@@ -73,10 +73,10 @@ public record BoundHeldIn(List<Location> data, Map<BindingId, String> called) {
         return out;
     }
 
-    /** The same, each with the binding that roots it, so that two bindings called alike are two
-     *  entries. For a document, which is compared as it is written. */
-    public List<String> identified() {
-        return data.stream()
-                .map(each -> each + " (" + called.getOrDefault(each.root(), "?") + ")").toList();
+    /** Where the data is, as the locations are written and nothing a reader calls them. For a
+     *  document, which is compared as it is written: what it says is what two of these are equal
+     *  by. */
+    public List<String> locations() {
+        return data.stream().map(Location::toString).toList();
     }
 }

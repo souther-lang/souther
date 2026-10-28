@@ -6740,7 +6740,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** The data the bound of a threshold is read out of, in one order whatever the walk was. */
     private static void heldIn(ObjectNode into, BoundHeldIn held) {
         ArrayNode data = into.putArray("heldIn");
-        held.identified().forEach(data::add);
+        held.locations().forEach(data::add);
     }
 
     /**

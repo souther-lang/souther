@@ -793,7 +793,7 @@
         "heldIn": {
           "type": "array",
           "minItems": 1,
-          "description": "The data the bound is read out of, each as the name its binding is called and the binding, in one order.",
+          "description": "The data the bound is read out of, each as the location it is: the binding it is rooted at and the fields read from there, in one order. What a reader calls it is in the human report and is no part of which data it is.",
           "items": {
             "type": "string"
           }

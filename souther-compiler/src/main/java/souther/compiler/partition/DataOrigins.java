@@ -55,33 +55,56 @@ final class DataOrigins {
      *  is read out of none. */
     BoundHeldIn ofTheNumbersIn(Core number, InputReads reads) {
         Set<Location> origins = new LinkedHashSet<>();
-        numbersIn(number, reads, origins);
+        numbersIn(number, reads, Set.of(), origins);
         return origins.isEmpty() ? null : new BoundHeldIn(List.copyOf(origins), called);
     }
 
-    private void numbersIn(Core number, InputReads reads, Set<Location> into) {
+    /**
+     * A number is data where it is a field of some, or an element of a container. A name is what
+     * it was given, so a number named by a {@code let} or handed to a helper is read out of what
+     * it was made of, and a name given a literal is made of none.
+     *
+     * <p>{@code onPath} is the bindings this walk is inside of, which is what a cycle is. What
+     * another branch of the walk met is no part of it.
+     */
+    private void numbersIn(Core number, InputReads reads, Set<BindingId> onPath,
+                           Set<Location> into) {
         switch (Core.withoutStanding(number)) {
             case Core.Binary binary -> {
-                numbersIn(binary.left(), reads, into);
-                numbersIn(binary.right(), reads, into);
+                numbersIn(binary.left(), reads, onPath, into);
+                numbersIn(binary.right(), reads, onPath, into);
             }
-            case Core.Neg negated -> numbersIn(negated.operand(), reads, into);
-            // A number is data where it is a field of one: a name alone is a value, and says
-            // nothing of which table it is a number of.
-            case Core.FieldAccess field -> into.addAll(originsOf(field, reads, new HashSet<>()));
+            case Core.Neg negated -> numbersIn(negated.operand(), reads, onPath, into);
+            case Core.FieldAccess field -> into.addAll(originsOf(field, reads, onPath));
             case Core.FieldProjection projection ->
-                    into.addAll(originsOf(projection, reads, new HashSet<>()));
+                    into.addAll(originsOf(projection, reads, onPath));
+            case Core.Read name -> {
+                if (onPath.contains(name.binding())) {
+                    return;
+                }
+                if (!reads.containersTheElementCameFrom(name).isEmpty()) {
+                    into.addAll(originsOf(name, reads, onPath));
+                } else if (reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                        instanceof ReadMeaning.Through through) {
+                    numbersIn(through.denotes().value(), through.denotes().at(),
+                            with(onPath, name.binding()), into);
+                }
+            }
+            case Core.If choice -> {
+                numbersIn(choice.then(), reads, onPath, into);
+                numbersIn(choice.els(), reads, onPath, into);
+            }
             default -> { }
         }
     }
 
-    private Set<Location> originsOf(Core value, InputReads at, Set<BindingId> met) {
+    private Set<Location> originsOf(Core value, InputReads at, Set<BindingId> onPath) {
         return switch (Core.withoutStanding(value)) {
-            case Core.Read name -> ofAName(name, at, met);
-            case Core.FieldAccess field -> deeper(originsOf(field.target(), at, met),
+            case Core.Read name -> ofAName(name, at, onPath);
+            case Core.FieldAccess field -> deeper(originsOf(field.target(), at, onPath),
                     field.target().type(), field.field());
             case Core.FieldProjection projection -> {
-                Set<Location> out = originsOf(projection.base(), at, met);
+                Set<Location> out = originsOf(projection.base(), at, onPath);
                 Type from = projection.base().type();
                 for (Core.FieldProjection.Step each : projection.steps().inOrder()) {
                     out = deeper(out, from, each.field());
@@ -89,31 +112,40 @@ final class DataOrigins {
                 }
                 yield out;
             }
-            case Core.If choice -> union(originsOf(choice.then(), at, met),
-                    originsOf(choice.els(), at, met));
+            case Core.If choice -> union(originsOf(choice.then(), at, onPath),
+                    originsOf(choice.els(), at, onPath));
             case Core.Match match -> {
                 Set<Location> out = new LinkedHashSet<>();
                 for (Core.Case each : match.cases()) {
-                    out.addAll(originsOf(each.body(), at, met));
+                    out.addAll(originsOf(each.body(), at, onPath));
                 }
                 yield out;
             }
             case Core.IfConstructed construct -> {
-                Set<Location> out = new LinkedHashSet<>(originsOf(construct.then(), at, met));
+                Set<Location> out = new LinkedHashSet<>(originsOf(construct.then(), at, onPath));
                 for (Core.ElseArm each : construct.els()) {
-                    out.addAll(originsOf(each.body(), at, met));
+                    out.addAll(originsOf(each.body(), at, onPath));
                 }
                 yield out;
             }
-            case Core.LetIn let -> originsOf(let.body(), at, met);
+            case Core.LetIn let -> originsOf(let.body(), at, onPath);
             default -> Set.of();
         };
     }
 
-    private Set<Location> ofAName(Core.Read name, InputReads at, Set<BindingId> met) {
-        if (!met.add(name.binding())) {
+    /** {@code path} and {@code binding}: a walk that goes on from here has met it, and the walks
+     *  beside this one have not. */
+    private static Set<BindingId> with(Set<BindingId> path, BindingId binding) {
+        Set<BindingId> out = new HashSet<>(path);
+        out.add(binding);
+        return out;
+    }
+
+    private Set<Location> ofAName(Core.Read name, InputReads at, Set<BindingId> before) {
+        if (before.contains(name.binding())) {
             return Set.of(root(name));
         }
+        Set<BindingId> onPath = with(before, name.binding());
         // What a walk handed an element is the container the element came out of, and the step
         // into it: whichever table the fold ran over is the table, and the element's own field is
         // the column.
@@ -121,7 +153,7 @@ final class DataOrigins {
         if (!containers.isEmpty()) {
             Set<Location> out = new LinkedHashSet<>();
             for (Core container : containers) {
-                for (Location each : originsOf(container, at, met)) {
+                for (Location each : originsOf(container, at, onPath)) {
                     out.add(new Location(each.root(), withElement(each.path())));
                 }
             }
@@ -130,7 +162,7 @@ final class DataOrigins {
         if (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
                 instanceof ReadMeaning.Through through) {
             Core given = Core.withoutStanding(through.denotes().value());
-            Set<Location> out = originsOf(given, through.denotes().at(), met);
+            Set<Location> out = originsOf(given, through.denotes().at(), onPath);
             if (!out.isEmpty()) {
                 return out;
             }
