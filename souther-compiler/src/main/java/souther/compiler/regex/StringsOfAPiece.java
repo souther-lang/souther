@@ -39,11 +39,16 @@ public final class StringsOfAPiece {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
         }
         Automaton machine = whole.machine();
+        meter.starting();
+        Meter.Making making = meter.making();
+        if (!making.work((long) index * machine.size())) {
+            return null;
+        }
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         BitSet begin = new BitSet();
         begin.set(Automaton.START);
-        for (int passed = 0; passed < index; passed++) {
+        for (int passed = 0; passed < index && !begin.isEmpty(); passed++) {
             BitSet next = new BitSet();
             for (int state : withoutASeparator(machine, begin, within)) {
                 for (Automaton.Step each : machine.stepsFrom(state)) {
@@ -95,6 +100,10 @@ public final class StringsOfAPiece {
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         int states = machine.size();
+        meter.starting();
+        if (!meter.making().states((long) index + states + 1)) {
+            return null;
+        }
         // States 0 to index - 1 are the walk before the piece, one for each separator still to
         // pass. State index + q is the machine of the piece in state q, so the walk's last
         // separator leads to where the machine starts, and the last state is the rest of the

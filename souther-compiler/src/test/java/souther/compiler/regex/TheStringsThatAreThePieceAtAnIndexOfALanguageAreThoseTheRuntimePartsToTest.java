@@ -107,6 +107,15 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
         }
     }
 
+    /** An index past what the meter allows is refused before anything is made for it. */
+    @Test
+    void anIndexTheMeterCannotAffordIsRefusedNotWalked() {
+        assertEquals(null, StringsOfAPiece.pieceAt(language("[A-Z]+;7"), ';', Integer.MAX_VALUE,
+                ALLOWANCE));
+        assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A7"), ';',
+                Integer.MAX_VALUE, ALLOWANCE));
+    }
+
     @Test
     void aLanguageWithFewerPiecesThanTheIndexHasNone() {
         assertEquals(true, StringsOfAPiece.pieceAt(language("A7"), ';', 1, ALLOWANCE).isEmpty());
