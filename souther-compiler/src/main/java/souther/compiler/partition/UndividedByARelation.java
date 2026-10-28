@@ -481,6 +481,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         StringsAPartnerCanHold(ValueSet canBe, String partner) {
             this(canBe, canBe, null, partner);
         }
+
+        /** Whether every string is shown on one side or the other, so that none is open. */
+        boolean leavesNoneOpen() {
+            return upTo == null && canBe.equals(mayBe);
+        }
     }
 
     /** The places this relation is about, which are the only ones it says anything of. */
@@ -1882,8 +1887,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 strings = canBe == null || canBe.isEmpty() ? null
                         : new StringsAPartnerCanHold(canBe, called);
             }
-            if (strings == null || strings.mayBe().isAny() || strings.mayBe().isEmpty()
-                    || strings.mayBe() instanceof ValueSet.WholeRuns) {
+            // Nothing to part where every string is shown on one side: none may be the partner's,
+            // or every one is shown to be. Where every one only may be, some are open, and the
+            // strings shown on a side are still parted from them.
+            if (strings == null || strings.mayBe().isEmpty()
+                    || strings.mayBe() instanceof ValueSet.WholeRuns
+                    || (strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
             if (!runGetsThere.getAsBoolean()) {

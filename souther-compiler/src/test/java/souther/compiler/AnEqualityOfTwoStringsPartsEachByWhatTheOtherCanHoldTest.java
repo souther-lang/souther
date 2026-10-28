@@ -276,12 +276,11 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     }
 
     /**
-     * A piece so far into a string that what is written before it is longer than any string is
-     * shown the piece of no value, so no domain is shown on the side where it is one. Those that
-     * are no piece of any string are still shown on the other, and every other domain is open
-     * whatever its length. The domains are not shown undivided by it, since one open may be on the
-     * side none is shown on: the one class is those shown on the other side, and the rest are in
-     * none.
+     * A piece so far into a string that what this writes round one is longer than any string, so
+     * no domain is shown to be the piece of a value. Those that are no piece of any string are
+     * still shown on the other side, and every other domain is open whatever its length. The
+     * domains are not shown undivided by it, since one open may be on the side none is shown on:
+     * the one class is those shown on the other side, and the rest are in none.
      */
     @Test
     void aPieceNothingCanBeWrittenBeforeLeavesEveryDomainItMayBeOpen() {
@@ -299,6 +298,56 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                         List.of("book[*].domain@Some/x is never piece 300000000 of email")),
                 classesAtOf("book[*].domain@Some", "[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*",
                         lets));
+    }
+
+    /** The domains of the piece above, against a book whose every domain is a piece of a string. */
+    private static final String PIECE_NOTHING_IS_SHOWN_AT = """
+            let f (email, book) =
+                match List.get(300000000, String.split("@", email.value)) with
+                    | Some d -> List.filter(r -> hasDomain(d, r)%s, book.value)
+                    | None -> []
+            %s""";
+
+    /**
+     * The same piece, where every domain the book can hold is a piece of some string: none is
+     * shown on either side, so the position has no class. What is open is still a question that
+     * holds the measure open, and nothing says the domains are undivided.
+     */
+    @Test
+    void aPositionEveryValueOfWhichIsOpenStillAsksAboutThem() {
+        PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z]+",
+                PIECE_NOTHING_IS_SHOWN_AT.formatted("", ""));
+
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertEquals(List.of(), evidence.axes().stream()
+                .filter(axis -> axis.path().equals("book[*].domain@Some")).toList());
+        assertFalse(notReadAt(evidence, "book[*].domain@Some").contains(
+                UndividedPosition.Reason.RULE_TELLS_NOTHING_APART));
+    }
+
+    /**
+     * And with a rule beside it that every domain is shown on one side of: the position has no
+     * class for what the equality left open, which the equality says, and the rule beside it is
+     * not said to have left anything.
+     */
+    @Test
+    void aRuleBesideOnesThatLeaveEveryValueOpenIsNotToldItLeftThem() {
+        PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z]+",
+                PIECE_NOTHING_IS_SHOWN_AT.formatted(" && startsAtA(r)", """
+
+                        let startsAtA (r: Row): Bool =
+                            match r.domain with
+                                | Some own -> String.matches("a[a-z]*", own.value)
+                                | None -> false
+                        """));
+
+        assertEquals(1, evidence.notRead().stream()
+                .filter(each -> each.at().equals("book[*].domain@Some")
+                        && each.reason() == UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION)
+                .count(), evidence.notRead().toString());
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+                leftOpenAt(evidence, "book[*].domain@Some"));
     }
 
     private static final Map<String, List<String>> THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN =

@@ -241,35 +241,26 @@ public final class BehaviorSetStatements {
      * rest and under the same allowance. Whether the position holds values on both sides of it is
      * settled where its values are known ({@link Classing}), as for any rule that states a set.
      *
-     * <p>As far as each string is shown. The strings shown to be the partner's are those of
-     * {@code canBe} no longer than {@code upTo}, the strings shown to be none of its values are
-     * those outside {@code mayBe}, and the rest are told neither way: they are in no class this
-     * draws, and are said to be left open ({@link SetStatement#notShown}).
+     * <p>As far as each string is shown, which is the three regions {@code strings} holds: the
+     * strings shown to be the partner's, those shown to be none of its values, and the rest, told
+     * neither way, which are in no class this draws and are said to be left open
+     * ({@link SetStatement#notShown}). Held as the one value they are read off, so what is open is
+     * said in one place.
      *
-     * @param by     which reading of which comparison this is
-     * @param states what it states, called by the partner it is relative to
-     * @param term   the position it is about
-     * @param canBe  the strings shown to be some value of the partner, as far as {@code upTo}
-     *               goes
-     * @param mayBe  the strings outside which no value of the partner is
-     * @param upTo   the most code points a string of {@code canBe} is shown one at, or null where
-     *               every one of them is
+     * @param by      which reading of which comparison this is
+     * @param states  what it states, called by the partner it is relative to
+     * @param term    the position it is about
+     * @param strings the strings the partner can hold, as far as each is shown
      */
     public record Partnered(PredicateOrigin by, PredicateStatement states,
-                            NumericTerm.FromOnePosition term, ValueSet canBe, ValueSet mayBe,
-                            Long upTo) {
+                            NumericTerm.FromOnePosition term,
+                            UndividedByARelation.StringsAPartnerCanHold strings) {
 
         public Partnered {
-            if (by == null || states == null || term == null || canBe == null || mayBe == null) {
+            if (by == null || states == null || term == null || strings == null) {
                 throw new IllegalArgumentException(
                         "an equality states of a position the strings its partner can hold");
             }
-        }
-
-        /** Strings shown to be the partner's exactly where {@code canBe} holds them. */
-        public Partnered(PredicateOrigin by, PredicateStatement states,
-                         NumericTerm.FromOnePosition term, ValueSet canBe) {
-            this(by, states, term, canBe, canBe, null);
         }
     }
 
@@ -298,17 +289,18 @@ public final class BehaviorSetStatements {
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         for (Partnered each : partnered) {
-            boolean everyOne = each.upTo() == null && each.canBe().equals(each.mayBe());
+            UndividedByARelation.StringsAPartnerCanHold strings = each.strings();
             // A partner none of whose values is shown leaves the true side empty, and every string
             // it may be told neither way.
-            AdmittedPlan shown = each.canBe().isEmpty() ? AdmittedPlan.NONE
-                    : AdmittedPlan.of(each.canBe());
+            AdmittedPlan shown = strings.canBe().isEmpty() ? AdmittedPlan.NONE
+                    : AdmittedPlan.of(strings.canBe());
             asked.add(new Asked(each.by(), each.states(), each.term(),
-                    shown, AdmittedPlan.without(each.mayBe()),
-                    everyOne ? null : AdmittedPlan.meeting(List.of(AdmittedPlan.of(each.mayBe()),
-                            each.canBe().isEmpty() ? AdmittedPlan.ANY
-                                    : AdmittedPlan.without(each.canBe()))),
-                    each.upTo()));
+                    shown, AdmittedPlan.without(strings.mayBe()),
+                    strings.leavesNoneOpen() ? null
+                            : AdmittedPlan.meeting(List.of(AdmittedPlan.of(strings.mayBe()),
+                                    strings.canBe().isEmpty() ? AdmittedPlan.ANY
+                                            : AdmittedPlan.without(strings.canBe()))),
+                    strings.upTo()));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();

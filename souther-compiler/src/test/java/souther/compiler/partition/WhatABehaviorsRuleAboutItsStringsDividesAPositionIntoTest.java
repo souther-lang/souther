@@ -2,7 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
+
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.StatedContract;
@@ -308,7 +312,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         Allowance<NumericTerm.FromOnePosition> spent =
                 Allowance.of(new PatternPlan.Budget(1, 1, 1_000_000_000L));
         Classing.Result answered = Classing.of(read.statements().get(0).at(), read.statements(),
-                List.of(), new souther.compiler.check.Carrier.Text(),
+                List.of(), new Carrier.Text(),
                 // A position whose own declarations leave it a language, which is what an
                 // `invariant String.matches(...)` leaves. Meeting a rule with it is machine work,
                 // and that is the work this allowance cannot afford.
@@ -389,6 +393,36 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 answered.forEach().stream().map(Classing.Disposed::outcome).toList());
     }
 
+    /**
+     * Where the classes stop at a rule before it, what a rule leaves open is carried all the same.
+     * The first rule's true side is {@code a} and a combining acute, which no value is shown to be
+     * and none is shown not to be, so the classes are not composed; the second leaves the strings
+     * past two code points open, and is still asked about them.
+     */
+    @Test
+    void whatARuleLeavesOpenIsCarriedWhereTheClassesStopBeforeIt() {
+        SetStatement read = matchingLowerCase();
+        RuleEvidence unsettled = new RuleEvidence.BySet(new SetStatement(read.term(),
+                ValuesWithin.all(matching("a\\x{301}")), read.whenFalse(), read.statement(),
+                read.origin(), ValueSet.NONE));
+        Classing.Result answered = Classing.of(read.term(),
+                List.of(unsettled, shownUpTo(read, 2L)), List.of(),
+                new Carrier.Text(), matching(".+"),
+                Allowance.of(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                PatternPlan.Budget.OF_A_WITNESS::meter, place -> null);
+
+        assertInstanceOf(Classing.Classed.NotComposed.class, answered.classed());
+        assertEquals(1, answered.leftOpen().size(), "the second rule's values past two: "
+                + answered.leftOpen());
+    }
+
+    private static ValueSet matching(String regex) {
+        PatternRead said = PatternParser.read(regex);
+        return ValueSet.matching(PatternPlan.of(
+                        assertInstanceOf(PatternRead.Read.class, said, regex).meaning())
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()));
+    }
+
     /** The one division a rule that a code is lower case states. */
     private static SetStatement matchingLowerCase() {
         return divisionIn(readingsOf("""
@@ -433,7 +467,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 new Value.Text("abcd"), new Value.Text("abcdefg"), new Value.Text("AB"))));
         Classing.Result answered = Classing.of(read.term(),
                 List.of(shownUpTo(read, 3L), shownUpTo(read, 5L)), List.of(),
-                new souther.compiler.check.Carrier.Text(), admits,
+                new Carrier.Text(), admits,
                 Allowance.of(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                 PatternPlan.Budget.OF_A_WITNESS::meter, place -> null);
 
@@ -466,7 +500,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                                                     ValueSet admits,
                                                     Function<Place, FixtureTemplate> writing) {
         return Classing.of(read.term(), List.of(shownUpTo(read, longest)), List.of(),
-                new souther.compiler.check.Carrier.Text(), admits,
+                new Carrier.Text(), admits,
                 Allowance.of(PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                 PatternPlan.Budget.OF_A_WITNESS::meter, writing);
     }

@@ -888,7 +888,12 @@ public final class Partitions {
         // Into the gathering the whole stage answers with, and not a list of this method's own:
         // what a reader is told is assembled once, after every position has been measured, so a
         // finding kept here would be one nobody reads.
-        if (made.why() != null && blocked.isEmpty()) {
+        //
+        // Nor where what stopped the classes is the values the rules left open. Each rule that
+        // left some said which above, as it does beside classes; a rule beside them left none, and
+        // the reason copied onto it would name it for what another rule was not shown over.
+        if (made.why() != null && blocked.isEmpty()
+                && !(made.why() instanceof BlockReason.RelationShownOverARegion)) {
             RuleEvidence.statementsIn(answered.notComposed())
                     .forEach(each -> found.add(RuleWithoutALine.of(each.origin().cited(),
                             each.origin().readAt(),
