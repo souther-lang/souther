@@ -1202,13 +1202,8 @@ final class Pullback {
             leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
             leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
         } else if (e instanceof Core.IfConstructed attempt) {
-            // The construction an attempt tests takes the other arm where it is refused and ends
-            // nothing ({@link WhatARunMayEndFor#of}); what it is built of is worked out all the
-            // same.
-            Core.forEachChild(Core.withoutStanding(attempt.construct()),
-                    child -> leaveUnsaidWhatMayEndARunUnder(child, reads, bound));
-            leaveUnsaidWhatMayEndARunUnder(attempt.then(), reads, bound);
-            attempt.els().forEach(arm -> leaveUnsaidWhatMayEndARunUnder(arm.body(), reads, bound));
+            WhatARunMayEndFor.forEachWorkedOut(attempt,
+                    part -> leaveUnsaidWhatMayEndARunUnder(part, reads, bound));
         } else {
             Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
                     Core.withoutStanding(child) instanceof Core.Block block

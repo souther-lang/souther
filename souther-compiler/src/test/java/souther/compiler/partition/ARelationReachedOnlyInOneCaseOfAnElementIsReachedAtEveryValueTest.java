@@ -183,11 +183,16 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
 
     /**
      * The domains of the mails of a lead, found before the contacts on those mails are: each mail
-     * hands an attempt at a domain name, which a refused attempt leaves out. {@code f2} reads the
-     * contacts on a mail alone, which is what has the places of the contacts measured.
+     * hands an attempt at a domain name, which a refused attempt leaves out. {@code contactsOnTheMail}
+     * reads the contacts on a mail alone, and the reading reports the stop of {@code screen} only
+     * with it beside.
      */
     private static final String AFTER_AN_ATTEMPT = """
-            module m.scr exposing ( EmailAddress, DomainName, EmailOnly, PhoneOnly, EmailAndPhone, Reach, Contact, CBook, ContactId, Acct, Book, Dup, NoEmail, NoDup, f2, g1 )
+            module example.screening exposing (
+                EmailAddress, DomainName, EmailOnly, PhoneOnly, EmailAndPhone, Reach, Contact,
+                Contacts, ContactId, Account, Book, Found, NoMail, NothingFound,
+                contactsOnTheMail, screen
+            )
 
             data EmailAddress = String
                 invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
@@ -200,10 +205,10 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
             data EmailAndPhone = { email: EmailAddress, phone: String }
             data Reach = EmailOnly | PhoneOnly | EmailAndPhone
             data Contact = { id: ContactId, reach: Reach }
-            data CBook = List<Contact>
+            data Contacts = List<Contact>
                 invariant List.allDistinctBy(.id, value)
-            data Acct = { id: ContactId, domain: DomainName? }
-            data Book = List<Acct>
+            data Account = { id: ContactId, domain: DomainName? }
+            data Book = List<Account>
                 invariant List.allDistinctBy(.id, value)
 
             let emailOf (reach: Reach): List<EmailAddress> =
@@ -218,10 +223,10 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
                     | EmailAndPhone { email = own } -> own == email
                     | PhoneOnly { phone } -> false
 
-            let contactsOnEmail (email: EmailAddress, CBook(rows)): List<Contact> =
+            let contactsOnEmail (email: EmailAddress, Contacts(rows)): List<Contact> =
                 List.filter(c -> reachHasEmail(email, c.reach), rows)
 
-            let emailMatches (reach: Reach, contacts: CBook): List<Contact> =
+            let emailMatches (reach: Reach, contacts: Contacts): List<Contact> =
                 List.flatMap(e -> contactsOnEmail(e, contacts), emailOf(reach))
 
             let domainOf (email: EmailAddress): List<DomainName> =
@@ -229,38 +234,38 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
                     | Some d -> if DomainName(d) as name then [ name ] else []
                     | None -> []
 
-            let hasDomain (domain: DomainName, a: Acct): Bool =
+            let hasDomain (domain: DomainName, a: Account): Bool =
                 match a.domain with
                     | Some own -> own == domain
                     | None -> false
 
-            let accountsOnDomain (domain: DomainName, Book(rows)): List<Acct> =
+            let accountsOnDomain (domain: DomainName, Book(rows)): List<Account> =
                 List.filter(a -> hasDomain(domain, a), rows)
 
-            let domainMatches (reach: Reach, accounts: Book): List<Acct> =
+            let domainMatches (reach: Reach, accounts: Book): List<Account> =
                 List.flatMap(d -> accountsOnDomain(d, accounts), List.flatMap(e -> domainOf(e), emailOf(reach)))
 
-            data Dup = { accounts: List<ContactId>, contacts: List<ContactId> }  invariant List.length(accounts) + List.length(contacts) >= 1
-            data NoEmail
-            data NoDup
+            data Found = { accounts: List<ContactId>, contacts: List<ContactId> }  invariant List.length(accounts) + List.length(contacts) >= 1
+            data NoMail
+            data NothingFound
 
-            behavior g1 : (reach: Reach, accounts: Book, contacts: CBook) -> NoDup | Dup | NoEmail
-                constructs Dup, DomainName
-            let g1 (reach, accounts, contacts) = {
-                guard List.length(emailOf(reach)) >= 1 else NoEmail
+            behavior screen : (reach: Reach, accounts: Book, contacts: Contacts) -> NothingFound | Found | NoMail
+                constructs Found, DomainName
+            let screen (reach, accounts, contacts) = {
+                guard List.length(emailOf(reach)) >= 1 else NoMail
                 let ma = List.map(a -> a.id, domainMatches(reach, accounts))
                 let mc = List.map(c -> c.id, emailMatches(reach, contacts))
-                guard List.length(ma) + List.length(mc) >= 1 else NoDup
-                Dup { accounts = ma, contacts = mc }
+                guard List.length(ma) + List.length(mc) >= 1 else NothingFound
+                Found { accounts = ma, contacts = mc }
             }
 
-            behavior f2 : (reach: Reach, contacts: CBook) -> List<Contact>
-            let f2 (reach, contacts) = emailMatches(reach, contacts)
+            behavior contactsOnTheMail : (reach: Reach, contacts: Contacts) -> List<Contact>
+            let contactsOnTheMail (reach, contacts) = emailMatches(reach, contacts)
             """;
 
     @Test
     void anAttemptedConstructionBeforeARelationStopsNoRunOnTheMailsItReads() {
-        assertEquals(List.of(), notReachedAtEveryValue(AFTER_AN_ATTEMPT, "g1"),
+        assertEquals(List.of(), notReachedAtEveryValue(AFTER_AN_ATTEMPT, "screen"),
                 "an attempt refused takes the other arm and holds at most one element");
     }
 
