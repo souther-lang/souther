@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Location;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -125,30 +126,32 @@ final class DataOrigins {
                 }
                 yield out;
             }
-            case Core.If choice -> chosenAmong(List.of(choice.then(), choice.els()), at, onPath);
-            case Core.Match match ->
-                    chosenAmong(match.cases().stream().map(Core.Case::body).toList(), at, onPath);
-            case Core.IfConstructed construct -> {
-                List<Core> arms = new ArrayList<>();
-                arms.add(construct.then());
-                construct.els().forEach(each -> arms.add(each.body()));
-                yield chosenAmong(arms, at, onPath);
-            }
-            case Core.LetIn let -> originsOf(let.body(), at, onPath);
+            // The value of a node that chooses or binds is what is in the children the scope steps
+            // say are its answer, each read under the names in force there: the names a step goes
+            // through are {@link ScopeStep}'s to say, and this keeps no list of its own.
+            case Core.If _, Core.Match _, Core.IfConstructed _, Core.LetIn _ ->
+                    answeredBy(Core.withoutStanding(value), at, onPath);
             default -> Set.of();
         };
     }
 
     /**
-     * The origins of whichever of {@code arms} a condition chooses: all of theirs together — and
-     * none where any one of them has no place. A value one arm of which is built where it stands, or
-     * computed, is a value of its own, and the places of the others say only some of what it may be;
-     * the name it was given is then where the data is.
+     * The origins of what {@code node} answers with: the body of a binding, or whichever arm a
+     * condition chooses — all of theirs together, and none where any one of them has no place. A
+     * value one arm of which is built where it stands, or computed, is a value of its own, and the
+     * places of the others say only some of what it may be; the name it was given is then where the
+     * data is.
      */
-    private Set<Location> chosenAmong(List<Core> arms, InputReads at, Set<BindingId> onPath) {
+    private Set<Location> answeredBy(Core node, InputReads at, Set<BindingId> onPath) {
+        List<Set<Location>> answers = new ArrayList<>();
+        ScopeStep.forEachChild(node, (child, step) -> {
+            if (step instanceof ScopeStep.Chosen || step instanceof ScopeStep.Let) {
+                answers.add(originsOf(child, at.entering(step, read.rules().symbols(),
+                        read.rules().newtypes()), onPath));
+            }
+        });
         Set<Location> out = new LinkedHashSet<>();
-        for (Core arm : arms) {
-            Set<Location> each = originsOf(arm, at, onPath);
+        for (Set<Location> each : answers) {
             if (each.isEmpty()) {
                 return Set.of();
             }

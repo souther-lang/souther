@@ -597,6 +597,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/DataOrigins", "originsOf",
                 "(" + core + reads + "Ljava/util/Set;)Ljava/util/Set;", Reading.NAMES,
                 READS_THE_NAMES);
+        row(out, c + "partition/DataOrigins", "answeredBy",
+                "(" + core + reads + "Ljava/util/Set;)Ljava/util/Set;", Reading.STRUCTURE,
+                CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "comparisonHolding",
                 "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",

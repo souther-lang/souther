@@ -104,6 +104,20 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                 + " else gradeIn(config.second, a.v)");
     }
 
+    /** A table handed through a name a block binds is the table, as it is handed directly. */
+    @Test
+    void aTableHandedThroughALocalNameIsThatTable() {
+        assertOwedAtTheBound(0, Shape.FLAT, "if useFirst then gradeIn(first, a.v)"
+                + " else gradeIn({ let t = first\n        t }, a.v)");
+    }
+
+    /** And the same through the arm of a `match` or a condition inside the argument. */
+    @Test
+    void aTableHandedThroughAChoiceOfLocalNamesIsThatTable() {
+        assertOwedAtTheBound(0, Shape.FLAT, "if useFirst then gradeIn(first, a.v)"
+                + " else gradeIn({ let t = first\n        if useFirst then t else t }, a.v)");
+    }
+
     /** A helper over a limit, applied to two limits whose bounds are alike. */
     private static String helperOver(String body, String call) {
         return """
