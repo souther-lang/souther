@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.TiltOfADerivedValue.RowsOnABorder;
@@ -314,6 +315,40 @@ class TiltOfADerivedValueTest {
         TiltOfADerivedValue unread = new TiltOfADerivedValue(OneBorder.derivedValue(),
                 TiltOfADerivedValue.standingsOf(PLACES, List.of(List.of())), List.of(), List.of());
         assertEquals(2, unread.notDecided("b").causes().size());
+    }
+
+    private static final Weakening A_PLACE_NOT_WORKED_OUT = new Weakening.ItemsPlaceNotWorkedOut(
+            OneBorder.border(), UnheldNumber.MORE_ROOM_COULD_ANSWER);
+
+    /**
+     * A border no row stands at the line of, read short, says why it was short as the points
+     * nearest the line said it. The weight is not left to the weights' own word for a border that
+     * had a reason, which would answer a wider run for a stop a wider run gets past.
+     */
+    @Test
+    void aBorderNoRowIsOnReadShortKeepsWhyTheNearPointsWereShort() {
+        for (Weakening why : List.of(A_STOP, A_PLACE_NOT_WORKED_OUT)) {
+            RowsOnABorder evidence = Coverages.evidenceOn(UNIT_WEIGHTS, reaches(100),
+                    Coverages.StandingsRead.ofNoRow(false), WeakeningSet.of(why), true);
+            assertEquals(WeakeningSet.of(why), evidence.wentWithout());
+
+            Standing.Undecided said = undecided(oneCall(evidence), A);
+            assertEquals(WeakeningSet.of(why), said.carried(), why.toString());
+            assertTrue(said.own().isEmpty(), "a stop that has its reason is not said again: "
+                    + said.own().written());
+        }
+    }
+
+    /** What reading the rows at the points went without and what the points went without are both
+     *  kept, whichever way the rows were come by. */
+    @Test
+    void whatTheRowsAndTheNearPointsWentWithoutAreKeptTogether() {
+        Coverages.StandingsRead read = new Coverages.StandingsRead(held(row(100, 0)), false,
+                WeakeningSet.of(A_STOP), false);
+        RowsOnABorder evidence = Coverages.evidenceOn(UNIT_WEIGHTS, reaches(100), read,
+                WeakeningSet.of(A_PLACE_NOT_WORKED_OUT), true);
+        assertEquals(WeakeningSet.of(A_STOP).union(WeakeningSet.of(A_PLACE_NOT_WORKED_OUT)),
+                evidence.wentWithout());
     }
 
     @Test

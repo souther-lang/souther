@@ -35,8 +35,9 @@ import java.util.function.Supplier;
  * once for each position (White and Cohen, IEEE TSE SE-6(3), 1980).
  *
  * <p><b>A weight is fixed where a computation weighing it otherwise would fail a row.</b> The faults
- * are the ones a border is held against beside its own line ({@link FaultFamily}): one position
- * weighed one more or one less than the model weighs it, and nothing else. For each such
+ * are the family of lines beside a border's own ({@link FaultFamily}), taken at the threshold the
+ * model wrote: one position weighed one more or one less than the model weighs it, and nothing
+ * else. For each such
  * computation, a row at the value nearest a border answers differently from the model where the
  * border's rule, read against the threshold the model wrote and the value the changed computation
  * works out, puts the row on the other side. A weight is fixed where both the computation weighing
@@ -45,8 +46,10 @@ import java.util.function.Supplier;
  * to the side the model has it on, so the check is made against the rule and not against how the
  * rows are spread.
  *
- * <p>What this establishes is what E1938 establishes and no more: no fault of one step in one
- * weight is left, which is a fault domain stated and not the weights pinned down.
+ * <p>What this establishes is that no fault of one step in one weight, with the threshold the model
+ * wrote, is left: a fault domain stated and not the weights pinned down. E1938 states a wider one
+ * for a border cut at one place, where the threshold of the line beside it moves as well, and a
+ * border that is a threshold of a computation cut at several places is not asked it.
  *
  * <p><b>Evidence belongs to the call that reads it.</b> A computation names the calls cut at the
  * same places, and which of them is one computation is not something the borders can prove: two

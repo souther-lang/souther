@@ -1473,12 +1473,17 @@ final class Coverages {
         boolean someRowIsOn = false;
         boolean pointsRead = true;
         boolean allWorkedOut = true;
+        // What the points nearest the line went without, as their own measurements say it. The
+        // owner of that is the point's assessment, so it is asked of it on every way out of here
+        // and not rebuilt from the flags below, which keep whether and lose why.
+        WeakeningSet pointsWentWithout = WeakeningSet.none();
         for (DomainPoint point : border.answers().keySet()) {
             // The values nearest the line on each side, which is where a row shows the line has not
             // moved; a run away from it shows nothing of that.
             if (!border.roleOf(point).againstTheLine()) {
                 continue;
             }
+            pointsWentWithout = pointsWentWithout.union(items.get(point).weakening(border));
             switch (border.demand(point)) {
                 case Demand.Owed owed -> {
                     near.add(owed.criterion());
@@ -1500,13 +1505,14 @@ final class Coverages {
         boolean rowsAreOn = someRowIsOn;
         boolean noRowIsOnAndTheyWereRead = pointsRead;
         boolean pointsWorkedOut = allWorkedOut;
+        WeakeningSet nearWentWithout = pointsWentWithout;
         // The rule is the border's own and is read against the model's weights in the quantity's own
         // units, which is the family E1938 holds a border against. A border that reads as no rule
         // of that kind has no rule to put a changed computation to, and says so by being incomplete.
         Optional<OrderedAffineBoundary> boundary = OrderedAffineBoundary.of(border).orNull();
         if (boundary == null || boundary.isEmpty()) {
             return Optional.of(new TiltOfADerivedValue.Reading(border,
-                    TiltOfADerivedValue.RowsOnABorder::unread));
+                    () -> TiltOfADerivedValue.RowsOnABorder.unread(nearWentWithout)));
         }
         OrderedAffineBoundary rule = boundary.get();
         Map<NumericTerm, ExactRatio> weights = rule.direction().direction();
@@ -1515,23 +1521,44 @@ final class Coverages {
                 .containsAll(changed.keySet())
                 ? Optional.ofNullable(rule.satisfiesWeighing(changed, values).orNull())
                 : Optional.empty();
-        return Optional.of(new TiltOfADerivedValue.Reading(border, () -> {
-            if (!rowsAreOn) {
-                return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, List.of(),
-                        noRowIsOnAndTheyWereRead);
-            }
-            StandingsRead read = readAt(border, near, shape, rows);
-            return new TiltOfADerivedValue.RowsOnABorder(weights, weighed, read.readings(),
-                    pointsWorkedOut && read.complete(), read.wentWithout(), read.unwatched());
-        }));
+        return Optional.of(new TiltOfADerivedValue.Reading(border, () -> evidenceOn(weights, weighed,
+                rowsAreOn ? readAt(border, near, shape, rows)
+                        : StandingsRead.ofNoRow(noRowIsOnAndTheyWereRead),
+                nearWentWithout, pointsWorkedOut)));
+    }
+
+    /**
+     * What the rows on one border say of the weights, made in one place for every way the rows
+     * were or were not read.
+     *
+     * <p>Whether a border was read in full and why it was not are one fact, and a flag per way out
+     * of reading it keeps the first and loses the second. So what the points nearest the line went
+     * without is joined here, to what reading the rows at them went without, whichever of the two
+     * ways the rows came by.
+     *
+     * @param nearWentWithout what the points nearest the line went without, by their own
+     *                        assessments
+     */
+    static TiltOfADerivedValue.RowsOnABorder evidenceOn(
+            Map<NumericTerm, ExactRatio> weights, TiltOfADerivedValue.Rule rule,
+            StandingsRead read, WeakeningSet nearWentWithout, boolean pointsWorkedOut) {
+        return new TiltOfADerivedValue.RowsOnABorder(weights, rule, read.readings(),
+                pointsWorkedOut && read.complete(), read.wentWithout().union(nearWentWithout),
+                read.unwatched());
     }
 
     /**
      * The readings of the rows that stand at the points {@code at}, whether they are all, and what
      * reading them went without in the words the border's own reading says it in.
      */
-    private record StandingsRead(List<Map<NumericTerm, Place>> readings, boolean complete,
-                                 WeakeningSet wentWithout, boolean unwatched) {}
+    record StandingsRead(List<Map<NumericTerm, Place>> readings, boolean complete,
+                         WeakeningSet wentWithout, boolean unwatched) {
+
+        /** No row stands at the line, and whether the rows were all read is {@code complete}. */
+        static StandingsRead ofNoRow(boolean complete) {
+            return new StandingsRead(List.of(), complete, WeakeningSet.none(), false);
+        }
+    }
 
     /**
      * The readings of the rows that stand at a point, asked of the walk that says whether a row
