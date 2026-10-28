@@ -11,6 +11,7 @@ import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -189,8 +190,55 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                     invariant List.allDistinctBy(i -> i.id, items)
                 """);
         assertEquals(List.of(Set.of(new ClauseRead(new RuleKey(List.of("items")),
-                        ClauseRead.Kind.EACH_ELEMENTS_RUN, RuleKey.of("id")))),
+                        ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART, RuleKey.of("id")))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
+    }
+
+    /**
+     * What a clause reads and what it needs are told apart: a call keeping elements apart that the
+     * clause denies, or states as one way among several, is read at the same places and is not one
+     * the clause cannot be true without.
+     */
+    @Test
+    void aCallKeepingElementsApartIsNeededOnlyWhereTheClauseIsFalseWithoutIt() {
+        for (String clause : List.of(
+                "List.allDistinctBy(i -> i.id, items) == false",
+                "List.allDistinctBy(i -> i.id, items) || List.length(items) >= 3")) {
+            Compilation c = started("""
+                    module shop.prices exposing ( Item, Range )
+
+                    data Item = { id: Int, price: Int }
+
+                    data Range = { items: List<Item> }
+                        invariant %s
+                    """.formatted(clause));
+            assertEquals(Set.of(ClauseRead.Kind.EACH_ELEMENTS_RUN),
+                    kindsOfTheElementsRead(c), clause);
+        }
+        Compilation both = started("""
+                module shop.prices exposing ( Item, Range )
+
+                data Item = { id: Int, price: Int }
+
+                data Range = { items: List<Item> }
+                    invariant List.allDistinctBy(i -> i.id, items) && List.length(items) >= 2
+                """);
+        assertEquals(Set.of(ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART),
+                kindsOfTheElementsRead(both), "a conjunct needs what it holds");
+    }
+
+    /** The kinds of read of elements the clauses of {@code c} say, one entry per kind. */
+    private static Set<ClauseRead.Kind> kindsOfTheElementsRead(Compilation c) {
+        Set<ClauseRead.Kind> out = new HashSet<>();
+        for (Set<ClauseRead> each : clausesSay(c, ClauseMeaning.Stated::reads)) {
+            for (ClauseRead read : each) {
+                if (read.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN
+                        || read.kind() == ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART) {
+                    out.add(read.kind());
+                }
+            }
+        }
+        return out;
     }
 
     /** A newtype's own {@code value} is the value itself, so a newtype wrapping a record reads its

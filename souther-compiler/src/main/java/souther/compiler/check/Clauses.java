@@ -408,7 +408,8 @@ final class Clauses {
         Map<BindingId, String> declared = new HashMap<>();
         bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
         return new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                new HashMap<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>())
+                new HashMap<>(), new ArrayList<>(), new ArrayList<>(), new HashSet<>(),
+                new HashSet<>())
                 .exactly(clause, symbols, source.declarations());
     }
 
@@ -420,7 +421,8 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    new HashMap<>(), new ArrayList<>(), bindings, reads).readsOf(read);
+                    new HashMap<>(), new ArrayList<>(), new ArrayList<>(), bindings, reads)
+                    .readsOf(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
                 String name = declared.get(each);
@@ -456,7 +458,7 @@ final class Clauses {
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
                                   DeclarationNewtypes newtypes, Map<BindingId, Location> aliases,
-                                  List<Lookup> lookups,
+                                  List<Lookup> lookups, List<Apart> aparts,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
 
         /** The operations that take what to look for and the container to look in, in that order,
@@ -472,6 +474,7 @@ final class Clauses {
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
             Objects.requireNonNull(aliases, "a walk of a clause knows what a name was given");
             Objects.requireNonNull(lookups, "a walk of a clause gathers its lookups somewhere");
+            Objects.requireNonNull(aparts, "a walk of a clause gathers its apart calls somewhere");
             Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
             Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
         }
@@ -479,17 +482,27 @@ final class Clauses {
         /** A lookup in a container that is a place of the value: the lookup, and the container. */
         private record Lookup(Core lookup, Location container) {}
 
+        /** A call saying no two elements of a container that is a place of the value share what a
+         *  run reads off one: the call, the container, and the run. */
+        private record Apart(Core call, Location container, List<String> run) {}
+
         /**
-         * Every place of {@code clause} it reads. The containers it looks members up in are read
-         * once the whole clause has been walked, because whether a lookup is one the clause
-         * cannot be true without is a question about the clause around it.
+         * Every place of {@code clause} it reads. The containers it looks members up in, and those
+         * it says the elements of are apart, are read once the whole clause has been walked,
+         * because whether a part is one the clause cannot be true without is a question about the
+         * clause around it.
          */
         void readsOf(Core clause) {
             walk(clause);
             for (Lookup each : lookups) {
-                read(each.container(), LookupsAClauseNeeds.needs(clause, each.lookup())
+                read(each.container(), WhatAClauseNeeds.aMemberFound(clause, each.lookup())
                         ? ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS
                         : ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+            }
+            for (Apart each : aparts) {
+                read(each.container(), WhatAClauseNeeds.elementsApart(clause, each.call())
+                        ? ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART
+                        : ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(each.run()));
             }
         }
 
@@ -511,7 +524,7 @@ final class Clauses {
             ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
             Location container = apart == null ? null : locationOf(apart.container());
             if (container != null) {
-                read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(apart.run()));
+                aparts.add(new Apart(e, container, apart.run()));
                 return;
             }
             if (e instanceof Core.Read r) {

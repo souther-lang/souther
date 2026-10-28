@@ -223,6 +223,15 @@ public final class ContainerSizesUnderAWitness {
             }
             case Core.LetIn li -> most(li.body());
             case Core.If fork -> larger(most(fork.then()), most(fork.els()));
+            // Of the value an attempt answers where it is built or where it is refused: how many
+            // elements it holds if it answers, not that it does.
+            case Core.IfConstructed attempt -> {
+                Optional<BigInteger> out = most(attempt.then());
+                for (Core.ElseArm arm : attempt.els()) {
+                    out = larger(out, most(arm.body()));
+                }
+                yield out;
+            }
             case Core.Match match -> {
                 Optional<BigInteger> out = Optional.of(BigInteger.ZERO);
                 for (Core.Case arm : match.cases()) {

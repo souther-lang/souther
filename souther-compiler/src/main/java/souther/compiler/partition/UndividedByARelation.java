@@ -4512,10 +4512,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * a row only where that many elements can be written together. Two things no number says hold
      * that back. A rule of a value around the container may read inside its elements — every
      * element one, and no two alike, leave a list of one at most — so where one does, nothing is
-     * shown at all; a rule reading the container for how many it holds is a rule on the count,
-     * which the region holds. And the rules of the element's own type may leave it no value, so
-     * past nought the run is taken only where a value of the element is shown to exist
-     * ({@link #aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
+     * shown at all. A rule the clause cannot be true without, that only holds the elements apart
+     * from one another, is the exception: a list of one meets it, so the run is taken at one
+     * element at most, as a set's is. That is a list that is a witness, and not a bound on how
+     * many such a container may hold. A rule reading the container for how many it holds is a
+     * rule on the count, which the region holds. And the rules of the element's own type may
+     * leave it no value, so past nought the run is taken only where a value of the element is
+     * shown to exist ({@link #aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
      * asked each of these. Then a list of so many copies of one such value is a row
      * at every count the region leaves. A set, or the keys of a map, holds a value once, and how
      * many different values the element has is not asked here, so past one nothing is shown of
@@ -4536,8 +4539,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
         List<TermPath> entry = read.domain().entryOf(container, rules);
+        KeptApart apart = new KeptApart();
         for (TermPath part : entry) {
-            if (namedDownTo(part, container.steps().size(), read, null) != Named.NOT) {
+            if (namedDownTo(part, container.steps().size(), read, null, apart) != Named.NOT) {
                 return null;
             }
         }
@@ -4552,7 +4556,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!anElementShown && !entry.stream().allMatch(part ->
                 aValueIsShownToExist(read.domain().typeAt(part, rules), read))) {
             most = 0;
-        } else if (!read.domain().holdsAnElementOverAgain(container, rules)) {
+        } else if (apart.found || !read.domain().holdsAnElementOverAgain(container, rules)) {
             most = 1;
         } else {
             return run;
@@ -5137,6 +5141,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static Named namedDownTo(TermPath path, int deepest, InputReading read,
                                      Nodes nodes) {
+        return namedDownTo(path, deepest, read, nodes, null);
+    }
+
+    /**
+     * The same, where {@code apart} is given: a rule the clause cannot be true without, that only
+     * keeps the elements of the container {@code path} is an element of apart from one another,
+     * asks nothing a list of one fails. It names nothing of the element, and {@code apart} is told
+     * there was one ({@link KeptApart}).
+     */
+    private static Named namedDownTo(TermPath path, int deepest, InputReading read,
+                                     Nodes nodes, KeptApart apart) {
         List<TermPath.Step> steps = path.steps();
         Named out = Named.NOT;
         for (int length = 0; length <= deepest && length < steps.size(); length++) {
@@ -5157,7 +5172,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             List<TermPath.Step> rest = steps.subList(length, steps.size());
             for (TypeSymbol each : worn) {
-                out = out.and(namedBy(each, here, path, rest, read, nodes));
+                out = out.and(namedBy(each, here, path, rest, read, nodes, apart));
                 if (out == Named.UNSEEN && nodes == null) {
                     return out;
                 }
@@ -5171,7 +5186,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where one was not reached or has no form to say what it reads.
      */
     private static Named namedBy(TypeSymbol worn, TermPath here, TermPath place,
-                                 List<TermPath.Step> rest, InputReading read, Nodes nodes) {
+                                 List<TermPath.Step> rest, InputReading read, Nodes nodes,
+                                 KeptApart apart) {
         if (!(worn instanceof TypeSymbol.AtModule name)) {
             return Named.NOT;
         }
@@ -5195,7 +5211,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             for (ClauseRead reading : stated.reads()) {
-                Named says = namedBy(reading, here, place, rest, read);
+                Named says = namedBy(reading, here, place, rest, read, apart);
                 out = out.and(says);
                 if (says != Named.NOT && nodes != null) {
                     TiedOnTheWay.Rule rule = new TiedOnTheWay.Rule(here, worn, clause);
@@ -5248,7 +5264,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static List<TermPath> placesRead(ClauseRead reading, TermPath here, InputReading read) {
         return RulesRead.of(read).placed().computeIfAbsent(new Written(here, reading), each -> {
             List<TermPath> named = read.domain().positionsNamed(here, reading.at());
-            if (reading.kind() != ClauseRead.Kind.EACH_ELEMENTS_RUN) {
+            if (reading.kind() != ClauseRead.Kind.EACH_ELEMENTS_RUN
+                    && reading.kind() != ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART) {
                 return named;
             }
             List<TermPath> out = new ArrayList<>();
@@ -5281,7 +5298,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * into the elements.
      */
     private static Named namedBy(ClauseRead reading, TermPath here, TermPath place,
-                                 List<TermPath.Step> rest, InputReading read) {
+                                 List<TermPath.Step> rest, InputReading read, KeptApart apart) {
         int fields = 0;
         while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
             fields++;
@@ -5297,7 +5314,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return Named.BY_A_RULE;
         }
         if (reading.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN) {
-            return namedByARunOfEachElement(reading, here, place, read);
+            return namedByARunOfEachElement(reading, here, place, read, null);
+        }
+        // Told to the caller only for a call the clause cannot be true without: one that is only
+        // read may be denied, or be one way of several, and a list of one is then no witness.
+        if (reading.kind() == ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART) {
+            return namedByARunOfEachElement(reading, here, place, read, apart);
         }
         if (reading.kind() == ClauseRead.Kind.A_LOOKED_UP_MEMBER) {
             return Named.UNSEEN;
@@ -5362,19 +5384,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * it reads are neither the place, nor under it, nor a value it is a part of — the rule then
      * reads other fields of the elements — and unseen where they are, or where they are placed
      * nowhere.
+     *
+     * <p>Where {@code apart} is given, the clause cannot be true without the elements being apart
+     * ({@link ClauseRead.Kind#ELEMENTS_THE_CLAUSE_NEEDS_APART}). If {@code place} is an element
+     * whose own fields are all the rule reads of it, the rule only holds the elements of the
+     * container apart from one another. That is false of no list of one element, so it names
+     * nothing of the element, and is told to {@code apart}.
      */
     private static Named namedByARunOfEachElement(ClauseRead reading, TermPath here,
-                                                  TermPath place, InputReading read) {
+                                                  TermPath place, InputReading read,
+                                                  KeptApart apart) {
         List<TermPath> reached = placesRead(reading, here, read);
         if (reached.isEmpty()) {
             return Named.UNSEEN;
         }
         for (TermPath each : reached) {
             if (place.isAtOrUnder(each) || each.isAtOrUnder(place)) {
+                if (apart != null && readsOnlyFieldsOfTheElement(place, each)) {
+                    apart.found = true;
+                    continue;
+                }
                 return Named.UNSEEN;
             }
         }
         return Named.NOT;
+    }
+
+    /** Whether {@code place} is an element and {@code read} is that element or a chain of fields
+     *  of it. */
+    private static boolean readsOnlyFieldsOfTheElement(TermPath place, TermPath read) {
+        List<TermPath.Step> steps = place.steps();
+        if (steps.isEmpty() || !(steps.getLast() instanceof TermPath.Step.Element)
+                || !read.isAtOrUnder(place)) {
+            return false;
+        }
+        return read.steps().subList(steps.size(), read.steps().size()).stream()
+                .allMatch(step -> step instanceof TermPath.Step.Field);
+    }
+
+    /** Whether a rule the clause cannot be true without, that holds the elements of a container
+     *  apart from one another, read the element being asked about. */
+    private static final class KeptApart {
+
+        private boolean found;
     }
 
     /**
