@@ -231,58 +231,84 @@ public final class CasesOfALineAsked {
      * were written in, since a choice nobody took apart ends the walk there.
      */
     static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
-        return cases.fold(HELD_FIRST).cases();
+        return cases.fold(inThatOrder(cases.references())).cases();
     }
 
     /**
      * The cases put in that order, with what a group around them is given of them: the parts every
      * case of them holds, and the choices, each in the order they come.
      *
+     * @param source  the case that was put in order
      * @param cases   the cases themselves, in that order
      * @param held    the parts every case of them holds, which a group around them holds as well
      * @param choices the choices among them, which a group around them has beside its own
      */
-    private record InThatOrder(DecidingCase.Cases cases, List<DecidingCase.Cases> held,
-                               List<DecidingCase.Cases> choices) {}
+    private record InThatOrder(DecidingCase.Cases source, DecidingCase.Cases cases,
+                               List<DecidingCase.Cases> held, List<DecidingCase.Cases> choices) {
+
+        /** Whether a group around this one is given nothing of it. */
+        boolean holdsNothing() {
+            return held.isEmpty() && choices.isEmpty();
+        }
+    }
 
     /**
      * What puts the cases in that order, a case that more than one case holds put in order once.
-     * A group inside a group was put in order before the one it is in, so what it holds and what
-     * it chooses go into the group around it where they stand.
+     *
+     * <p>A group inside a group was put in order before the one it is in, so what it holds and
+     * what it chooses go into the group around it where they stand — if only one case holds it.
+     * A group that more cases hold stays a case of its own in each, and is not copied into them:
+     * what is copied is as long as the ways to it, so a group held twice by a group held twice by
+     * a group would be written out for every way down. Held by a group, it is chosen from there,
+     * and the cases a group stands for are the same either way, since choosing together is
+     * associative.
+     *
+     * @param references how many cases hold each case ({@link DecidingCase.Cases#references})
      */
-    private static final DecidingCase.Cases.Fold<InThatOrder> HELD_FIRST =
-            new DecidingCase.Cases.Fold<>() {
+    private static DecidingCase.Cases.Fold<InThatOrder> inThatOrder(
+            Map<DecidingCase.Cases, Integer> references) {
+        return new DecidingCase.Cases.Fold<>() {
 
-                @Override
-                public InThatOrder one(DecidingCase.Cases.One one) {
-                    return new InThatOrder(one, List.of(one), List.of());
-                }
+            @Override
+            public InThatOrder one(DecidingCase.Cases.One one) {
+                return new InThatOrder(one, one, List.of(one), List.of());
+            }
 
-                @Override
-                public InThatOrder eachOf(List<InThatOrder> alternatives) {
-                    DecidingCase.Cases.EachOf each = new DecidingCase.Cases.EachOf(
-                            alternatives.stream().map(InThatOrder::cases).toList());
-                    return new InThatOrder(each, List.of(), List.of(each));
-                }
+            @Override
+            public InThatOrder eachOf(DecidingCase.Cases.EachOf node,
+                                      List<InThatOrder> alternatives) {
+                DecidingCase.Cases.EachOf each = new DecidingCase.Cases.EachOf(
+                        alternatives.stream().map(InThatOrder::cases).toList());
+                return new InThatOrder(node, each, List.of(), List.of(each));
+            }
 
-                @Override
-                public InThatOrder together(List<InThatOrder> factors) {
-                    List<DecidingCase.Cases> held = new ArrayList<>();
-                    List<DecidingCase.Cases> choices = new ArrayList<>();
-                    for (InThatOrder factor : factors) {
+            @Override
+            public InThatOrder together(DecidingCase.Cases.Together node,
+                                        List<InThatOrder> factors) {
+                List<DecidingCase.Cases> held = new ArrayList<>();
+                List<DecidingCase.Cases> choices = new ArrayList<>();
+                for (InThatOrder factor : factors) {
+                    if (factor.source() instanceof DecidingCase.Cases.Together
+                            && references.get(factor.source()) > 1 && !factor.holdsNothing()) {
+                        choices.add(factor.cases());
+                    } else {
                         held.addAll(factor.held());
                         choices.addAll(factor.choices());
                     }
-                    List<DecidingCase.Cases> inOrder = new ArrayList<>(held);
-                    inOrder.addAll(choices);
-                    return new InThatOrder(new DecidingCase.Cases.Together(inOrder), held, choices);
                 }
+                List<DecidingCase.Cases> inOrder = new ArrayList<>(held);
+                inOrder.addAll(choices);
+                return new InThatOrder(node, new DecidingCase.Cases.Together(inOrder), held,
+                        choices);
+            }
 
-                @Override
-                public InThatOrder notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
-                    return new InThatOrder(notTakenApart, List.of(), List.of(notTakenApart));
-                }
-            };
+            @Override
+            public InThatOrder notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                return new InThatOrder(notTakenApart, notTakenApart, List.of(),
+                        List.of(notTakenApart));
+            }
+        };
+    }
 
     /**
      * Each case holding all of {@code chosen}, and one case of each of {@code toChoose}, that holds

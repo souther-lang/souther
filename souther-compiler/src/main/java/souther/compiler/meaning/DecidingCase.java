@@ -266,14 +266,19 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * way to it shares ({@link WhereEachLineDecides}), so the ways of choosing grow as the
          * product of the choices while the cases that hold them grow as their sum. A reader that
          * walks them as a tree walks the product.
+         *
+         * <p>Nor may what it makes of a case be a copy of what it made of the cases inside: a case
+         * held twice by one case is the same result twice, and a result that holds those of the
+         * cases inside by copying them is as long as the ways to the case. A result holds the ones
+         * made of the cases inside it, or something of a size that does not grow with them.
          */
         interface Fold<R> {
 
             R one(One one);
 
-            R eachOf(List<R> alternatives);
+            R eachOf(EachOf node, List<R> alternatives);
 
-            R together(List<R> factors);
+            R together(Together node, List<R> factors);
 
             R notTakenApart(NotTakenApart notTakenApart);
         }
@@ -300,12 +305,23 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             }
             R made = switch (this) {
                 case One one -> by.one(one);
-                case EachOf(var alternatives) -> by.eachOf(foldAll(alternatives, by, worked));
-                case Together(var factors) -> by.together(foldAll(factors, by, worked));
+                case EachOf each -> by.eachOf(each, foldAll(each.alternatives(), by, worked));
+                case Together group -> by.together(group, foldAll(group.factors(), by, worked));
                 case NotTakenApart notTakenApart -> by.notTakenApart(notTakenApart);
             };
             worked.put(this, Objects.requireNonNull(made, "a fold makes something of every case"));
             return made;
+        }
+
+        /**
+         * How many cases hold each case of these, each case counted once however many ways lead
+         * to it: a case held by one case is only in that one's way, and one held by more is shared
+         * by every way that goes through them.
+         */
+        default Map<Cases, Integer> references() {
+            Map<Cases, Integer> held = new IdentityHashMap<>();
+            countHolds(this, held);
+            return held;
         }
 
         /** Each figure some of these were stopped at where they were never taken apart. */
@@ -347,12 +363,14 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 }
 
                 @Override
-                public Optional<Proposition> eachOf(List<Optional<Proposition>> alternatives) {
+                public Optional<Proposition> eachOf(EachOf node,
+                                                    List<Optional<Proposition>> alternatives) {
                     return joined(alternatives, false);
                 }
 
                 @Override
-                public Optional<Proposition> together(List<Optional<Proposition>> factors) {
+                public Optional<Proposition> together(Together node,
+                                                      List<Optional<Proposition>> factors) {
                     return joined(factors, true);
                 }
 
@@ -392,7 +410,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 }
 
                 @Override
-                public Long eachOf(List<Long> alternatives) {
+                public Long eachOf(EachOf node, List<Long> alternatives) {
                     long ways = 0;
                     for (long these : alternatives) {
                         ways = Math.min(past + 1, ways + these);
@@ -401,7 +419,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 }
 
                 @Override
-                public Long together(List<Long> factors) {
+                public Long together(Together node, List<Long> factors) {
                     long ways = 1;
                     for (long these : factors) {
                         if (these == 0) {
@@ -430,12 +448,12 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 }
 
                 @Override
-                public Cases eachOf(List<Cases> alternatives) {
+                public Cases eachOf(EachOf node, List<Cases> alternatives) {
                     return new EachOf(alternatives);
                 }
 
                 @Override
-                public Cases together(List<Cases> factors) {
+                public Cases together(Together node, List<Cases> factors) {
                     return new Together(factors);
                 }
 
@@ -464,12 +482,14 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 }
 
                 @Override
-                public Set<CompositionBudget> eachOf(List<Set<CompositionBudget>> alternatives) {
+                public Set<CompositionBudget> eachOf(EachOf node,
+                                                     List<Set<CompositionBudget>> alternatives) {
                     return union(alternatives);
                 }
 
                 @Override
-                public Set<CompositionBudget> together(List<Set<CompositionBudget>> factors) {
+                public Set<CompositionBudget> together(Together node,
+                                                       List<Set<CompositionBudget>> factors) {
                     return union(factors);
                 }
 
