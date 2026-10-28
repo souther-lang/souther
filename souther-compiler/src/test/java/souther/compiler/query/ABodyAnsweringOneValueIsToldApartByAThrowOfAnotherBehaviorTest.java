@@ -13,7 +13,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A body answering one value is told from a fold over a list whose element another behavior
@@ -61,15 +60,23 @@ class ABodyAnsweringOneValueIsToldApartByAThrowOfAnotherBehaviorTest {
         assertToldApart("List.fold((acc, t) -> acc + points(t), 0, throws)");
     }
 
-    /** A body that answers the constant whatever it is given is the rewrite under another
-     *  spelling: no row of throws answers otherwise, and nothing is owed for it. */
+    /**
+     * A body that answers the constant whatever it is given is the rewrite under another
+     * spelling: no row of throws answers otherwise, so it is left undecided — every candidate was
+     * asked and none came back different, and no run was spent short of that — and is no gap.
+     */
     @Test
-    void aBodyThatAnswersTheConstantIsNoGap() {
+    void aBodyThatAnswersTheConstantIsLeftUndecidedAndNoGap() {
         List<ReplacementEvidence.Outcome> oneAnswer =
                 oneAnswers(rewritesOf(MODEL.formatted("0 * List.length(throws)"), "score"));
 
-        assertTrue(oneAnswer.stream().noneMatch(ReplacementEvidence.Unnoticed.class::isInstance),
-                () -> "no row of throws tells it from the constant: " + oneAnswer);
+        assertEquals(1, oneAnswer.size(), () -> "a rewrite for the one value: " + oneAnswer);
+        ReplacementEvidence.Undecided open = assertInstanceOf(ReplacementEvidence.Undecided.class,
+                oneAnswer.getFirst(), () -> "no row of throws tells it from the constant: "
+                        + oneAnswer);
+        assertEquals(List.of(ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY),
+                open.why().ways().stream().map(ReplacementEvidence.Undecided.Way::why).toList(),
+                () -> "asked of every candidate, and not stopped short: " + open);
     }
 
     private static void assertToldApart(String body) {

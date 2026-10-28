@@ -3,12 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.SourceConstructOrigin;
-import souther.compiler.types.Type;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.TreeMap;
@@ -41,13 +38,17 @@ public sealed interface ReplacementOwed {
      *                    Never empty: a rewrite of an arm is asked about because such a row went
      *                    through it, and those inputs are somewhere a run through the arm is known
      *                    to start from whatever a reading of the way in could state
+     * @param ranWith     the inputs the rows of the module ran with, by the type of the position:
+     *                    where an element of a list the classes divide no way is looked for
      */
     record OfAnArm(SourceConstructOrigin fork, int part, int with, List<ArmProbe> occurrences,
                    SequencedMap<Integer, Integer> replacing,
-                   List<List<ObservedValue>> seenThrough) implements ReplacementOwed {
+                   List<List<ObservedValue>> seenThrough,
+                   InputsRowsRanWith ranWith) implements ReplacementOwed {
 
         public OfAnArm {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
+            Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             occurrences = List.copyOf(occurrences);
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
             seenThrough = seenThrough.stream().map(List::copyOf).toList();
@@ -72,26 +73,22 @@ public sealed interface ReplacementOwed {
      *                   the order the rows are written. Somewhere a run is known to come back, which
      *                   is where a row the rewrite answers differently on is looked for beside the
      *                   values the classes offer
-     * @param statedElsewhere the inputs the other behaviors of the module have rows for, by the
-     *                   type each stands at, in the order the rows are written. Each is a value a
-     *                   run took at a position of the type, which is where an element of a list
-     *                   the classes divide no way is looked for
+     * @param ranWith    the inputs the rows of the module ran with, by the type of the position:
+     *                   where an element of a list the classes divide no way is looked for
      */
     record ByOneAnswer(Replacement.ByOneAnswer replacement,
                        List<List<ObservedValue>> answeredOn,
-                       Map<Type, List<ObservedValue>> statedElsewhere) implements ReplacementOwed {
+                       InputsRowsRanWith ranWith) implements ReplacementOwed {
 
         public ByOneAnswer {
             Objects.requireNonNull(replacement, "a body answering one value answers some value");
+            Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             answeredOn = answeredOn.stream().map(List::copyOf).toList();
-            Map<Type, List<ObservedValue>> kept = new LinkedHashMap<>();
-            statedElsewhere.forEach((type, values) -> kept.put(type, List.copyOf(values)));
-            statedElsewhere = Collections.unmodifiableMap(kept);
         }
 
         public ByOneAnswer(Replacement.ByOneAnswer replacement,
                            List<List<ObservedValue>> answeredOn) {
-            this(replacement, answeredOn, Map.of());
+            this(replacement, answeredOn, InputsRowsRanWith.NONE);
         }
 
         /** The value the rewritten body answers. */

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.Sig;
@@ -23,12 +24,12 @@ import souther.compiler.observe.Verdict;
 import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.GenerationPlan;
+import souther.compiler.partition.InputsRowsRanWith;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,7 +40,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -97,19 +97,18 @@ public final class Replacements {
             ArmReplacements inTheClasses = carried;
             // Read off the rows only when a body answering one value is asked about, which most
             // modules never are.
-            Supplier<Map<String, Map<Type, List<ObservedValue>>>> takenBy =
-                    new Supplier<>() {
+            Supplier<InputsRowsRanWith> ranWith = new Supplier<>() {
 
-                        private Map<String, Map<Type, List<ObservedValue>>> read;
+                private InputsRowsRanWith read;
 
-                        @Override
-                        public Map<String, Map<Type, List<ObservedValue>>> get() {
-                            if (read == null) {
-                                read = inputsTakenBy(sigs.value(), byTarget);
-                            }
-                            return read;
-                        }
-                    };
+                @Override
+                public InputsRowsRanWith get() {
+                    if (read == null) {
+                        read = inputsRowsRanWith(prepared.value(), sigs.value(), byTarget);
+                    }
+                    return read;
+                }
+            };
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
                 Sig sig = sigs.value().get(behavior.name());
                 Adequacy.RowReading reading =
@@ -139,63 +138,39 @@ public final class Replacements {
                                 return Comparisons.verdict(stated, answered, types, at)
                                         instanceof Verdict.Held;
                             }
-                        }, () -> statedBeside(behavior.name(), takenBy.get()));
+                        }, ranWith);
             });
         }
 
-        /** The most values of one type that the rows of other behaviors are asked for. */
-        private static final int MOST_VALUES_OF_A_TYPE = 8;
-
         /**
-         * The inputs each behavior's rows were run with, by the type of the parameter each stood
-         * at, in the order the rows are written. A row whose inputs do not line up with the
-         * behavior's parameters holds nothing to take from.
+         * What the rows of the module ran with, behavior by behavior in the order they are
+         * declared. A row whose inputs do not line up with the behavior's parameters holds
+         * nothing to take from.
          */
-        private static Map<String, Map<Type, List<ObservedValue>>> inputsTakenBy(
+        private static InputsRowsRanWith inputsRowsRanWith(CheckSurface prepared,
                 Map<String, Sig> sigs, Map<String, Adequacy.RowReading> byTarget) {
-            Map<String, Map<Type, List<ObservedValue>>> out = new TreeMap<>();
-            sigs.forEach((name, sig) -> {
-                Map<Type, List<ObservedValue>> taken = new LinkedHashMap<>();
-                for (RowOutcome row : Adequacy.RowReadings.readingFor(byTarget, name).rowsSeen()) {
+            List<List<List<InputsRowsRanWith.Taken>>> behaviors = new ArrayList<>();
+            for (Hir.BehaviorDef behavior : prepared.behaviors()) {
+                Sig sig = sigs.get(behavior.name());
+                if (sig == null) {
+                    continue;
+                }
+                List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+                for (RowOutcome row : Adequacy.RowReadings.readingFor(byTarget, behavior.name())
+                        .rowsSeen()) {
                     if (row.inputs().size() != sig.inputTypes().size()) {
                         continue;
                     }
+                    List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
                     for (int p = 0; p < row.inputs().size(); p++) {
-                        List<ObservedValue> held = taken.computeIfAbsent(sig.inputTypes().get(p),
-                                _ -> new ArrayList<>());
-                        if (held.size() < MOST_VALUES_OF_A_TYPE
-                                && !held.contains(row.inputs().get(p))) {
-                            held.add(row.inputs().get(p));
-                        }
+                        inputs.add(new InputsRowsRanWith.Taken(sig.inputTypes().get(p),
+                                row.inputs().get(p)));
                     }
+                    rows.add(inputs);
                 }
-                out.put(name, taken);
-            });
-            return out;
-        }
-
-        /**
-         * What the rows of the behaviors other than {@code behavior} were run with, by type: the
-         * values a position of that type is known to take, which a list of them is not otherwise
-         * composed from where nothing divides its elements.
-         */
-        private static Map<Type, List<ObservedValue>> statedBeside(String behavior,
-                Map<String, Map<Type, List<ObservedValue>>> takenBy) {
-            Map<Type, List<ObservedValue>> out = new LinkedHashMap<>();
-            takenBy.forEach((name, taken) -> {
-                if (name.equals(behavior)) {
-                    return;
-                }
-                taken.forEach((type, values) -> {
-                    List<ObservedValue> held = out.computeIfAbsent(type, _ -> new ArrayList<>());
-                    for (ObservedValue value : values) {
-                        if (held.size() < MOST_VALUES_OF_A_TYPE && !held.contains(value)) {
-                            held.add(value);
-                        }
-                    }
-                });
-            });
-            return out;
+                behaviors.add(rows);
+            }
+            return InputsRowsRanWith.of(behaviors);
         }
 
         /**

@@ -76,6 +76,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -83,6 +84,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -2198,10 +2200,19 @@ public final class Generator {
                     // the bodies part a string and go on to attempt a construction of each piece.
                     // Before the rows below are moved, because the runs are one budget and these
                     // are read off the body: a few strings, each one change from a row seen,
-                    // where moving a row asks for as many as composing a value takes.
-                    for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
-                        seen = demandedFrom(arm.seenThrough().get(at), axes, purposes, looking,
-                                check, answers, read.piecesAttempted());
+                    // where moving a row asks for as many as composing a value takes. And a list
+                    // of those rows with one more element, a value the rows of the module ran
+                    // with, where the classes divide no element and the rows held none: a
+                    // candidate of each in turn, as for a body answering one value.
+                    int through = arm.seenThrough().size();
+                    if (seen == null) {
+                        seen = taking(looking, List.of(
+                                inOrder(through, at -> piecesDemanded(arm.seenThrough().get(at),
+                                        axes, purposes, looking, check, answers,
+                                        read.piecesAttempted())),
+                                inOrder(through, at -> candidatesBeside(
+                                        arm.seenThrough().get(at), axes, purposes, check, answers,
+                                        aListGrown(arm.ranWith())))));
                     }
                     // And from the rows seen going through it, which is where a run through the
                     // arm is known to start whatever a reading of the way in could state — an arm
@@ -2239,27 +2250,20 @@ public final class Generator {
                     // where the values the classes offer are ones the body gives no answer on. Last,
                     // because the runs are one budget: asked first, these could spend what a row the
                     // classes reach is found with, and a rewrite the classes tell apart would be
-                    // left undecided. Not once the runs are spent, which every row would find out
-                    // again.
-                    for (int at = 0; seen == null && !looking.spent()
-                            && at < one.answeredOn().size(); at++) {
-                        seen = nextTo(one.answeredOn().get(at), axes, purposes, looking, check,
-                                answers);
-                    }
-                    for (int at = 0; seen == null && !looking.spent()
-                            && at < one.answeredOn().size(); at++) {
-                        seen = demandedFrom(one.answeredOn().get(at), axes, purposes, looking,
-                                check, answers, read.piecesAttempted());
-                    }
-                    // And with one more element in a list, which is a value the rows of another
-                    // behavior ran with: where the classes divide no element, the rows written
-                    // hold only the lists they ran with, and none of them has an element to move.
-                    for (int at = 0; seen == null && !looking.spent()
-                            && at < one.answeredOn().size(); at++) {
-                        seen = grownFrom(one.answeredOn().get(at), one.statedElsewhere(), axes,
-                                purposes, looking, check, answers);
-                    }
-                    yield seen;
+                    // left undecided. Three ways to look, a candidate of each in turn: a number
+                    // moved by one, a string put as one a body parts, and a list with one more
+                    // element — a value the rows of the module ran with, where the classes divide
+                    // no element and the rows written hold only the lists they ran with. None is
+                    // asked ahead of another, so one with many candidates leaves the others the
+                    // runs it would have spent.
+                    int rows = one.answeredOn().size();
+                    yield seen != null ? seen : taking(looking, List.of(
+                            inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
+                                    purposes, check, answers, A_WHOLE_NUMBER_MOVED)),
+                            inOrder(rows, at -> piecesDemanded(one.answeredOn().get(at), axes,
+                                    purposes, looking, check, answers, read.piecesAttempted())),
+                            inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
+                                    purposes, check, answers, aListGrown(one.ranWith())))));
                 }
             };
             replacementAnswers.put(asked, found != null
@@ -2342,8 +2346,7 @@ public final class Generator {
     }
 
     /**
-     * A row the rewrite {@code looking} asks about answers differently on, found one step from the
-     * inputs of a row a run was seen coming back on — or null where none is.
+     * One step from the inputs of a row a run was seen coming back on.
      *
      * <p>Where the classes offer values the body does not answer on, they leave nothing to compare
      * the rewrite against; the run that came back is the one place known to. One whole number in the
@@ -2352,30 +2355,17 @@ public final class Generator {
      * answers differently, is what running it says, as it is for every candidate the rewrite is
      * asked about.
      */
-    private static GeneratedRow nextTo(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
-                                       List<Purpose> purposes, ReplacementWitness looking,
-                                       CandidateCheck check, List<StoodInAnswer> answers) {
-        return beside(seen, axes, purposes, looking, check, answers,
-                (value, type, reading, _) -> NearbyValues.of(value, type, reading));
-    }
+    private static final Beside A_WHOLE_NUMBER_MOVED =
+            (value, type, reading, _) -> NearbyValues.of(value, type, reading);
 
     /**
-     * A row the rewrite {@code looking} asks about answers differently on, found beside the inputs
-     * of a row a run came back on, with one more element in a list they hold — one of
-     * {@code stated}, the values the rows of other behaviors ran with, by the type they stood at
+     * The inputs of a row a run came back on with one more element in a list they hold — one of
+     * {@code ranWith}, the values the rows of the module ran a position of the element's type with
      * ({@link NearbyValues#grown}). Which candidate answers, and whether it answers differently,
      * is what running it says.
      */
-    private static GeneratedRow grownFrom(List<ObservedValue> seen,
-                                          Map<Type, List<ObservedValue>> stated,
-                                          MeasuredInput.MeasuredAxes axes, List<Purpose> purposes,
-                                          ReplacementWitness looking, CandidateCheck check,
-                                          List<StoodInAnswer> answers) {
-        if (stated.isEmpty()) {
-            return null;
-        }
-        return beside(seen, axes, purposes, looking, check, answers,
-                (value, type, reading, _) -> NearbyValues.grown(value, type, reading, stated));
+    private static Beside aListGrown(InputsRowsRanWith ranWith) {
+        return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith);
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
@@ -2397,26 +2387,38 @@ public final class Generator {
      * answers differently only where a piece it keeps and the body does not, or the other way, is
      * one the construction goes on with. No class of the input holds that, since what the
      * construction admits is stated of a value made from the string. Which candidate answers, and
-     * whether it answers differently, is what running it says.
+     * whether it answers differently, is what running it says. None where no string is parted.
      */
-    private static GeneratedRow demandedFrom(List<ObservedValue> seen,
-                                             MeasuredInput.MeasuredAxes axes,
-                                             List<Purpose> purposes, ReplacementWitness looking,
-                                             CandidateCheck check, List<StoodInAnswer> answers,
-                                             List<PieceDemand> demands) {
+    private static Iterator<GeneratedRow> piecesDemanded(List<ObservedValue> seen,
+                                                         MeasuredInput.MeasuredAxes axes,
+                                                         List<Purpose> purposes,
+                                                         ReplacementWitness looking,
+                                                         CandidateCheck check,
+                                                         List<StoodInAnswer> answers,
+                                                         List<PieceDemand> demands) {
         if (demands.isEmpty()) {
-            return null;
+            return Collections.emptyIterator();
         }
-        return beside(seen, axes, purposes, looking, check, answers,
+        return candidatesBeside(seen, axes, purposes, check, answers,
                 (value, type, reading, parameter) ->
                         NearbyValues.demanded(value, type, reading, parameter, demands, seen,
                                 looking::composingStoppedAt));
     }
 
-    private static GeneratedRow beside(List<ObservedValue> seen, MeasuredInput.MeasuredAxes axes,
-                                       List<Purpose> purposes, ReplacementWitness looking,
-                                       CandidateCheck check, List<StoodInAnswer> answers,
-                                       Beside how) {
+    /**
+     * The rows that put one position of {@code seen} where {@code how} says and leave the others
+     * as the run had them, one at a time and in the order the positions and their candidates come.
+     *
+     * <p>Handed over lazily: a candidate is made when it is asked for, so the work of making them
+     * follows the runs the search makes and not the number a value could have. Nothing where a
+     * position of the run cannot be written as a fixture, since there is no row to move from.
+     */
+    private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
+                                                           MeasuredInput.MeasuredAxes axes,
+                                                           List<Purpose> purposes,
+                                                           CandidateCheck check,
+                                                           List<StoodInAnswer> answers,
+                                                           Beside how) {
         MeasuredInput subject = axes.subject();
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
@@ -2425,26 +2427,104 @@ public final class Generator {
             if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
                     instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                             FixtureTemplate value))) {
-                return null;
+                return Collections.emptyIterator();
             }
             kept.add(value);
         }
-        for (int moved = 0; moved < seen.size(); moved++) {
-            Iterator<ObservedValue> nearer = how.of(seen.get(moved),
-                    subject.types().get(moved), subject.ruleReading(),
-                    subject.parameters().get(moved));
-            while (nearer.hasNext()) {
-                ObservedValue near = nearer.next();
-                if (!(ObservedFixtures.of(near, subject.types().get(moved),
-                        subject.ruleReading())
-                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                FixtureTemplate value))
-                        || check.refuse(moved, value).isPresent()) {
+        return new Iterator<>() {
+
+            private int moved;
+
+            private Iterator<ObservedValue> nearer;
+
+            private GeneratedRow next;
+
+            @Override
+            public boolean hasNext() {
+                while (next == null && moved < seen.size()) {
+                    if (nearer == null) {
+                        nearer = how.of(seen.get(moved), subject.types().get(moved),
+                                subject.ruleReading(), subject.parameters().get(moved));
+                    }
+                    if (!nearer.hasNext()) {
+                        nearer = null;
+                        moved++;
+                        continue;
+                    }
+                    ObservedValue near = nearer.next();
+                    if (ObservedFixtures.of(near, subject.types().get(moved),
+                            subject.ruleReading())
+                            instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                    FixtureTemplate value)
+                            && check.refuse(moved, value).isEmpty()) {
+                        List<FixtureTemplate> inputs = new ArrayList<>(kept);
+                        inputs.set(moved, value);
+                        next = new GeneratedRow(purposes, inputs, answers);
+                    }
+                }
+                return next != null;
+            }
+
+            @Override
+            public GeneratedRow next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                GeneratedRow out = next;
+                next = null;
+                return out;
+            }
+        };
+    }
+
+    /** The candidates of {@code count} rows one after the other, each made when it is reached. */
+    private static Iterator<GeneratedRow> inOrder(int count,
+                                                  IntFunction<Iterator<GeneratedRow>> each) {
+        return new Iterator<>() {
+
+            private int at;
+
+            private Iterator<GeneratedRow> current = Collections.emptyIterator();
+
+            @Override
+            public boolean hasNext() {
+                while (!current.hasNext() && at < count) {
+                    current = each.apply(at++);
+                }
+                return current.hasNext();
+            }
+
+            @Override
+            public GeneratedRow next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return current.next();
+            }
+        };
+    }
+
+    /**
+     * The first candidate of {@code strategies} the rewrite answers differently on, or null where
+     * none does or the runs are spent.
+     *
+     * <p>One candidate of each in turn, so no strategy spends the runs another is found with: the
+     * runs are one budget, and a strategy with many candidates asked first would leave the ones
+     * after it with none. What a strategy has not yet asked when the runs are spent is said as
+     * the runs being spent ({@link ReplacementWitness#of}), since the next candidate is put to it
+     * all the same.
+     */
+    private static GeneratedRow taking(ReplacementWitness looking,
+                                       List<Iterator<GeneratedRow>> strategies) {
+        List<Iterator<GeneratedRow>> live = new ArrayList<>(strategies);
+        while (!live.isEmpty()) {
+            for (int at = 0; at < live.size(); ) {
+                Iterator<GeneratedRow> each = live.get(at);
+                if (!each.hasNext()) {
+                    live.remove(at);
                     continue;
                 }
-                List<FixtureTemplate> inputs = new ArrayList<>(kept);
-                inputs.set(moved, value);
-                GeneratedRow row = new GeneratedRow(purposes, inputs, answers);
+                GeneratedRow row = each.next();
                 switch (looking.of(row, null)) {
                     case TAKEN -> {
                         return row;
@@ -2452,7 +2532,7 @@ public final class Generator {
                     case STOPPED -> {
                         return null;
                     }
-                    case PASSED -> { }
+                    case PASSED -> at++;
                 }
             }
         }
@@ -9832,11 +9912,6 @@ public final class Generator {
         /** The body run on {@code row}, once per line, or null where no run is left. */
         private ObservedRun run(GeneratedRow row) {
             return trial.run(row.toRun(), this::spend);
-        }
-
-        /** Whether this search has no run left to make. */
-        boolean spent() {
-            return runs >= mostRuns;
         }
 
         /** One more run of this search's own, where one is left. */

@@ -58,8 +58,8 @@ final class NearbyValues {
 
         /** What a list becomes beyond its elements moved one at a time: nothing, unless a step
          *  adds to the list itself. */
-        default Iterator<ObservedValue> longer(ObservedValue.Sequence held,
-                                               Shape.Sequence sequence) {
+        default Iterator<ObservedValue> longer(ObservedValue.Sequence unusedHeld,
+                                               Shape.Sequence unusedSequence) {
             return none();
         }
     }
@@ -75,17 +75,17 @@ final class NearbyValues {
 
     /**
      * The values {@code value} becomes where a list it holds, or is, has one more element: a value
-     * a run took at a position of the element's type ({@code stated}), put after the elements it
+     * a run took at a position of the element's type ({@code ranWith}), put after the elements it
      * has, and everything else stays as it was.
      *
      * <p>For a list the classes divide no way, which holds only what the rows written ran with and
-     * has no element to move a number of. What an element can be is then the rows of the
-     * behaviors that take one. Handed over one at a time, a list at a time in the order the value
-     * is walked.
+     * has no element to move a number of. What an element can be is then what the rows of the
+     * module ran a position of its type with. Handed over one at a time, a list at a time in the
+     * order the value is walked.
      */
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
-                                         Map<Type, List<ObservedValue>> stated) {
-        if (stated.isEmpty()) {
+                                         InputsRowsRanWith ranWith) {
+        if (ranWith.isEmpty()) {
             return none();
         }
         return of(value, type, reading, null, List.of(), new Leaves() {
@@ -99,7 +99,7 @@ final class NearbyValues {
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
                                                   Shape.Sequence sequence) {
-                return mapped(stated.getOrDefault(sequence.element(), List.of()).iterator(),
+                return mapped(ranWith.of(sequence.element()).iterator(),
                         more -> {
                             List<ObservedValue> elements = new ArrayList<>(held.elements());
                             elements.add(more);

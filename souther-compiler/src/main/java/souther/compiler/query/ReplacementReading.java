@@ -16,11 +16,11 @@ import souther.compiler.observe.ReplacedRun;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.partition.InputsRowsRanWith;
 import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -157,7 +157,7 @@ public final class ReplacementReading {
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                    Comparing comparing,
-                                   Supplier<Map<Type, List<ObservedValue>>> statedElsewhere) {
+                                   Supplier<InputsRowsRanWith> ranWith) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
         // model owes there — so it is evidence for neither the body nor the rewrite, on either side
@@ -209,7 +209,7 @@ public final class ReplacementReading {
         occurrences.forEach((replaced, at) -> out.add(new Account(
                 ReplacementAsWritten.OfAnArm.in(plan, replaced), at.reportAt(),
                 armStanding(replaced, at.asked(), at.probes(), stated, wentThrough,
-                        stoppedAt))));
+                        stoppedAt, ranWith))));
         // One answer only where no arm has a rewrite that is another program. Which family a body
         // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
         // its arms the rows stating an answer happen to reach — read off what they reached
@@ -218,7 +218,7 @@ public final class ReplacementReading {
         // answers one value already: every way to an answer that reads something, or that is
         // another answer, closed by the rules.
         if (!forked && !plan.fromOneValue(behavior).provenAway(unreached)) {
-            out.addAll(oneAnswerAccounts(stated, comparing, statedElsewhere));
+            out.addAll(oneAnswerAccounts(stated, comparing, ranWith));
         }
         return List.copyOf(out);
     }
@@ -233,7 +233,8 @@ public final class ReplacementReading {
     private static Standing armStanding(Replacement.OfAnArm replaced, ArmReplacements.Asked asked,
                                         List<ArmProbe> where, List<RowOutcome> rows,
                                         Function<RowOutcome, Set<ArmProbe>> wentThrough,
-                                        Function<RowOutcome, ReplacementDisposition.Met> stoppedAt) {
+                                        Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
+                                        Supplier<InputsRowsRanWith> ranWith) {
         SequencedMap<Integer, Integer> replacing;
         switch (asked) {
             // Left unasked at the figure a fork was held to, or at what the JVM holds in one
@@ -290,7 +291,7 @@ public final class ReplacementReading {
                     ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, untold));
         }
         ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
-                replaced.with(), where, replacing, seenThrough);
+                replaced.with(), where, replacing, seenThrough, ranWith.get());
         return shownBy != null
                 ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);
@@ -333,7 +334,7 @@ public final class ReplacementReading {
      * it is.
      */
     private static List<Account> oneAnswerAccounts(List<RowOutcome> rows, Comparing comparing,
-            Supplier<Map<Type, List<ObservedValue>>> statedElsewhere) {
+                                                   Supplier<InputsRowsRanWith> ranWith) {
         List<RowOutcome> answered = new ArrayList<>();
         List<ObservedValue> values = new ArrayList<>();
         for (RowOutcome row : rows) {
@@ -353,8 +354,7 @@ public final class ReplacementReading {
                         RowRef.of(answered.get(i)));
                 out.add(new Account(new ReplacementAsWritten.ByOneAnswer(rewrite),
                         new ReplacementReportAnchor.AtTheBehavior(),
-                        oneAnswerStanding(rewrite, rows, answered, values, comparing,
-                                statedElsewhere)));
+                        oneAnswerStanding(rewrite, rows, answered, values, comparing, ranWith)));
             }
         }
         return List.copyOf(out);
@@ -364,7 +364,7 @@ public final class ReplacementReading {
     private static Standing oneAnswerStanding(Replacement.ByOneAnswer rewrite,
                                               List<RowOutcome> rows, List<RowOutcome> answered,
                                               List<ObservedValue> values, Comparing comparing,
-                                              Supplier<Map<Type, List<ObservedValue>>> statedElsewhere) {
+                                              Supplier<InputsRowsRanWith> ranWith) {
         ObservedValue always = rewrite.answer();
         boolean unread = false;
         for (RowOutcome row : rows) {
@@ -387,7 +387,7 @@ public final class ReplacementReading {
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         }
         ReplacementOwed.ByOneAnswer lookFor = new ReplacementOwed.ByOneAnswer(rewrite,
-                answered.stream().map(RowOutcome::inputs).toList(), statedElsewhere.get());
+                answered.stream().map(RowOutcome::inputs).toList(), ranWith.get());
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {
