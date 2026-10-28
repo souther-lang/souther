@@ -16,6 +16,7 @@ import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.RuleWithoutALine;
@@ -24,6 +25,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
@@ -300,12 +302,28 @@ public final class GuardThresholds {
                                     && each.stopsWhere().isPresent()
                                     && ComparisonAssessment.someRowArrives(
                                             wayToACase.apply(each.stopsWhere().get()), arrivals);
+                            // And the values at which every run getting to it stops in what it
+                            // works out, asked of the way before a row is narrowed to getting
+                            // past that: a row that got past holds none of them.
+                            List<SearchRegion> before = Reachability.of(
+                                    new WayToTheBorder(each.assumed()),
+                                    read.quantities().region())
+                                    instanceof Reachability.Reaching way
+                                    ? List.of(way.region()) : List.of();
+                            List<EveryRunStops> stops =
+                                    arrived instanceof ComparisonAssessment.AnswersNowhere
+                                            ? List.<EveryRunStops>of()
+                                            : arrived.relationsRead().stream()
+                                                    .flatMap(relation -> relation
+                                                            .everyRunStopsIn(read, before)
+                                                            .stream())
+                                                    .distinct().toList();
                             reached(cuts, stated, each, readingsOf(arrived), aCase);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, aRunStops, found, between, throughADerivedValue,
-                                    partnered, withoutALine);
+                                    reaches, arrived, aRunStops, stops, found, between,
+                                    throughADerivedValue, partnered, withoutALine);
                         }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
@@ -800,12 +818,16 @@ public final class GuardThresholds {
      * <p>Whether a line may be drawn on this comparison at all was settled before the walk got
      * here, by {@link BoundaryPolicy}, and what the comparison comes to was read where that was
      * settled ({@code read}). Nothing here reads the comparison again.
+     *
+     * @param stops the values at which every run getting to the comparison stops in what it works
+     *              out
      */
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
                                SourceConstructOrigin wrote, Citation where,
                                ElementsMetOn metOn, RuleReachNumbering reaches,
                                ComparisonAssessment read, boolean aRunStops,
+                               List<EveryRunStops> stops,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<DerivedValues.Settling> throughADerivedValue,
@@ -817,10 +839,12 @@ public final class GuardThresholds {
         partnered.addAll(stringsPartnersCanHold(behavior, stated, wrote, anchor, read,
                 partnered.size()));
         publish(behavior, stated, wrote, anchor, read, withoutALine);
-        if (aRunStops) {
+        // And where every run getting to it is shown to stop, which is a run that may stop in it
+        // whatever else is said.
+        if (aRunStops || !stops.isEmpty()) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated));
+                    ModelOccurrences.of(stated), stops);
         }
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where

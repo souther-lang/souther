@@ -88,6 +88,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -3884,8 +3885,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
                 out.append(String.format("      %s may stop a run: %s — a run that reaches it may"
-                                + " stop in an operation it is read through%s%n",
+                                + " stop in an operation it is read through%s%s%n",
                         mark(f), cited(it.cited(), rendering, declaredIn, places),
+                        everyRunStopsAt(it.everyRunStops()),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn)));
             }
@@ -6066,6 +6068,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
                                  List<Figure> figures,
                                  Optional<BlockReason.RelationShownOverARegion> leftOpen) {
+    }
+
+    /** Where every run getting to a rule stops, as the human report says it after the rule. */
+    private static String everyRunStopsAt(List<EveryRunStops> stops) {
+        StringBuilder out = new StringBuilder();
+        for (EveryRunStops each : stops) {
+            out.append(out.isEmpty() ? "; every run stops " : ", ")
+                    .append("in ").append(each.operation()).append(" where ")
+                    .append(each.at().path())
+                    .append(each.from().equals(each.to()) ? " is " + each.from()
+                            : " is " + each.from() + " to " + each.to());
+        }
+        return out.toString();
     }
 
     /**
@@ -9304,6 +9319,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
         if (finding.about() instanceof About.OfSomethingNotRead about) {
             f.put("reason", word(about.finding().reason()));
+        }
+        // And where every run getting to a rule a run may stop in is shown to stop: the values,
+        // and the operation it stops in.
+        if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
+                && !it.everyRunStops().isEmpty()) {
+            ArrayNode stops = f.putArray("everyRunStops");
+            for (EveryRunStops each : it.everyRunStops()) {
+                ObjectNode one = stops.addObject();
+                one.put("at", each.at().path().toString());
+                one.put("from", each.from());
+                one.put("to", each.to());
+                one.put("operation", each.operation());
+            }
         }
         // Present where the kind has one. A finding a build is not told about under any code is
         // not one with an empty code, and a consumer joining these to the diagnostics a build

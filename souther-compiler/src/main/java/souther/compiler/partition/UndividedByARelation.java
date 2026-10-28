@@ -23,6 +23,7 @@ import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
+import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -91,6 +92,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
@@ -464,11 +466,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Strings shown to be the partner's values exactly where {@code canBe} holds them. */
         StringsAPartnerCanHold(ValueSet canBe, String partner) {
             this(canBe, canBe, null, partner);
-        }
-
-        /** Whether every string is shown one way or the other. */
-        boolean showsEveryString() {
-            return upTo == null && canBe.equals(mayBe);
         }
     }
 
@@ -927,6 +924,174 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
+    }
+
+    /**
+     * The runs of the values at the positions this relation reads at which every run getting to
+     * it in one of {@code regions} stops in an operation the reading of the comparison told of.
+     *
+     * <p>Asked of each operation and each number of the input it is over, alone: where the
+     * operation comes to past its type at a value of the number whatever the rest of it holds in
+     * the region, every run there stops in it. The rest is taken as wide as the region leaves it,
+     * so a run is said to stop only where it does. What several operations rule out only together
+     * is not said, and a run said here is one some region leaves the number at.
+     *
+     * @param regions what the ways to the comparison leave, before what the rows that get past
+     *                its operations are narrowed to: a region a row got past them in holds none
+     *                of the values a run stops at
+     */
+    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
+        Set<EveryRunStops> out = new LinkedHashSet<>();
+        for (IntOperation operation : working.operations()) {
+            for (Map.Entry<NumericTerm, ExactRatio> each : operation.form().coefs().entrySet()) {
+                if (!(each.getKey() instanceof NumericTerm.ValueOf place)
+                        || !each.getValue().isWhole()) {
+                    continue;
+                }
+                Map<NumericTerm, ExactRatio> rest = new LinkedHashMap<>(operation.form().coefs());
+                rest.remove(place);
+                LinearForm<NumericTerm> others =
+                        new LinearForm<>(operation.form().constant(), rest);
+                for (SearchRegion region : regions) {
+                    out.addAll(whereEveryRunStops(operation, place,
+                            each.getValue().floor() instanceof ExactAnswer.Held<BigInteger> a
+                                    ? a.value() : null,
+                            others, region, read));
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The runs of {@code place} at which {@code operation}, which is {@code weight} times it and
+     * {@code others}, comes to past what it holds whatever {@code others} holds in
+     * {@code region}: at the high end of {@code place} and at the low end, each where some value
+     * of it there is one the region leaves it. An end the region places none at is the end of
+     * the type, which no value is past.
+     */
+    private static List<EveryRunStops> whereEveryRunStops(IntOperation operation,
+                                                         NumericTerm.ValueOf place,
+                                                         BigInteger weight,
+                                                         LinearForm<NumericTerm> others,
+                                                         SearchRegion region, InputReading read) {
+        if (weight == null || weight.signum() == 0
+                || !(region.projectionOf(place) instanceof NumericDomain.FormProjection.Within(
+                        NumericDomain.Bounds own))) {
+            return List.of();
+        }
+        BigInteger restLeast;
+        BigInteger restMost;
+        if (others.coefs().isEmpty()) {
+            // A rest of no number is its constant, which no region is asked about.
+            restLeast = typeEndOf(others, true, read);
+            restMost = restLeast;
+        } else if (region.projectionOf(others) instanceof NumericDomain.FormProjection.Within(
+                NumericDomain.Bounds rest)) {
+            restLeast = rest.min() != null ? rest.min().wholeAdmitted(true)
+                    : typeEndOf(others, true, read);
+            restMost = rest.max() != null ? rest.max().wholeAdmitted(false)
+                    : typeEndOf(others, false, read);
+        } else {
+            return List.of();
+        }
+        BigInteger ownLeast = own.min() != null ? own.min().wholeAdmitted(true)
+                : typeEndOf(LinearForm.atom(place), true, read);
+        BigInteger ownMost = own.max() != null ? own.max().wholeAdmitted(false)
+                : typeEndOf(LinearForm.atom(place), false, read);
+        if (ownLeast == null || ownMost == null) {
+            return List.of();
+        }
+        boolean up = weight.signum() > 0;
+        List<EveryRunStops> out = new ArrayList<>();
+        // Past the greatest: weight times the value with the least of the rest is above it.
+        if (restLeast != null) {
+            BigInteger room = operation.greatest().subtract(restLeast);
+            BigInteger from = up ? floorOf(room, weight).add(BigInteger.ONE) : ownLeast;
+            BigInteger to = up ? ownMost : ceilingOf(room, weight).subtract(BigInteger.ONE);
+            stopsWithin(place, from, to, ownLeast, ownMost, operation, out);
+        }
+        // Below the least: weight times the value with the most of the rest is under it.
+        if (restMost != null) {
+            BigInteger room = operation.least().subtract(restMost);
+            BigInteger from = up ? ownLeast : floorOf(room, weight).add(BigInteger.ONE);
+            BigInteger to = up ? ceilingOf(room, weight).subtract(BigInteger.ONE) : ownMost;
+            stopsWithin(place, from, to, ownLeast, ownMost, operation, out);
+        }
+        return out;
+    }
+
+    /**
+     * The least {@code form} comes to where each number in it is at an end of its type — or the
+     * most, where {@code least} is false — or null where a number of it has no such end or is no
+     * whole number.
+     */
+    private static BigInteger typeEndOf(LinearForm<NumericTerm> form, boolean least,
+                                        InputReading read) {
+        if (!(form.constant().floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger sum))
+                || !form.constant().isWhole()) {
+            return null;
+        }
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof NumericTerm.ValueOf place) || !each.getValue().isWhole()
+                    || !(each.getValue().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger weight))) {
+                return null;
+            }
+            Carrier carrier = read.quantities().ordersOf(place).answered();
+            BigInteger end = least == (weight.signum() > 0) ? leastOf(carrier)
+                    : greatestOf(carrier);
+            if (end == null) {
+                return null;
+            }
+            sum = sum.add(weight.multiply(end));
+        }
+        return sum;
+    }
+
+    /** {@code from} to {@code to} as far as {@code least} to {@code most} goes, where any of it
+     *  is left. */
+    private static void stopsWithin(NumericTerm.ValueOf place, BigInteger from, BigInteger to,
+                                    BigInteger least, BigInteger most, IntOperation operation,
+                                    List<EveryRunStops> out) {
+        BigInteger low = from.max(least);
+        BigInteger high = to.min(most);
+        if (low.compareTo(high) <= 0) {
+            out.add(new EveryRunStops(FilingCoordinate.of(place), low, high,
+                    written(operation.form())));
+        }
+    }
+
+    private static BigInteger floorOf(BigInteger numerator, BigInteger denominator) {
+        BigInteger[] parts = numerator.divideAndRemainder(denominator);
+        return parts[1].signum() != 0 && parts[1].signum() != denominator.signum()
+                ? parts[0].subtract(BigInteger.ONE) : parts[0];
+    }
+
+    private static BigInteger ceilingOf(BigInteger numerator, BigInteger denominator) {
+        return floorOf(numerator.negate(), denominator).negate();
+    }
+
+    /** {@code form} as an author would write it: each number weighed, in the order of their
+     *  names, and the constant last. */
+    private static String written(LinearForm<NumericTerm> form) {
+        Map<String, ExactRatio> named = new TreeMap<>();
+        form.coefs().forEach((term, weight) -> named.put(term.toString(), weight));
+        StringBuilder out = new StringBuilder();
+        named.forEach((name, weight) -> {
+            boolean below = weight.signum() < 0;
+            ExactRatio size = below ? weight.negated() : weight;
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.equals(ExactRatio.ONE) ? "" : size.spelled() + " * ")
+                    .append(name);
+        });
+        if (!form.constant().isZero() || out.isEmpty()) {
+            boolean below = form.constant().signum() < 0;
+            ExactRatio size = below ? form.constant().negated() : form.constant();
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.spelled());
+        }
+        return out.toString();
     }
 
     /**

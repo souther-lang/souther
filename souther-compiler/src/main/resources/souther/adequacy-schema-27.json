@@ -4146,6 +4146,39 @@
             "description": "The code a build is told this under, present exactly where the kind has one. A kind a build is never told about carries no code rather than an empty one.",
             "pattern": "^E[0-9]{4}$"
           },
+          "everyRunStops": {
+            "type": "array",
+            "minItems": 1,
+            "description": "On `rule_may_stop_a_run` only, where it is known: the runs of the values at a position of the rule at which every run that gets to the rule stops in an operation the rule is read through, because what the operation works out is past what its type holds whatever else it is over holds there. A proof about those values and not a class of them: the rule is neither true nor false there, no row there is a witness for either side, and nothing is left open, so no measure waits on it. Absent where no such run is known.",
+            "items": {
+              "type": "object",
+              "required": [
+                "at",
+                "from",
+                "to",
+                "operation"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "description": "The position, as a report names it."
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "The least value of the run."
+                },
+                "to": {
+                  "type": "integer",
+                  "description": "The greatest value of the run."
+                },
+                "operation": {
+                  "type": "string",
+                  "description": "The operation every run there stops in, as the numbers it is over weighed and a constant."
+                }
+              }
+            }
+          },
           "at": {
             "description": "Where the finding is, present exactly where its place is its own rather than the declaration it sits under — `arm_unreached` and nothing else. A behavior with two `guard`s has two arms labelled `else`, so the place is what tells two of these apart, and it is the same place under the same key as the matching `branch.obligations` entry, whose `disposition` is `unmet`. The other kinds are cited at the behavior's own declaration, which the entry above already names.",
             "$ref": "#/$defs/at"

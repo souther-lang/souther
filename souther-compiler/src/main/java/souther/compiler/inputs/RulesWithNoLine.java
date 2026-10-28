@@ -150,7 +150,13 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         /** A rule a run reaching it may stop in, which is what a report says of it. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
-            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt);
+            mayStopARun(cited, readAt, List.of());
+        }
+
+        /** The same, with the values at which every run getting to the rule stops. */
+        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
+                                List<EveryRunStops> everyRunStops) {
+            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt, everyRunStops);
             stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
         }
 
