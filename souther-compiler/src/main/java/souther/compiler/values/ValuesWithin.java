@@ -3,6 +3,8 @@ package souther.compiler.values;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import souther.compiler.regex.Language;
+
 /**
  * The values of a set whose length lies between two numbers of code points.
  *
@@ -93,9 +95,13 @@ public record ValuesWithin(ValueSet values, long shortest, Long longest) {
 
     /**
      * The set a value standing for these is looked for in: the set, with what it names outright
-     * kept to the lengths these allow. A value found in a set that names none outright is the
-     * shortest one it holds, so where that is longer than these allow every value of it is; a
-     * value found shorter than these allow says nothing of the longer ones, and is no answer.
+     * kept to the lengths these allow. What is found in a language is the shortest string of it a
+     * row can write ({@link Language#someWritten}), so where that is longer than these allow no
+     * string of it a row can write is within them. What is found in a set of every string but a
+     * few is the first run of one letter it keeps, which a shorter string may beat; such a set is
+     * bounded by no length here, since what bounds one is a true side, which is a language, and a
+     * set met with a language is one. A value found shorter than these allow says nothing of the
+     * longer ones, and is no answer.
      */
     public ValueSet toLookIn() {
         if (!bounded() || !(values instanceof ValueSet.Finite finite)) {

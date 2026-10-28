@@ -377,7 +377,6 @@ sealed interface ComparisonAssessment {
                     stops, partedByTheirPartners(about, leaves));
         }
 
-
         /**
          * Each string position some relation shows parted by the strings its partner can hold
          * where every relation about its place shows it parted by the same strings.

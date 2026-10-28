@@ -501,9 +501,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /**
          * The operations already told that {@code node} is worked out of: those told at one of
-         * its operands, and theirs. The walk tells of an operand just before what it is an
-         * operand of, so the last told at the operand is the one this run works out, where a
-         * definition read twice tells of one node twice.
+         * its operands, and theirs. The walk tells of an operand before what it is an operand of,
+         * so the last told at the operand is one this run works out before {@code node}. A node
+         * read twice — a definition, or a name bound once and read on both sides — is told twice,
+         * and the copy told first is missed. That leaves out only what comes after, never puts in
+         * what does not: a run is then taken to stop at either copy first, and the two are past
+         * their types at the same rows, which are said of neither. An operand worked out by a call
+         * is told at no node of its own and is missed the same way.
          */
         List<Integer> workedOutOf(Core node) {
             List<Core> operands = switch (Core.withoutStanding(node)) {
