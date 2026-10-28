@@ -9,6 +9,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -139,8 +140,8 @@ class AWatchedReadingAsksOnlyWhatItCanPlaceOfWhatWasHandedTest {
         BindingEnvironment apart = nothingHanded().handing(OTHER, written(1));
 
         HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> {
-            on.roleOf(EACH);
-            return apart.roleOf(OTHER);
+            BindingRole placed = on.roleOf(EACH);
+            return List.of(placed, apart.roleOf(OTHER));
         }).asked();
 
         assertFalse(asked.toldApart());

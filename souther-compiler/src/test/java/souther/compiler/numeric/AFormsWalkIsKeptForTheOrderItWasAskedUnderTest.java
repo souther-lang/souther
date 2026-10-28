@@ -65,11 +65,13 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
         Function<CanonicalForm<String>, List<Map.Entry<String, ExactRatio>>> walks =
                 ClosedStates.kept().walksIn(counting(comparisons));
 
-        walks.apply(form("c", "3", "a", "1", "b", "5"));
+        List<Map.Entry<String, ExactRatio>> first = walks.apply(form("c", "3", "a", "1", "b", "5"));
         int afterTheFirst = comparisons.get();
-        walks.apply(form("b", "5", "c", "3", "a", "1"));
+        List<Map.Entry<String, ExactRatio>> second =
+                walks.apply(form("b", "5", "c", "3", "a", "1"));
 
         assertEquals(afterTheFirst, comparisons.get());
+        assertEquals(first, second);
     }
 
     @Test
@@ -85,7 +87,7 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
             int howMany = 1 + dice.nextInt(positions.size());
             for (int at = 0; at < howMany; at++) {
                 coefs.put(positions.get(dice.nextInt(positions.size())),
-                        ExactRatio.of((dice.nextBoolean() ? 1 : -1) * (1 + dice.nextInt(7))));
+                        ExactRatio.of((dice.nextBoolean() ? 1L : -1L) * (1 + dice.nextInt(7))));
             }
             CanonicalForm<String> form = new CanonicalForm<>(coefs);
 
@@ -132,11 +134,12 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
                 ClosedStates.NONE.walksIn(counting(comparisons));
         CanonicalForm<String> form = form("c", "3", "a", "1", "b", "5");
 
-        walks.apply(form);
+        List<Map.Entry<String, ExactRatio>> first = walks.apply(form);
         int afterTheFirst = comparisons.get();
-        walks.apply(form);
+        List<Map.Entry<String, ExactRatio>> second = walks.apply(form);
 
         assertEquals(2 * afterTheFirst, comparisons.get());
+        assertEquals(first, second);
     }
 
     /**
