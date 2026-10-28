@@ -466,11 +466,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest"),
-            new Held("souther.compiler.partition.AffineReading.1.worksOutNothingBesideTheStop",
-                    "asks whether an expression beside the stopped one is a quotient by a value"
-                            + " and where the operator's own account says it answers, so that"
-                            + " the divisor it is kept to is the quotient's analysis to answer"
-                            + " for"),
             new Held("souther.compiler.partition.AffineReading.workingOfEvaluating",
                     "asks whether what a run evaluates is a comparison, whose two sides are"
                             + " worked out whichever way it comes out"),

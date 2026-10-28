@@ -151,6 +151,20 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
     }
 
     /**
+     * A quotient around the stop, or on the other side of the comparison, is not the stopped
+     * expression's to answer for: where its divisor is nought a run stops, and the analysis that
+     * owns the stop draws no line from it. A rule that reads the quotient answers for it, as a
+     * quotient by a value does for its own ({@link #aQuotientByAnInputIsToldToWorkOutNothingBeyondItsOperands}).
+     */
+    @Test
+    void aQuotientBesideTheStopIsNotTheStopsToAnswerFor() {
+        assertEquals(UndividedByARelation.Working.UNREAD,
+                workingOfTheStop("(m * k) / n >= 100"));
+        assertEquals(UndividedByARelation.Working.UNREAD,
+                workingOfTheStop("m * k >= n / m"));
+    }
+
+    /**
      * A construction checks the invariant of the type it makes, which stops a run, whatever the
      * stop under it is.
      */

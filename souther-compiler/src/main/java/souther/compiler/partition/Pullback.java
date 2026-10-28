@@ -387,6 +387,14 @@ final class Pullback {
      */
     private UndividedByARelation.Working workingOfTheRule;
     /**
+     * The expressions the rule being tried answers for beside the one the arithmetic stopped at;
+     * null where it answers for that one alone.
+     */
+    private Predicate<Core> answersFor;
+    /** What each rule that concluded something said ({@link #sayingWhatItAnswersFor}), by what it
+     *  concluded. */
+    private final Map<Derivation, WhatTheRuleSaid> said = new IdentityHashMap<>();
+    /**
      * What each relation read under an arm of a choice works out, off the comparison read with the
      * choice standing as that arm ({@link #tellWhatItWorksOut}).
      */
@@ -731,13 +739,11 @@ final class Pullback {
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
         reading.theComparisonRead = comparison;
         reading.theArithmeticRead = arithmetic;
-        Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(
-                reading.firstThatReadsIt(
-                        reading.rulesFor(comparison, null, false, reads, arithmetic)),
-                comparison, reads));
+        Derivation chosen = reading.firstThatReadsIt(
+                reading.rulesFor(comparison, null, false, reads, arithmetic));
+        Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads));
         return new OnTheInput(stated, arithmetic,
-                () -> reading.workingOfTheRule != null ? reading.workingOfTheRule
-                        : AffineReading.OfAComparison.workingOf(arithmetic.get()),
+                new Once<>(() -> reading.workingOf(chosen, arithmetic)),
                 reading.workingOfRelation::get, reading.readOff);
     }
 
@@ -1400,7 +1406,7 @@ final class Pullback {
                 new Weighed(new Denotation(stated.left(), reads), ExactRatio.ONE),
                 new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
                 Pullback::nothingElse, () -> false)));
-        return List.of(
+        List<Supplier<Derivation>> rules = List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), emptiness, reads)
                         : asking(at, () -> observe(checked.container(), emptiness, reads)),
@@ -1417,12 +1423,89 @@ final class Pullback {
                 () -> ofARoundedNumber(stated, at, fixed, reads),
                 () -> ofAQuotientByAValue(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
-                () -> ofASizeInCases(stated, at, reads),
-                () -> ofAWalkKeepingAnEnd(stated, at, reads),
-                () -> ofAWalkChoosingAnElement(stated, at, reads),
-                () -> ofAChoice(stated, at, reads),
-                () -> throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get()),
+                () -> readingTheComparisonAgain(ofASizeInCases(stated, at, reads)),
+                () -> readingTheComparisonAgain(ofAWalkKeepingAnEnd(stated, at, reads)),
+                () -> readingTheComparisonAgain(ofAWalkChoosingAnElement(stated, at, reads)),
+                () -> {
+                    Derivation read = ofAChoice(stated, at, reads);
+                    if (read != null) {
+                        // Each side that is a choice is read arm by arm, with the choice standing
+                        // as that arm, so what it works out is this rule's to answer for.
+                        answersForTheChoicesAmong(stated);
+                    }
+                    return read;
+                },
+                () -> readingTheComparisonAgain(
+                        throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get())),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
+        List<Supplier<Derivation>> saying = new ArrayList<>();
+        for (Supplier<Derivation> rule : rules) {
+            saying.add(() -> sayingWhatItAnswersFor(rule));
+        }
+        return saying;
+    }
+
+    /**
+     * What a rule that took a comparison says of the rows of what it concluded, where it is not
+     * what the reading of the comparison says: the working it worked out, and the expressions it
+     * answers for beside the one the arithmetic stopped at ({@link #answersFor}).
+     */
+    private record WhatTheRuleSaid(UndividedByARelation.Working working,
+                                   Predicate<Core> answersFor) { }
+
+    /**
+     * {@code rule}, tried with nothing said, and what it said recorded against what it concluded,
+     * so that a rule tried and set aside leaves nothing for the one kept.
+     */
+    private Derivation sayingWhatItAnswersFor(Supplier<Derivation> rule) {
+        workingOfTheRule = null;
+        answersFor = null;
+        Derivation concluded = rule.get();
+        if (concluded != null) {
+            said.put(concluded, new WhatTheRuleSaid(workingOfTheRule, answersFor));
+        }
+        return concluded;
+    }
+
+    /**
+     * {@code read}, a rule that goes into the value the arithmetic stopped at and reads the
+     * comparison again with it taken, which answers for what the comparison works out beside that
+     * value: each reading of it is a comparison read in full.
+     */
+    private Derivation readingTheComparisonAgain(Derivation read) {
+        if (read != null) {
+            answersFor = _ -> true;
+        }
+        return read;
+    }
+
+    private void answersForTheChoicesAmong(StatedComparison stated) {
+        List<Core> choices = new ArrayList<>();
+        for (Core side : List.of(stated.left(), stated.right())) {
+            Core value = AffineReading.withoutBindings(side);
+            if (Choice.of(value) != null) {
+                choices.add(value);
+            }
+        }
+        answersFor = node -> choices.contains(Core.withoutStanding(node));
+    }
+
+    /**
+     * What the rows of {@code chosen}, the derivation a comparison was read by, work out: what the
+     * rule that concluded it says, and otherwise what the arithmetic over the input made of the
+     * comparison, with the expressions the rule answers for held to it.
+     */
+    private UndividedByARelation.Working workingOf(
+            Derivation chosen, Supplier<AffineReading.OfAComparison> arithmetic) {
+        WhatTheRuleSaid theRule = said.get(chosen);
+        if (theRule != null && theRule.working() != null) {
+            return theRule.working();
+        }
+        AffineReading.OfAComparison read = arithmetic.get();
+        return theRule != null && theRule.answersFor() != null
+                && read instanceof AffineReading.OfAComparison.Stopped stopped
+                ? stopped.apart(theRule.answersFor())
+                : AffineReading.OfAComparison.workingOf(read);
     }
 
     /**
@@ -1644,7 +1727,12 @@ final class Pullback {
 
     /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
     private Derivation firstThatReadsIt(List<Supplier<Derivation>> rules) {
-        return RuleChoice.firstThatReadsIt(rules, met, trying);
+        Derivation chosen = RuleChoice.firstThatReadsIt(rules, met, trying);
+        // The rules tried after the one kept said their own, and a comparison read as another
+        // statement of itself (a rounded number) is read by the one kept.
+        WhatTheRuleSaid theRule = said.get(chosen);
+        workingOfTheRule = theRule == null ? null : theRule.working();
+        return chosen;
     }
 
     /**
@@ -10555,9 +10643,16 @@ final class Pullback {
         }
         UndividedByARelation.Working told = null;
         if ((stated == theComparisonRead || restatingTheComparisonRead)
-                && theArithmeticRead.get() instanceof AffineReading.OfAComparison.Stopped stopped
-                && divisionBy(quotient.divisor(), stopped.node()) instanceof Core division) {
-            told = stopped.ofTheQuotientAwayFromNought(division);
+                && theArithmeticRead.get() instanceof AffineReading.OfAComparison.Stopped stopped) {
+            // The quotient may be written at the stop, behind a name, or around it.
+            Core division = divisionBy(quotient.divisor(), stopped.node());
+            division = division != null ? division
+                    : divisionBy(quotient.divisor(), stated.left());
+            division = division != null ? division
+                    : divisionBy(quotient.divisor(), stated.right());
+            if (division != null) {
+                told = stopped.ofTheQuotientAwayFromNought(division);
+            }
         }
         Derivation answers;
         Derivation signed;

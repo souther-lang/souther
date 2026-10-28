@@ -34,11 +34,14 @@ import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * A comparison read as one statement: {@code Σ coef·position REL threshold}.
@@ -93,7 +96,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         static UndividedByARelation.Working workingOf(OfAComparison read) {
             return switch (read) {
                 case Cuts cuts -> cuts.working();
-                case Stopped stopped -> stopped.apart();
+                case Stopped stopped -> stopped.apart(_ -> false);
                 case CutsNothing _, NotHeld _ -> UndividedByARelation.Working.UNREAD;
             };
         }
@@ -192,18 +195,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * What the program works out beside the expression the reading stopped at, for a
              * relation drawn by an analysis that owns that expression: none of the stopped value's
              * own operations are told, and a row is not shown computed for an operation beside it
-             * that is not.
+             * that is not. {@code answersFor} says which other expressions nothing here reads the
+             * analysis answers for as well; any other that may end a run leaves the operations
+             * told as not every one.
              */
-            UndividedByARelation.Working apart() {
-                return beside.apart();
+            UndividedByARelation.Working apart(Predicate<Core> answersFor) {
+                return beside.apart(answersFor);
             }
 
             /**
              * The same, for the analysis of a quotient by a value, whose lines are drawn on the
-             * dividend and the divisor with the divisor away from nought. The dividend and the
-             * divisor are worked out on every row of those lines, and the quotient of two numbers
-             * answers on every divisor but nought, so they are told with the rest. Not every
-             * operation is told where the stop is not a quotient of that kind.
+             * dividend and the divisor with the divisor away from nought, and which answers for
+             * everything written under the quotient. The dividend and the divisor are worked out
+             * on every row of those lines, and the quotient of two numbers answers on every divisor
+             * but nought, so they are told with the rest. Not every operation is told where the
+             * quotient is not of that kind.
              */
             UndividedByARelation.Working ofTheQuotientAwayFromNought(Core division) {
                 return beside.ofTheQuotientAwayFromNought(division);
@@ -436,25 +442,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * Whether {@code node}, an expression nothing here reads other than the stopped one,
-             * ends no run, is a whole side of the comparison, or is the quotient by a value that
-             * has the stopped expression for an operand. The analysis that draws a line from a
-             * comparison of two values answers for what each side works out, as it does for the
-             * stopped one, since nothing joins them but the comparison. A quotient is kept to the
-             * rows whose divisor is not nought by the analyses of a quotient, which is the one
-             * thing it ends a run for; any other expression that may end a run, joined to the
-             * stopped one by an operation, has no owner here.
+             * ends no run, or is one the analysis that drew the lines answers for. Any other that
+             * may end a run has no owner here.
              */
             private boolean worksOutNothingBesideTheStop(Core node) {
-                if (WhatARunMayEndFor.endsNoneBeneath(node) || stoppedAt.isASide(node)) {
-                    return true;
-                }
-                return Core.withoutStanding(node) instanceof Core.Binary quotient
-                        && quotient.op() == BinOp.DIV
-                        && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
-                                List.of(quotient.left().type(), quotient.right().type()))
-                                instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought
-                        && (quotient.left().equals(stoppedAt.node())
-                                || quotient.right().equals(stoppedAt.node()));
+                return WhatARunMayEndFor.endsNoneBeneath(node) || stoppedAt.answersFor(node);
             }
 
             /**
@@ -734,6 +726,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return told.working();
     }
 
+    /** What {@code side} comes to once the bindings written around it are taken off. */
+    static Core withoutBindings(Core side) {
+        Core value = Core.withoutStanding(side);
+        while (value instanceof Core.LetIn binding) {
+            value = Core.withoutStanding(binding.body());
+        }
+        return value;
+    }
+
     /**
      * The value of the expression a reading stopped at, as an atom of its own. No position of the
      * input is it, so an operation over it is told of nowhere and a form that names it is dropped.
@@ -756,31 +757,22 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final boolean quotientAwayFromNought;
         private final InputReading read;
         private final boolean aChoice;
-        private final List<Core> sides;
+        private final Predicate<Core> answersFor;
         private FormRange range;
 
         StoppedValue(Core node, boolean quotientAwayFromNought, InputReading read,
-                     StatedComparison comparison) {
+                     Predicate<Core> answersFor) {
             this.node = Objects.requireNonNull(node);
             this.quotientAwayFromNought = quotientAwayFromNought;
             this.read = Objects.requireNonNull(read);
             this.aChoice = Choice.of(Core.withoutStanding(node)) != null;
-            this.sides = List.of(valueOf(comparison.left()), valueOf(comparison.right()));
+            this.answersFor = Objects.requireNonNull(answersFor);
         }
 
-        /** What a side comes to once the bindings written around it are taken off. */
-        private static Core valueOf(Core side) {
-            Core value = Core.withoutStanding(side);
-            while (value instanceof Core.LetIn binding) {
-                value = Core.withoutStanding(binding.body());
-            }
-            return value;
-        }
-
-        /** Whether {@code other} is a whole side of the comparison, which nothing but the
-         *  comparison joins to the stopped expression. */
-        boolean isASide(Core other) {
-            return sides.contains(Core.withoutStanding(other));
+        /** Whether the analysis that drew the lines answers for {@code other}, an expression
+         *  beside the stopped one, as it does for that one. */
+        boolean answersFor(Core other) {
+            return answersFor.test(other);
         }
 
         Core node() {
@@ -821,7 +813,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final InputReads reads;
         private final InputReading ofTheInput;
         private final Core node;
-        private UndividedByARelation.Working apart;
 
         WhatLiesBesideTheStop(StatedComparison comparison, InputReads reads,
                               InputReading ofTheInput, Core node) {
@@ -836,22 +827,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * operations beside it are every one that is told, and the sizes of the form answer for a
          * row where there are none.
          */
-        UndividedByARelation.Working apart() {
-            if (apart == null) {
-                UndividedByARelation.Working beside = beside(false);
-                apart = beside.operations().isEmpty() && beside.exact()
-                        ? UndividedByARelation.Working.NOTHING : beside;
-            }
-            return apart;
+        UndividedByARelation.Working apart(Predicate<Core> answersFor) {
+            UndividedByARelation.Working beside =
+                    beside(new StoppedValue(node, false, ofTheInput, answersFor));
+            return beside.operations().isEmpty() && beside.exact()
+                    ? UndividedByARelation.Working.NOTHING : beside;
         }
 
+        /** The same for the quotient {@code division}, which the analysis answers for with
+         *  everything written under it and under the expression the reading stopped at, which it
+         *  reads the quotient out of. */
         UndividedByARelation.Working ofTheQuotientAwayFromNought(Core division) {
-            return beside(new StoppedValue(division, true, ofTheInput, comparison));
+            Set<Core> under = Collections.newSetFromMap(new IdentityHashMap<>());
+            collectUnder(division, under);
+            collectUnder(node, under);
+            return beside(new StoppedValue(division, true, ofTheInput,
+                    node -> under.contains(Core.withoutStanding(node))));
         }
 
-        private UndividedByARelation.Working beside(boolean quotientAwayFromNought) {
-            return beside(new StoppedValue(node, quotientAwayFromNought, ofTheInput,
-                    comparison));
+        private static void collectUnder(Core around, Set<Core> into) {
+            Core here = Core.withoutStanding(around);
+            into.add(here);
+            Core.forEachChild(here, child -> collectUnder(child, into));
         }
 
         private UndividedByARelation.Working beside(StoppedValue stoppedAt) {
