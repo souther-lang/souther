@@ -107,13 +107,21 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
         }
     }
 
-    /** An index past what the meter allows is refused before anything is made for it. */
+    /** Where the walk comes round to the states it began a piece in, a later index is the same. */
     @Test
-    void anIndexTheMeterCannotAffordIsRefusedNotWalked() {
-        assertEquals(null, StringsOfAPiece.pieceAt(language("[A-Z]+;7"), ';', Integer.MAX_VALUE,
-                ALLOWANCE));
-        assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A7"), ';',
-                Integer.MAX_VALUE, ALLOWANCE));
+    void anIndexPastARoundOfTheWalkIsThePieceOfTheIndexInTheRound() {
+        Language whole = language("(A;7;)*A");
+        Language early = StringsOfAPiece.pieceAt(whole, ';', 3, ALLOWANCE);
+        Language late = StringsOfAPiece.pieceAt(whole, ';', 3 + 2 * 1_000_000, ALLOWANCE);
+        assertEquals(true, early.has("7") && !early.has("A"));
+        assertEquals(true, late.has("7") && !late.has("A"));
+    }
+
+    /** A machine for an index that the meter's states do not reach is refused unmade. */
+    @Test
+    void anIndexTheMeterCannotAffordIsRefused() {
+        assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A7"), ';', 10,
+                new Meter(5, 5, 5)));
     }
 
     @Test

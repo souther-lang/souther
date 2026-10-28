@@ -4,7 +4,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
@@ -41,14 +43,26 @@ public final class StringsOfAPiece {
         Automaton machine = whole.machine();
         meter.starting();
         Meter.Making making = meter.making();
-        if (!making.work((long) index * machine.size())) {
-            return null;
-        }
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         BitSet begin = new BitSet();
         begin.set(Automaton.START);
-        for (int passed = 0; passed < index && !begin.isEmpty(); passed++) {
+        // Where the states a walk begins a piece in come round to a set they were before, the
+        // passes left are those of one round, so a large index costs a round and not itself.
+        Map<BitSet, Integer> seen = new HashMap<>();
+        int limit = index;
+        for (int passed = 0; passed < limit && !begin.isEmpty(); passed++) {
+            Integer before = seen.put(begin, passed);
+            if (before != null) {
+                limit = passed + (index - passed) % (passed - before);
+                seen.clear();
+                if (passed >= limit) {
+                    break;
+                }
+            }
+            if (!making.work(machine.size())) {
+                return null;
+            }
             BitSet next = new BitSet();
             for (int state : withoutASeparator(machine, begin, within)) {
                 for (Automaton.Step each : machine.stepsFrom(state)) {
