@@ -55,6 +55,13 @@ final class NearbyValues {
 
         Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
                                        List<Narrowing> along, TypeView view);
+
+        /** What a list becomes beyond its elements moved one at a time: nothing, unless a step
+         *  adds to the list itself. */
+        default Iterator<ObservedValue> longer(ObservedValue.Sequence unusedHeld,
+                                               Shape.Sequence unusedSequence) {
+            return none();
+        }
     }
 
     private static final Leaves WHOLE_NUMBERS = (prim, leaf, _, _, _) ->
@@ -64,6 +71,42 @@ final class NearbyValues {
     /** The values one step from {@code value}, standing at a position of {@code type}. */
     static Iterator<ObservedValue> of(ObservedValue value, Type type, RuleReadingContext reading) {
         return of(value, type, reading, null, List.of(), WHOLE_NUMBERS);
+    }
+
+    /**
+     * The values {@code value} becomes where a list it holds, or is, has one more element: a value
+     * a run took at a position of the element's type ({@code ranWith}), put after the elements it
+     * has, and everything else stays as it was.
+     *
+     * <p>For a list the classes divide no way, which holds only what the rows written ran with and
+     * has no element to move a number of. What an element can be is then what the rows of the
+     * module ran a position of its type with. Handed over one at a time, a list at a time in the
+     * order the value is walked.
+     */
+    static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
+                                         InputsRowsRanWith ranWith) {
+        if (ranWith.isEmpty()) {
+            return none();
+        }
+        return of(value, type, reading, null, List.of(), new Leaves() {
+
+            @Override
+            public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                                  List<Narrowing> along, TypeView view) {
+                return none();
+            }
+
+            @Override
+            public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
+                                                  Shape.Sequence sequence) {
+                return mapped(ranWith.of(sequence.element()).iterator(),
+                        more -> {
+                            List<ObservedValue> elements = new ArrayList<>(held.elements());
+                            elements.add(more);
+                            return new ObservedValue.Sequence(elements);
+                        });
+            }
+        });
     }
 
     /**
@@ -308,7 +351,9 @@ final class NearbyValues {
                     && made.type().equals(product.name())
                     ? fieldsOf(made, product, reading, at, along, leaves) : none();
             case Shape.Sequence sequence -> value instanceof ObservedValue.Sequence held
-                    ? elementsOf(held, sequence, reading, at, along, leaves) : none();
+                    ? flat(List.of(elementsOf(held, sequence, reading, at, along, leaves),
+                            leaves.longer(held, sequence)).iterator(), Function.identity())
+                    : none();
             // The case the value is, as a fixture writes a sum.
             case Shape.Sum sum -> value instanceof ObservedValue.Constructed made
                     && sum.reaches().cases().contains(made.type())

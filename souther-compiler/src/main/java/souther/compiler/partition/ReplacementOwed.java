@@ -38,13 +38,17 @@ public sealed interface ReplacementOwed {
      *                    Never empty: a rewrite of an arm is asked about because such a row went
      *                    through it, and those inputs are somewhere a run through the arm is known
      *                    to start from whatever a reading of the way in could state
+     * @param ranWith     the inputs the rows of the module ran with, by the type of the position:
+     *                    where an element of a list the classes divide no way is looked for
      */
     record OfAnArm(SourceConstructOrigin fork, int part, int with, List<ArmProbe> occurrences,
                    SequencedMap<Integer, Integer> replacing,
-                   List<List<ObservedValue>> seenThrough) implements ReplacementOwed {
+                   List<List<ObservedValue>> seenThrough,
+                   InputsRowsRanWith ranWith) implements ReplacementOwed {
 
         public OfAnArm {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
+            Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             occurrences = List.copyOf(occurrences);
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
             seenThrough = seenThrough.stream().map(List::copyOf).toList();
@@ -69,13 +73,22 @@ public sealed interface ReplacementOwed {
      *                   the order the rows are written. Somewhere a run is known to come back, which
      *                   is where a row the rewrite answers differently on is looked for beside the
      *                   values the classes offer
+     * @param ranWith    the inputs the rows of the module ran with, by the type of the position:
+     *                   where an element of a list the classes divide no way is looked for
      */
     record ByOneAnswer(Replacement.ByOneAnswer replacement,
-                       List<List<ObservedValue>> answeredOn) implements ReplacementOwed {
+                       List<List<ObservedValue>> answeredOn,
+                       InputsRowsRanWith ranWith) implements ReplacementOwed {
 
         public ByOneAnswer {
             Objects.requireNonNull(replacement, "a body answering one value answers some value");
+            Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             answeredOn = answeredOn.stream().map(List::copyOf).toList();
+        }
+
+        public ByOneAnswer(Replacement.ByOneAnswer replacement,
+                           List<List<ObservedValue>> answeredOn) {
+            this(replacement, answeredOn, InputsRowsRanWith.NONE);
         }
 
         /** The value the rewritten body answers. */

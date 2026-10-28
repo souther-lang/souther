@@ -236,8 +236,8 @@ final class CallExampleSeeds {
                 .anyMatch(each -> check.refuse(each.getKey(), each.getValue()).isPresent());
     }
 
-    private static void collect(Core e, Predicate<ValueName.Behavior> worthReading,
-                                List<AnOperationApplied> out) {
+    static void collect(Core e, Predicate<ValueName.Behavior> worthReading,
+                        List<AnOperationApplied> out) {
         for (Core each : Core.subexpressionsAt(e)) {
             if (AnOperationApplied.of(each) instanceof AnOperationApplied applied
                     && applied.operation() instanceof ValueName.Behavior callee
