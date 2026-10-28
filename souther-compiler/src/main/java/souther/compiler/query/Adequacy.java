@@ -191,6 +191,7 @@ import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -1107,8 +1108,8 @@ public final class Adequacy {
      * The same, of {@code read}, which is {@code spec}'s input as {@link #inputReadingOf} reads it:
      * for a caller that hands the reading on beside the subject, and asks for it once.
      */
-    private static MeasuredInput subjectOf(Db db, String module, Hir.SpecBehavior spec,
-                                           InputReading read) {
+    static MeasuredInput subjectOf(Db db, String module, Hir.SpecBehavior spec,
+                                   InputReading read) {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
@@ -1123,7 +1124,7 @@ public final class Adequacy {
 
     /** The reading of {@code spec}'s input every measure of it reads, or null where there is
      *  none. */
-    private static InputReading inputReadingOf(Db db, String module, Hir.SpecBehavior spec) {
+    static InputReading inputReadingOf(Db db, String module, Hir.SpecBehavior spec) {
         Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
         Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
         if (!sigs.present() || !reading.present()) {
@@ -4401,7 +4402,14 @@ public final class Adequacy {
         // has to hold, so a row composed for one item can stand where another item asks — and the
         // two went out as two pieces of work because nothing asked what an offered row settles.
         Settlements table = Settlements.of(db, composed);
-        Set<RowKey> kept = table.keeping();
+        Set<RowKey> kept = new LinkedHashSet<>(table.keeping());
+        // And the rows that try a behavior with what the rows of its callees are given. They are
+        // composed for no item, so what the reduction keeps is what an item needs and these stay
+        // beside it: the offering is the work the model is owed and the inputs its author has
+        // already reached for.
+        Set<RowKey> seeded = composed.seeded();
+        composed.rowsByBehavior().values().forEach(rows -> rows.stream()
+                .map(OfferedRow::key).filter(seeded::contains).forEach(kept::add));
         // And what the rows that are left answer, which is what the block may not say nothing
         // offers. A row composed for one thing standing where another asks is the whole of this,
         // and a note printed over it would send a person after work that is already in front of
@@ -4573,8 +4581,8 @@ public final class Adequacy {
 
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
      *  first stage's and are divided there. */
-    private static Hir.SpecBehavior specOf(CheckSurface prepared,
-                                           String name) {
+    static Hir.SpecBehavior specOf(CheckSurface prepared,
+                                   String name) {
         for (Hir.BehaviorDef each : prepared.behaviors()) {
             if (each instanceof Hir.SpecBehavior spec && spec.name().equals(name)) {
                 return spec;
@@ -5647,17 +5655,21 @@ public final class Adequacy {
                           Generator.GenerationResult boundaries,
                           Generated.RowsForRules rules,
                           Generated.RowsForCases cases,
-                          List<GenerationDisposition> generation) {
+                          List<GenerationDisposition> generation,
+                          List<Generator.GeneratedRow> callSeeds) {
 
         public Filling {
             generation = List.copyOf(generation);
+            callSeeds = List.copyOf(callSeeds);
         }
 
-        /** This filling holding {@code cases} for the cases a statement draws inside itself. */
-        Filling holding(Generated.RowsForCases cases) {
-            return new Filling(composed, boundaries, rules, cases, generation);
+        /**
+         * This filling holding {@code cases} for the cases a statement draws inside itself, and
+         * {@code seeds} for the rows the callees' inputs seed.
+         */
+        Filling holding(Generated.RowsForCases cases, List<Generator.GeneratedRow> seeds) {
+            return new Filling(composed, boundaries, rules, cases, generation, seeds);
         }
-
 
         /**
          * The rows composed for lines the rows do not tell from the lines beside them.
@@ -6050,7 +6062,12 @@ public final class Adequacy {
             return Answer.of(new Filling(composed,
                     offeredHere(behavior, here.edges(),
                             RowsOwed.restingOnAPremise(db, name, behavior)),
-                    rules, cases, generation));
+                    rules, cases, generation,
+                    here.callSeeds(Stream.of(
+                                    composed.offers().stream().map(FillResult.Offer::row),
+                                    apart.stream(), rules.byRule().values().stream(),
+                                    cases.byCase().values().stream())
+                            .flatMap(rows -> rows).toList())));
         }
 
         /**
@@ -6149,6 +6166,28 @@ public final class Adequacy {
                 return new Environment(db, name, behavior, prepared.value(), spec, sig, subject,
                         divided, edges, meetings, numbering,
                         RowReadings.readingFor(byTarget, behavior));
+            }
+
+            /**
+             * The rows that try this behavior with the inputs the rows of the behaviors it calls
+             * give ({@link CallExampleSeeds}), beside {@code bases} the fill composed.
+             *
+             * <p>Nothing where the module did not get far enough to read the body or build a
+             * value, which says nothing about what the callees' rows are worth.
+             */
+            List<Generator.GeneratedRow> callSeeds(List<Generator.GeneratedRow> bases) {
+                InputReading input = inputReadingOf(db, name, spec);
+                Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
+                AnalysisBody analysis =
+                        checked == null ? null : checked.analysisBodies().get(behavior);
+                FixturesAtTheBoundary building = constructing(db, name);
+                if (input == null || analysis == null || building == null) {
+                    return List.of();
+                }
+                return CallExampleSeeds.rowsFor(db, name, subject, input, analysis,
+                        checkAgainst(building, sig), bases,
+                        RequiredDependencies.of(db, name, behavior).none(),
+                        db.ask(new Front.Adequacy()).value().generation().rowLimit());
             }
 
             /** What a search of this behavior for {@code asked} composed. */

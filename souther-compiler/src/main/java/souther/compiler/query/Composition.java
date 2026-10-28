@@ -5,6 +5,7 @@ import souther.compiler.partition.FillResult;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -95,7 +96,8 @@ public record Composition(OfferingRequest request,
                     atTheLines(owed.get(behavior)),
                     filling == null ? List.of() : filling.tellingLinesApart(),
                     filling == null ? List.of() : filling.rules().byRule().values(),
-                    filling == null ? List.of() : filling.cases().byCase().values());
+                    filling == null ? List.of() : filling.cases().byCase().values(),
+                    filling == null ? List.of() : filling.callSeeds());
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, here) -> {
@@ -152,7 +154,8 @@ public record Composition(OfferingRequest request,
                 ? Map.of() : account.rowsByCarrier();
         Map<String, Adequacy.Filling> out = new LinkedHashMap<>();
         generated.forEach((behavior, filling) -> {
-            if (filling == null || filling.cases().byCase().isEmpty()) {
+            if (filling == null || (filling.cases().byCase().isEmpty()
+                    && filling.callSeeds().isEmpty())) {
                 out.put(behavior, filling);
                 return;
             }
@@ -167,8 +170,29 @@ public record Composition(OfferingRequest request,
                     kept.put(which, row);
                 }
             });
+            // The rows the callees' inputs seed come last, so they take the room the rows owed
+            // something leave.
+            List<Generator.GeneratedRow> seeds = new ArrayList<>();
+            for (Generator.GeneratedRow row : filling.callSeeds()) {
+                RowKey key = RowKey.of(behavior, row);
+                if (holds.contains(key) || holds.size() < rowLimit) {
+                    holds.add(key);
+                    seeds.add(row);
+                }
+            }
             out.put(behavior, filling.holding(
-                    new Adequacy.Generated.RowsForCases(filling.cases().asked(), kept)));
+                    new Adequacy.Generated.RowsForCases(filling.cases().asked(), kept), seeds));
+        });
+        return out;
+    }
+
+    /** The keys of the rows the callees' inputs seed, whichever behavior they are offered under. */
+    Set<RowKey> seeded() {
+        Set<RowKey> out = new HashSet<>();
+        searched.forEach((behavior, filling) -> {
+            if (filling != null) {
+                filling.callSeeds().forEach(row -> out.add(RowKey.of(behavior, row)));
+            }
         });
         return out;
     }
@@ -179,7 +203,8 @@ public record Composition(OfferingRequest request,
                              List<Generator.GeneratedRow> lines,
                              List<Generator.GeneratedRow> apart,
                              Collection<Generator.GeneratedRow> rules,
-                             Collection<Generator.GeneratedRow> cases) {
+                             Collection<Generator.GeneratedRow> cases,
+                             Collection<Generator.GeneratedRow> seeds) {
         // One block per behavior, however many kinds of row it holds. Rows of one behavior written
         // under two headings are legal and read as two lists of something, which they are not.
         Map<RowKey, OfferedRow> here =
@@ -230,6 +255,13 @@ public record Composition(OfferingRequest request,
         for (Generator.GeneratedRow row : cases) {
             RowKey key = RowKey.of(behavior, row);
             here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, row)).and(row, null));
+        }
+        // And the rows that try the behavior with what its callees' rows are given, last. They are
+        // composed for no item, so a row an item is owed stands as it is, and one that is none of
+        // those is a row of its own.
+        for (Generator.GeneratedRow row : seeds) {
+            RowKey key = RowKey.of(behavior, row);
+            here.putIfAbsent(key, OfferedRow.of(key, row));
         }
     }
 
