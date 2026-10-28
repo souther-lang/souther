@@ -255,6 +255,29 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
                 () -> "add's row is wrapper's: " + offered(wrapper, "repro.add", "wrapper"));
     }
 
+    @Test
+    void aRowTheCallerHasWrittenIsNotOfferedAgain() {
+        String written = AS_BEHAVIOR + """
+
+                example score
+                    | ([]) -> 0
+                    | ([Throw([])]) -> 0
+                    | ([Throw([Pin(12)])]) -> 12
+                    | ([Throw([Pin(1), Pin(2)])]) -> 2
+                    | ([Throw([Pin(1), Pin(2), Pin(3)])]) -> 3
+                """;
+        assertEquals(List.of(), seededOnly(written, "repro.split", "score"));
+
+        String partly = AS_BEHAVIOR + """
+
+                example score
+                    | ([Throw([Pin(12)])]) -> 12
+                """;
+        List<String> seeded = seededOnly(partly, "repro.split", "score");
+        assertTrue(!seeded.contains("[Throw([Pin(12)])]") && seeded.contains("[Throw([])]"),
+                () -> "only the row not written is offered: " + seeded);
+    }
+
     /** What a row of score is owed for, as the generation asks it. */
     private static RowWork owedForScore(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

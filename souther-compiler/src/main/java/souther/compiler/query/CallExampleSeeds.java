@@ -105,6 +105,9 @@ final class CallExampleSeeds {
      * what the first of {@code bases} has there, or nothing is composed where there is no base and
      * the callee's row does not fill them all.
      *
+     * <p>A row whose inputs are the inputs of a row the caller has written is not offered: it is
+     * that row.
+     *
      * <p>What the callee's row answers is no part of this, and neither is what the caller owes:
      * these rows are inputs to try. A candidate the decoder refuses, an input nothing can write,
      * or a callee of another module is no row.
@@ -142,7 +145,14 @@ final class CallExampleSeeds {
         List<Call> calls = callsIn(analysis, input, callee -> callee.module().equals(module)
                 && sigs.containsKey(callee.name()) && !ranOf.apply(callee.name()).isEmpty());
         Map<List<String>, Generator.GeneratedRow> out = new LinkedHashMap<>();
-        Set<List<String>> considered = new HashSet<>();
+        // Starts as the inputs the caller's own rows write, so that a lift of a callee's row the
+        // caller has written is not offered again. Only where the caller has no dependency: two
+        // rows with one input and different stand-ins are two rows, and the inputs alone do not
+        // tell them apart.
+        Set<List<String>> considered = standsNothingIn
+                ? new HashSet<>(writtenByTheCaller(ranOf.apply(subject.behavior()),
+                        sigs.get(subject.behavior()), subject))
+                : new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;
         for (Call call : calls) {
@@ -186,6 +196,29 @@ final class CallExampleSeeds {
     /** One row of one callee, by its place among the callee's rows, which is what a written input
      *  is a function of. */
     private record WrittenRow(ValueName.Behavior callee, int place) {}
+
+    /**
+     * The inputs, as the text a row of the caller carries them in, of each row the caller has
+     * written. A row with an input that cannot be written is left out: it names no row to compare
+     * with.
+     */
+    private static Set<List<String>> writtenByTheCaller(List<RowOutcome> rows, Sig caller,
+                                                        MeasuredInput subject) {
+        Set<List<String>> out = new HashSet<>();
+        if (caller == null) {
+            return out;
+        }
+        for (RowOutcome row : rows) {
+            if (row.inputs().size() != caller.ins().size()) {
+                continue;
+            }
+            List<Optional<FixtureTemplate>> inputs = writtenInputs(row, caller, subject);
+            if (inputs.stream().allMatch(Optional::isPresent)) {
+                out.add(inputs.stream().map(each -> each.get().text()).toList());
+            }
+        }
+        return out;
+    }
 
     /** What each input of {@code row} is written as, empty where it cannot be. */
     private static List<Optional<FixtureTemplate>> writtenInputs(RowOutcome row, Sig callee,
