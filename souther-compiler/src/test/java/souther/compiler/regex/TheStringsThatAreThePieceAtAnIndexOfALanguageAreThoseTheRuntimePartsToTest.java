@@ -117,6 +117,32 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
         assertEquals(true, late.has("7") && !late.has("A"));
     }
 
+    /**
+     * A language has pieces at an index only of strings that have that many separators, and a
+     * String holds no more than {@code LONGEST_TEXT} code points: past the longest string's worth
+     * of separators there is no piece to name, though the language, which does not know that, has
+     * one.
+     */
+    @Test
+    void anIndexNoStringOfTheLanguageReachesWithinWhatAStringHoldsNamesNoPiece() {
+        int past = (int) Strings.LONGEST_TEXT + 1;
+        assertEquals(null, StringsOfAPiece.pieceAt(language("(A;)*A"), ';', past, ALLOWANCE));
+        assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A"), ';', past,
+                ALLOWANCE));
+    }
+
+    /**
+     * Nor does a language whose stretch between two separators is long: the index is reached by a
+     * string only if the stretches of as many separators fit, which is what the machine's size
+     * says and the index alone does not.
+     */
+    @Test
+    void anIndexTheStretchesBetweenSeparatorsMakeTooLongForAStringIsNamedNoPiece() {
+        Language whole = language("(AAAAAAAAAA;)*A");
+        assertEquals(true, StringsOfAPiece.pieceAt(whole, ';', 3, ALLOWANCE).has("A"));
+        assertEquals(null, StringsOfAPiece.pieceAt(whole, ';', 20_000_000, ALLOWANCE));
+    }
+
     /** A machine for an index that the meter's states do not reach is refused unmade. */
     @Test
     void anIndexTheMeterCannotAffordIsRefused() {

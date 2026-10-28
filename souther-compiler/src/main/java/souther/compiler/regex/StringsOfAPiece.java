@@ -11,6 +11,7 @@ import java.util.Map;
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
+import souther.runtime.Strings;
 
 /**
  * The strings that are the piece at an index of some string of a language, and the strings that
@@ -26,6 +27,16 @@ import net.unit8.notation199x.pattern.Meter;
  * <p>Read off the machine of the language: the states a walk is in after {@code index}
  * separators, each reached through pieces that hold none, are where the piece begins, and it ends
  * where the string does or at a separator that the rest of some string of the language follows.
+ *
+ * <p>A language bounds the strings and does not know that a {@code String} holds no more than
+ * {@link Strings#LONGEST_TEXT} code points. Parted at one code point, an index multiplies that:
+ * a piece at {@code index} is in a string of at least as many separators, and the strings of a
+ * language that has the piece there can be longer than any {@code String}, so the language of such
+ * pieces holds pieces no value has. Both directions are therefore answered only where
+ * {@link #fitsAString} holds, which is where a string of the language with a piece there exists
+ * whenever the language says one does, for every piece of up to half the longest string. Past it
+ * the answer is null, as it is where the machine is more than the allowance: not worked out, and
+ * not a language to part anything by.
  */
 public final class StringsOfAPiece {
 
@@ -33,14 +44,33 @@ public final class StringsOfAPiece {
     }
 
     /**
+     * Whether a string of a machine of {@code states} states that has a piece at {@code index} has
+     * one no longer than a {@code String} holds, whatever the piece, if the piece is up to half
+     * of that.
+     *
+     * <p>From any state a machine reaches any other it can reach in fewer than {@code states}
+     * symbols, so the stretch before each of the {@code index} separators, the separator, and the
+     * rest after the piece come to no more than {@code (index + 2) * (states + 1)} code points
+     * beyond the piece.
+     */
+    static boolean fitsAString(int index, int states) {
+        return (index + 2L) * (states + 1L) <= Strings.LONGEST_TEXT / 2;
+    }
+
+    /**
      * The pieces at {@code index} of the strings of {@code whole} parted at {@code separator}, or
-     * null where making the machine for them is more than {@code meter} allows.
+     * null where making the machine for them is more than {@code meter} allows, or the index is
+     * one the strings of {@code whole} cannot reach within what a {@code String} holds
+     * ({@link #fitsAString}).
      */
     public static Language pieceAt(Language whole, int separator, int index, Meter meter) {
         if (index < 0) {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
         }
         Automaton machine = whole.machine();
+        if (!fitsAString(index, machine.size())) {
+            return null;
+        }
         meter.starting();
         Meter.Making making = meter.making();
         CodePoints apart = CodePoints.of(separator);
@@ -114,6 +144,9 @@ public final class StringsOfAPiece {
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         int states = machine.size();
+        if (!fitsAString(index, states)) {
+            return null;
+        }
         meter.starting();
         if (!meter.making().states((long) index + states + 1)) {
             return null;

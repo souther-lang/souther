@@ -131,11 +131,17 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     /** The classes of {@code f}'s positions, over an email and a book of rows with a domain. */
     private static Map<String, List<String>> classesOfAnEmailAgainstTheDomainsOfARow(
             String lets) {
+        return classesAtOf("email", "[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", lets);
+    }
+
+    /** The classes at {@code path}, the emails being those {@code emails} spells. */
+    private static Map<String, List<String>> classesAtOf(String path, String emails,
+                                                         String lets) {
         Compilation compilation = Compilation.ofSource("""
                 module example.pieces
 
                 data Email = String
-                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+                    invariant String.matches("%s", value)
 
                 data Domain = String
                     invariant String.matches("[a-z0-9]+(\\\\.[a-z0-9]+)+", value)
@@ -152,14 +158,14 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 behavior f : (email: Email, book: Book) -> List<Row>
 
                 %s
-                """.formatted(lets), "Main");
+                """.formatted(emails, lets), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
         Map<String, List<String>> out = new java.util.TreeMap<>();
-        all.get("f").axes().stream().filter(axis -> axis.path().equals("email"))
+        all.get("f").axes().stream().filter(axis -> axis.path().equals(path))
                 .forEach(axis -> out.put(axis.path(), axis.classes()));
         return out;
     }
@@ -176,6 +182,23 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     void theStringsWhoseSecondPieceCanBeTheOtherSideAreAClassOfTheString() {
         assertEquals(THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN,
                 classesOfAnEmailAgainstTheDomainsOfARow("""
+                        let f (email, book) =
+                            match List.get(1, String.split("@", email.value)) with
+                                | Some d -> List.filter(r -> hasDomain(d, r), book.value)
+                                | None -> []
+                        """));
+    }
+
+    /**
+     * The other side is parted too: a domain of a row is a class of its own by whether it is the
+     * second piece of some email, which only two domains are.
+     */
+    @Test
+    void theDomainsThatAreTheSecondPieceOfSomeEmailAreAClassOfTheOtherSide() {
+        assertEquals(Map.of("book[*].domain@Some", List.of(
+                        "book[*].domain@Some/x can be piece 1 of email",
+                        "book[*].domain@Some/x is never piece 1 of email")),
+                classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example", """
                         let f (email, book) =
                             match List.get(1, String.split("@", email.value)) with
                                 | Some d -> List.filter(r -> hasDomain(d, r), book.value)
