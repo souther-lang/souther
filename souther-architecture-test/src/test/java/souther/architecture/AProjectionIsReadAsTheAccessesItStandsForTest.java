@@ -626,6 +626,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
+        row(out, c + "check/WhatARunMayEndFor", "forEachWorkedOut", "(L" + c
+                        + "core/Core$IfConstructed;Ljava/util/function/Consumer;)V",
+                Reading.STRUCTURE,
+                "hands the parts of an attempt to a reader, the operands of the construction it"
+                        + " tests and its arms, and reads none of them: a projection among them is"
+                        + " read as the reader it is handed to reads one");
         row(out, c + "partition/Pullback", "chosenField", "(" + core + reads + ")L" + c
                         + "partition/Pullback$ChosenField;", Reading.STRUCTURE,
                 "takes the field accesses over the call of a walk one at a time, and asks of the"

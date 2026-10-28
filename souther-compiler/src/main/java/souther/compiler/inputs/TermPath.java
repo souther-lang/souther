@@ -360,14 +360,13 @@ public record TermPath(String head, List<Step> steps) {
      */
     public Requirements requirements() {
         Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
-        TermPath at = TermPath.of(head);
-        for (Step step : steps) {
-            if (step instanceof Step.Refine refine) {
+        for (int at = 0; at < steps.size(); at++) {
+            if (steps.get(at) instanceof Step.Refine refine) {
                 // Keyed by where the value stands: under a narrowing to several cases, a name is
-                // the name read at the sum, and what is required of it is required there.
-                out.put(at.position(), refine.cases());
+                // the name read at the sum, and what is required of it is required there. A path
+                // is built only where it is a key, and not at every step on the way.
+                out.put(new TermPath(head, steps.subList(0, at)).position(), refine.cases());
             }
-            at = at.append(step);
         }
         return new Requirements(out, List.of());
     }

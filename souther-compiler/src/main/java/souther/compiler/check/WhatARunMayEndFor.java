@@ -10,6 +10,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * What working a tree out may end a run without a value for, read in a tree where the library's
@@ -59,14 +60,8 @@ public final class WhatARunMayEndFor {
     public static Endings of(Core e) {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.IfConstructed attempt) {
-            // The construction an attempt tests takes the other arm where it is refused, and ends
-            // nothing; what it is built of is worked out first all the same.
             Endings[] out = {NONE};
-            Core.forEachChild(attempt.construct(), child -> out[0] = out[0].and(of(child)));
-            out[0] = out[0].and(of(attempt.then()));
-            for (Core.ElseArm arm : attempt.els()) {
-                out[0] = out[0].and(of(arm.body()));
-            }
+            forEachWorkedOut(attempt, part -> out[0] = out[0].and(of(part)));
             return out[0];
         }
         Endings[] out = {itself(node)};
@@ -76,6 +71,22 @@ public final class WhatARunMayEndFor {
             }
         });
         return out[0];
+    }
+
+    /**
+     * What working out {@code attempt} is made of, each part handed to {@code visit}: what the
+     * construction it tests is built of, then its arms.
+     *
+     * <p>Not the construction itself. It takes the other arm where it is refused, and ends
+     * nothing; what it is built of is worked out first all the same. The one place that is said,
+     * for every reader that walks a tree for what working it out may end a run for.
+     */
+    public static void forEachWorkedOut(Core.IfConstructed attempt, Consumer<Core> visit) {
+        Core.forEachChild(attempt.construct(), visit);
+        visit.accept(attempt.then());
+        for (Core.ElseArm arm : attempt.els()) {
+            visit.accept(arm.body());
+        }
     }
 
     /**
