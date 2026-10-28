@@ -1705,10 +1705,18 @@ public final class CoverageSites {
          *
          * <p>A fork inside a copy of the language's own operation is a place a run is recorded at
          * and is read as one, and it is no decision of the model's unless the model made it: the
-         * rule the model handed the operation settles the fork, as the predicate of
-         * {@code List.filter} does. A fork the operation settles itself, as {@code List.take} does
-         * at its own count or {@code List.distinctBy} does from what it has gathered, owes no row —
-         * a row there would be a row for how the library happens to be written.
+         * fork is settled by nothing but a rule ({@link DecisionSource.Supplied#byTheirVerdict}),
+         * and the model is the one who handed the operation that rule
+         * ({@link ModelOccurrence#calledByTheModel}), as it does {@code List.filter} a predicate.
+         * A fork the operation settles itself, as {@code List.take} does at its own count or
+         * {@code List.distinctBy} does from what it has gathered, owes no row, and neither does one
+         * a library operation handed its own rule, as {@code Map.intersection} hands
+         * {@code Map.filterEntries} — a row there would be a row for how the library happens to be
+         * written.
+         *
+         * <p>Two questions, one of the declaration and one of the occurrence, because neither
+         * answers for the other: the declaration says what settles its fork and says nothing of who
+         * handed it the rule.
          *
          * <p>Asked once, where the arm is numbered, and carried on the site: it is a fact about the
          * fork and not about the behavior that reaches it.
@@ -1716,7 +1724,7 @@ public final class CoverageSites {
         private boolean owesARow(ConstructOccurrence fork) {
             return ModelOccurrence.statedAt(fork).isPresent()
                     || (decisions.at(fork.origin()) instanceof DecisionSource.Supplied by
-                            && by.byTheirVerdict());
+                            && by.byTheirVerdict() && ModelOccurrence.calledByTheModel(fork));
         }
 
         /**

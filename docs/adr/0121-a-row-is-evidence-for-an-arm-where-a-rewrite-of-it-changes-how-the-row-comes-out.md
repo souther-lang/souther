@@ -37,7 +37,9 @@ value the rows were seen to answer, one rewrite per value: answering one value a
 another are two programs, and a row telling one of them apart says nothing of the other. Only there:
 a body whose rows go through a fork is asked about the fork arm by arm. Both rewrites are edits of
 the source an author could make, so a finding reads against what was written; neither moves an
-input. A sibling reading the name its own arm gives a value is no program the body could be written
+input. Where the arm is in the language's own operation the author has no source of it to edit, and
+the finding is shown at the behavior, which is the call the program the model could have been
+differs at. A sibling reading the name its own arm gives a value is no program the body could be written
 as, and two siblings that do the same thing are one rewrite. The arms are the ones the plan
 numbers, so a helper is rewritten wherever it is declared, as it is measured wherever it is
 declared. That includes a fork inside a copy of the language's own operation, though the branch

@@ -12,6 +12,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -143,6 +144,48 @@ class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
         }
         String report = report(compilation);
         assertFalse(report.contains("no row goes through"), report);
+    }
+
+    /**
+     * A rule the library hands an operation is the library's, however the operation settles its
+     * fork: {@code Map.intersection} is {@code Map.filterEntries} with a predicate of its own, and
+     * the model only chose {@code intersection}.
+     */
+    @Test
+    void aRuleOneLibraryOperationHandsAnotherIsNotTheModels() {
+        Compilation compilation = measured("""
+                module exp.ops
+
+                behavior common : (a: Map<String, Int>, b: Map<String, Int>) -> Int
+                let common (a, b) = Map.size(Map.intersection(a, b))
+
+                behavior onlyInFirst : (a: Map<String, Int>, b: Map<String, Int>) -> Int
+                let onlyInFirst (a, b) = Map.size(Map.difference(a, b))
+                """);
+        Map<String, Adequacy.BranchEvidence> byBehavior =
+                compilation.db().ask(new Adequacy.BranchCoverage("exp.ops")).value();
+
+        for (String behavior : List.of("common", "onlyInFirst")) {
+            assertEquals(Adequacy.BranchEvidence.noArms(
+                            Adequacy.BranchEvidence.NoArms.NO_ARM_OBLIGATIONS),
+                    byBehavior.get(behavior), behavior);
+        }
+    }
+
+    /** The same operation, called by the model with a rule of the model's own, is owed. */
+    @Test
+    void aRuleTheModelHandsTheSameOperationIsOwed() {
+        Compilation compilation = measured("""
+                module exp.ops
+
+                behavior positives : (m: Map<String, Int>) -> Int
+                let positives (m) = Map.size(Map.filterEntries((k, v) -> v > 0, m))
+                """);
+
+        assertNotEquals(Adequacy.BranchEvidence.noArms(
+                        Adequacy.BranchEvidence.NoArms.NO_ARM_OBLIGATIONS),
+                compilation.db().ask(new Adequacy.BranchCoverage("exp.ops")).value()
+                        .get("positives"));
     }
 
     /** What the model hands the operation to decide by is its own decision, whichever operation. */
