@@ -1724,11 +1724,14 @@ public final class CoverageSites {
          * which is no way of its own.
          *
          * <p>{@code Bool.not} is written as a fork on its argument. Each way through it is a way
-         * the truth handed to it came out, which is the caller's truth and is owed where the
-         * caller decides by it — so {@code Bool.not(p)} and {@code p == false} are one condition
-         * and owe the same arms. A fork an operation draws a line of its own at, as
-         * {@code Int.max} compares its two arguments, is a way the model's rows go through and
-         * stays owed.
+         * the truth handed to it came out, which is the caller's truth and is where the caller
+         * decides by it — so {@code Bool.not(p)} and {@code p == false} are one condition, and
+         * rewriting an arm of the operation would be rewriting the caller's own fork a second time.
+         * It is left unnumbered, so neither a row nor a rewrite is asked of it.
+         *
+         * <p>A fork an operation draws a line of its own at, as {@code Int.max} compares its two
+         * arguments, stays numbered: no row is owed through it ({@link ArmSite#owesARow}), and a
+         * rewrite of it is another program the model could have been.
          */
         private boolean restatesWhatItWasHanded(Core fork) {
             if (!(Core.withoutStanding(fork) instanceof Core.If iff)
