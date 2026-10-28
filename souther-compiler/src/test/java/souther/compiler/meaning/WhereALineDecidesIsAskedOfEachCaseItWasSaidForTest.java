@@ -516,7 +516,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     @Test
     void asManyCasesAsAreTakenApartAreAskedToTheEnd() {
         DecidingCase.Cases many = manyCases(TAKEN_APART);
-        Proposition someOne = many.holdingInSome().orElseThrow();
+        Proposition someOne = many.holdingInSome(TAKEN_APART).orElseThrow();
         Asking asking = new Asking(someOne::equals);
 
         assertEquals(IN_NONE, asking.of(many));

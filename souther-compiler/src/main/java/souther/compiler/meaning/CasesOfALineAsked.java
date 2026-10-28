@@ -98,6 +98,10 @@ public final class CasesOfALineAsked {
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
 
+    /** The figures each case was never taken apart at, for the cases already asked of. */
+    private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
+            new IdentityHashMap<>();
+
     private CasesOfALineAsked(Predicate<Proposition> crossedIn) {
         this.crossedIn = crossedIn;
     }
@@ -175,7 +179,7 @@ public final class CasesOfALineAsked {
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
         if (said.standsFor().waysOfChoosing(most) > most) {
             stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-            notTakenApartAt(said.standsFor(), stopped);
+            addFiguresNotTakenApart(said.standsFor());
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
@@ -196,10 +200,7 @@ public final class CasesOfALineAsked {
         // since a prefix with no row on one side of the line leaves every case past it unasked,
         // and the steps bound the rest.
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-        boolean writtenOut = said.standsFor().waysOfChoosing(most) <= most;
-        if (!crossedIn.test(writtenOut
-                ? said.standsFor().holdingInSome().orElse(said.condition())
-                : said.condition())) {
+        if (!crossedIn.test(said.standsFor().holdingInSome(most).orElse(said.condition()))) {
             return IN_NONE;
         }
         if (said.saidAlone()) {
@@ -230,46 +231,58 @@ public final class CasesOfALineAsked {
      * were written in, since a choice nobody took apart ends the walk there.
      */
     private static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
-        return heldFirst(cases, new IdentityHashMap<>());
+        return cases.fold(HELD_FIRST).cases();
     }
 
-    /** The same, where the cases share what follows from a choice: each is put in order once. */
-    private static DecidingCase.Cases heldFirst(DecidingCase.Cases cases,
-                                                Map<DecidingCase.Cases, DecidingCase.Cases> done) {
-        DecidingCase.Cases known = done.get(cases);
-        if (known != null) {
-            return known;
-        }
-        DecidingCase.Cases ordered = switch (cases) {
-            case DecidingCase.Cases.One _, DecidingCase.Cases.NotTakenApart _ -> cases;
-            case DecidingCase.Cases.EachOf(var alternatives) -> new DecidingCase.Cases.EachOf(
-                    alternatives.stream().map(one -> heldFirst(one, done)).toList());
-            case DecidingCase.Cases.Together(var factors) -> {
-                List<DecidingCase.Cases> held = new ArrayList<>();
-                List<DecidingCase.Cases> choices = new ArrayList<>();
-                gatherHeldFirst(factors, held, choices, done);
-                held.addAll(choices);
-                yield new DecidingCase.Cases.Together(held);
-            }
-        };
-        done.put(cases, ordered);
-        return ordered;
-    }
+    /**
+     * The cases put in that order, with what a group around them is given of them: the parts every
+     * case of them holds, and the choices, each in the order they come.
+     *
+     * @param cases   the cases themselves, in that order
+     * @param held    the parts every case of them holds, which a group around them holds as well
+     * @param choices the choices among them, which a group around them has beside its own
+     */
+    private record InThatOrder(DecidingCase.Cases cases, List<DecidingCase.Cases> held,
+                               List<DecidingCase.Cases> choices) {}
 
-    private static void gatherHeldFirst(List<DecidingCase.Cases> factors,
-                                        List<DecidingCase.Cases> held,
-                                        List<DecidingCase.Cases> choices,
-                                        Map<DecidingCase.Cases, DecidingCase.Cases> done) {
-        for (DecidingCase.Cases factor : factors) {
-            switch (factor) {
-                case DecidingCase.Cases.One _ -> held.add(factor);
-                case DecidingCase.Cases.Together(var inner) ->
-                        gatherHeldFirst(inner, held, choices, done);
-                case DecidingCase.Cases.EachOf _, DecidingCase.Cases.NotTakenApart _ ->
-                        choices.add(heldFirst(factor, done));
-            }
-        }
-    }
+    /**
+     * What puts the cases in that order, a case that more than one case holds put in order once.
+     * A group inside a group was put in order before the one it is in, so what it holds and what
+     * it chooses go into the group around it where they stand.
+     */
+    private static final DecidingCase.Cases.Fold<InThatOrder> HELD_FIRST =
+            new DecidingCase.Cases.Fold<>() {
+
+                @Override
+                public InThatOrder one(DecidingCase.Cases.One one) {
+                    return new InThatOrder(one, List.of(one), List.of());
+                }
+
+                @Override
+                public InThatOrder eachOf(List<InThatOrder> alternatives) {
+                    DecidingCase.Cases.EachOf each = new DecidingCase.Cases.EachOf(
+                            alternatives.stream().map(InThatOrder::cases).toList());
+                    return new InThatOrder(each, List.of(), List.of(each));
+                }
+
+                @Override
+                public InThatOrder together(List<InThatOrder> factors) {
+                    List<DecidingCase.Cases> held = new ArrayList<>();
+                    List<DecidingCase.Cases> choices = new ArrayList<>();
+                    for (InThatOrder factor : factors) {
+                        held.addAll(factor.held());
+                        choices.addAll(factor.choices());
+                    }
+                    List<DecidingCase.Cases> inOrder = new ArrayList<>(held);
+                    inOrder.addAll(choices);
+                    return new InThatOrder(new DecidingCase.Cases.Together(inOrder), held, choices);
+                }
+
+                @Override
+                public InThatOrder notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                    return new InThatOrder(notTakenApart, List.of(), List.of(notTakenApart));
+                }
+            };
 
     /**
      * Each case holding all of {@code chosen}, and one case of each of {@code toChoose}, that holds
@@ -337,20 +350,15 @@ public final class CasesOfALineAsked {
      */
     private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
         stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
-        notWalked.forEach(each -> notTakenApartAt(each, stopped));
+        notWalked.forEach(this::addFiguresNotTakenApart);
     }
 
-    /** Adds to {@code figures} each figure a case {@code cases} stands for was stopped at, where
-     *  it was never taken apart. */
-    private static void notTakenApartAt(DecidingCase.Cases cases, Set<CompositionBudget> figures) {
-        switch (cases) {
-            case DecidingCase.Cases.One _ -> { }
-            case DecidingCase.Cases.EachOf(var alternatives) ->
-                    alternatives.forEach(each -> notTakenApartAt(each, figures));
-            case DecidingCase.Cases.Together(var factors) ->
-                    factors.forEach(each -> notTakenApartAt(each, figures));
-            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> figures.add(stoppedAt);
-        }
+    /** Adds to what stopped this each figure the cases {@code cases} stand for were stopped at,
+     *  where they were never taken apart. Out of steps is where this is asked, so it is asked of
+     *  each case once however many times the steps run out: what is asked is a visit to each case
+     *  and not a choice among them. */
+    private void addFiguresNotTakenApart(DecidingCase.Cases cases) {
+        stopped.addAll(cases.notTakenApartAt(figuresOf));
     }
 
     /** Whether one more step may be taken — an alternative chosen or a part asked — counting it
