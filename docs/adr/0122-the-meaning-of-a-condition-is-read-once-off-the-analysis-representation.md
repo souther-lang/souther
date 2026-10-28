@@ -45,8 +45,10 @@ of the container that case chose, rather than stopping because the choice stands
 The runnable representation represents execution: which paths a run takes, where a construct is
 materialised, and what a run records. No analysis defines the meaning of a condition of the model
 from it. A fork inside a copy of a library operation is no condition of the model, so no obligation
-is drawn on it; it is still a path a run can take, and reachability keeps walking it, taking nothing
-from its condition that the shared meaning does not give.
+is drawn on it — unless the model supplied the rule the fork decides by, as the predicate handed to
+`List.filter`, which is a decision of the model's; it is still a path a run can take, and
+reachability keeps walking it, taking nothing from its condition that the shared meaning does not
+give.
 
 The two are joined by `ModelOccurrence`, the construct of the model a materialisation is one of. The
 join is partial — a construct inside a library operation has none — and one to many: one construct

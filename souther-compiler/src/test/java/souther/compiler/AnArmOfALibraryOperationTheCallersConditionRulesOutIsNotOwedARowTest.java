@@ -54,7 +54,7 @@ class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
                 | (-2) -> 2
             """;
 
-    /** Nothing says the argument is negative, so both arms of {@code abs} are owed a row. */
+    /** Nothing says the argument is negative, and the arms of {@code abs} are still the operation's own. */
     private static final String UNCONDITIONAL = """
             module p
             behavior f : (x: Int) -> Int
@@ -80,9 +80,49 @@ class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
     }
 
     @Test
-    void anArmNothingRulesOutIsStillOwed() {
-        assertTrue(report(UNCONDITIONAL).contains("no row goes through"),
+    void anArmTheOperationDecidesForItselfIsNotOwedEither() {
+        assertFalse(report(UNCONDITIONAL).contains("no row goes through"),
                 () -> report(UNCONDITIONAL));
+    }
+
+    /** The loops {@code take}, {@code drop} and {@code zipShortest} turn at are the library's. */
+    @Test
+    void theForksInsideTakeDropAndZipShortestAreNotTheModels() {
+        String source = """
+                module exp.ops
+
+                behavior takeTwo : (xs: List<Int>) -> List<Int>
+                let takeTwo (xs) = List.take(2, xs)
+                example takeTwo
+                    | "one" : ([1]) -> [1]
+
+                behavior dropTwo : (xs: List<Int>) -> List<Int>
+                let dropTwo (xs) = List.drop(2, xs)
+                example dropTwo
+                    | "one" : ([1]) -> []
+
+                behavior pairs : (xs: List<Int>, ys: List<Int>) -> Int
+                let pairs (xs, ys) = List.length(List.zipShortest(xs, ys))
+                example pairs
+                    | "same length" : ([1], [2]) -> 1
+                """;
+
+        assertFalse(report(source).contains("no row goes through"), () -> report(source));
+    }
+
+    /** What the author writes inside a closure handed to a library operation is still owed. */
+    @Test
+    void aForkTheAuthorWritesInAClosureHandedToTheOperationIsStillOwed() {
+        String source = """
+                module exp.ops
+
+                behavior signs : (xs: List<Int>) -> List<Int>
+                let signs (xs) = List.map((x) -> if x > 0 then 1 else 0, xs)
+                example signs
+                    | "positive" : ([5]) -> [1]
+                """;
+
+        assertTrue(report(source).contains("no row goes through `else`"), () -> report(source));
     }
 
     private static String report(String source) {

@@ -165,8 +165,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 """);
 
         assertTrue(report.contains("decision    rules 1"), report);
-        assertTrue(report.contains("branch      not measured (no row names this behavior)"),
-                report);
+        assertTrue(report.contains("branch      not applicable (this body owes no arm)"), report);
     }
 
     /** One that the model writes is a decision of the model, read the way it always was. */

@@ -307,6 +307,20 @@ public final class CoverageSites {
             return place.anchor();
         }
 
+        /**
+         * Whether a row is owed through this arm.
+         *
+         * <p>A fork inside a copy of the language's own operation is still a place a run is
+         * recorded at and is read as one. It is a decision of the model's only where the model
+         * supplied the rule it decides by, as the predicate handed to {@code List.filter} is; a
+         * fork the operation decides for itself, as {@code List.take} does at its own count, is no
+         * decision of the model's and owes no row.
+         */
+        public boolean owesARow() {
+            return ModelOccurrence.statedAt(place.arm().fork()).isPresent()
+                    || !(obligation.decided() instanceof DecidedBy.ByTheDeclaration);
+        }
+
         /** The same place, owed by {@code behavior}. */
         public ArmSite ownedBy(String behavior) {
             return new ArmSite(body, outcome, place, ordinal, obligation.ownedBy(behavior));
