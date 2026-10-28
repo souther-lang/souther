@@ -409,7 +409,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     default -> null;
                 };
                 if (stoppedAt != null && form.coefs().containsKey(THE_STOPPED_VALUE)) {
-                    if (!stopsNoRowTheOwnerDoesNotAnswerFor(where, form)) {
+                    if (stoppedAt.isAPlainStop()
+                            && where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld) {
+                        // A sum of the addends of the comparison is the owner's, which draws their
+                        // sizes; whether this one is, the form of the comparison says.
+                        told.sumsOverTheStop.add(form);
+                    } else if (!stopsNoRowTheOwnerDoesNotAnswerFor(where, form)) {
                         told.exact = false;
                     }
                     return;
@@ -452,10 +457,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /**
              * Whether {@code operation}, over the stopped value and worked out as {@code where}
              * says, is one that stops no row, or stops one only where the analysis that owns the
-             * value answers for it. The owner answers for the value and no more: for a number that
-             * is the sum or product it is added to by whole numbers, which it draws the sizes of;
-             * not for any other operation on the number it comes to. A quotient by a value is drawn
-             * on its dividend and divisor alone, so nothing worked out over it is its owner's.
+             * value answers for it. A quotient by a value is drawn on its dividend and divisor
+             * alone, so nothing worked out over it is its owner's; the sums over a plain stop are
+             * the owner's only as far as they are the addends of the comparison, which is asked
+             * once the comparison has been read ({@link WhatLiesBesideTheStop#beside}).
              */
             private boolean stopsNoRowTheOwnerDoesNotAnswerFor(WhereAnOperatorAnswers where,
                                                               LinearForm<NumericTerm> form) {
@@ -465,8 +470,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (stoppedAt.isAChoice()) {
                     return stopsNoRowWhicheverArmIsTaken(where, form);
                 }
-                return !stoppedAt.quotientAwayFromNought()
-                        && where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld;
+                return false;
             }
 
 
@@ -672,6 +676,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
+        /** The forms of the operations over a stopped value that are told of nowhere, to be asked
+         *  of the form of the comparison. */
+        private final List<LinearForm<NumericTerm>> sumsOverTheStop = new ArrayList<>();
         private boolean exact = true;
 
         void add(Core node, UndividedByARelation.IntOperation operation) {
@@ -824,6 +831,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return read;
         }
 
+        /** Whether the stopped expression is neither a choice nor a quotient by a value. */
+        boolean isAPlainStop() {
+            return !aChoice && !quotientAwayFromNought;
+        }
+
         /** Whether the stopped expression answers one of several values by how things stand. */
         boolean isAChoice() {
             return aChoice;
@@ -892,16 +904,42 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             WhatWasTold told = new WhatWasTold();
             AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
                     new LinkedHashSet<>(), new ElementsMet(), told, stoppedAt);
+            List<LinearForm<NumericTerm>> sides = new ArrayList<>();
             for (Core side : List.of(comparison.left(), comparison.right())) {
                 // A second stop is one more expression nothing is told of.
                 if (AffineForms.outcome(side, reads, reading)
-                        instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
+                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> read) {
+                    sides.add(read.form());
+                } else {
+                    told.exact = false;
+                }
+            }
+            LinearForm<NumericTerm> whole = sides.size() == 2 ? sides.get(0).minus(sides.get(1))
+                    .orNull() : null;
+            for (LinearForm<NumericTerm> sum : told.sumsOverTheStop) {
+                if (!areAddendsOf(sum, whole)) {
                     told.exact = false;
                 }
             }
             // The stopped expression is worked out too, and a run may stop in it before any
             // operation told.
             return told.working().notOnEveryRun();
+        }
+
+        /**
+         * Whether {@code sum} adds up addends of {@code whole}, the form the comparison is a
+         * cut of, each as large as it weighs there. That is all the program is taken to work
+         * out where the sizes of the addends answer for a row: a size has no sign, and which side
+         * of the comparison an addend was written on only turns it round. A sum with a constant,
+         * or weighing an addend differently, is an operation of its own.
+         */
+        private static boolean areAddendsOf(LinearForm<NumericTerm> sum,
+                                            LinearForm<NumericTerm> whole) {
+            return whole != null && sum.constant().signum() == 0
+                    && sum.coefs().entrySet().stream().allMatch(each -> {
+                        ExactRatio weighs = whole.coefs().get(each.getKey());
+                        return weighs != null && each.getValue().abs().equals(weighs.abs());
+                    });
         }
     }
 

@@ -158,6 +158,19 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
         assertUnread(workingOfTheStop("m * k >= n / m"));
     }
 
+    /**
+     * The sizes of the addends answer for a row only where the program adds the addends up. A sum
+     * that cancels in the form, or weighs the product otherwise, is an operation of its own: at
+     * the greatest product the run stops in the sum that adds one.
+     */
+    @Test
+    void anOperationThatIsNoSumOfTheAddendsIsNotTheOwnersToAnswerFor() {
+        assertUnread(workingOfTheStop("((m * k) + 1) - 1 >= 100"));
+        assertUnread(workingOfTheStop("m * k + 5 >= 100"));
+        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k + n >= 100"));
+        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k * 2 >= 100"));
+    }
+
     /** No row is shown computed, and no operation is told. */
     private static void assertUnread(UndividedByARelation.Working working) {
         assertEquals(WhatARelationLeavesUndivided.Told.SOME, working.told(), working::toString);
