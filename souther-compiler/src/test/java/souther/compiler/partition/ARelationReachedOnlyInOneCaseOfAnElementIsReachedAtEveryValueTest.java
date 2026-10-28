@@ -59,6 +59,38 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
             behavior keptApart : (meetings: Apart, owner: UserId) -> List<Meeting>
 
             let keptApart (meetings, owner) = List.filter(m -> m.owner == owner, meetings.value)
+
+            data ByMail = { email: String }
+            data ByPhone = { phone: String }
+            data Reach = ByMail | ByPhone
+            data Contact = { id: String, reach: Reach }
+
+            data FreeBook = List<Contact>
+
+            data Book = List<Contact>
+                invariant different = List.allDistinctBy(.id, value)
+
+            let mailOf (r: Reach): List<String> =
+                match r with
+                    | ByMail { email } -> [ email ]
+                    | ByPhone { phone } -> []
+
+            let isMailedTo (mail: String, r: Reach): Bool =
+                match r with
+                    | ByMail { email = own } -> own == mail
+                    | ByPhone { phone } -> false
+
+            behavior throughFree : (reach: Reach, contacts: FreeBook) -> List<Contact>
+
+            let throughFree (reach, FreeBook(rows)) =
+                List.flatMap(mail -> List.filter(c -> isMailedTo(mail, c.reach), rows),
+                        mailOf(reach))
+
+            behavior throughBook : (reach: Reach, contacts: Book) -> List<Contact>
+
+            let throughBook (reach, Book(rows)) =
+                List.flatMap(mail -> List.filter(c -> isMailedTo(mail, c.reach), rows),
+                        mailOf(reach))
             """;
 
     /** Said at each of the two places the comparison reads. */
@@ -83,6 +115,117 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
         assertEquals(List.of(), whyNoLine("keptApart"),
                 "the owners differ, so an owner is not every value of an element, and the"
                         + " comparison is not said to relate two values");
+    }
+
+    @Test
+    void aListOfOneElementIsApartFromNothingSoTheRuleKeepingElementsApartDoesNotStopTheRun() {
+        assertEquals(List.of(), notReachedAtEveryValue("throughFree"),
+                "the control: the elements are held by nothing");
+        assertEquals(List.of(), notReachedAtEveryValue("throughBook"),
+                "a run that reaches the comparison holds one element, which no rule keeping"
+                        + " elements apart refuses");
+    }
+
+    /**
+     * The domains of the mails of a lead, found before the contacts on those mails are: each mail
+     * hands an attempt at a domain name, which a refused attempt leaves out, and two lengths are
+     * added.
+     */
+    private static final String AFTER_AN_ATTEMPT = """
+            module m.scr exposing ( EmailAddress, DomainName, EmailOnly, PhoneOnly, EmailAndPhone, Reach, Contact, CBook, ContactId, Acct, Book, Dup, NoEmail, NoDup, f2, g1 )
+
+            data EmailAddress = String
+                invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+            data DomainName = String
+                invariant String.matches("[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?(\\\\.[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?)+", value)
+            data ContactId = String   invariant String.length(value) >= 1
+
+            data EmailOnly = { email: EmailAddress }
+            data PhoneOnly = { phone: String }
+            data EmailAndPhone = { email: EmailAddress, phone: String }
+            data Reach = EmailOnly | PhoneOnly | EmailAndPhone
+            data Contact = { id: ContactId, reach: Reach }
+            data CBook = List<Contact>
+                invariant List.allDistinctBy(.id, value)
+            data Acct = { id: ContactId, domain: DomainName? }
+            data Book = List<Acct>
+                invariant List.allDistinctBy(.id, value)
+
+            let emailOf (reach: Reach): List<EmailAddress> =
+                match reach with
+                    | EmailOnly { email } -> [ email ]
+                    | EmailAndPhone { email } -> [ email ]
+                    | PhoneOnly { phone } -> []
+
+            let reachHasEmail (email: EmailAddress, reach: Reach): Bool =
+                match reach with
+                    | EmailOnly { email = own } -> own == email
+                    | EmailAndPhone { email = own } -> own == email
+                    | PhoneOnly { phone } -> false
+
+            let contactsOnEmail (email: EmailAddress, CBook(rows)): List<Contact> =
+                List.filter(c -> reachHasEmail(email, c.reach), rows)
+
+            let emailMatches (reach: Reach, contacts: CBook): List<Contact> =
+                List.flatMap(e -> contactsOnEmail(e, contacts), emailOf(reach))
+
+            let domainOf (email: EmailAddress): List<DomainName> =
+                match List.get(1, String.split("@", email.value)) with
+                    | Some d -> if DomainName(d) as name then [ name ] else []
+                    | None -> []
+
+            let hasDomain (domain: DomainName, a: Acct): Bool =
+                match a.domain with
+                    | Some own -> own == domain
+                    | None -> false
+
+            let accountsOnDomain (domain: DomainName, Book(rows)): List<Acct> =
+                List.filter(a -> hasDomain(domain, a), rows)
+
+            let domainMatches (reach: Reach, accounts: Book): List<Acct> =
+                List.flatMap(d -> accountsOnDomain(d, accounts), List.flatMap(e -> domainOf(e), emailOf(reach)))
+
+            data Dup = { accounts: List<ContactId>, contacts: List<ContactId> }  invariant List.length(accounts) + List.length(contacts) >= 1
+            data NoEmail
+            data NoDup
+
+            behavior g1 : (reach: Reach, accounts: Book, contacts: CBook) -> NoDup | Dup | NoEmail
+                constructs Dup, DomainName
+            let g1 (reach, accounts, contacts) = {
+                guard List.length(emailOf(reach)) >= 1 else NoEmail
+                let ma = List.map(a -> a.id, domainMatches(reach, accounts))
+                let mc = List.map(c -> c.id, emailMatches(reach, contacts))
+                guard List.length(ma) + List.length(mc) >= 1 else NoDup
+                Dup { accounts = ma, contacts = mc }
+            }
+
+            behavior f2 : (reach: Reach, contacts: CBook) -> List<Contact>
+            let f2 (reach, contacts) = emailMatches(reach, contacts)
+            """;
+
+    @Test
+    void aRunThatAttemptsAConstructionAndAddsTwoLengthsStopsNoRunOnTheMailsAfterIt() {
+        assertEquals(List.of(), notReachedAtEveryValue(AFTER_AN_ATTEMPT, "g1"),
+                "an attempt refused takes the other arm and holds at most one element, and two"
+                        + " lengths added come to far less than an Int holds");
+    }
+
+    /** The places a relation is read at that the run is not shown to get to at every value. */
+    private static List<String> notReachedAtEveryValue(String behavior) {
+        return notReachedAtEveryValue(DECLARED, behavior);
+    }
+
+    private static List<String> notReachedAtEveryValue(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        PartitionEvidence evidence = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get(behavior);
+        assertNotNull(evidence, "the model under test compiles");
+        return evidence.notRead().stream()
+                .filter(each -> each.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)
+                .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
     }
 
     /** The reasons for which a rule of {@code behavior} came to no line, one for each place. */
