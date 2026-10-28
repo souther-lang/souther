@@ -12,9 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Narrowing a base by a list of steps comes to the fold of the list over the base, whichever lists
@@ -143,6 +147,63 @@ class ARegionNarrowedByAListStartingAlikeIsTheFoldOfItTest {
         AtomicInteger applied = new AtomicInteger();
         assertEquals(first, through(base, first, applied).taken());
         assertEquals(first.size(), applied.get());
+    }
+
+    @Test
+    void aBaseThatIsNotTheOwnerOfWhatIsKeptNeitherReadsNorWritesIt() {
+        NarrowingsKept kept = new NarrowingsKept();
+        Trail owner = base(kept);
+        List<Integer> steps = List.of(1, 2, 3, 4, 5, 6, 7, 8);
+        through(owner, steps, new AtomicInteger());
+
+        // The same steps over a base that keeps elsewhere are folded from that base: the answer
+        // starts from it, and nothing of it is kept for the owner to be lent.
+        Trail stranger = new Trail(List.of(99), NarrowingsKept.NONE);
+        AtomicInteger applied = new AtomicInteger();
+        List<Integer> expected = new ArrayList<>(List.of(99));
+        expected.addAll(steps);
+        assertEquals(expected, ((Trail) kept.through(stranger, steps, (step, region) -> {
+            applied.incrementAndGet();
+            List<Integer> taken = new ArrayList<>(((Trail) region).taken());
+            taken.add(step);
+            return new Trail(List.copyOf(taken), NarrowingsKept.NONE);
+        })).taken());
+        assertEquals(steps.size(), applied.get());
+
+        AtomicInteger again = new AtomicInteger();
+        assertEquals(steps, through(owner, steps, again).taken());
+        assertEquals(0, again.get());
+    }
+
+    @Test
+    void listsAskedFromManyThreadsAtOnceEachComeToTheirOwnFold() throws Exception {
+        NarrowingsKept kept = new NarrowingsKept();
+        Trail base = base(kept);
+        int threads = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<Boolean>> done = new ArrayList<>();
+            for (int thread = 0; thread < threads; thread++) {
+                Random random = new Random(2781 + thread);
+                done.add(pool.submit(() -> {
+                    boolean every = true;
+                    for (int ask = 0; ask < 2000; ask++) {
+                        List<Integer> steps = new ArrayList<>();
+                        int length = random.nextInt(21);
+                        for (int at = 0; at < length; at++) {
+                            steps.add(random.nextInt(2));
+                        }
+                        every &= steps.equals(through(base, steps, new AtomicInteger()).taken());
+                    }
+                    return every;
+                }));
+            }
+            for (Future<Boolean> one : done) {
+                assertTrue(one.get());
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

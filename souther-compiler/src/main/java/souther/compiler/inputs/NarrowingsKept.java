@@ -25,6 +25,11 @@ import java.util.function.BiFunction;
  *
  * <p>A step is part of the key by its equality, which is everything a step says of the region it
  * narrows, so a region lent is the region the fold would have made.
+ *
+ * <p>The key is the steps alone, so what is kept is the answer for one base and one narrowing. The
+ * base is the region that hands out this object as its own {@link SearchRegion#narrowingsKept()},
+ * and a base that does not is folded from itself without reading or writing what is kept. The
+ * narrowing is the one function every caller of a base uses.
  */
 public final class NarrowingsKept {
 
@@ -57,7 +62,8 @@ public final class NarrowingsKept {
         int n = steps.size();
         SearchRegion region = base;
         int from = 0;
-        if (kept != null) {
+        boolean ownBase = kept != null && base.narrowingsKept() == this;
+        if (ownBase) {
             synchronized (kept) {
                 for (int at = n; at > 0; at = (at - 1) / EVERY * EVERY) {
                     SearchRegion had = kept.get(steps.subList(0, at));
@@ -72,11 +78,10 @@ public final class NarrowingsKept {
         for (int at = from; at < n; at++) {
             region = narrowing.apply(steps.get(at), region);
             int done = at + 1;
-            if (kept != null && (done == n || done % EVERY == 0)) {
+            if (ownBase && (done == n || done % EVERY == 0)) {
                 List<S> key = List.copyOf(steps.subList(0, done));
                 synchronized (kept) {
-                    kept.put(key, region);
-                }
+                    kept.put(key, region);                }
             }
         }
         return region;
