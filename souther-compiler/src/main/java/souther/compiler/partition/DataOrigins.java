@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AffineForms;
 import souther.compiler.check.Location;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -31,11 +33,13 @@ import java.util.Set;
  * tables names each of them apart. What a walk handed an element is the container it took it from,
  * with a step into an element, so a column of a table is the table and its column. A value a
  * condition or a {@code match} chooses is one of the values its arms are, which is more than one
- * origin and is said so.
+ * origin and is said so — unless an arm is no place, and then it is a value of its own.
  *
- * <p>A name given a value that is no place — a literal, a call — is the root: it is the data, and
- * there is nothing further to follow. A value that names none is no origin, and a number with no
- * origin is told apart from nothing.
+ * <p>What a number is made of is the arithmetic's to say ({@link AffineForms#partsOf}): an operator's
+ * operands, an operation's declared arguments and the value a newtype wraps are followed, and
+ * nothing else is. A name given a value that is no place — a literal, a call — is the root: it is
+ * the data, and there is nothing further to follow. A value that names none is no origin, and a
+ * number with no origin is told apart from nothing.
  */
 final class DataOrigins {
 
@@ -44,11 +48,18 @@ final class DataOrigins {
 
     private final InputReading read;
 
+    /** The arithmetic a bound is read as a number by, which says what a number is made of. */
+    private final AffineForms.Reading<Quantity, InputReads> arithmetic;
+
+    /** The names whose numbers have been read, in the one bound this is asked of. */
+    private final Set<BindingId> numbered = new HashSet<>();
+
     /** What each root binding is called, for a reader; no part of which data it is. */
     private final Map<BindingId, String> called = new LinkedHashMap<>();
 
-    DataOrigins(InputReading read) {
+    DataOrigins(InputReading read, AffineForms.Reading<Quantity, InputReads> arithmetic) {
         this.read = read;
+        this.arithmetic = arithmetic;
     }
 
     /** The data the numbers of {@code number} are read out of, in {@code reads}, and none where it
@@ -70,16 +81,14 @@ final class DataOrigins {
     private void numbersIn(Core number, InputReads reads, Set<BindingId> onPath,
                            Set<Location> into) {
         switch (Core.withoutStanding(number)) {
-            case Core.Binary binary -> {
-                numbersIn(binary.left(), reads, onPath, into);
-                numbersIn(binary.right(), reads, onPath, into);
-            }
-            case Core.Neg negated -> numbersIn(negated.operand(), reads, onPath, into);
             case Core.FieldAccess field -> into.addAll(originsOf(field, reads, onPath));
             case Core.FieldProjection projection ->
                     into.addAll(originsOf(projection, reads, onPath));
             case Core.Read name -> {
-                if (onPath.contains(name.binding())) {
+                // Read once: what a name was made of is the same wherever it is read from, and a
+                // value that names the same binding twice would otherwise be walked once for each
+                // way down to it, which doubles with every name that names another twice.
+                if (onPath.contains(name.binding()) || !numbered.add(name.binding())) {
                     return;
                 }
                 if (!reads.containersTheElementCameFrom(name).isEmpty()) {
@@ -90,11 +99,15 @@ final class DataOrigins {
                             with(onPath, name.binding()), into);
                 }
             }
-            case Core.If choice -> {
-                numbersIn(choice.then(), reads, onPath, into);
-                numbersIn(choice.els(), reads, onPath, into);
+            // What else a number is made of is the arithmetic's to say: the same parts it composes
+            // the number out of, so an operation it reads a number through is one this reads the
+            // data of.
+            default -> {
+                for (AffineForms.Part<InputReads> part
+                        : AffineForms.partsOf(number, reads, arithmetic)) {
+                    numbersIn(part.expression(), part.at(), onPath, into);
+                }
             }
-            default -> { }
         }
     }
 
@@ -112,25 +125,36 @@ final class DataOrigins {
                 }
                 yield out;
             }
-            case Core.If choice -> union(originsOf(choice.then(), at, onPath),
-                    originsOf(choice.els(), at, onPath));
-            case Core.Match match -> {
-                Set<Location> out = new LinkedHashSet<>();
-                for (Core.Case each : match.cases()) {
-                    out.addAll(originsOf(each.body(), at, onPath));
-                }
-                yield out;
-            }
+            case Core.If choice -> chosenAmong(List.of(choice.then(), choice.els()), at, onPath);
+            case Core.Match match ->
+                    chosenAmong(match.cases().stream().map(Core.Case::body).toList(), at, onPath);
             case Core.IfConstructed construct -> {
-                Set<Location> out = new LinkedHashSet<>(originsOf(construct.then(), at, onPath));
-                for (Core.ElseArm each : construct.els()) {
-                    out.addAll(originsOf(each.body(), at, onPath));
-                }
-                yield out;
+                List<Core> arms = new ArrayList<>();
+                arms.add(construct.then());
+                construct.els().forEach(each -> arms.add(each.body()));
+                yield chosenAmong(arms, at, onPath);
             }
             case Core.LetIn let -> originsOf(let.body(), at, onPath);
             default -> Set.of();
         };
+    }
+
+    /**
+     * The origins of whichever of {@code arms} a condition chooses: all of theirs together — and
+     * none where any one of them has no place. A value one arm of which is built where it stands, or
+     * computed, is a value of its own, and the places of the others say only some of what it may be;
+     * the name it was given is then where the data is.
+     */
+    private Set<Location> chosenAmong(List<Core> arms, InputReads at, Set<BindingId> onPath) {
+        Set<Location> out = new LinkedHashSet<>();
+        for (Core arm : arms) {
+            Set<Location> each = originsOf(arm, at, onPath);
+            if (each.isEmpty()) {
+                return Set.of();
+            }
+            out.addAll(each);
+        }
+        return out;
     }
 
     /** {@code path} and {@code binding}: a walk that goes on from here has met it, and the walks
@@ -181,12 +205,6 @@ final class DataOrigins {
         for (Location each : of) {
             out.add(each.then(readFrom, field, read.rules().newtypes()));
         }
-        return out;
-    }
-
-    private static Set<Location> union(Set<Location> one, Set<Location> other) {
-        Set<Location> out = new LinkedHashSet<>(one);
-        out.addAll(other);
         return out;
     }
 

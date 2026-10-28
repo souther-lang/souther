@@ -539,15 +539,23 @@ final class Pullback {
      *
      * <p>And the data that number is read out of ({@link TheBound#heldIn}).
      */
-    static TheBound boundOf(StatedComparison comparison, InputReading read, InputReads reads) {
-        TheSignOfAnOrder.Sides<InputReads> sides =
-                new Pullback(read, Optional.empty()).sides();
+    static TheBound boundOf(StatedComparison comparison, InputReading read, InputReads reads,
+                            boolean inACopy) {
+        Pullback pullback = new Pullback(read, Optional.empty());
+        TheSignOfAnOrder.Sides<InputReads> sides = pullback.sides();
         ExactRatio left = sides.constant(comparison.left(), reads);
         ExactRatio right = sides.constant(comparison.right(), reads);
         if (left == null == (right == null)) {
             return TheBound.NONE;
         }
-        BoundHeldIn data = new DataOrigins(read).ofTheNumbersIn(
+        // What data a bound is read out of tells the lines of one comparison apart only where the
+        // comparison is a copy of a helper's: written in a body of its own it is one line with one
+        // data, and its place is what names it. Asked nowhere else, so what is not asked is not
+        // walked.
+        if (!inACopy) {
+            return new TheBound(Optional.of(left == null ? right : left), Optional.empty());
+        }
+        BoundHeldIn data = new DataOrigins(read, pullback.quantities()).ofTheNumbersIn(
                 left == null ? comparison.right() : comparison.left(), reads);
         return new TheBound(Optional.of(left == null ? right : left), Optional.ofNullable(data));
     }

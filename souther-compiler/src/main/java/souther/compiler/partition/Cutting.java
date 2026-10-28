@@ -1028,7 +1028,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                  InputReading read, InputReads reads, Arrivals answering,
                                  Pullback.OnTheInput onTheInput,
                                  Optional<ExpansionLineage> writtenIn) {
-        Pullback.TheBound bound = Pullback.boundOf(comparison, read, reads);
+        Pullback.TheBound bound = Pullback.boundOf(comparison, read, reads,
+                writtenIn.orElse(null) instanceof ExpansionLineage.Expansion);
         return heldIn(writtenAgainst(
                 readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
                         writtenIn),

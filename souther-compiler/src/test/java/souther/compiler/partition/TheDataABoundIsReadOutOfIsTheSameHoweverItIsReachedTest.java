@@ -155,6 +155,17 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
         assertEquals(2, placesInTheDocument(helperOver(named, TWO_LIMITS)).size());
     }
 
+    /** A bound the library's own conversion carries is read out of what it converts, as the
+     *  arithmetic reads it: the number is the same number. */
+    @Test
+    void aBoundConvertedByTheLibraryIsReadOutOfTheDataItIsAFieldOf() {
+        String source = helperOver("if Decimal.fromInt(l.lowerBound) <= m then 2 else 1",
+                "if useFirst then atLeast(first, Decimal.fromInt(a.v))"
+                        + " else atLeast(second, Decimal.fromInt(a.v))")
+                .replace("(l: Limit, m: Int)", "(l: Limit, m: Decimal)");
+        assertEquals(2, placesInTheDocument(source).size());
+    }
+
     /** A number handed to a helper is read out of what the caller read it out of: a field of a
      *  limit handed as a number is that limit's, and two calls with two limits are two data. */
     @Test

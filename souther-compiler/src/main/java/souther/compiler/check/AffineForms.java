@@ -865,6 +865,59 @@ public final class AffineForms {
         };
     }
 
+    /** One expression {@link #partsOf} says another is composed of, and the names in force at it. */
+    public record Part<E>(Core expression, E at) {}
+
+    /**
+     * What {@code asPlaced} is arithmetic over, which is what {@link #composed} reads the form of:
+     * the operands of an operator, the arguments the library says an operation answers a form of,
+     * the arguments the environment takes a call as a form of, the value a newtype's construction
+     * wraps, and the body of a binding. Nothing for what the walk takes as a leaf.
+     *
+     * <p>Written beside {@link #composed} and answering for at least the expressions it composes, so
+     * a reader after what a number was made of — where it was read out of — asks the arithmetic
+     * which parts count and keeps no list of its own. An operation added to one that is not added to
+     * the other is a number the walk computes and the reader cannot trace.
+     *
+     * <p>More than the form composes where the number is made of the same parts all the same: a
+     * number worked out from a table's field by an operator the form cannot carry is still read out
+     * of the table, so every operand of an operator counts, whichever operator it is.
+     */
+    public static <A, E> List<Part<E>> partsOf(Core asPlaced, E at, Reading<A, E> reading) {
+        Core e = Core.withoutStanding(asPlaced);
+        return switch (e) {
+            case Core.Neg n -> List.of(new Part<>(n.operand(), at));
+            case Core.Binary b -> List.of(new Part<>(b.left(), at), new Part<>(b.right(), at));
+            case Core.PreservedCall _, Core.Call _ -> {
+                LinearForm<Core> taken = e instanceof Core.PreservedCall
+                        ? reading.takenAsAForm(e, at) : null;
+                if (taken != null) {
+                    yield taken.coefs().keySet().stream().map(each -> new Part<>(each, at))
+                            .toList();
+                }
+                LinearForm<DeclaredArgument> says = formSaidOf(e);
+                List<Core> args = says == null ? List.of() : Terms.argsOf(e);
+                List<Part<E>> out = new ArrayList<>();
+                if (says != null) {
+                    for (DeclaredArgument each : says.coefs().keySet()) {
+                        int position = CallArguments.positionOf(each, Terms.operationOf(e));
+                        if (position >= 0 && position < args.size()) {
+                            out.add(new Part<>(args.get(position), at));
+                        }
+                    }
+                }
+                yield out;
+            }
+            case Core.Construct nd when !nd.values().isEmpty()
+                    && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
+                            reading.declarations().kinds(), reading.declarations().sums())
+                            .isWrapped() ->
+                    List.of(new Part<>(nd.values().get(0).value(), at));
+            case Core.LetIn li -> List.of(new Part<>(li.body(), reading.inside(li, at)));
+            default -> List.of();
+        };
+    }
+
     /**
      * {@code p} read as arithmetic: the arm above for a field access, asked of each of its names in
      * turn from the last one down.
