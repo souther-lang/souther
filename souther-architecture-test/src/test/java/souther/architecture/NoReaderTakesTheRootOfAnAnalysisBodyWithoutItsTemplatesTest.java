@@ -50,6 +50,9 @@ class NoReaderTakesTheRootOfAnAnalysisBodyWithoutItsTemplatesTest {
             "reads the root alone: it looks for a call of the behavior's own body, and the tree that"
                     + " runs builds a value by calling it, so a call whose expansion is met there is"
                     + " never one inside a template",
+            "souther/compiler/query/CallExampleSeeds",
+            "reads the root alone: it looks for the calls the body makes of other behaviors, and a"
+                    + " call inside a template is not looked for, so it seeds no row",
             "souther/compiler/query/Adequacy$BodyAtACall",
             "hands the root on to the reading of a call that enters the body, with the bindings of"
                     + " the root and of every template, so a name a build gives is what it holds"

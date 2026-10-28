@@ -522,6 +522,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputUses$Walk", "whole", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        // Which behaviors a body calls, and where each argument stands in its input.
+        row(out, c + "query/CallExampleSeeds", "walk", "(" + core + reads + "L" + c
+                + "inputs/InputReading;Ljava/util/List;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "takenOff", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,
