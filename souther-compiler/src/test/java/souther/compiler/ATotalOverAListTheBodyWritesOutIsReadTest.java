@@ -153,10 +153,22 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         assertFalse(report.contains("states no law"), report);
     }
 
+    /**
+     * The walk draws the lines of the form it is the walk of. It tells of no operation the walk
+     * works out, so the comparison is not read to the end where the form written out is: what is
+     * held is the lines, and not that nothing is left unread.
+     */
     @Test
     void aWalkWhoseStepScalesWhatItCarriedIsReadAsThatForm() {
         String report = measured("List.fold((acc, m) -> acc * 2 + m.pay, 0, [a, b, c])");
-        assertEquals(measured("(a.pay * 2 + b.pay) * 2 + c.pay"), report);
+        String written = measured("(a.pay * 2 + b.pay) * 2 + c.pay");
+        assertEquals(readAs(written), readAs(report));
+    }
+
+    /** The lines of a report that say which form a border is drawn on. */
+    private static Set<String> readAs(String report) {
+        return report.lines().filter(line -> line.contains("read as")).map(String::strip)
+                .collect(Collectors.toSet());
     }
 
     /**

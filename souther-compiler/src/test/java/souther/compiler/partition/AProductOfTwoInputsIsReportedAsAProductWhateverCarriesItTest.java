@@ -100,9 +100,8 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
     /**
      * A quotient by an input held against another value is no line, and says it is a divisor.
-     * Against a number it is a line on each sign of the divisor, which stops where the comparison
-     * written out over the product on each sign stops: what is left unread of it is the relation,
-     * and not the division. The sign is what the quotient knows of the divisor and a product
+     * Against a number it is a line on each sign of the divisor, whose reading stops at the
+     * relation and not at the division. The sign is what the quotient knows of the divisor and a product
      * written alone does not: held above nought, the divisor keeps the dividend's least values
      * below the line. A comparison read to the end is not asked here: the quotient parts its
      * divisor at the sign itself, and the arms written out leave that to the conditions before
@@ -115,11 +114,16 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= i.q, xs)
                         """));
-        assertEquals(stopped("""
+        // Written out, the product is an operation the comparison tells of, so a row is computed
+        // where it keeps inside the type and the relation is read. The quotient is no form the
+        // walk composes, so nothing is told of what it stops at and the relation stays unread.
+        assertEquals(List.of(), stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> if i.p > 0 then i.q >= 10 * i.p
                             else if i.p < 0 then i.q <= 10 * i.p else false, xs)
-                        """),
+                        """));
+        assertEquals(List.of("xs[*].p: RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE",
+                        "xs[*].q: RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE"),
                 stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= 10, xs)

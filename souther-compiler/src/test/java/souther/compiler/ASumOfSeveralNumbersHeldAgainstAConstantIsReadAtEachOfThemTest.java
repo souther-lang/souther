@@ -17,9 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * are.
  *
  * <p>With the numbers of {@code Int}, the greatest value of one of them has a row that holds the
- * relation and none that fails it, since a row failing it needs the others to come to more
- * below nought than the arithmetic computes. That value is the type's and no line of the model, so
- * it leaves the number undivided at every place, as two numbers do and as three or more did not.
+ * relation and a row that fails it: {@code a} the greatest, {@code b} the least and {@code c} a
+ * hundred fails {@code a + b + c > 100}, and its sums along the way are minus one and ninety-nine.
+ * Which rows a program computes is the order it adds in, and the form says none, so the number is
+ * left undivided at every place where the others are shown to take the relation either way
+ * whatever the order, as two numbers are and as three or more were not.
  */
 class ASumOfSeveralNumbersHeldAgainstAConstantIsReadAtEachOfThemTest {
 

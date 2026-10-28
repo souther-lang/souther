@@ -32,6 +32,15 @@ public record ClausesInOrder(List<OneClause> inOrder, boolean everyRuleReached) 
         inOrder = List.copyOf(inOrder);
     }
 
+    /**
+     * Whether nothing governs the value beyond its fields: no clause is read, and none is missing
+     * because a declaration could not be reached. An empty {@link #inOrder} alone says only that
+     * none was found.
+     */
+    public boolean governsNothing() {
+        return everyRuleReached && inOrder.isEmpty();
+    }
+
     /** One clause, as it reads at the construction. */
     public sealed interface OneClause {
 
