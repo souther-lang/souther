@@ -20,6 +20,12 @@ import java.util.function.Supplier;
  * told what the first of them says. Each ask is handed a read of its own, made of the same demand.
  * A read of a kind that is not made again from its parts is worked out each time it is asked.
  *
+ * <p>Once however many ask at the same time: a comparison not yet worked out is worked out by the
+ * one that finds it so, under this object's lock, and the others wait for what it made. A hit takes
+ * no lock. Working a comparison out reads other comparisons of the same reading — the count of
+ * elements a statement is met by is read as the statements it names — so the work asks this object
+ * again, from the thread that holds the lock, for another comparison.
+ *
  * <p>Of one reading, which is held and asked for: what a comparison asks is read against the
  * declarations of the input, and an answer under one reading is no answer under another
  * ({@link InputReading#derived}).
@@ -40,19 +46,28 @@ final class RelationsAsked {
      */
     DemandReading.Read of(Proposition.Compared compared, Supplier<DemandReading.Read> work) {
         DemandReading.Read had = asked.get(compared);
-        if (had == null) {
+        if (had != null) {
+            return afresh(had);
+        }
+        synchronized (this) {
+            had = asked.get(compared);
+            if (had != null) {
+                return afresh(had);
+            }
             DemandReading.Read made = work.get();
-            if (!(made instanceof DemandReading.Read.Demands
-                    || made instanceof DemandReading.Read.Unread
-                    || made instanceof DemandReading.Read.Settled)) {
+            DemandReading.Read own = afresh(made);
+            if (own == null) {
                 return made;
             }
             asked.put(compared, made);
-            return afresh(made);
+            return own;
         }
-        return afresh(had);
     }
 
+    /**
+     * A read made of the same parts as {@code made}, or null where a read of its kind is not made
+     * again from its parts, which is a read that is not kept.
+     */
     private static DemandReading.Read afresh(DemandReading.Read made) {
         return switch (made) {
             case DemandReading.Read.Demands(var demand) -> new DemandReading.Read.Demands(demand);
@@ -60,8 +75,7 @@ final class RelationsAsked {
                     new DemandReading.Read.Unread(whys, beside);
             case DemandReading.Read.Settled(boolean thisWay) ->
                     new DemandReading.Read.Settled(thisWay);
-            default -> throw new IllegalStateException(
-                    "a read of this kind is not kept, so it is not made again: " + made);
+            default -> null;
         };
     }
 }

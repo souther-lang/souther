@@ -14,8 +14,16 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -99,6 +107,69 @@ class AComparisonIsReadOnceForAReadingAndEveryPlaceGetsAReadOfItsOwnTest {
 
         assertEquals(2, worked.get());
         assertNotSame(first, second);
+    }
+
+    @Test
+    void manyThreadsAskingTogetherWorkTheComparisonOutOnce() throws Exception {
+        RelationsAsked asked = new RelationsAsked();
+        AtomicInteger worked = new AtomicInteger();
+        int threads = 8;
+        CountDownLatch started = new CountDownLatch(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<DemandReading.Read>> told = new ArrayList<>();
+            for (int thread = 0; thread < threads; thread++) {
+                told.add(pool.submit(() -> {
+                    started.countDown();
+                    started.await();
+                    return asked.of(above(3, true), () -> {
+                        worked.incrementAndGet();
+                        // Held until the others have had the chance to come in, which they do
+                        // together where nothing keeps them out.
+                        sleep(100);
+                        return settled(true);
+                    });
+                }));
+            }
+            Set<DemandReading.Read> distinct = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Future<DemandReading.Read> each : told) {
+                assertEquals(settled(true), each.get());
+                distinct.add(each.get());
+            }
+            assertEquals(1, worked.get());
+            assertEquals(threads, distinct.size());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void workingOneComparisonOutMayAskForAnotherOfTheSameReading() {
+        RelationsAsked asked = new RelationsAsked();
+        AtomicInteger worked = new AtomicInteger();
+
+        DemandReading.Read outer = asked.of(above(3, true), () -> {
+            worked.incrementAndGet();
+            assertEquals(settled(false), asked.of(above(4, true), () -> {
+                worked.incrementAndGet();
+                return settled(false);
+            }));
+            return settled(true);
+        });
+
+        assertEquals(settled(true), outer);
+        assertEquals(2, worked.get());
+        assertEquals(settled(false), asked.of(above(4, true), () -> settled(true)));
+        assertEquals(2, worked.get());
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
+        }
     }
 
     private static DemandReading.Read narrows(AtomicInteger worked) {
