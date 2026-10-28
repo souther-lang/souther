@@ -75,19 +75,18 @@ final class NearbyValues {
 
     /**
      * The values {@code value} becomes where a list it holds, or is, has one more element: a value
-     * a run took at a position of the element's type ({@code ranWith}), put after the elements it
-     * has, and everything else stays as it was.
+     * a run took at a position of the element's type ({@code ranWith}), and after those a value
+     * {@code stoodFor} offers for the type, put after the elements it has, and everything else
+     * stays as it was.
      *
      * <p>For a list the classes divide no way, which holds only what the rows written ran with and
      * has no element to move a number of. What an element can be is then what the rows of the
-     * module ran a position of its type with. Handed over one at a time, a list at a time in the
-     * order the value is walked.
+     * module ran a position of its type with, and where none did, what stands for the type.
+     * Handed over one at a time, a list at a time in the order the value is walked.
      */
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
-                                         InputsRowsRanWith ranWith) {
-        if (ranWith.isEmpty()) {
-            return none();
-        }
+                                         InputsRowsRanWith ranWith,
+                                         Function<Type, List<ObservedValue>> stoodFor) {
         return of(value, type, reading, null, List.of(), new Leaves() {
 
             @Override
@@ -99,7 +98,9 @@ final class NearbyValues {
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
                                                   Shape.Sequence sequence) {
-                return mapped(ranWith.of(sequence.element()).iterator(),
+                return mapped(filtered(flat(List.of(ranWith.of(sequence.element()),
+                                stoodFor.apply(sequence.element())).iterator(), List::iterator),
+                                new HashSet<ObservedValue>()::add),
                         more -> {
                             List<ObservedValue> elements = new ArrayList<>(held.elements());
                             elements.add(more);

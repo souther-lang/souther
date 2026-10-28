@@ -2217,7 +2217,7 @@ public final class Generator {
                                     axes, purposes, looking, check, answers,
                                     read.piecesAttempted(), pieces)),
                             inOrder(through, at -> candidatesBeside(arm.seenThrough().get(at),
-                                    axes, purposes, check, answers, aListGrown(arm.ranWith()),
+                                    axes, purposes, check, answers, aListGrown(arm.ranWith(), axes.subject()),
                                     lists)),
                             inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
                                     purposes, looking, check, answers))));
@@ -2265,7 +2265,7 @@ public final class Generator {
                                     purposes, looking, check, answers, read.piecesAttempted(),
                                     pieces)),
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
-                                    purposes, check, answers, aListGrown(one.ranWith()),
+                                    purposes, check, answers, aListGrown(one.ranWith(), axes.subject()),
                                     lists))));
                 }
             };
@@ -2399,8 +2399,9 @@ public final class Generator {
      * ({@link NearbyValues#grown}). Which candidate answers, and whether it answers differently,
      * is what running it says.
      */
-    private static Beside aListGrown(InputsRowsRanWith ranWith) {
-        return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith);
+    private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject) {
+        return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
+                element -> ElementsOfAType.of(subject, element));
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
