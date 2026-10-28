@@ -78,17 +78,21 @@ final class StableStarters {
     private static int next(int cp, int last, boolean stable) {
         while (cp <= last) {
             long[] page = page(cp / PAGE);
-            int at = cp % PAGE;
-            long word = page[at / Long.SIZE];
-            if (!stable) {
-                word = ~word;
+            int pageStart = cp - cp % PAGE;
+            for (int index = cp % PAGE / Long.SIZE; index < page.length; index++) {
+                long word = stable ? page[index] : ~page[index];
+                int start = pageStart + index * Long.SIZE;
+                if (start < cp) {
+                    word &= -1L << (cp - start);
+                }
+                if (word != 0) {
+                    return Math.min(start + Long.numberOfTrailingZeros(word), last + 1);
+                }
+                if (start + Long.SIZE > last) {
+                    return last + 1;
+                }
             }
-            word &= -1L << (at % Long.SIZE);
-            int start = cp - at % Long.SIZE;
-            if (word != 0) {
-                return Math.min(start + Long.numberOfTrailingZeros(word), last + 1);
-            }
-            cp = start + Long.SIZE;
+            cp = pageStart + PAGE;
         }
         return last + 1;
     }
