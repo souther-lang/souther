@@ -115,6 +115,7 @@ public final class PositionsAStatementReads {
             // string that statement is about is no part of this quantity to collect.
             case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.APieceOf piece -> reads(piece.string());
+            case Quantity.ThePieceAt piece -> reads(piece.string());
             case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     reads(counted) && reads(each);

@@ -56,14 +56,19 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.Language;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.StringsHeldAsWritten;
+import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.Accumulation;
+import souther.compiler.semantics.CaseMapping;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
@@ -87,6 +92,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -395,15 +401,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *               a walk kept so far of what it carried, where the element it hands its step
      *               stands, or how many of the elements meet a statement — which says where it
      *               lies; null otherwise
+     * @param piece  the piece of a string of the input at an index that it is, which is made of
+     *               that string's position and is at none of its own; null otherwise
      */
     record Side(List<FilingCoordinate> madeOf, ExactRatio weight,
-                NumericTerm number, Quantity.ReadAlongAContainer along) {
+                NumericTerm number, Quantity.ReadAlongAContainer along,
+                Quantity.ThePieceAt piece) {
 
         Side {
             madeOf = List.copyOf(madeOf);
             if (along != null && (number != null || !madeOf.isEmpty())) {
                 throw new IllegalArgumentException("what is read along a container is at no"
                         + " position: " + along);
+            }
+            if (piece != null && number != null) {
+                throw new IllegalArgumentException("a piece of a string is no number of one"
+                        + " position: " + piece);
             }
         }
 
@@ -571,18 +584,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         each.getValue());
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null, null);
+                        each.getValue(), null, null, null);
                 case Quantity.APieceOf piece -> new Side(
                         piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null, null);
+                        each.getValue(), null, null, null);
+                case Quantity.ThePieceAt piece -> new Side(
+                        piece.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
+                        each.getValue(), null, null, piece);
                 case Quantity.IsAmongThePieces among -> new Side(
                         among.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
-                        each.getValue(), null, null);
+                        each.getValue(), null, null, null);
                 case Quantity.OfABinding bound -> new Side(List.of(), each.getValue(), null,
-                        bound.handed().orElse(null));
+                        bound.handed().orElse(null), null);
                 case Quantity.HowManyMeet counted -> new Side(List.of(), each.getValue(), null,
-                        counted);
-                default -> new Side(List.of(), each.getValue(), null, null);
+                        counted, null);
+                default -> new Side(List.of(), each.getValue(), null, null, null);
             });
         }
         return new UndividedByARelation(sides, form.constant(), relation, List.of(), Kind.AFFINE,
@@ -605,9 +621,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     static UndividedByARelation ofTwoPositions(TermPath one, TermPath other) {
         return new UndividedByARelation(List.of(
                 new Side(List.of(FilingCoordinate.at(one)), ExactRatio.ONE,
-                        new NumericTerm.ValueOf(one), null),
+                        new NumericTerm.ValueOf(one), null, null),
                 new Side(List.of(FilingCoordinate.at(other)), ExactRatio.ONE.negated(),
-                        new NumericTerm.ValueOf(other), null)), ExactRatio.ZERO, Rel.EQ,
+                        new NumericTerm.ValueOf(other), null, null)), ExactRatio.ZERO, Rel.EQ,
                 List.of(), Kind.AFFINE, null);
     }
 
@@ -633,7 +649,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<Side> sides = new ArrayList<>();
         sides.add(new Side(dividend.coefs().keySet().stream().map(FilingCoordinate::of).toList(),
-                ExactRatio.ONE, null, null));
+                ExactRatio.ONE, null, null, null));
         added.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
         return new UndividedByARelation(sides, level.negated(), relation, List.of(), Kind.AFFINE,
                 new RemainderSide(dividend, shift, divisor));
@@ -669,7 +685,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
-        return new Side(List.of(FilingCoordinate.of(term)), weight, term, null);
+        return new Side(List.of(FilingCoordinate.of(term)), weight, term, null, null);
     }
 
     /** The places shown undivided over what the declarations leave. */
@@ -1429,9 +1445,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
-        if (sides.size() == 2 && heldWhole && written.isEmpty()
-                && past.equals(DemandReading.Answered.NOTHING) && independent.between(0, 1)) {
-            shown = shown.partnered(stringsAPartnerCanHold(carriers, out, read));
+        if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
+            shown = shown.partnered(stringsAPartnerCanHold(carriers, out, read, written,
+                    past.narrowing(), () -> !mayStopOnWhatItReads(past, read, along, written,
+                            declined)));
         }
         return reachedAlong(shown, past, read, along, written, declined);
     }
@@ -1447,10 +1464,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * is written at the other. Nothing is said where the other's strings are not worked out
      * exactly, since a value it cannot hold would then be counted among those it can.
      *
-     * @param shown the places already shown undivided, which need no other word
+     * <p>Along a way that states something or works something out before the relation, only where
+     * none of that reaches the strings of either side: a statement about the container an element
+     * is in, or about whether a value is there, leaves the strings of both as they were, and a
+     * stop on a value that is no string of theirs does too.
+     *
+     * @param shown      the places already shown undivided, which need no other word
+     * @param written    what the way states
+     * @param narrowing  what the numbers of places outside a container say along the run
+     * @param runGetsThere whether the run is shown to get to the relation at every value it
+     *                   reads, asked only once a pair of strings is otherwise parted
      */
     private Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> stringsAPartnerCanHold(
-            List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read) {
+            List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read,
+            List<OnAWay> written, List<TakenConstraint> narrowing, BooleanSupplier runGetsThere) {
         if (kind != Kind.AFFINE || remainder != null || sides.size() != 2
                 || (relation != Rel.EQ && relation != Rel.NE)
                 || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
@@ -1461,11 +1488,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < 2; at++) {
             Side here = sides.get(at);
             Side there = sides.get(1 - at);
-            if (!(here.number() instanceof NumericTerm.ValueOf mine)
-                    || !(there.number() instanceof NumericTerm.ValueOf theirs)
+            NumericTerm.ValueOf mine = placeOf(here);
+            NumericTerm.ValueOf theirs = placeOf(there);
+            if (mine == null || theirs == null
+                    || (here.piece() != null && there.piece() != null)
                     || !(carriers.get(at) instanceof Carrier.Text)
                     || !(carriers.get(1 - at) instanceof Carrier.Text)
-                    || shown.contains(FilingCoordinate.of(mine))) {
+                    || shown.contains(FilingCoordinate.of(mine))
+                    || !leavesTheStringsOf(mine.subjectPath(), theirs.subjectPath(), written,
+                            narrowing, here.piece() != null ? here.piece() : there.piece())) {
                 continue;
             }
             Position partner = read.domain().at(theirs.subjectPath());
@@ -1473,13 +1504,158 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     instanceof AdmissibleSet.Completeness.Complete)) {
                 continue;
             }
-            ValueSet canBe = partner.admitted().approximation();
-            if (canBe.isAny() || canBe.isEmpty() || canBe instanceof ValueSet.WholeRuns) {
+            ValueSet theirStrings = partner.admitted().approximation();
+            ValueSet canBe = here.piece() != null
+                    ? stringsWithAPiece(here.piece(), theirStrings)
+                    : there.piece() != null
+                    ? stringsThatAreThePiece(there.piece(), theirStrings,
+                            longestStringAt(mine.subjectPath(), read))
+                    : theirStrings;
+            if (canBe == null || canBe.isAny() || canBe.isEmpty()
+                    || canBe instanceof ValueSet.WholeRuns) {
                 continue;
             }
-            out.put(mine, new StringsAPartnerCanHold(canBe, theirs.subjectPath().toString()));
+            if (!runGetsThere.getAsBoolean()) {
+                continue;
+            }
+            out.put(mine, new StringsAPartnerCanHold(canBe, there.piece() == null
+                    ? theirs.subjectPath().toString()
+                    : "piece " + there.piece().index() + " of " + theirs.subjectPath()));
         }
         return out;
+    }
+
+    /**
+     * The position whose strings {@code side} is read off: the position it is a number of, or the
+     * position of the string it is a piece of — or null where it is neither.
+     */
+    private static NumericTerm.ValueOf placeOf(Side side) {
+        if (side.number() instanceof NumericTerm.ValueOf place) {
+            return place;
+        }
+        return side.piece() == null ? null : stringOf(side.piece());
+    }
+
+    /**
+     * The position of the string {@code piece} is of, where that is a string of the input as it
+     * stands — or null where it is made of one by an operation.
+     */
+    private static NumericTerm.ValueOf stringOf(Quantity.ThePieceAt piece) {
+        return piece.string() instanceof DecisionAtom.OfTheInput(NumericTerm.ValueOf string)
+                ? string : null;
+    }
+
+    /**
+     * The strings that have {@code piece} in some string of {@code whole}, or null where
+     * {@code whole} is not a language of strings or the machine for them is more than a piece's
+     * allowance.
+     */
+    private static ValueSet stringsWithAPiece(Quantity.ThePieceAt piece, ValueSet whole) {
+        if (!(whole instanceof ValueSet.Matching(Language language))) {
+            return null;
+        }
+        Language having = StringsOfAPiece.wholesWithAPieceIn(language, piece.separator(),
+                piece.index(), PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        return having == null ? null : ValueSet.matching(having);
+    }
+
+    /**
+     * The strings that are {@code piece} of some value of {@code whole}, for the strings of up
+     * to {@code longest} code points, or null where {@code whole} is not a language of strings,
+     * the machine for them is more than a piece's allowance, or the pieces of that length are not
+     * all the pieces of values ({@link StringsOfAPiece#pieceOfAValueAt}).
+     */
+    private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole,
+                                                   long longest) {
+        if (!(whole instanceof ValueSet.Matching(Language language))) {
+            return null;
+        }
+        Language image = StringsOfAPiece.pieceOfAValueAt(language, piece.separator(),
+                piece.index(), longest, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        return image == null ? null : ValueSet.matching(image);
+    }
+
+    /**
+     * The most code points a string at {@code place} has as the declarations leave it: what its
+     * language bounds, and the most a {@code String} holds where that is no bound.
+     */
+    private static long longestStringAt(TermPath place, InputReading read) {
+        Position at = read.domain().at(place);
+        if (at != null && at.admitted().approximation() instanceof ValueSet.Matching(
+                Language language)) {
+            Language.Ends lengths = language.lengths();
+            if (lengths != null && lengths.most() != null) {
+                return lengths.most();
+            }
+        }
+        return TextExtents.LONGEST_STRING;
+    }
+
+    /**
+     * Whether what a way states, and what the numbers outside a container say along the run,
+     * leave the strings at {@code mine} and {@code theirs} as the declarations hold them.
+     *
+     * <p>A statement of which case a value is, or of how many a container holds, says nothing of
+     * the values there; any other statement does not reach them only where it names neither
+     * place nor one that holds a place or is held by it. Where {@code theirs} is the string a piece is of, a statement that the string holds
+     * the separators the piece's index needs is one the piece's strings already stand on.
+     *
+     * @param piece the piece the partner is, or null where it is the strings at {@code theirs}
+     */
+    private static boolean leavesTheStringsOf(TermPath mine, TermPath theirs,
+                                              List<OnAWay> written,
+                                              List<TakenConstraint> narrowing,
+                                              Quantity.ThePieceAt piece) {
+        for (OnAWay each : written) {
+            boolean saysNothingOfValues = each.whatStands() && each.relation() == null
+                    && each.elementsOf() == null;
+            if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
+                    && (reaches(each, mine) || reaches(each, theirs)
+                    || each.elementsOf() != null)) {
+                return false;
+            }
+        }
+        return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
+                .anyMatch(term -> overlap(term.subjectPath(), mine)
+                        || overlap(term.subjectPath(), theirs)));
+    }
+
+    /**
+     * Whether {@code statement} turns on {@code place}, or on a place that holds it or is held by
+     * it. A statement of what stands at a value that holds the place, how many a container holds,
+     * says nothing of the place's values, so only what stands at the place or under it is theirs.
+     */
+    private static boolean reaches(OnAWay statement, TermPath place) {
+        return statement.positions().stream().anyMatch(at -> statement.whatStands()
+                ? at.isAtOrUnder(place) : overlap(at, place));
+    }
+
+    /**
+     * Whether {@code statement} says the string {@code piece} is of holds at least as many of the
+     * separator as the piece's index needs and nothing else, which the strings that have a piece
+     * at that index all do.
+     */
+    private static boolean holdsTheSeparatorsOf(OnAWay statement, Quantity.ThePieceAt piece) {
+        NumericTerm.ValueOf whole = piece == null ? null : stringOf(piece);
+        if (whole == null) {
+            return false;
+        }
+        TermPath string = whole.subjectPath();
+        if (statement.elementsOf() != null
+                || !statement.positions().equals(Set.of(string))
+                || !(statement.relation() instanceof TakenConstraint.Affine(
+                        LinearForm<NumericTerm> form, Rel rel)) || rel != Rel.GE
+                || form.coefs().size() != 1) {
+            return false;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getKey() instanceof NumericTerm.CodePointClassCount count
+                && count.position().equals(string)
+                && count.through().equals(CaseMapping.NONE)
+                && count.counted().equals(new CodePointClass.OneOf(
+                        CodePoints.of(piece.separator())))
+                && only.getValue().equals(ExactRatio.ONE)
+                && ExactRatio.of(piece.index()).compareTo(form.constant().negated()) >= 0;
     }
 
     /**

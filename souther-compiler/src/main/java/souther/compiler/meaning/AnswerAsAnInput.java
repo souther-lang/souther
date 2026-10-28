@@ -662,7 +662,7 @@ public final class AnswerAsAnInput {
             case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
             case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.APieceOf _,
+                 Quantity.CodePointsOfAPiece _, Quantity.APieceOf _, Quantity.ThePieceAt _,
                  Quantity.IsAmongThePieces _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyDifferentBelow _ -> null;

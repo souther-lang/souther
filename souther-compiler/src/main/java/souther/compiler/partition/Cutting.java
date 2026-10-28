@@ -1314,6 +1314,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     input.addAll(piece.positionsItIsMadeOf());
                     another = true;
                 }
+                case Quantity.ThePieceAt piece -> {
+                    input.addAll(piece.positionsItIsMadeOf());
+                    another = true;
+                }
                 case Quantity.IsAmongThePieces among -> {
                     input.addAll(among.positionsItIsMadeOf());
                     another = true;
@@ -1360,7 +1364,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                      Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,
-                     Quantity.IsAmongThePieces _ -> { }
+                     Quantity.ThePieceAt _, Quantity.IsAmongThePieces _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
                 case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
             }

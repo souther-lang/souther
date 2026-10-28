@@ -2220,7 +2220,7 @@ final class DemandReading {
                 case Quantity.ProductOfTwo _ -> product = true;
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
                 case Quantity.WhatAnOperationAnswers _, Quantity.APieceOf _,
-                     Quantity.IsAmongThePieces _ -> answered = true;
+                     Quantity.ThePieceAt _, Quantity.IsAmongThePieces _ -> answered = true;
                 case DecisionAtom.OfTheInput _ -> { }
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
                 case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
