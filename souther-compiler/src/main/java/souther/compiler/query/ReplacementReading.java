@@ -32,6 +32,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * What a behavior's written rows came to about each rewrite of its body a row could notice.
@@ -156,7 +157,7 @@ public final class ReplacementReading {
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                    Comparing comparing,
-                                   Map<Type, List<ObservedValue>> statedElsewhere) {
+                                   Supplier<Map<Type, List<ObservedValue>>> statedElsewhere) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
         // model owes there — so it is evidence for neither the body nor the rewrite, on either side
@@ -332,7 +333,7 @@ public final class ReplacementReading {
      * it is.
      */
     private static List<Account> oneAnswerAccounts(List<RowOutcome> rows, Comparing comparing,
-                                                   Map<Type, List<ObservedValue>> statedElsewhere) {
+            Supplier<Map<Type, List<ObservedValue>>> statedElsewhere) {
         List<RowOutcome> answered = new ArrayList<>();
         List<ObservedValue> values = new ArrayList<>();
         for (RowOutcome row : rows) {
@@ -363,7 +364,7 @@ public final class ReplacementReading {
     private static Standing oneAnswerStanding(Replacement.ByOneAnswer rewrite,
                                               List<RowOutcome> rows, List<RowOutcome> answered,
                                               List<ObservedValue> values, Comparing comparing,
-                                              Map<Type, List<ObservedValue>> statedElsewhere) {
+                                              Supplier<Map<Type, List<ObservedValue>>> statedElsewhere) {
         ObservedValue always = rewrite.answer();
         boolean unread = false;
         for (RowOutcome row : rows) {
@@ -386,7 +387,7 @@ public final class ReplacementReading {
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         }
         ReplacementOwed.ByOneAnswer lookFor = new ReplacementOwed.ByOneAnswer(rewrite,
-                answered.stream().map(RowOutcome::inputs).toList(), statedElsewhere);
+                answered.stream().map(RowOutcome::inputs).toList(), statedElsewhere.get());
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {

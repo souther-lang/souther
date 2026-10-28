@@ -41,6 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * The rewrites of each behavior's body and whether its rows tell them from the body: what the
@@ -94,8 +95,21 @@ public final class Replacements {
                 }
             }
             ArmReplacements inTheClasses = carried;
-            Map<String, Map<Type, List<ObservedValue>>> takenBy =
-                    inputsTakenBy(sigs.value(), byTarget);
+            // Read off the rows only when a body answering one value is asked about, which most
+            // modules never are.
+            Supplier<Map<String, Map<Type, List<ObservedValue>>>> takenBy =
+                    new Supplier<>() {
+
+                        private Map<String, Map<Type, List<ObservedValue>>> read;
+
+                        @Override
+                        public Map<String, Map<Type, List<ObservedValue>>> get() {
+                            if (read == null) {
+                                read = inputsTakenBy(sigs.value(), byTarget);
+                            }
+                            return read;
+                        }
+                    };
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
                 Sig sig = sigs.value().get(behavior.name());
                 Adequacy.RowReading reading =
@@ -125,7 +139,7 @@ public final class Replacements {
                                 return Comparisons.verdict(stated, answered, types, at)
                                         instanceof Verdict.Held;
                             }
-                        }, statedBeside(behavior.name(), takenBy));
+                        }, () -> statedBeside(behavior.name(), takenBy.get()));
             });
         }
 
@@ -149,7 +163,8 @@ public final class Replacements {
                     for (int p = 0; p < row.inputs().size(); p++) {
                         List<ObservedValue> held = taken.computeIfAbsent(sig.inputTypes().get(p),
                                 _ -> new ArrayList<>());
-                        if (!held.contains(row.inputs().get(p))) {
+                        if (held.size() < MOST_VALUES_OF_A_TYPE
+                                && !held.contains(row.inputs().get(p))) {
                             held.add(row.inputs().get(p));
                         }
                     }
