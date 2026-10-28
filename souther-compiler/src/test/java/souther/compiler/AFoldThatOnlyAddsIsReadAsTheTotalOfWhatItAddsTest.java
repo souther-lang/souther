@@ -172,8 +172,9 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
      * note totals that note, so the total takes every {@code Int} a gross does; held at nought it
      * leaves the ask and the limit held against each other, each at every value the other takes,
      * and both are left either way. The total itself is what an operation answers and not the
-     * value at a place, so the limit is not taken past the greatest {@code Int} for it, and that
-     * it reaches every value of the total is all it leaves unread.
+     * value at a place, so the limit is not taken past the greatest {@code Int} for it. The totals
+     * past the greatest {@code Int} are none a row stands at, so the total is left either way
+     * as the others are.
      */
     @Test
     void aTotalBesideAnotherNumberIsRead() {
@@ -188,10 +189,10 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
         assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertEquals(Set.of("asked", "limit"), placesSaying(report,
+        assertEquals(Set.of("asked", "limit", "List.sum(ns[*].gross)"), placesSaying(report,
                 "rather than dividing the values here"), report);
-        assertEquals(Set.of("List.sum(ns[*].gross)"), placesSaying(report,
-                "not shown to reach every value here"), report);
+        assertEquals(Set.of(), placesSaying(report, "not shown to reach every value here"),
+                report);
     }
 
     /** The places the lines of {@code report} saying {@code words} of a rule's line are about. */
