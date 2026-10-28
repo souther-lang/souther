@@ -154,11 +154,7 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      * where every one is, or the program is taken to add the form.
      */
     boolean mayStopARow() {
-        return switch (operations.told()) {
-            case NOTHING_SAID -> false;
-            case SOME -> true;
-            case EVERY -> !operations.sums().isEmpty();
-        };
+        return operations.canStopARow();
     }
 
     /**

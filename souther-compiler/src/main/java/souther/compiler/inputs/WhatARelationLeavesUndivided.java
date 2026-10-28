@@ -231,6 +231,35 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /**
+         * Whether the program can stop a row at something beyond the form: not where it is taken
+         * to add the form up, nor where every operation is told and there is none. An analysis
+         * that answers for a row by the form's sizes alone is asked only where this is false.
+         */
+        public boolean canStopARow() {
+            return switch (told) {
+                case NOTHING_SAID -> false;
+                case SOME -> true;
+                case EVERY -> !sums.isEmpty();
+            };
+        }
+
+        /**
+         * Whether the sizes of the form's addends answer for a row: nothing beyond the form can
+         * stop one, or every operation is told and each is a sum of the form's own terms, so
+         * that the sizes are the sizes the operations are worked out over.
+         */
+        public <P> boolean theSizesOfTheFormAnswer(List<Term<P>> terms, ExactRatio constant) {
+            if (!canStopARow()) {
+                return true;
+            }
+            if (told != Told.EVERY) {
+                return false;
+            }
+            ExactRatio multiple = multipleOfTheForm(terms, constant);
+            return multiple != null && multiple.compareTo(ExactRatio.ONE) == 0;
+        }
+
+        /**
          * How many times the form the operations are, at the most, or null where one of them is
          * not a multiple of a sum of some of its terms: every term it reads weighed by the same
          * multiple of the weight the relation weighs it by, and the constant of the relation
