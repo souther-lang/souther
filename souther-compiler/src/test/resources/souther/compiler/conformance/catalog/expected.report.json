@@ -7164,50 +7164,6 @@
           "disposition" : "met"
         }, {
           "obligationId" : {
-            "module" : "souther.int",
-            "definition" : "max",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 0,
-            "decidedBy" : "the_declaration"
-          },
-          "label" : "then",
-          "kind" : "then",
-          "construct" : "if",
-          "at" : {
-            "sourceId" : "2",
-            "line" : 90,
-            "column" : 26,
-            "writtenAt" : {
-              "kind" : "outOfSight",
-              "declaration" : "Int.max"
-            }
-          },
-          "disposition" : "unmet"
-        }, {
-          "obligationId" : {
-            "module" : "souther.int",
-            "definition" : "max",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 1,
-            "decidedBy" : "the_declaration"
-          },
-          "label" : "else",
-          "kind" : "else",
-          "construct" : "if",
-          "at" : {
-            "sourceId" : "2",
-            "line" : 90,
-            "column" : 26,
-            "writtenAt" : {
-              "kind" : "outOfSight",
-              "declaration" : "Int.max"
-            }
-          },
-          "disposition" : "met"
-        }, {
-          "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
             "construct" : 6,
@@ -7667,28 +7623,6 @@
           "behavior" : "出荷する",
           "ordinal" : 3,
           "lowered" : 0
-        }
-      }, {
-        "kind" : "arm_unreached",
-        "disposition" : "refused",
-        "subject" : "then",
-        "obligationId" : {
-          "module" : "souther.int",
-          "definition" : "max",
-          "construct" : 0,
-          "lowered" : 0,
-          "part" : 0,
-          "decidedBy" : "the_declaration"
-        },
-        "code" : "E1918",
-        "at" : {
-          "sourceId" : "2",
-          "line" : 90,
-          "column" : 26,
-          "writtenAt" : {
-            "kind" : "outOfSight",
-            "declaration" : "Int.max"
-          }
         }
       } ]
     }, {

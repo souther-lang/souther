@@ -5060,8 +5060,17 @@ public final class Adequacy {
                                               Function<List<CoverageSites.ArmSite>,
                                                       List<WhereNothingIsAnswered.Premise>>
                                                       premisesOf) {
-            ArmAccount account = ArmAccount.of(owed(all, reachable), covered, awaiting, weakenings,
-                    ArmCensus.of(armsBehind(all, reachable.contradicted().places())), premisesOf);
+            // Over every arm the plan numbered, since a proof a run contradicted may be at an arm of
+            // the language's own operation; what is owed and what is doubted is the part that owes
+            // a row.
+            List<CoverageSites.ArmSite> stated =
+                    all.stream().filter(CoverageSites.ArmSite::owesARow).toList();
+            Set<CoverageSites.Obligation> doubted = armsBehind(all, reachable.contradicted().places());
+            Set<CoverageSites.Obligation> owing = new HashSet<>();
+            stated.forEach(site -> owing.add(site.obligation()));
+            doubted.retainAll(owing);
+            ArmAccount account = ArmAccount.of(owed(stated, reachable), covered, awaiting,
+                    weakenings, ArmCensus.of(doubted), premisesOf);
             WeakeningSet by = account.weakening();
             return new BranchEvidence(by.isEmpty()
                     ? new Measurement.Complete<>(account.summary())
@@ -5203,8 +5212,11 @@ public final class Adequacy {
                 // The arms, and not every site of the behavior. A comparison of a guard's condition
                 // has a site of its own and is not a fork a row is in or out of, so counting it here
                 // would report an arm the body does not have.
+                List<CoverageSites.ArmSite> everyArm = plan.arms(behavior.name());
+                // And of those, the ones the model states: a fork inside a copy of the language's
+                // own operation is recorded and read, and owes no row.
                 List<CoverageSites.ArmSite> arms =
-                        plan.arms(behavior.name());
+                        everyArm.stream().filter(CoverageSites.ArmSite::owesARow).toList();
                 RowReading observed = RowReadings.readingFor(byTarget, behavior.name());
                 souther.compiler.check.PathReachability.Answers.AsRun arrives =
                         reachable == null ? NOTHING_PROVEN
@@ -5233,7 +5245,7 @@ public final class Adequacy {
                 souther.compiler.partition.MeasuredInput subject =
                         unanswered.regions().isEmpty() ? null
                                 : subjectOf(db, name, behavior.name());
-                return BranchEvidence.measured(behavior.name(), arms, covered, awaited,
+                return BranchEvidence.measured(behavior.name(), everyArm, covered, awaited,
                         arrives, rowsBehind(observed), BranchEvidence.premisesOfArms(
                                 unanswered, met == null ? null : met.get(behavior.name()),
                                 subject == null ? null : subject.axes()));
