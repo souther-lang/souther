@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.inputs.WhatARelationLeavesUndivided.Beside;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.IntSum;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Leaves;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Operations;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -206,13 +208,143 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                         Operations operations =
                                 new Operations(program.sums(), program.state());
                         Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(terms,
-                                at, ExactRatio.of(constant), relation, List.of(),
+                                at, Beside.just(ExactRatio.of(constant)), relation, List.of(),
                                 String::equals, BigInteger.valueOf(GREATEST), operations,
                                 operations.theSizesAreRowsComputed(terms, ExactRatio.of(constant)));
-                        verify(program, program.sums(), constant, relation, at, said);
+                        verify(program, program.sums(), constant, relation, at, said, -1, 0);
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * The three-term programs asked of two terms with the third held still at a value: what the
+     * two are asked against is the constant and the third's weighed value, kept apart, since the
+     * arithmetic adds them as two addends and a value that cancels the constant in the sum still
+     * counts in the sizes. What is said is held to the rows with the third at that value. The
+     * program {@code a + b + c > 4} with {@code c} held at 4 is asked as {@code a + b > 0}, and
+     * {@code a = 0, b = 1} is no row of it: {@code 0 + 1 + 4} passes the type.
+     *
+     * <p>Not asked of a program no reading was made of: it is taken to add the form up with the
+     * sizes symmetric about nought, which leave out the least value of the type, and what is
+     * said of it is that approximation and not a claim about the rows.
+     */
+    @Test
+    void whatIsSaidOfTwoTermsWithAThirdHeldStillIsTrueOfEveryRowWithTheThirdThere() {
+        for (Program program : PROGRAMS) {
+            if (program.weights().size() != 3 || program.weightOf(0).abs().compareTo(
+                    ExactRatio.ONE) != 0 || program.weightOf(1).abs().compareTo(
+                    ExactRatio.ONE) != 0 || program.state() == Told.NOTHING_SAID) {
+                continue;
+            }
+            Operations operations = new Operations(program.sums(), program.state());
+            List<Term<String>> all = termsOf(program);
+            // To the ends of the type: a constant the third's value cancels in the sum is as
+            // large as the type is.
+            for (int constant = LEAST; constant <= GREATEST; constant++) {
+                boolean sizesAreRowsComputed =
+                        operations.theSizesAreRowsComputed(all, ExactRatio.of(constant));
+                for (int held = LEAST; held <= GREATEST; held++) {
+                    Beside beside = new Beside(List.of(ExactRatio.of(constant),
+                            program.weightOf(2).times(ExactRatio.of(held)).orNull()));
+                    for (Rel relation : RELATIONS) {
+                        for (int at = 0; at < 2; at++) {
+                            Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(
+                                    all.subList(0, 2), at, beside, relation, List.of(),
+                                    String::equals, BigInteger.valueOf(GREATEST), operations,
+                                    sizesAreRowsComputed);
+                            verify(program, program.sums(), constant, relation, at, said, 2,
+                                    held);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The same three-term programs asked which places the two are left undivided at, with the
+     * third held still: a place said so is reached either way at the middle of the type, where
+     * there is a row with the third there that gets past the operations and holds the relation,
+     * and one that fails it.
+     */
+    @Test
+    void aPlaceSaidUndividedByTheirDifferenceHasARowEachWayWithTheThirdHeldStill() {
+        int said = 0;
+        for (Program program : PROGRAMS) {
+            if (program.weights().size() != 3 || program.weightOf(0).abs().compareTo(
+                    ExactRatio.ONE) != 0 || program.weightOf(1).abs().compareTo(
+                    ExactRatio.ONE) != 0 || program.state() == Told.NOTHING_SAID) {
+                continue;
+            }
+            Operations operations = new Operations(program.sums(), program.state());
+            List<Term<String>> all = termsOf(program);
+            // The two reach the whole type and take the same values, as the analysis asks.
+            List<Term<String>> pair = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                pair.add(new Term<>(List.of(NAMES.get(i)), program.weightOf(i),
+                        run(LEAST, GREATEST), NumericDomain.Bounds.OPEN, "n", true,
+                        Granularity.DISCRETE, run(LEAST, GREATEST), NAMES.get(i)));
+            }
+            for (int constant = LEAST; constant <= GREATEST; constant++) {
+                boolean sizesAreRowsComputed =
+                        operations.theSizesAreRowsComputed(all, ExactRatio.of(constant));
+                for (int held = LEAST; held <= GREATEST; held++) {
+                    Beside beside = new Beside(List.of(ExactRatio.of(constant),
+                            program.weightOf(2).times(ExactRatio.of(held)).orNull()));
+                    for (Rel relation : RELATIONS) {
+                        Set<String> places = WhatARelationLeavesUndivided.ofTheirDifference(
+                                pair, beside, relation, List.of(),
+                                new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
+                                        run(LEAST, GREATEST)),
+                                String::equals, BigInteger.valueOf(GREATEST), operations,
+                                sizesAreRowsComputed);
+                        for (int at = 0; at < 2; at++) {
+                            if (places.contains(NAMES.get(at))) {
+                                said++;
+                                verifyARowEachWay(program, constant, relation, at, held);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // The control: the check is held to places that were said.
+        assertTrue(said > 0, "no place was ever said undivided");
+    }
+
+    private static void verifyARowEachWay(Program program, int constant, Rel relation, int at,
+                                          int held) {
+        List<IntSum> everyOperation = new ArrayList<>(program.sums());
+        everyOperation.addAll(program.hidden());
+        int free = 3 - at - 2;
+        for (int value : new int[] {-1, 0}) {
+            boolean sawTrue = false;
+            boolean sawFalse = false;
+            for (int other = LEAST; other <= GREATEST; other++) {
+                int[] row = new int[3];
+                row[at] = value;
+                row[2] = held;
+                row[free] = other;
+                if (!getsPast(everyOperation, row)) {
+                    continue;
+                }
+                ExactRatio form = ExactRatio.of(constant);
+                for (int i = 0; i < 3; i++) {
+                    form = form.plus(program.weightOf(i).times(ExactRatio.of(row[i])).orNull())
+                            .orNull();
+                }
+                if (holds(relation, form.signum())) {
+                    sawTrue = true;
+                } else {
+                    sawFalse = true;
+                }
+            }
+            assertTrue(sawTrue && sawFalse, "said undivided at term " + at + ", yet at the middle "
+                    + value + " a side has no row with term 2 held at " + held + ": "
+                    + program.name()
+                    + ", constant " + constant + " " + relation + " 0");
         }
     }
 
@@ -230,14 +362,18 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 ExactRatio.of(constant), relation, String::equals, (one, other) -> true,
                 Granularity.DISCRETE, BigInteger.valueOf(GREATEST), List.of(),
                 new Operations(sums, program.state()));
-        verify(program, sums, constant, relation, at, said);
+        verify(program, sums, constant, relation, at, said, -1, 0);
     }
 
+    /**
+     * Holds {@code said} of the term {@code at} to the rows of the program, those with the term
+     * at {@code held} standing at {@code heldValue} where it is not negative.
+     */
     private static void verify(Program program, List<IntSum> sums, int constant, Rel relation,
-                               int at, Leaves said) {
+                               int at, Leaves said, int held, int heldValue) {
         int size = program.weights().size();
         String where = program.name() + ", constant " + constant + " " + relation + " 0, term "
-                + at + ": " + said;
+                + at + (held < 0 ? "" : ", term " + held + " held at " + heldValue) + ": " + said;
         int range = GREATEST - LEAST + 1;
         // A row is a row of the program where it gets past every operation the program works out,
         // told or not: the code was given those it was told of.
@@ -250,13 +386,15 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         for (int value = LEAST; value <= GREATEST; value++) {
             boolean sawTrue = false;
             boolean sawFalse = false;
-            int others = (int) Math.pow(range, size - 1);
+            int others = (int) Math.pow(range, size - (held < 0 ? 1 : 2));
             for (int code = 0; code < others; code++) {
                 int[] row = new int[size];
                 int rest = code;
                 for (int i = 0; i < size; i++) {
                     if (i == at) {
                         row[i] = value;
+                    } else if (i == held) {
+                        row[i] = heldValue;
                     } else {
                         row[i] = LEAST + rest % range;
                         rest /= range;

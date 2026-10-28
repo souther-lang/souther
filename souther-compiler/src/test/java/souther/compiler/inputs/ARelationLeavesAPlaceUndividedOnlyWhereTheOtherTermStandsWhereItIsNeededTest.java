@@ -262,8 +262,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                      long constant, Rel relation,
                                      WhatARelationLeavesUndivided.OnTheDifference... held) {
-        return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
-                relation, List.of(held), DATES, String::equals, GREATEST_INT,
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation, List.of(held), DATES, String::equals, GREATEST_INT,
                 WhatARelationLeavesUndivided.Operations.NONE, true);
     }
 
@@ -310,8 +310,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
 
         WhatARelationLeavesUndivided.Leaves.Settled a =
                 (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
-                        .leavesByTheirDifference(terms, 0, ExactRatio.of(k), Rel.GT, List.of(),
-                                String::equals, GREATEST_INT,
+                        .leavesByTheirDifference(terms, 0,
+                                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(k)),
+                                Rel.GT, List.of(), String::equals, GREATEST_INT,
                                 WhatARelationLeavesUndivided.Operations.NONE, true);
         assertEquals(List.of(), a.linesOfTheModel());
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
@@ -319,8 +320,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
 
         WhatARelationLeavesUndivided.Leaves.Settled b =
                 (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
-                        .leavesByTheirDifference(terms, 1, ExactRatio.of(k), Rel.GT, List.of(),
-                                String::equals, GREATEST_INT,
+                        .leavesByTheirDifference(terms, 1,
+                                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(k)),
+                                Rel.GT, List.of(), String::equals, GREATEST_INT,
                                 WhatARelationLeavesUndivided.Operations.NONE, true);
         assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.LE, ExactRatio.of(k - 1))),
                 b.linesOfTheModel());
@@ -345,7 +347,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 term("b", -1, amounts, amounts, null, true));
 
         assertNull(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
-                ExactRatio.of(k), Rel.GT, List.of(), String::equals, GREATEST_INT,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(k)), Rel.GT, List.of(),
+                String::equals, GREATEST_INT,
                 WhatARelationLeavesUndivided.Operations.NONE, true));
     }
 
@@ -364,8 +367,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 term("w", -1, amounts, amounts, null, true));
         WhatARelationLeavesUndivided.Leaves.Settled w =
                 (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
-                        .leavesByTheirDifference(terms, 1, ExactRatio.ZERO, Rel.GT,
-                                List.of(new WhatARelationLeavesUndivided.OnTheDifference(
+                        .leavesByTheirDifference(terms, 1,
+                                WhatARelationLeavesUndivided.Beside.just(ExactRatio.ZERO),
+                                Rel.GT, List.of(new WhatARelationLeavesUndivided.OnTheDifference(
                                         ExactRatio.ONE, ExactRatio.ZERO, Rel.GE)),
                                 String::equals, GREATEST_INT,
                                 WhatARelationLeavesUndivided.Operations.NONE, true);
@@ -393,8 +397,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                     term("w", 1, run(0, 10), run(0, 10), null, true),
                     term("t", -1, held, held, null, true));
             WhatARelationLeavesUndivided.Leaves t = WhatARelationLeavesUndivided
-                    .leavesByTheirDifference(terms, 1, ExactRatio.ZERO, Rel.GT, atLeast,
-                            String::equals, GREATEST_INT,
+                    .leavesByTheirDifference(terms, 1,
+                            WhatARelationLeavesUndivided.Beside.just(ExactRatio.ZERO), Rel.GT,
+                            atLeast, String::equals, GREATEST_INT,
                             WhatARelationLeavesUndivided.Operations.NONE, true);
             if (held == amounts) {
                 assertNull(t);
@@ -500,7 +505,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     @Test
     void aTypeWithNoEndLeavesEveryDifference() {
         assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
-                pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
+                pair(1, -1, A_DATE), WhatARelationLeavesUndivided.Beside.just(
+                        ExactRatio.of(-10_000_000_000_000L)), Rel.GT, List.of(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
                         NumericDomain.Bounds.OPEN), String::equals, GREATEST_INT,
                 WhatARelationLeavesUndivided.Operations.NONE, true));
@@ -654,8 +660,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
             var a = term("a", weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
             var b = term("b", -weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
             assertEquals(weight == 1 ? Set.of("a", "b") : Set.of(),
-                    WhatARelationLeavesUndivided.ofTheirDifference(List.of(a, b), ExactRatio.ZERO,
-                            Rel.LT, List.of(),
+                    WhatARelationLeavesUndivided.ofTheirDifference(List.of(a, b),
+                            WhatARelationLeavesUndivided.Beside.just(ExactRatio.ZERO), Rel.LT,
+                            List.of(),
                             new WhatARelationLeavesUndivided.WhereTheRepresentationStops(INTS),
                             String::equals, GREATEST_INT,
                             WhatARelationLeavesUndivided.Operations.NONE, true),

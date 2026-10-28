@@ -172,8 +172,9 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                                                 term("b", weights[1], heldB, at == 0 ? reached : OPEN));
                                         Leaves leaves = WhatARelationLeavesUndivided
                                                 .leavesByTheirDifference(terms, at,
-                                                        ExactRatio.of(constant), relation, held,
-                                                        String::equals,
+                                                        WhatARelationLeavesUndivided.Beside.just(
+                                                                ExactRatio.of(constant)),
+                                                        relation, held, String::equals,
                                                         BigInteger.valueOf(GREATEST),
                                                         WhatARelationLeavesUndivided
                                                                 .Operations.NONE, true);
@@ -251,7 +252,8 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                         List<Term<String>> terms = List.of(term("a", weights[0], TYPE, OPEN),
                                 term("b", weights[1], TYPE, OPEN));
                         Leaves leaves = WhatARelationLeavesUndivided.leavesByTheirDifference(
-                                terms, at, ExactRatio.of(constant), relation, List.of(),
+                                terms, at, WhatARelationLeavesUndivided.Beside.just(
+                                        ExactRatio.of(constant)), relation, List.of(),
                                 String::equals, BigInteger.valueOf(GREATEST),
                                 WhatARelationLeavesUndivided.Operations.NONE, true);
                         if (leaves instanceof Leaves.Settled settled) {
@@ -282,7 +284,8 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                             new Term<>(List.of("b"), ExactRatio.of(weights[1]), TYPE, OPEN,
                                     "n", true, Granularity.DISCRETE, TYPE));
                     Set<String> out = WhatARelationLeavesUndivided.ofTheirDifference(terms,
-                            ExactRatio.of(constant), relation, List.of(),
+                            WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)),
+                            relation, List.of(),
                             new WhatARelationLeavesUndivided.WhereTheRepresentationStops(TYPE),
                             String::equals, BigInteger.valueOf(GREATEST),
                             WhatARelationLeavesUndivided.Operations.NONE, true);

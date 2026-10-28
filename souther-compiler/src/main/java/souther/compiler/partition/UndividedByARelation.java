@@ -3694,7 +3694,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds run = sides.get(pair.first()).number() instanceof NumericTerm.TakenOf
                 ? terms.get(0).realizes()
                 : on.whereItStops();
-        return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.constant(), relation, held,
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.beside(), relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
                 UndividedByARelation::overlap, greatestOf(on), operations, sizesAreRowsComputed);
     }
@@ -3753,10 +3753,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.add(null);
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
-                pair.constant(), relation, held, UndividedByARelation::overlap, greatestOf(on),
+                pair.beside(), relation, held, UndividedByARelation::overlap, greatestOf(on),
                 operations, sizesAreRowsComputed));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
-                pair.constant(), relation, held, UndividedByARelation::overlap, greatestOf(on),
+                pair.beside(), relation, held, UndividedByARelation::overlap, greatestOf(on),
                 operations, sizesAreRowsComputed));
         return out;
     }
@@ -3766,10 +3766,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param first    the first side's place in the relation's sides
      * @param second   the second side's
-     * @param constant the constant the two are held against: the relation's own, and with a third
-     *                 side held still, what that comes to at the value it is held at
+     * @param beside   the addends the two are held against, each apart: the relation's constant,
+     *                 and with a third side held still, that side's weighed value at the value it
+     *                 is held at. Null where the relation's constant is no number.
      */
-    private record TwoSides(int first, int second, ExactRatio constant) {}
+    private record TwoSides(int first, int second, WhatARelationLeavesUndivided.Beside beside) {}
 
     /**
      * The two sides that stand apart by a difference, where the relation is over two sides of one
@@ -3789,7 +3790,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             SearchRegion region, WhatARelationLeavesUndivided.Independence independent) {
         if (sides.size() == 2) {
             return carriers.get(0) != null && carriers.get(0).equals(carriers.get(1))
-                    ? new TwoSides(0, 1, constant) : null;
+                    ? new TwoSides(0, 1, constant == null ? null
+                            : WhatARelationLeavesUndivided.Beside.just(constant)) : null;
         }
         if (sides.size() != 3 || kind != Kind.AFFINE || remainder != null) {
             return null;
@@ -3812,9 +3814,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             ExactRatio weighed = at == null || (carriers.get(held).spacingBetweenValues()
                     == Granularity.DISCRETE && !at.isWhole()) ? null
                     : at.times(sides.get(held).weight()).orNull();
-            ExactRatio moved = weighed == null ? null : constant.plus(weighed).orNull();
-            if (moved != null) {
-                return new TwoSides(first, second, moved);
+            if (weighed != null && constant != null) {
+                return new TwoSides(first, second,
+                        new WhatARelationLeavesUndivided.Beside(List.of(constant, weighed)));
             }
         }
         return null;
