@@ -1361,8 +1361,11 @@ public sealed interface AnotherLineTheRowsAllow {
             }
             Map<NumericTerm, Place> moved = movedBy(boundary, values, along, steps);
             if (moved != null) {
-                found.add(new Parting(moved, reaches.stillArrives(values, moved),
-                        keptByTheOthers(elsewhere, moved), steps.abs()));
+                // The preference is read only of an input a row arrives at: the others are
+                // dropped before it is asked of anything.
+                boolean reached = reaches.stillArrives(values, moved);
+                found.add(new Parting(moved, reached,
+                        reached && keptByTheOthers(elsewhere, moved), steps.abs()));
             }
         }
     }
