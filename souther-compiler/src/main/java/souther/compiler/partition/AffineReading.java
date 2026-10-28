@@ -71,6 +71,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     sealed interface OfAComparison {
 
         /**
+         * What reading the comparison told of the operations a row of its lines gets past: what
+         * the walk collected where it read a line, and no claim where it did not. A comparison
+         * that was not read as a sum the walk composed says nothing of what the program works
+         * out, which is not that the program adds the form up.
+         *
+         * <p>The one exception is a reading that stopped at an expression of its own analysis's
+         * (a product, a remainder, a quotient by an input): the lines drawn from it are that
+         * analysis's, built from the statement's form and not from this walk, and it answers for
+         * its rows by the form's sizes ({@link UndividedByARelation.Working#NOTHING}).
+         */
+        static UndividedByARelation.Working workingOf(OfAComparison read) {
+            return switch (read) {
+                case Cuts cuts -> cuts.working();
+                case Stopped _ -> UndividedByARelation.Working.NOTHING;
+                case CutsNothing _, NotHeld _ -> UndividedByARelation.Working.UNREAD;
+            };
+        }
+
+        /**
          * The line the comparison draws.
          *
          * @param mirrored whether the form is the right side less the left rather than the left

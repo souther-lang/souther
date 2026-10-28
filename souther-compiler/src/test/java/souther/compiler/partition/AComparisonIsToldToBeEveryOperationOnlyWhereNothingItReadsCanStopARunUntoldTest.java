@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.ExactRatio;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,6 +76,21 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
                         ExactRatio.of(each.greatest())) > 0)
                 .findFirst().orElse(null);
         assertTrue(past != null, () -> "the sum past the greatest value is told: " + working);
+    }
+
+    /**
+     * A comparison that was read but cuts no line, or whose difference no number holds, says
+     * nothing of what the program works out. That is not that the program adds the form up, which
+     * is what a row computed by the form's sizes assumes.
+     */
+    @Test
+    void aComparisonThatDrewNoLineTellsNothingOfWhatTheProgramWorksOut() {
+        assertEquals(UndividedByARelation.Working.UNREAD,
+                AffineReading.OfAComparison.workingOf(new AffineReading.OfAComparison.CutsNothing(
+                        Set.of(), ExactRatio.ZERO)));
+        assertEquals(UndividedByARelation.Working.UNREAD,
+                AffineReading.OfAComparison.workingOf(
+                        new AffineReading.OfAComparison.NotHeld(Set.of())));
     }
 
     @Test

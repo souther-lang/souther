@@ -810,9 +810,8 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,
                     () -> aboutNoPosition(comparison, reads, read.newtypes()), witnesses,
-                    () -> conditions.comparison(comparison, reads, read).arithmetic().get()
-                            instanceof AffineReading.OfAComparison.Cuts cuts
-                            ? cuts.working() : UndividedByARelation.Working.NOTHING);
+                    () -> AffineReading.OfAComparison.workingOf(
+                            conditions.comparison(comparison, reads, read).arithmetic().get()));
             // One rule and a line for each relation it holds, each line read as a comparison of
             // one line is and carrying where it decides.
             case Cutting.Read.Several several -> eachLineOf(behavior,

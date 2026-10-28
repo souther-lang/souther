@@ -1132,8 +1132,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** What the reading of the comparison on {@code onTheInput} told of its operations: nothing
      *  said where it was not read as a sum the walk composed. */
     private static UndividedByARelation.Working workingOf(Pullback.OnTheInput onTheInput) {
-        return onTheInput.arithmetic().get() instanceof AffineReading.OfAComparison.Cuts cuts
-                ? cuts.working() : UndividedByARelation.Working.NOTHING;
+        return AffineReading.OfAComparison.workingOf(onTheInput.arithmetic().get());
     }
 
     /**
@@ -1599,8 +1598,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
             case CountsWrittenOut.Written(Proposition written) ->
                     switch (several(behavior, comparison.left(), written, read, reads, authors,
-                            arithmetic.get() instanceof AffineReading.OfAComparison.Cuts cuts
-                                    ? cuts.working() : UndividedByARelation.Working.NOTHING)) {
+                            AffineReading.OfAComparison.workingOf(arithmetic.get()))) {
                         case TheParts.Drawn(Read.Several lines) -> lines;
                         case TheParts.NotDrawn none when none.readToTheEnd() ->
                                 severalNotDrawn(comparison, read, reads, answering);
