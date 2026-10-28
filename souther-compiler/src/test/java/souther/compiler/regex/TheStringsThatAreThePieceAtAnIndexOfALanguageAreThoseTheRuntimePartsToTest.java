@@ -146,6 +146,21 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
         assertEquals(null, StringsOfAPiece.pieceAt(whole, ';', 25_000_000, 1, ALLOWANCE));
     }
 
+    /**
+     * A string the language reads as {@code E}, a combining acute and then more is changed by
+     * normalization, so it is no value and no value has its piece. The pieces of the values are
+     * then not the pieces of the strings, and are not told; where every string is its own
+     * normalization they are the same, and are.
+     */
+    @Test
+    void thePiecesOfTheValuesAreToldOnlyWhereNoStringOfTheLanguageIsChangedByNormalization() {
+        assertEquals(null, StringsOfAPiece.pieceOfAValueAt(language("A;A|E\\u0301;B"), ';', 1, 1,
+                ALLOWANCE));
+        Language whole = language("A;[A-C]|D;B");
+        assertEquals(StringsOfAPiece.pieceAt(whole, ';', 1, 1, ALLOWANCE),
+                StringsOfAPiece.pieceOfAValueAt(whole, ';', 1, 1, ALLOWANCE));
+    }
+
     /** The strings that have a piece are asked of strings a String holds, so no index bounds them
      *  but the machine it takes. */
     @Test

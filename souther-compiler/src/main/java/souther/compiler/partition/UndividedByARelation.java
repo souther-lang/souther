@@ -1560,18 +1560,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The strings that are {@code piece} of some string of {@code whole}, for the strings of up
+     * The strings that are {@code piece} of some value of {@code whole}, for the strings of up
      * to {@code longest} code points, or null where {@code whole} is not a language of strings,
      * the machine for them is more than a piece's allowance, or the pieces of that length are not
-     * all the pieces of strings a {@code String} holds ({@link StringsOfAPiece#pieceAt}).
+     * all the pieces of values ({@link StringsOfAPiece#pieceOfAValueAt}).
      */
     private static ValueSet stringsThatAreThePiece(Quantity.ThePieceAt piece, ValueSet whole,
                                                    long longest) {
         if (!(whole instanceof ValueSet.Matching(Language language))) {
             return null;
         }
-        Language image = StringsOfAPiece.pieceAt(language, piece.separator(), piece.index(),
-                longest, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        Language image = StringsOfAPiece.pieceOfAValueAt(language, piece.separator(),
+                piece.index(), longest, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
         return image == null ? null : ValueSet.matching(image);
     }
 

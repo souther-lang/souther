@@ -217,6 +217,26 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     }
 
     /**
+     * A language holds sequences of code points, and a String holds only those in Normalization
+     * Form C. The second piece of the one email the language reads as {@code e}, a combining acute
+     * and {@code @b} is {@code b}, and no value has it: an email arrives as {@code é@b}, which the
+     * language does not hold. So no domain is the second piece of an email but {@code a}, and
+     * neither of the two domains the book can hold is parted by it.
+     */
+    @Test
+    void aPieceOfAStringNoValueIsIsNoPieceOfAValue() {
+        assertEquals(Map.of(), classesAtOf("book[*].domain@Some", "a@a|e\\\\u0301@b",
+                "b|c", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+    }
+
+    /** And the emails are not parted by a piece only a string no value is has. */
+    @Test
+    void anEmailWhoseOnlyMatchingPieceIsThatOfAStringNoValueIsIsNotPartedByIt() {
+        assertEquals(Map.of(), classesAtOf("email", "a@a|e\\\\u0301@b", "b|c",
+                THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
+    }
+
+    /**
      * Where the domains have no length the model bounds, one near the longest string is the piece
      * of no email, though the language of the pieces holds it: the domains are not parted by it.
      */

@@ -28,19 +28,44 @@ import souther.runtime.Strings;
  * separators, each reached through pieces that hold none, are where the piece begins, and it ends
  * where the string does or at a separator that the rest of some string of the language follows.
  *
- * <p>A language bounds the strings and does not know that a {@code String} holds no more than
- * {@link Strings#LONGEST_TEXT} code points. The strings that have a piece in a language
- * ({@link #wholesWithAPieceIn}) are told apart exactly: whether a string has a piece there is
- * a question about that string, and every string asked about is one a {@code String} holds. The
- * pieces of the strings of a language ({@link #pieceAt}) are not: a piece is one of a string that
- * is longer than it by the stretches before it and after it, so a piece near the longest string
- * is in the language of pieces, which does not know that, and is the piece of no value. That
- * language is answered only for the pieces of up to a length the caller asks it for, which
- * {@link #fitsAString} says every such piece is a piece of a value.
+ * <p>A language holds sequences of code points, and a {@code String} holds only those in
+ * Normalization Form C that are no longer than {@link Strings#LONGEST_TEXT}. The strings that have
+ * a piece in a language ({@link #wholesWithAPieceIn}) are told apart exactly: whether a string has
+ * a piece there is a question about that string, and every string asked about is a value. The
+ * pieces of the values of a language ({@link #pieceOfAValueAt}) are not the pieces of its strings,
+ * which are the pieces of strings no value is as well: one of a string that is changed by
+ * normalization, or one near the longest string, which is longer than any piece by the stretches
+ * round it. They are answered only where the two are the same, and not otherwise.
  */
 public final class StringsOfAPiece {
 
     private StringsOfAPiece() {
+    }
+
+    /**
+     * The pieces at {@code index} of the values of {@code whole} parted at {@code separator}, of
+     * up to {@code longest} code points, or null where they are not worked out exactly: where
+     * making the machines for them is more than {@code meter} allows, where a piece of that length
+     * may be that of no string a {@code String} holds ({@link #fitsAString}), or where the pieces
+     * of the strings of the language are not those of the strings it holds as written
+     * ({@link StringsHeldAsWritten}), a subset of its values, so that a piece of some string of the
+     * language may be the piece of no value.
+     *
+     * <p>What the language holds of its strings that is no value is not told from here, so the
+     * pieces of its strings are the pieces of its values only where the strings that are surely
+     * values already have all of them. They are then both, and are all that is, without the
+     * values being listed.
+     */
+    public static Language pieceOfAValueAt(Language whole, int separator, int index,
+                                           long longest, Meter meter) {
+        Language ofTheStrings = pieceAt(whole, separator, index, longest, meter);
+        if (ofTheStrings == null) {
+            return null;
+        }
+        Language written = whole.heldAsWritten().language(meter);
+        Language ofTheWritten = written == null ? null
+                : pieceAt(written, separator, index, longest, meter);
+        return ofTheStrings.equals(ofTheWritten) ? ofTheStrings : null;
     }
 
     /**
@@ -65,7 +90,7 @@ public final class StringsOfAPiece {
      * {@code String} holds ({@link #fitsAString}) — which is wherever the caller cannot say its
      * pieces are shorter than the longest string by the stretches round them.
      */
-    public static Language pieceAt(Language whole, int separator, int index, long longest,
+    static Language pieceAt(Language whole, int separator, int index, long longest,
                                    Meter meter) {
         if (index < 0) {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
