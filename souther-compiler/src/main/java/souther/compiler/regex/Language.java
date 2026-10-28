@@ -249,11 +249,12 @@ public final class Language {
     }
 
     /**
-     * Whether it holds a string a {@code String} holds as written ({@link StringsHeldAsWritten}).
-     * Answered without making their machine.
+     * The fewest code points a string of it a {@code String} holds as written has
+     * ({@link StringsHeldAsWritten}), or -1 where it holds none. Answered without making their
+     * machine.
      */
-    public boolean holdsAStringAsWritten() {
-        return !StringsHeldAsWritten.holdsNoneIn(machine);
+    public long shortestHeldAsWritten() {
+        return StringsHeldAsWritten.shortestIn(machine);
     }
 
     /**

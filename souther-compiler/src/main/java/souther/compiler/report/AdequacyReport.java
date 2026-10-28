@@ -86,7 +86,9 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AuthoredOrder;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -295,7 +297,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 26;
+    public static final int SCHEMA_VERSION = 27;
 
     /**
      * Where the schema this writes documents ships.
@@ -3883,8 +3885,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
                 out.append(String.format("      %s may stop a run: %s — a run that reaches it may"
-                                + " stop in an operation it is read through%s%n",
+                                + " stop in an operation it is read through%s%s%n",
                         mark(f), cited(it.cited(), rendering, declaredIn, places),
+                        everyRunStopsAt(it.everyRunStops()),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn)));
             }
@@ -3957,6 +3960,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " relates the value here to another value, but a run may stop on the way to"
                     + " it on values this compiler does not say, so not every value here is shown"
                     + " to get to it";
+            case RELATION_SHOWN_OVER_A_REGION -> "what it states was read, and it relates the"
+                    + " value here to another value; its classes hold the values it was shown over,"
+                    + " and the rest are shown on neither side of it";
             case RULE_RELATING_TWO_VALUES ->
                     "it relates the value here to another value rather than dividing the values here";
             case RULE_RELATING_ELEMENTS -> "it says how the elements here stand to each other,"
@@ -4045,6 +4051,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "whether the values stop on";
             case StandingQuestion.NothingClassifiesIt _ ->
                     "what this rule states about";
+            // A third: the rule's classes stand, and what nothing worked out is which of them some
+            // values are in.
+            case StandingQuestion.RegionUndetermined _ ->
+                    "which class this rule puts some values in at";
         };
     }
 
@@ -6052,9 +6062,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param figures every figure the stops of this entry were met at, each once and in
      *                {@link Figure#inOrder}: what is said beside the entry and not what tells it
      *                from another
+     * @param leftOpen which values a relation shown over some of them was not shown over, which
+     *                 tells two entries apart: two of them leave two sets of values open
      */
     private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
-                                 List<Figure> figures) {
+                                 List<Figure> figures,
+                                 Optional<BlockReason.RelationShownOverARegion> leftOpen) {
+    }
+
+    /** Where every run getting to a rule stops, as the human report says it after the rule. */
+    private static String everyRunStopsAt(List<EveryRunStops> stops) {
+        StringBuilder out = new StringBuilder();
+        for (EveryRunStops each : stops) {
+            out.append(out.isEmpty() ? "; every run stops " : ", ")
+                    .append("in ").append(each.operation()).append(" where ");
+            for (int i = 0; i < each.where().size(); i++) {
+                EveryRunStops.Within within = each.where().get(i);
+                out.append(i == 0 ? "" : " and ").append(within.form());
+                if (within.least() != null && within.least().equals(within.greatest())) {
+                    out.append(" is ").append(within.least());
+                } else if (within.least() != null && within.greatest() != null) {
+                    out.append(" is ").append(within.least()).append(" to ")
+                            .append(within.greatest());
+                } else if (within.least() != null) {
+                    out.append(" is at least ").append(within.least());
+                } else {
+                    out.append(" is at most ").append(within.greatest());
+                }
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * Where the values a relation shown over some of them was not shown over lie, as an entry of a
+     * question's {@code stopped} writes it: past which length some are, and whether some are open
+     * whatever their length. A bound on them, as {@link BlockReason.RelationShownOverARegion}
+     * says, and not which they are.
+     */
+    private static void leftOpen(ObjectNode into, BlockReason.RelationShownOverARegion open) {
+        ObjectNode left = into.putObject("leftOpen");
+        if (open.longerThan() != null) {
+            left.put("longerThan", open.longerThan());
+        }
+        left.put("atAnyLength", open.atAnyLength());
     }
 
     /**
@@ -6071,16 +6122,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
                                                       WhereAPartIs parts) {
-        record WordAtAPlace(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {}
+        record WordAtAPlace(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
+                            Optional<BlockReason.RelationShownOverARegion> leftOpen) {}
         Map<WordAtAPlace, List<Figure>> out = new LinkedHashMap<>();
         for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
             out.computeIfAbsent(
-                    new WordAtAPlace(each.reason(), placeInTheRule(each.sentTo(), parts)),
+                    new WordAtAPlace(each.reason(), placeInTheRule(each.sentTo(), parts),
+                            each.leftOpen()),
                     _ -> new ArrayList<>()).addAll(each.figures());
         }
         List<PublishedStop> written = new ArrayList<>();
-        out.forEach((entry, figures) -> written.add(
-                new PublishedStop(entry.reason(), entry.sentTo(), Figure.inOrder(figures))));
+        out.forEach((entry, figures) -> written.add(new PublishedStop(entry.reason(),
+                entry.sentTo(), Figure.inOrder(figures), entry.leftOpen())));
         return List.copyOf(written);
     }
 
@@ -7582,7 +7635,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // neither has a subject. What the `path` beside this names is where a reader is sent to
             // look, which is one word because it is one thing.
             case StandingQuestion.BoundaryUndetermined _,
-                 StandingQuestion.NothingClassifiesIt _ -> "filedAt";
+                 StandingQuestion.NothingClassifiesIt _,
+                 StandingQuestion.RegionUndetermined _ -> "filedAt";
         };
     }
 
@@ -7605,6 +7659,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case StandingQuestion.Exact it -> word(it.obligation());
             case StandingQuestion.BoundaryUndetermined _ -> "boundaryNotDetermined";
             case StandingQuestion.NothingClassifiesIt _ -> "notDetermined";
+            case StandingQuestion.RegionUndetermined _ -> "regionNotDetermined";
         };
     }
 
@@ -8125,6 +8180,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ObjectNode standsOn = stopped.addObject();
                         standsOn.put("reason", word(stop.reason()));
                         figuresMet(standsOn, stop.figures());
+                        stop.leftOpen().ifPresent(open -> leftOpen(standsOn, open));
                         stop.sentTo().ifPresent(
                                 at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
@@ -9276,6 +9332,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (finding.about() instanceof About.OfSomethingNotRead about) {
             f.put("reason", word(about.finding().reason()));
         }
+        // And where every run getting to a rule a run may stop in is shown to stop: the
+        // operation it stops in, and the rows, as forms between their ends.
+        if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
+                && !it.everyRunStops().isEmpty()) {
+            ArrayNode stops = f.putArray("everyRunStops");
+            for (EveryRunStops each : it.everyRunStops()) {
+                ObjectNode one = stops.addObject();
+                one.put("operation", each.operation());
+                ArrayNode where = one.putArray("where");
+                for (EveryRunStops.Within within : each.where()) {
+                    ObjectNode bound = where.addObject();
+                    bound.put("form", within.form());
+                    if (within.least() != null) {
+                        bound.put("least", within.least());
+                    }
+                    if (within.greatest() != null) {
+                        bound.put("greatest", within.greatest());
+                    }
+                }
+            }
+        }
         // Present where the kind has one. A finding a build is not told about under any code is
         // not one with an empty code, and a consumer joining these to the diagnostics a build
         // printed reads the difference.
@@ -10213,7 +10290,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // this word says and the one thing a build held to it acts on. Which of them
                     // it is, is what the question beside it says.
                     case StandingQuestion.BoundaryUndetermined _,
-                         StandingQuestion.NothingClassifiesIt _ ->
+                         StandingQuestion.NothingClassifiesIt _,
+                         StandingQuestion.RegionUndetermined _ ->
                             WeakeningWord.RULE_UNREAD;
                 };
                 case ClosureGap.RulesNotReached _ ->

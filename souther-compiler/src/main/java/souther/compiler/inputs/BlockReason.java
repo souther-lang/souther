@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.ValuesWithin;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.
@@ -298,6 +299,7 @@ public sealed interface BlockReason {
                 case RelationNotShownWhereTheSearchStopped _ -> 25;
                 case RelationNotShownReachedAtEveryValue _ -> 26;
                 case OrderedExtentEndIsNoValue _ -> 27;
+                case RelationShownOverARegion _ -> 29;
             };
         }
 
@@ -321,6 +323,12 @@ public sealed interface BlockReason {
                 case RelationNotShownWhereTheSearchStopped(List<Figure> stoppedAt) ->
                         Figure.compare(stoppedAt,
                                 ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
+                case RelationShownOverARegion(boolean atAnyLength, Long longerThan) -> {
+                    RelationShownOverARegion them = (RelationShownOverARegion) other;
+                    int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
+                    yield byLength != 0 ? byLength : Comparator.nullsFirst(Long::compare)
+                            .compare(longerThan, them.longerThan());
+                }
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -369,6 +377,9 @@ public sealed interface BlockReason {
                 // And where one line of several decides was not worked out, which is a question
                 // about the line and asks nothing of the values the rules leave.
                 case WhereALineDecidesNotWorkedOut _ -> false;
+                // And a relation shown over some of the values here: what the position admits is
+                // what the rules leave, and what is open is which class some of them are in.
+                case RelationShownOverARegion _ -> false;
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
@@ -424,7 +435,8 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _, RelationNotShownReachedAtEveryValue _ ->
+                     RelationNotShownToReachEveryValue _, RelationNotShownReachedAtEveryValue _,
+                     RelationShownOverARegion _ ->
                         RunSensitivity.UNAFFECTED;
             };
         }
@@ -457,7 +469,7 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _ -> List.of();
+                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _ -> List.of();
             };
         }
     }
@@ -1297,6 +1309,55 @@ public sealed interface BlockReason {
      * way wherever a row gets to it is not this, since that is said whichever values get there.
      */
     record RelationNotShownReachedAtEveryValue() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value; the
+     * classes it draws here are shown over some of the values, and the rest are shown on neither
+     * side of it.
+     *
+     * <p>Under {@code a.domain == d} with {@code d} the domain of an address, a domain is shown to
+     * be one some address has where an address can be written round it within the longest
+     * {@code String}, and a domain no address has is shown that whatever its length. The longest
+     * domains are neither, and no class here holds them.
+     *
+     * <p>Apart from {@link RelationNotShownToReachEveryValue}, which leaves the position no class
+     * of the rule's. Here the classes stand over what was shown, and what this says is where the
+     * values they do not hold lie.
+     *
+     * <p>A bound on those values and not the values. Of the strings longer than {@code longerThan},
+     * those the relation is shown of at every length are in a class all the same — a domain no
+     * address has is shown to be none whatever its length — and which of them are open is the
+     * relation's to say, and the classes say which values they hold. What a reader is told is
+     * where to look, and the one value a question carries is this summary: the values themselves
+     * are a language, which no answer the store keeps holds.
+     *
+     * @param atAnyLength whether some values here are shown on neither side whatever their length
+     * @param longerThan  the fewest code points less one of a value left open for its length: some
+     *                    longer may be in no class, and none shorter is for that; null where no
+     *                    value is left open for its length
+     */
+    record RelationShownOverARegion(boolean atAnyLength, Long longerThan)
+            implements RuleReadingStopped {
+
+        public RelationShownOverARegion {
+            if (!atAnyLength && longerThan == null) {
+                throw new IllegalArgumentException("a relation shown over a region leaves some"
+                        + " values open");
+            }
+        }
+
+        /**
+         * What a reader is shown of the values {@code open} holds, each as long as it is left
+         * open at: whether some are open whatever their length, and the fewest code points the
+         * rest are longer than.
+         */
+        public static RelationShownOverARegion of(List<ValuesWithin> open) {
+            boolean atAnyLength = open.stream().anyMatch(each -> each.shortest() == 0);
+            Long longerThan = open.stream().filter(each -> each.shortest() > 0)
+                    .map(each -> each.shortest() - 1).min(Long::compare).orElse(null);
+            return new RelationShownOverARegion(atAnyLength, longerThan);
+        }
+    }
 
     /**
      * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:

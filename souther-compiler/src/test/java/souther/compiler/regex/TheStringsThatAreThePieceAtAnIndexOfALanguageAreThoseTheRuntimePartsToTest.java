@@ -9,7 +9,9 @@ import net.unit8.notation199x.pattern.PatternRead;
 import souther.runtime.Strings;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -175,6 +177,60 @@ class TheStringsThatAreThePieceAtAnIndexOfALanguageAreThoseTheRuntimePartsToTest
     void anIndexTheMeterCannotAffordIsRefused() {
         assertEquals(null, StringsOfAPiece.wholesWithAPieceIn(language("A7"), ';', 10,
                 new Meter(5, 5, 5)));
+    }
+
+    /**
+     * What a piece is said to give up of the longest string is no less than what the shortest
+     * string of the language with the piece there is longer than the piece by — over every piece of
+     * every string of up to eight code points, so a stretch the walk misses on either side of a
+     * piece would be a piece standing in a shorter string than the one said.
+     */
+    @Test
+    void thePieceIsShownInAStringNoLongerThanItAndTheStretchesSaidRoundIt() {
+        List<String> wholes = everyStringOfUpTo(MOST_WHOLE);
+        for (String regex : WHOLES) {
+            Language whole = language(regex);
+            List<String> held = wholes.stream().filter(whole::has).toList();
+            for (int index = 0; index < 4; index++) {
+                long around = StringsOfAPiece.mostAround(whole.machine(), ';', index);
+                Map<String, Integer> shortest = new HashMap<>();
+                for (String each : held) {
+                    List<String> parts = Strings.split(each, ";");
+                    if (parts.size() > index) {
+                        shortest.merge(parts.get(index), each.codePointCount(0, each.length()),
+                                Math::min);
+                    }
+                }
+                for (Map.Entry<String, Integer> each : shortest.entrySet()) {
+                    long piece = each.getKey().codePointCount(0, each.getKey().length());
+                    assertEquals(true, each.getValue() - piece <= around,
+                            regex + " at " + index + ": " + each);
+                }
+            }
+        }
+    }
+
+    /**
+     * An address written round a domain is two code points longer than it, and every domain held
+     * as written up to the longest string less those two is shown to be the domain of an address
+     * that is a value. A domain an address holds only through a code point normalization changes
+     * is a piece of its strings and not shown one of its values, so the two are not told the same.
+     */
+    @Test
+    void aPieceIsShownTheValueOfAStringWrittenRoundIt() {
+        Language email = language("[^@\\s]+@[^@\\s]+\\.[^@\\s]+");
+        StringsOfAPiece.Shown shown = StringsOfAPiece.piecesOfValuesAt(email, '@', 1, ALLOWANCE);
+        assertNotNull(shown);
+        assertEquals(Strings.LONGEST_TEXT - 2, shown.upTo());
+        assertEquals(true, shown.ofTheValues().has("example.com"));
+        assertEquals(false, shown.ofTheStrings().has("example"));
+        assertEquals(false, shown.allUpTo(1));
+
+        Language ascii = language("[a-z]+@[a-z]+\\.[a-z]+");
+        StringsOfAPiece.Shown written = StringsOfAPiece.piecesOfValuesAt(ascii, '@', 1, ALLOWANCE);
+        assertNotNull(written);
+        assertEquals(true, written.allUpTo(Strings.LONGEST_TEXT - 2));
+        assertEquals(false, written.allUpTo(Strings.LONGEST_TEXT - 1));
     }
 
     @Test
