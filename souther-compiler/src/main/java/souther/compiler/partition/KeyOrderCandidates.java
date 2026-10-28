@@ -481,7 +481,8 @@ public final class KeyOrderCandidates {
     }
 
     /** What a composer would write at a scalar type, as the values an observation holds: what the
-     *  type's own decoder makes of each value it offers. */
+     *  type's own decoder makes of each value it offers. None where there is nothing to build
+     *  against, which is also where nothing can run a candidate to confirm it. */
     private static List<ObservedValue> composedAt(MeasuredInput subject,
                                                   Generator.CandidateCheck check, Type.Prim prim) {
         List<ObservedValue> out = new ArrayList<>();

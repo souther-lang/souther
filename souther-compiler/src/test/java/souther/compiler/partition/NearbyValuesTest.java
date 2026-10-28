@@ -169,6 +169,105 @@ class NearbyValuesTest {
         assertTrue(near.hasNext(), "the rest are still to come");
     }
 
+    private static ObservedValue decimal(String text) {
+        return new ObservedValue.Decimal(new java.math.BigDecimal(text));
+    }
+
+    private static List<ObservedValue> oneUnitFrom(ObservedValue value, Type type) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.oneUnitFrom(value, type, READING).forEachRemaining(out::add);
+        return out;
+    }
+
+    /** A decimal is a unit of its scale from the next, either way, where it has no neighbour. */
+    @Test
+    void aDecimalIsOneUnitOfItsScaleFromTheNext() {
+        assertEquals(List.of(decimal("0.1"), decimal("-0.1")), oneUnitFrom(decimal("0.0"),
+                Type.DECIMAL));
+        assertEquals(List.of(decimal("3"), decimal("1")), oneUnitFrom(decimal("2"),
+                Type.DECIMAL));
+        assertEquals(List.of(), all(decimal("0.0"), Type.DECIMAL),
+                "the moves of a number seen are not changed by this");
+    }
+
+    /** A whole number is moved by one here as it is there, inside what holds it. */
+    @Test
+    void aUnitStepIsTakenInsideARecordAndANewtype() {
+        ObservedValue priced = new ObservedValue.Constructed(declared("Priced"), Map.of(
+                "code", new ObservedValue.Constructed(declared("Code"), Map.of("value", whole(3))),
+                "price", decimal("1.50")));
+
+        List<ObservedValue> near = new ArrayList<>();
+        NearbyValues.oneUnitFrom(priced, Type.ref(declared("Priced")), READING)
+                .forEachRemaining(near::add);
+
+        assertEquals(4, near.size(), "the code up and down, the price up and down");
+    }
+
+    /** A decimal written to more places than the host can step by has no unit step, and is not
+     *  an error. */
+    @Test
+    void aDecimalTooWideToStepHasNoUnitStep() {
+        ObservedValue wide = new ObservedValue.Decimal(
+                java.math.BigDecimal.ONE.scaleByPowerOfTen(Integer.MAX_VALUE));
+
+        assertEquals(List.of(), oneUnitFrom(wide, Type.DECIMAL));
+    }
+
+    private static List<ObservedValue> grown(InputsRowsRanWith ranWith,
+                                             java.util.function.Function<Type, List<ObservedValue>> stoodFor) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.grown(new ObservedValue.Sequence(List.of()), Type.list(Type.INT), READING,
+                ranWith, stoodFor).forEachRemaining(out::add);
+        return out;
+    }
+
+    private static ObservedValue listOf(ObservedValue... elements) {
+        return new ObservedValue.Sequence(List.of(elements));
+    }
+
+    private static InputsRowsRanWith ranWithInts(int count) {
+        List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            rows.add(List.of(new InputsRowsRanWith.Taken(Type.INT, whole(100 + i))));
+        }
+        return InputsRowsRanWith.of(rows.isEmpty() ? List.of() : List.of(rows), List.of());
+    }
+
+    /** What the rows ran with and what stands for the type are taken in turn, so that the type's
+     *  are reached however many the rows ran with. */
+    @Test
+    void theRowsAndTheTypeAreTakenInTurn() {
+        List<ObservedValue> grown = grown(ranWithInts(50), _ -> List.of(whole(0), whole(1)));
+
+        assertEquals(List.of(listOf(whole(100)), listOf(whole(0)), listOf(whole(101)),
+                listOf(whole(1))), grown.subList(0, 4));
+        assertEquals(52, grown.size(), "and what is left of the longer is taken after");
+    }
+
+    @Test
+    void aValueTheRowsRanWithIsNotOfferedAgainFromTheType() {
+        List<ObservedValue> grown = grown(ranWithInts(1), _ -> List.of(whole(100), whole(7)));
+
+        assertEquals(List.of(listOf(whole(100)), listOf(whole(7))), grown);
+    }
+
+    /** What stands for the type is made when it is first wanted. */
+    @Test
+    void theTypesValuesAreAskedForOnlyWhenTheSecondIsWanted() {
+        int[] asked = {0};
+        Iterator<ObservedValue> grown = NearbyValues.grown(new ObservedValue.Sequence(List.of()),
+                Type.list(Type.INT), READING, ranWithInts(3), _ -> {
+                    asked[0]++;
+                    return List.of(whole(0));
+                });
+
+        grown.next();
+        assertEquals(0, asked[0]);
+        grown.next();
+        assertEquals(1, asked[0]);
+    }
+
     private static TypeSymbol declared(String name) {
         return TypeSymbols.declared(new TypeKey("example.nearby", name));
     }

@@ -43,6 +43,8 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
             new Case("", "Int", "Int", "List.fold((acc, x) -> acc + x, 0, xs)", "0"),
             new Case("", "Decimal", "Decimal", "List.fold((acc, x) -> acc + x, 0.0m, xs)", "0.0m"),
             new Case("", "String", "Int", "List.length(xs)", "0"),
+            new Case("", "String", "String", "String.concat(xs)", "\"\""),
+            new Case("", "List<Int>", "Int", "List.length(xs)", "0"),
             new Case("", "Bool", "Int", "List.length(xs)", "0"),
             new Case("", "Date", "Int", "List.length(xs)", "0"),
             new Case("""
