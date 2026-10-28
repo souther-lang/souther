@@ -10176,6 +10176,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // was read against it — apart from `BorderValueUnreadable`, which is a row's value once
             // a line already known to ask for one.
             case Weakening.ItemsPlaceNotWorkedOut _ -> WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT;
+            case Weakening.AWeightNotDecided _ -> WeakeningWord.A_WEIGHT_NOT_DECIDED;
             case Weakening.AReadingNotTiedToItsLine _ ->
                     WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {

@@ -85,9 +85,11 @@ position twice: it moves each of them away from the border on the side the model
 is where the rule holds is the comparison's too, since a strict comparison holds one value further up
 than a non-strict one.
 
-What this establishes is what E1938 establishes and no more: no fault of one step in one weight is
-left, which is a fault domain stated and not the weights pinned down. A rule weighing a position by
-two and a half lies between the weights this tries.
+What this establishes is no fault of one step in one weight with the threshold the model wrote: a
+fault domain stated and not the weights pinned down. A rule weighing a position by two and a half lies
+between the weights this tries. E1938 states a wider domain for a border cut at one place, where the
+threshold of the line beside it may move as well; the two are separate fault models and neither
+contains the other.
 
 Only the readings of a row that stand at a border's point are evidence of it. A row inside a
 container has a reading for each element, and one of them standing at the point is no reason to take
@@ -112,18 +114,22 @@ moves with every row written, and an obligation whose identity moved with them w
 obligation every run. It is a warning, E1940, and it appears in the document under `partition.weights`
 beside the borders, each entry with the word `shown`, `not_shown` or `undecided`.
 
-It sits beside the lines one step from a border (E1938), which hold a border against a fault of one
-step in one weight. For a value cut at one place the two are measures of what the rows show about the
-same computation, and a row can answer both, so E1938 stays as it is.
+It is owed only for a value cut at several places. A value cut at one place is no computation shared by
+thresholds and owes no weight here; its border is held against the lines one step from it (E1938), which
+is where a fault of one step in one weight of that border is asked.
 
 For a value cut at several places E1938 is not asked of the thresholds. The weight is a fault of the
 computation, which every threshold reads, so it is owed once, here. A line beside a threshold that
 weighs a position otherwise and moves the constant with it is two faults at once: the weight is owed
-here, and the constant at the ON and OFF points of each threshold. Rows that fix both leave no
-single fault standing, and a fault made of both together is not among the faults either measure
-states. A threshold is recognised by the partition having placed it (`Border.threshold`), and the
-answer is `OwedByTheComputation` whatever the weights came to: an unfixed weight is said under E1940
-and does not bring the lines beside the threshold back.
+here, and the constant at the ON and OFF points of each threshold. A fault made of both together is
+not among the faults either measure states. A threshold is recognised by the partition having placed
+it (`Border.threshold`), and the answer is `OwedByTheComputation` whatever the weights came to: an
+unfixed weight is said under E1940 and does not bring the lines beside the threshold back.
+
+What the weights are short of is the weights' to say, since no border carries it any longer. A weight
+the rows neither fix nor show unfixed is `undecided` in the document and is a weakening of the
+behavior's border measure (`a_weight_not_decided`), so a verdict does not rest on a weight nobody
+established.
 
 ### What each threshold is owed
 

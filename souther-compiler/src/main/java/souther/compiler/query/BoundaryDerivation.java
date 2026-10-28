@@ -102,8 +102,13 @@ public final class BoundaryDerivation {
     }
 
     /** What the measure came to, from what it found and whether its reading ran out. The one place
-     *  the states are chosen between. */
+     *  the states are chosen between.
+     *
+     *  <p>{@code weightsNotDecided} is what the weights of the computations these lines cut went
+     *  without. The borders of a computation cut at several places are not held against the lines
+     *  beside them, so what the weights are short of is said here and nowhere on a border. */
     public static Measure<List<BorderAssessment>> of(List<BorderAssessment> at,
+                                                         WeakeningSet weightsNotDecided,
                                                          MeasureClosure.OfTheBorder closure,
                                                          souther.compiler.inputs.EmptyInput
                                                                  inputIsEmpty) {
@@ -120,7 +125,8 @@ public final class BoundaryDerivation {
                 if (at.isEmpty()) {
                     yield new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
                 }
-                WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at);
+                WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at)
+                        .union(weightsNotDecided);
                 yield beside.isEmpty() ? new Measurement.Complete<>(List.copyOf(at))
                         : new Measurement.Partial<>(List.copyOf(at), beside);
             }
@@ -137,7 +143,8 @@ public final class BoundaryDerivation {
                         ? new Measurement.FailedToMeasure<>(
                                 BodyWasNotRead.BODY_WAS_NOT_READ, without)
                         : new Measurement.Partial<>(List.copyOf(at), without.union(
-                                whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+                                whatHoldingThemAgainstTheirNeighboursWentWithout(at))
+                                .union(weightsNotDecided));
             }
             case MeasureClosure.OfTheBorder.Open open -> {
                 WeakeningSet by = PartitionDerivation.weakening(open.by());
@@ -145,7 +152,8 @@ public final class BoundaryDerivation {
                         ? new Measurement.FailedToMeasure<>(
                                 TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
                         : new Measurement.Partial<>(List.copyOf(at),
-                                by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+                                by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at))
+                                        .union(weightsNotDecided));
             }
         };
     }

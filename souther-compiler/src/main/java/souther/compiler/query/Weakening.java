@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
@@ -9,6 +10,7 @@ import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.Replacement;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -91,7 +93,7 @@ public sealed interface Weakening {
         return switch (this) {
             case ObservationIncomplete it -> it.met().figures();
             case OutputCasesUnreadable _, InputCasesUnreadable _,
-                 ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _,
+                 ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _, AWeightNotDecided _,
                  ABorderNotHeldAgainstTheLinesBesideIt _,
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
@@ -193,6 +195,38 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return why.runSensitivity();
+        }
+    }
+
+    /**
+     * The rows neither fix nor leave unfixed how one position weighs into a value derived from
+     * several positions.
+     *
+     * <p>Nothing was read against the computation, a border of it was not read in full, or the exact
+     * arithmetic gave out on a changed weight or on a row. None of them is a claim about the rows,
+     * so the weight is no finding, and none of them is a weight fixed either: what the weights are
+     * owed was not established, and a verdict that rested on it would rest on nothing.
+     *
+     * <p>Owned by the weights and not by a border. The computation is one however many borders cut
+     * it, and the borders of a computation cut at several places are not asked for the lines beside
+     * them, so no border carries what the weights went without.
+     *
+     * <p>Unaffected by a wider run: no allowance of its own stopped it. Where an allowance did stop
+     * the reading of a border of the computation, that border says so with the figure it stopped
+     * at, and a run that allows more is told by it.
+     */
+    record AWeightNotDecided(String behavior, DerivedValue value, NumericTerm position)
+            implements Weakening {
+
+        public AWeightNotDecided {
+            Objects.requireNonNull(behavior, "a weight not decided is a behavior's");
+            Objects.requireNonNull(value, "a weight is a weight in some computation");
+            Objects.requireNonNull(position, "a weight is the weight of some position");
+        }
+
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 

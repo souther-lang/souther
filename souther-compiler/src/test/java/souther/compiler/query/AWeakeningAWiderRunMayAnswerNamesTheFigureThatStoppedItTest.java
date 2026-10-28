@@ -6,6 +6,7 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.UnheldNumber;
@@ -214,6 +215,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.put("ItemsPlaceNotWorkedOut", new Weakening.ItemsPlaceNotWorkedOut(border(),
                 UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.put("AReadingNotTiedToItsLine", new Weakening.AReadingNotTiedToItsLine(border()));
+        out.put("AWeightNotDecided", new Weakening.AWeightNotDecided("b",
+                OneBorder.derivedValue(), new NumericTerm.ValueOf(TermPath.of("x"))));
         out.put("BorderReadingsNotExhausted", new Weakening.BorderReadingsNotExhausted(border(),
                 WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(256)));
         for (Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why why

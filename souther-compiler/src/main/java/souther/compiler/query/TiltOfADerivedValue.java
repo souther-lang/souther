@@ -263,6 +263,21 @@ public record TiltOfADerivedValue(DerivedValue value, SequencedMap<NumericTerm, 
     }
 
     /**
+     * What a measure over this behavior's lines went without for the weights the rows left
+     * undecided, one fact per position. Empty where every position is fixed or shown unfixed.
+     */
+    public WeakeningSet notDecided(String behavior) {
+        WeakeningSet out = WeakeningSet.none();
+        for (Map.Entry<NumericTerm, Standing> each : positions.entrySet()) {
+            if (each.getValue() instanceof Standing.Undecided) {
+                out = out.union(WeakeningSet.of(
+                        new Weakening.AWeightNotDecided(behavior, value, each.getKey())));
+            }
+        }
+        return out;
+    }
+
+    /**
      * The weighing of the positions the weight of {@code position} is said to be a weight in: the
      * widest of the weighings it is in, which is the one it is least a part of.
      */

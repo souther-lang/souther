@@ -139,6 +139,17 @@ public enum WeakeningWord {
     ITEMS_PLACE_NOT_WORKED_OUT,
 
     /**
+     * The rows neither fix nor leave unfixed how a position weighs into a value derived from
+     * several positions: nothing was read against the computation, a border of it was not read in
+     * full, or the exact arithmetic gave out on a changed weight or on a row.
+     *
+     * <p>Apart from the words about a border: the weight is the computation's, and the borders of a
+     * computation cut at several places are not held against the lines beside them. No wider run
+     * decides it, since no allowance stopped it; where one stopped a border, that border says so.
+     */
+    A_WEIGHT_NOT_DECIDED,
+
+    /**
      * A reading of a comparison a body wrote that could not be tied to the line its author drew:
      * the comparison turns there because a caller's choice does, and what rows came to there is not
      * counted for or against a point of the author's line.
