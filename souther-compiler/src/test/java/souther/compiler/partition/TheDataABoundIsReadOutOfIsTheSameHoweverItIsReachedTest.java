@@ -166,6 +166,20 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
         assertEquals(2, placesInTheDocument(source).size());
     }
 
+    /** A table a call computes: two calls of a function over two arguments hand back two tables. */
+    @Test
+    void aTableACallComputesIsTheDataOfThatCall() {
+        String source = model(Shape.FLAT, "gradeIn(tableOf(1), a.v) + gradeIn(tableOf(2), a.v)")
+                .replace("let gradeIn", "let tableOf (k: Int): List<Row> =\n"
+                        + "                    if k == 1 then first else second\n"
+                        + "                let gradeIn")
+                .replace("-> 2", "-> 4").replace("-> 1", "-> 2");
+        String report = reportOf(source);
+        // Each call is its own data, so the ON and OFF points are owed twice, and the rows of the
+        // sum, which go through both calls, meet all of them. Told as one data it would be four.
+        assertTrue(report.contains("border      borders 2   obligations 6/6"), report);
+    }
+
     /** And a literal handed to it is no data, so two calls with two literals are one line. */
     @Test
     void aNumberHandedAsALiteralIsNoData() {
