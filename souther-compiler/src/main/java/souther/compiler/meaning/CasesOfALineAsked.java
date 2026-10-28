@@ -230,7 +230,7 @@ public final class CasesOfALineAsked {
      * in it: each alternative is put in this order on its own. The choices keep the order they
      * were written in, since a choice nobody took apart ends the walk there.
      */
-    private static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
+    static DecidingCase.Cases heldFirst(DecidingCase.Cases cases) {
         return cases.fold(HELD_FIRST).cases();
     }
 
