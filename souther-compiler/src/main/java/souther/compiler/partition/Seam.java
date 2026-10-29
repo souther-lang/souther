@@ -280,6 +280,18 @@ public record Seam(CutPosition at, Level below, Level above) {
         if (k.equals(ExactRatio.ONE)) {
             return ExactAnswer.held(this);
         }
+        return counted(k);
+    }
+
+    /**
+     * The same division with every level counted, for an arrangement held on an order that counts:
+     * a level on a carrier is then the number it counts to, said as a level of the quantity.
+     */
+    ExactAnswer<Seam> counted() {
+        return counted(ExactRatio.ONE);
+    }
+
+    private ExactAnswer<Seam> counted(ExactRatio k) {
         return at.times(k).flatMap(line ->
                 scaled(below, k).flatMap(scaledBelow ->
                 scaled(above, k).map(scaledAbove ->

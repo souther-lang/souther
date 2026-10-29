@@ -155,4 +155,49 @@ public final class ExactDecimals {
         }
         return new BigDecimal(digits, (int) scale);
     }
+
+    /**
+     * The sum of {@code a} and {@code b} at the scale the run time gives it, or null where the
+     * representation has no room for it. The run time's {@code +} is this, and aborts on null.
+     */
+    public static BigDecimal sumWhereThereIsRoom(BigDecimal a, BigDecimal b) {
+        try {
+            return a.add(b);
+        } catch (ArithmeticException _) {
+            return null;
+        }
+    }
+
+    /** The difference of {@code a} and {@code b} as {@link #sumWhereThereIsRoom} gives a sum. */
+    public static BigDecimal differenceWhereThereIsRoom(BigDecimal a, BigDecimal b) {
+        try {
+            return a.subtract(b);
+        } catch (ArithmeticException _) {
+            return null;
+        }
+    }
+
+    /**
+     * The product of {@code a} and {@code b} at the scale the run time gives it, which is the sum
+     * of the factors' scales, or null where the representation has no room for it.
+     *
+     * <p>That sum is worked out first, and a product whose scale no {@code Decimal} holds has no
+     * room whatever its value is. Asked first, {@code BigDecimal} answers some such products
+     * instead of refusing them — a nought factor on the left is multiplied at a scale moved back
+     * into range, and the same factor on the right is refused — so {@code a * b} and {@code b * a}
+     * would differ. A refusal that still comes back is the representation having no room for the
+     * product's digits. Distinct from {@link #product}, which is the number and not the run
+     * time's representation of it.
+     */
+    public static BigDecimal timesWhereThereIsRoom(BigDecimal a, BigDecimal b) {
+        long scale = (long) a.scale() + b.scale();
+        if (scale != (int) scale) {
+            return null;
+        }
+        try {
+            return a.multiply(b);
+        } catch (ArithmeticException _) {
+            return null;
+        }
+    }
 }

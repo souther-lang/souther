@@ -89,6 +89,21 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null && !mayStopARow();
     }
 
+    /** Whether the rows of the relation work out an operation of decimals. */
+    boolean worksOutDecimals() {
+        return !operations.decimals().isEmpty();
+    }
+
+    /**
+     * Whether what rows built at the ends of a run find of the operations of decimals told holds
+     * of every number between, for a claim about the values of the term {@code asked} with the
+     * term {@code partner} put where it takes the claim ({@link DecimalOperation#allowAClaimOver}).
+     * True where there is none.
+     */
+    boolean decimalsAllowAClaimOver(Object asked, Object partner) {
+        return DecimalOperation.allowAClaimOver(operations.decimals(), asked, partner);
+    }
+
     /**
      * Whether one row is computed, the row being the {@code addends} of the form at it and the
      * {@code values} of the terms by key.
@@ -113,7 +128,8 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         }
         Map<Object, ExactRatio> standing = new LinkedHashMap<>(held);
         standing.putAll(values.get());
-        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing));
+        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing))
+                && DecimalOperation.allCompleteAt(operations.decimals(), standing);
     }
 
     /**
