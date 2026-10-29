@@ -87,7 +87,7 @@ final class EmittedClassReferences {
             // A result comes back as an object and is cast to the type the call answers — unless the
             // call is the loop it stands for, which is emitted where it is and calls nothing.
             case Core.Call call -> {
-                if (call.stepRunWhereItStands(symbols.theWalk()) == null) {
+                if (!call.runsAsALoop(symbols.theWalk())) {
                     add(call.type());
                 }
                 sortedBy(call);
@@ -162,6 +162,11 @@ final class EmittedClassReferences {
                         case NEVER_APPLIED -> { }
                         case HANDED_OVER -> visit(arg, null);
                     }
+                }
+                // A step applied as a value is handed each element and its answer is cast to the
+                // accumulator, both in the loop around the call.
+                if (call.appliesItsStepAsAValue(symbols.theWalk())) {
+                    ((Type.FnOf) call.args().get(0).type()).params().forEach(this::add);
                 }
             }
             default -> Core.forEachChild(e, child -> visit(child, null));

@@ -33,7 +33,7 @@ class WhatARelationPartsByWhatItsPartnerCanHoldIsKeptInTheOrderOfItsSidesTest {
         Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> out = new LinkedHashMap<>();
         for (int side = 0; side < 2; side++) {
             out.put(new NumericTerm.ValueOf(TermPath.of("p" + pair + "s" + side)),
-                    new StringsAPartnerCanHold(ValueSet.ANY, "partner" + side));
+                    StringsAPartnerCanHold.unreached(ValueSet.ANY, "partner" + side));
         }
         return out;
     }
