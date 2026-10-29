@@ -101,6 +101,114 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         assertEquals(Set.of("k", "n"), notShown(report), report);
     }
 
+    /** Where doubling an {@code Int} at or past {@code from} passes the type, from above and
+     *  from below, as the report says it of {@code doubled}. */
+    private static String whereDoublingStops(String doubled) {
+        long least = Long.MAX_VALUE / 2 + 1;
+        return "every run stops in 2 * " + doubled + " where " + doubled + " is at least " + least
+                + ", in 2 * " + doubled + " where " + doubled + " is at most " + (-least - 1);
+    }
+
+    /**
+     * A value a binding gives a name is worked out before the body whether or not the body
+     * reads it. Bound and never read, in a closure applied to each element of a list written out
+     * or in the step of a walk over one, it still stops the run where it passes the type, though
+     * what the total or the walk comes to does not.
+     */
+    @Test
+    void aValueBoundAndNeverReadStillStopsTheRun() {
+        String inputs = "n: Int, k: Int";
+        String mapped = report(inputs, UNUSED, """
+                List.sum(List.map(x -> {
+                        let discarded = 2 * x
+                        x
+                    }, [n])) >= k""");
+        assertEquals(whereDoublingStops("n"), whereEveryRunStops(mapped), mapped);
+        String walked = report(inputs, UNUSED, """
+                List.fold((acc, x) -> {
+                        let discarded = 2 * x
+                        acc + x
+                    }, 0, [n]) >= k""");
+        assertEquals(whereDoublingStops("n"), whereEveryRunStops(walked), walked);
+    }
+
+    /**
+     * Over a container, a value bound and never read is no part of what the closure answers, so
+     * it is not between nought and the total: doubled, it passes the type at an element the
+     * total holds. Bound and read, it is part of the answer, and the total is left either way.
+     */
+    @Test
+    void aValueBoundInAClosureIsNoMoreThanTheTotalOnlyWhereTheClosureReadsIt() {
+        String inputs = "gross: Int, ns: List<Nat>";
+        String discarded = report(inputs, NAT, """
+                gross >= List.sum(List.map(n -> {
+                        let discarded = 2 * n.value
+                        n.value
+                    }, ns))""");
+        assertEquals(Set.of("List.sum(ns[*])", "gross"), notShown(discarded), discarded);
+        String doubled = report(inputs, NAT, """
+                gross >= List.sum(List.map(n -> {
+                        let doubled = 2 * n.value
+                        doubled
+                    }, ns))""");
+        assertTrue(related(doubled).contains("List.sum({2·the element itself + 0 | ns[*]})"),
+                doubled);
+    }
+
+    /**
+     * A helper's arguments are worked out before its body, whichever of them the body reads, and
+     * whichever arm it takes: one it never reads, or reads only in the other arm, stops the run
+     * where it passes the type, and the comparison of what it answers is not taken to get
+     * through there.
+     */
+    @Test
+    void anArgumentAHelperDoesNotReadStillStopsTheRun() {
+        String unread = report("n: Int, m: Int, k: Int",
+                UNUSED + "\nlet first (a: Int, b: Int) : Int = a", "first(n, 2 * m) >= k");
+        assertEquals(whereDoublingStops("m"), whereEveryRunStops(unread), unread);
+        assertEquals(Set.of(), related(unread), unread);
+        String inAnArm = report("flag: Bool, n: Int, m: Int, k: Int",
+                UNUSED + "\nlet pick (c: Bool, a: Int, b: Int) : Int = if c then a else b",
+                "pick(flag, 2 * m, n) >= k");
+        assertFalse(related(inAnArm).contains("n"), inAnArm);
+        assertTrue(notShown(inAnArm).contains("n"), inAnArm);
+    }
+
+    /** What the comparison {@code condition} of a behavior taking {@code inputs} works out, read
+     *  off the tree a module's comparisons are read off when it is measured. */
+    private static UndividedByARelation.Working workingOf(String inputs, String condition) {
+        ReadComparisons read = ReadComparisons.ofTheAnalysis("""
+                module w1
+                data Unused = Int
+                behavior m : (%s) -> Bool
+                let m (%s) = %s
+                """.formatted(inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), condition), "m");
+        ComparisonReadings.Reading only = read.only();
+        AffineReading.OfAComparison arithmetic = AffineReading.read(
+                ((ComparisonReadings.Stated.AComparison) only.statement()).comparison(),
+                only.reads(), read.inputs().reading(read.rules()));
+        return AffineReading.OfAComparison.workingOf(arithmetic);
+    }
+
+    /**
+     * A walk read after other operations of the comparison is worked out after them, and each
+     * step after the one before: the step that adds {@code j} is worked out of the step that
+     * added {@code m}, and not of the sum the comparison worked out first.
+     */
+    @Test
+    void eachStepOfAWalkReadAfterOtherOperationsIsWorkedOutOfTheStepBefore() {
+        UndividedByARelation.Working whole = workingOf("n: Int, m: Int, j: Int, k: Int",
+                "k + 1 >= List.fold((acc, x) -> acc + x, 0, [n, m, j])");
+        List<UndividedByARelation.IntOperation> told = whole.operations();
+        assertFalse(told.isEmpty(), whole::toString);
+        UndividedByARelation.IntOperation last = told.getLast();
+        assertEquals(3, last.form().coefs().size(), whole::toString);
+        assertTrue(last.after().stream().map(told::get)
+                .anyMatch(before -> before.form().coefs().size() == 2
+                        && !before.form().coefs().keySet().toString().contains("k")),
+                whole::toString);
+    }
+
     @Test
     void aTotalOfWhatAClosureMakesOfEachElementStopsWhereAnApplicationDoes() {
         String report = report("n: Int, m: Int, k: Int", UNUSED,

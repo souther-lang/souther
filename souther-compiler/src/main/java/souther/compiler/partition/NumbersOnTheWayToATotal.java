@@ -72,7 +72,8 @@ final class NumbersOnTheWayToATotal {
                 }
                 handed.add(param.binding());
             }
-            return closure.body().type() == Type.INT && noMoreThanItAnswers(closure.body(), handed);
+            return closure.body().type() == Type.INT
+                    && noMoreThanItAnswers(closure.body(), handed, new HashSet<>());
         }
         // A call handed a function any other way is answered whole, the function's body with it.
         if (!(WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(here)
@@ -90,38 +91,53 @@ final class NumbersOnTheWayToATotal {
      * Whether every number {@code e} works out is at least nought and no more than what it
      * answers: additions, and products by a written number of at least one, of a written number
      * of at least nought or of what the closure is handed. What it is handed is at least nought
-     * as the caller shows of the elements and the seed.
+     * as the caller shows of the elements and the seed. Every part is worked out on every run
+     * and adds into the answer, so each name {@code e} reads, put in {@code read}, is no more
+     * than the answer either.
+     *
+     * <p>A value a binding gives a name is worked out before the body whether or not the body
+     * reads the name, and is no more than the answer only where the body reads it: the body adds
+     * it in at least once. One the body never reads may be any number, and is not shown.
      */
-    private static boolean noMoreThanItAnswers(Core e, Set<BindingId> handed) {
+    private static boolean noMoreThanItAnswers(Core e, Set<BindingId> handed,
+                                               Set<BindingId> read) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary sum when sum.op() == BinOp.ADD && sum.type() == Type.INT ->
-                    noMoreThanItAnswers(sum.left(), handed)
-                            && noMoreThanItAnswers(sum.right(), handed);
+                    noMoreThanItAnswers(sum.left(), handed, read)
+                            && noMoreThanItAnswers(sum.right(), handed, read);
             case Core.Binary product when product.op() == BinOp.MUL
                     && product.type() == Type.INT -> atLeastOne(product.left())
-                    ? noMoreThanItAnswers(product.right(), handed)
-                    : atLeastOne(product.right()) && noMoreThanItAnswers(product.left(), handed);
+                    ? noMoreThanItAnswers(product.right(), handed, read)
+                    : atLeastOne(product.right())
+                            && noMoreThanItAnswers(product.left(), handed, read);
             case Core.Int written -> written.value() >= 0;
             case Core.LetIn binding -> {
+                BindingId bound = binding.binder().binding();
                 Set<BindingId> named = new HashSet<>(handed);
-                named.add(binding.binder().binding());
-                yield noMoreThanItAnswers(binding.value(), handed)
-                        && noMoreThanItAnswers(binding.body(), named);
+                named.add(bound);
+                Set<BindingId> readInTheBody = new HashSet<>();
+                boolean shown = noMoreThanItAnswers(binding.value(), handed, read)
+                        && noMoreThanItAnswers(binding.body(), named, readInTheBody)
+                        && readInTheBody.contains(bound);
+                read.addAll(readInTheBody);
+                yield shown;
             }
-            case Core.Read name -> handed.contains(name.binding());
-            case Core.FieldAccess access -> readOffWhatItIsHanded(access, handed);
-            case Core.FieldProjection projection -> readOffWhatItIsHanded(projection, handed);
+            case Core.Read name -> readOffWhatItIsHanded(name, handed, read);
+            case Core.FieldAccess access -> readOffWhatItIsHanded(access, handed, read);
+            case Core.FieldProjection projection -> readOffWhatItIsHanded(projection, handed, read);
             default -> false;
         };
     }
 
-    /** Whether {@code e} is a field read off what the closure is handed, with nothing worked
-     *  out on the way. */
-    private static boolean readOffWhatItIsHanded(Core e, Set<BindingId> handed) {
+    /** Whether {@code e} is a name the closure is handed, or a field read off one, with nothing
+     *  worked out on the way; the name is put in {@code read}. */
+    private static boolean readOffWhatItIsHanded(Core e, Set<BindingId> handed,
+                                                 Set<BindingId> read) {
         Core at = Core.withoutStanding(e);
         while (true) {
             switch (at) {
                 case Core.Read name -> {
+                    read.add(name.binding());
                     return handed.contains(name.binding());
                 }
                 case Core.FieldAccess access -> at = Core.withoutStanding(access.target());

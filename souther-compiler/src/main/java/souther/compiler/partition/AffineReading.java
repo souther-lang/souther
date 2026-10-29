@@ -17,6 +17,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
@@ -53,8 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 /**
@@ -384,9 +385,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * answers changes at every binding the walk goes under; the reading of the input is one value
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
-    private static AffineForms.Reading<NumericTerm, InputReads> reading(
+    private static Arithmetic reading(
             InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told) {
         return reading(ofTheInput, named, met, told, null);
+    }
+
+    /**
+     * The reading of a comparison's arithmetic, with the readings of a call it unrolls, which
+     * are tried by another reading of the same input and kept only where they come to a form.
+     */
+    private interface Arithmetic extends AffineForms.Reading<NumericTerm, InputReads> {
+
+        /** What a walk from a seed over a list written out at the call comes to, step by step;
+         *  null where it is no such walk or a part does not compose. */
+        LinearForm<NumericTerm> walkOfWhatIsWrittenOut(Core node, InputReads at);
+
+        /** What a total over what an operation makes of a list written out at it comes to,
+         *  application by application; null where it is no such total or a part does not
+         *  compose. */
+        LinearForm<NumericTerm> totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
     }
 
     /**
@@ -394,13 +411,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * reading stopped at stands for an atom no operation is told over, so that the rest of the
      * comparison is read for what it works out.
      */
-    private static AffineForms.Reading<NumericTerm, InputReads> reading(
+    private static Arithmetic reading(
             InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
             StoppedValues stoppedAt) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
-        return new AffineForms.Reading<NumericTerm, InputReads>() {
+        return new Arithmetic() {
 
             /** What the walk being unrolled has carried so far, by its accumulator, while its
              *  step is read ({@link #walkOfWhatIsWrittenOut}). */
@@ -516,6 +533,33 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             @Override
             public void unobserved(Core node) {
+                told.exact = false;
+            }
+
+            /**
+             * A value bound before a body the walk read without reading the name, read as any
+             * part of the comparison is, so what working it out may stop a run at is told: it is
+             * worked out once before the body on every run, whichever arm the body then takes.
+             *
+             * <p>One that composes no form, or not one every operation of which is told, is told
+             * by no operation here. Where something reads the name — the body on another way than
+             * the walk took, a number of the input read through the name, or an expression held
+             * aside beside a stop — that reader is what answers for it, as it answers for the
+             * value it reads; where nothing does, it is a node read without telling of every
+             * operation.
+             */
+            @Override
+            public void bound(Core.LetIn binding, InputReads at) {
+                if (tried(apart -> AffineForms.outcome(binding.value(), at, apart)
+                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>(
+                                LinearForm<NumericTerm> value) ? value : null, true) != null) {
+                    return;
+                }
+                BindingId name = binding.binder() == null ? null : binding.binder().binding();
+                if (name != null && (WhatABodyReads.binding(binding.body(), name)
+                        || (stoppedAt != null && stoppedAt.reads(name)))) {
+                    return;
+                }
                 told.exact = false;
             }
 
@@ -658,7 +702,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (stoppedAt == null
                         && Core.withoutStanding(node) instanceof Core.PreservedCall) {
                     LinearForm<NumericTerm> walked =
-                            unlessItComesToNothing(() -> walkOfWhatIsWrittenOut(node, at));
+                            tried(apart -> apart.walkOfWhatIsWrittenOut(node, at));
                     if (walked != null) {
                         return walked;
                     }
@@ -666,8 +710,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (added != null) {
                         return added;
                     }
-                    LinearForm<NumericTerm> applied = unlessItComesToNothing(
-                            () -> totalOfWhatIsMadeOfAListWrittenOut(node, at));
+                    LinearForm<NumericTerm> applied =
+                            tried(apart -> apart.totalOfWhatIsMadeOfAListWrittenOut(node, at));
                     if (applied != null) {
                         return applied;
                     }
@@ -712,20 +756,35 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * What {@code reading} comes to, with what it told, named and met taken back where it
-             * came to no form: the expression is then read some other way, or the comparison
-             * stops at it, and neither is this reading's.
+             * What {@code unrolling} comes to, read by another reading of the input that starts
+             * from what this one has met and collects what it names and tells apart from it.
+             * Kept only where it came to a form: then what it named, met and told is this
+             * reading's, its operations after the ones told here. Where it came to none, the
+             * expression is read some other way or the comparison stops at it, and nothing the
+             * attempt did is left here, whatever it would have changed.
              */
-            private LinearForm<NumericTerm> unlessItComesToNothing(
-                    Supplier<LinearForm<NumericTerm>> reading) {
-                WhatWasTold.Mark before = told.mark();
-                Set<NumericTerm> namedBefore = new LinkedHashSet<>(named);
-                ElementsMet metBefore = met.copied();
-                LinearForm<NumericTerm> form = reading.get();
-                if (form == null) {
-                    told.backTo(before);
-                    named.retainAll(namedBefore);
-                    met.backTo(metBefore);
+            private LinearForm<NumericTerm> tried(
+                    Function<Arithmetic, LinearForm<NumericTerm>> unrolling) {
+                return tried(unrolling, false);
+            }
+
+            /**
+             * The same, kept only where it also told of every operation it read, where
+             * {@code everyOneTold} asks it to: for a reading whose operations only add to what
+             * another reader of the same value answers, and which is otherwise left to that one.
+             */
+            private LinearForm<NumericTerm> tried(
+                    Function<Arithmetic, LinearForm<NumericTerm>> unrolling,
+                    boolean everyOneTold) {
+                Set<NumericTerm> namedApart = new LinkedHashSet<>();
+                ElementsMet metApart = met.copied();
+                WhatWasTold toldApart = new WhatWasTold();
+                LinearForm<NumericTerm> form = unrolling.apply(
+                        reading(ofTheInput, namedApart, metApart, toldApart));
+                if (form != null && (!everyOneTold || toldApart.exact)) {
+                    named.addAll(namedApart);
+                    met.takes(metApart);
+                    told.absorb(toldApart);
                 }
                 return form;
             }
@@ -765,7 +824,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * <p>Only a step written at the call over a list written there: what a step reached
              * by a name works out is in no tree read here.
              */
-            private LinearForm<NumericTerm> walkOfWhatIsWrittenOut(Core node, InputReads at) {
+            @Override
+            public LinearForm<NumericTerm> walkOfWhatIsWrittenOut(Core node, InputReads at) {
                 SeededWalk walk = SeededWalk.of(node, closure ->
                         Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
                 if (walk == null || !walk.inTheContainersOrder()
@@ -819,7 +879,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * <p>Only an operation that makes every element of the list it is handed, each once:
              * one that keeps some of them answers on rows the reading would have to decide.
              */
-            private LinearForm<NumericTerm> totalOfWhatIsMadeOfAListWrittenOut(Core node,
+            @Override
+            public LinearForm<NumericTerm> totalOfWhatIsMadeOfAListWrittenOut(Core node,
                                                                                InputReads at) {
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
                         || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
@@ -1053,21 +1114,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             operations.add(operation);
         }
 
-        /** Where the telling stands: how much of each it has told, and whether every one. */
-        record Mark(int operations, int decimals, int sumsOverTheStop, boolean exact) {}
-
-        Mark mark() {
-            return new Mark(operations.size(), decimals.size(), sumsOverTheStop.size(), exact);
-        }
-
-        /** Back to where it stood at {@code mark}: a reading that came to no form told nothing
-         *  of the comparison, whatever it met on the way. */
-        void backTo(Mark mark) {
-            operations.subList(mark.operations(), operations.size()).clear();
-            at.subList(mark.operations(), at.size()).clear();
-            decimals.subList(mark.decimals(), decimals.size()).clear();
-            sumsOverTheStop.subList(mark.sumsOverTheStop(), sumsOverTheStop.size()).clear();
-            exact = mark.exact();
+        /**
+         * What {@code apart}, a reading of part of the comparison tried on its own, was told,
+         * taken as told here after everything told so far: each operation and each of decimals
+         * moved past the ones already here, with what it was worked out of moved with it, and the
+         * forms it knows the operation or the place of carried over to where they now stand.
+         */
+        void absorb(WhatWasTold apart) {
+            int ofWholeNumbers = operations.size();
+            for (int i = 0; i < apart.operations.size(); i++) {
+                UndividedByARelation.IntOperation each = apart.operations.get(i);
+                add(apart.at.get(i), new UndividedByARelation.IntOperation(each.form(),
+                        each.least(), each.greatest(), each.after().stream()
+                        .map(before -> before + ofWholeNumbers).toList()));
+            }
+            int ofDecimals = decimals.size();
+            for (DecimalOperation each : apart.decimals) {
+                decimals.add(each.shifted(ofDecimals));
+            }
+            apart.resultOf.forEach((form, where) -> resultOf.put(form, where + ofDecimals));
+            inputReads.addAll(apart.inputReads);
+            sumsOverTheStop.addAll(apart.sumsOverTheStop);
+            exact &= apart.exact;
         }
 
         /**
@@ -1365,6 +1433,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Map<NumericTerm, FormRange> out = new HashMap<>();
             byAtom.forEach((atom, held) -> out.put(atom, held.range));
             return out;
+        }
+
+        /** Whether an expression held aside reads {@code name}: what the name was given is then
+         *  worked out where that expression's owner answers for it. */
+        boolean reads(BindingId name) {
+            return byExpression.keySet().stream()
+                    .anyMatch(held -> WhatABodyReads.binding(held, name));
         }
 
         /** Whether the analysis that drew the lines answers for {@code other}, an expression

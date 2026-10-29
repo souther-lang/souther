@@ -674,9 +674,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node outside the closures what it ends a run for, and goes down to its"
                         + " parts: a projection ends none beyond what its base does");
         row(out, c + "partition/NumbersOnTheWayToATotal", "readOffWhatItIsHanded",
-                "(" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
-                "asks whether a value is a run of fields read off a name a closure is handed,"
-                        + " with nothing between, which the base answers");
+                "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "asks whether a value is a name a closure is handed or a run of fields read off"
+                        + " one, with nothing between, which the base answers");
         row(out, c + "partition/AffineReading$WhatLiesBesideTheStop", "collectUnder",
                 "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node and goes down to its parts: a projection is held where its"

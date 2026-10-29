@@ -217,16 +217,16 @@ public final class ElementsMet {
     }
 
     /**
-     * Puts back what {@code earlier}, a copy of this taken before a reading that was not taken,
-     * had met: for a reader that shares this with others and cannot hand them the copy instead.
+     * Leaves the elements as {@code tried}, a copy of this a reading was tried on, left them:
+     * the reading was taken, and this is shared by readers it cannot hand the copy to.
      */
-    public void backTo(ElementsMet earlier) {
+    public void takes(ElementsMet tried) {
         if (!holding) {
             return;
         }
         standingFor.clear();
-        standingFor.putAll(earlier.standingFor);
-        crowded = earlier.crowded;
+        standingFor.putAll(tried.standingFor);
+        crowded = tried.crowded;
     }
 
     /** Whether a number was refused because it named another element of a container this

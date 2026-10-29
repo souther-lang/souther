@@ -11,12 +11,14 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -154,6 +156,19 @@ public final class AffineForms {
          * says only that the walk does not know.
          */
         default void unobserved(Core node) {
+        }
+
+        /**
+         * That the walk read the body of {@code binding} without reading the name it binds on the
+         * way it took, though a run works the bound value out first, and working it out may end a
+         * run: on that way the value is read nowhere else. One the body read is read where the
+         * name is, by whatever reads that.
+         *
+         * <p>Told as a node read without telling of every operation, unless the reading reads the
+         * value and tells of what it works out.
+         */
+        default void bound(Core.LetIn binding, E at) {
+            unobserved(binding);
         }
 
         /**
@@ -434,6 +449,10 @@ public final class AffineForms {
         /** Who is told where the reading ended in a value, or null where nobody asked. */
         private final Consumed<E> told;
 
+        /** How many times the walk has read each name, so that a binding can ask whether the
+         *  body it binds for read it on the way the walk took. */
+        private final Map<BindingId, Integer> namesRead = new HashMap<>();
+
         Walk() {
             this.folds = null;
             this.told = null;
@@ -454,6 +473,16 @@ public final class AffineForms {
             if (told != null) {
                 told.written(expression, at);
             }
+        }
+
+        /** That the walk read {@code name}. */
+        void read(BindingId name) {
+            namesRead.merge(name, 1, Integer::sum);
+        }
+
+        /** How many times the walk has read {@code name} so far. */
+        int timesRead(BindingId name) {
+            return namesRead.getOrDefault(name, 0);
         }
 
     }
@@ -703,6 +732,7 @@ public final class AffineForms {
         if (led == null || !following.enter(r.binding())) {
             return null;
         }
+        following.read(r.binding());
         Outcome<A, E> read = switch (led) {
             // Asked once per question. What a name comes to is the value it was given read in the
             // environment it was given in, and a second occurrence of the name is that same
@@ -1183,8 +1213,22 @@ public final class AffineForms {
             // what it holds is a number is not asked: a binding denotes what it was given whatever
             // kind of value that is, which is what makes the facts a walk recorded about the places
             // under it reach the step that reads them (#867).
-            case Core.LetIn li -> formOf(li.body(), reading.inside(li, at), reading, following,
-                    stopped);
+            case Core.LetIn li -> {
+                BindingId bound = li.binder() == null ? null : li.binder().binding();
+                int readBefore = bound == null ? 0 : following.timesRead(bound);
+                LinearForm<A> body = formOf(li.body(), reading.inside(li, at), reading, following,
+                        stopped);
+                // The value is worked out before the body, read or not, as the other parts of a
+                // construction read through are. One the body read on the way the walk took is
+                // read where its name is; one it did not — never read, or read only in an arm
+                // not taken — is read nowhere else. Where the body composed nothing the walk
+                // stopped in it, and what it stopped at is whoever reads that one's to answer for.
+                if (body != null && (bound == null || following.timesRead(bound) == readBefore)
+                        && !WhatARunMayEndFor.endsNoneBeneath(li.value())) {
+                    reading.bound(li, at);
+                }
+                yield body;
+            }
             default -> null;
         };
     }
