@@ -221,6 +221,70 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
                 json(compilation));
     }
 
+    private static final String ORIENTED = """
+            module example.equal
+
+            data A = String
+                invariant String.matches("%s", value)
+
+            data B = String
+                invariant String.matches("%s", value)
+
+            data N = Int
+                invariant value >= 9223372036854775805
+
+            behavior f : (a: A, b: B, n: N) -> Bool
+
+            let f (a, b, n) = {
+                %s
+                a.value == b.value
+            }
+            """;
+
+    private static final String LETTERS = "[a-z]+";
+
+    private static final String LETTERS_AND_DIGITS = "[a-z0-9]+";
+
+    /**
+     * Whichever of the two strings holds the other's values, the string the way ties to a number
+     * is parted at the lengths that get a run past, and its other lengths are open: the strings
+     * the run stops on are not shown to be reached, nor are they shown on a side of the equality.
+     * Held in either direction, and with the way stating the sum or only working it out.
+     */
+    @Test
+    void theStringTheWayTiesIsOpenAtTheLengthsNoRunGetsPastWhicheverHoldsTheOther() {
+        for (String ties : List.of("guard String.length(b.value) + n.value > 0 else false",
+                "let total = String.length(b.value) + n.value")) {
+            for (List<String> languages : List.of(List.of(LETTERS, LETTERS_AND_DIGITS),
+                    List.of(LETTERS_AND_DIGITS, LETTERS))) {
+                Compilation compilation = measured(
+                        ORIENTED.formatted(languages.get(0), languages.get(1), ties));
+                PartitionEvidence evidence = evidenceOf(compilation);
+                String shape = ties + " over " + languages;
+
+                assertEquals(List.of("b"), shownOverARegion(evidence), shape);
+                assertEquals(List.of(), stringsNotShownToReachEveryValue(evidence), shape);
+                assertTrue(Pattern.compile("\"longerThan\"\\s*:\\s*2\\b")
+                        .matcher(json(compilation)).find(), shape);
+            }
+        }
+    }
+
+    /**
+     * A sum the number cannot bring below nought is not one a string of any length gets a run
+     * past: nothing arrives at the equality, which is said and not read as a rule owed.
+     */
+    @Test
+    void aSumNoNumberCanBringBelowNoughtLeavesNothingArrivingAtTheEquality() {
+        Compilation compilation = measured(NUMBER.formatted("invariant value >= 0",
+                "String.length(b.value) + n.value < 0"));
+        PartitionEvidence evidence = evidenceOf(compilation);
+
+        assertEquals(List.of(), stringsNotShownToReachEveryValue(evidence));
+        assertEquals(List.of(), shownOverARegion(evidence));
+        assertTrue(human(compilation).contains("measurement: complete"), human(compilation));
+    }
+
     /**
      * The number is held to at most five, so the sum is above ten only for a string of six code
      * points or more: a shorter string has no number that gets a run past the guard.

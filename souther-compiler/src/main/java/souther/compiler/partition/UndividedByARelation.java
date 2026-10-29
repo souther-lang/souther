@@ -1741,13 +1741,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
         List<OnAWay> unfree = offItsLine ? List.of()
                 : withoutWhatAFreeNumberMeets(written, declined, past, read);
-        // What the way states of a string's length leaves its strings as they were where a value
-        // of the numbers it ties the length to is shown for every length the string has.
-        RoomOnTheWay amongTheStrings = offItsLine || !heldWhole ? null
-                : roomAmongTheSides(carriers, written, past, read);
-        if (amongTheStrings != null && amongTheStrings.lengths() == null) {
-            unfree = unfree.stream().filter(each -> !amongTheStrings.statements().contains(each))
-                    .toList();
+        // What the way leaves of the lengths of the strings this relation is between, asked once
+        // for everything below that reads it. Where a value of the numbers it ties a length to is
+        // shown for every length the string has, what it states of the length leaves its strings
+        // as they were.
+        RoomOnTheWay lengthsRoom = heldWhole
+                ? roomAmongTheSides(carriers, written, past, read) : null;
+        if (!offItsLine && lengthsRoom != null && lengthsRoom.lengths() == null) {
+            unfree = unfree.stream()
+                    .filter(each -> !lengthsRoom.statements().contains(each)).toList();
         }
         // What the way states of the form asked is decided, or leaves no row, by every statement
         // of it, so it is asked before any is taken away.
@@ -1928,10 +1930,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
-        Set<DemandReading.Tie> accountedFor = Set.of();
+        Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
-            Partnering partnering = stringsAPartnerCanHold(carriers, out, read, written, past,
-                    ties -> !mayStopOnWhatItReads(past, read, along, written, declined, ties));
+            Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
+                    lengths -> !mayStopOnWhatItReads(past, read, along, written, declined,
+                            lengths));
             shown = shown.partnered(partnering.strings());
             accountedFor = partnering.accountedFor();
         }
@@ -1939,16 +1942,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The strings each side of an equality is parted by, and the ties on the way that parting
-     * takes account of.
+     * The strings each side of an equality is parted by, and the places whose lengths that
+     * parting accounts for.
      *
      * @param strings      what each side the equality parts is parted by
-     * @param accountedFor the ties of the way whose statements are met by the lengths of the
-     *                     strings in {@code strings}, so that the run they belong to is not one
-     *                     that may stop on what the relation reads
+     * @param accountedFor the places of strings whose every length is one a run gets past what
+     *                     the way ties it to, or whose lengths a run gets past it at are the
+     *                     ones {@code strings} shows and the rest it leaves open: a tie of the
+     *                     way that reads only such places is not one the run may stop on. A place
+     *                     is here for the claim made of that place itself, and never for a claim
+     *                     made of the other side
      */
     private record Partnering(Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings,
-                              Set<DemandReading.Tie> accountedFor) {
+                              Set<TermPath> accountedFor) {
 
         static final Partnering NONE = new Partnering(Map.of(), Set.of());
     }
@@ -1975,24 +1981,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link #roomOnTheWay}). A string of another length is shown neither way.
      *
      * @param shown      the places already shown undivided, which need no other word
-     * @param written    what the way states
-     * @param past       what the run works out on the way to the relation
+     * @param room       what the way leaves of the lengths of the two strings, or null where this
+     *                   is no equality between two strings or that is not worked out
      * @param runGetsThere whether the run is shown to get to the relation at every value it
-     *                   reads, given the ties of the way the lengths account for, asked only once
+     *                   reads, given the places whose lengths are accounted for, asked only once
      *                   a pair of strings is otherwise parted
      */
     private Partnering stringsAPartnerCanHold(
             List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read,
-            List<OnAWay> written, DemandReading.Answered past,
-            Predicate<Set<DemandReading.Tie>> runGetsThere) {
-        if (kind != Kind.AFFINE || remainder != null || sides.size() != 2
-                || (relation != Rel.EQ && relation != Rel.NE)
-                || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
-                        sides.stream().map(Side::weight).toList(), constant)) {
+            RoomOnTheWay room, Predicate<Set<TermPath>> runGetsThere) {
+        if (room == null) {
             return Partnering.NONE;
         }
         Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> out = new LinkedHashMap<>();
-        Set<DemandReading.Tie> accountedFor = new LinkedHashSet<>();
+        Set<TermPath> accountedFor = new LinkedHashSet<>();
         for (int at = 0; at < 2; at++) {
             Side here = sides.get(at);
             Side there = sides.get(1 - at);
@@ -2005,16 +2007,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || shown.contains(FilingCoordinate.of(mine))) {
                 continue;
             }
-            RoomOnTheWay room = roomOnTheWay(mine.subjectPath(), theirs.subjectPath(), written,
-                    past, read, here.piece() != null ? here.piece() : there.piece());
-            if (room == null) {
-                continue;
-            }
-            // Ties met at every length hold the run past them wherever the strings go on to be
-            // parted; ties met at some lengths only are accounted for by the strings left open at
-            // the rest, which is said where they are parted.
-            if (room.lengths() == null) {
-                accountedFor.addAll(room.accountedFor());
+            // A place every length of which gets a run past what the way ties it to is accounted
+            // for whatever becomes of its parting. One whose lengths do at some only is accounted
+            // for where its parting leaves the rest open, which is below.
+            if (room.lengths() == null && room.place() != null) {
+                accountedFor.add(room.place());
             }
             Position partner = read.domain().at(theirs.subjectPath());
             if (partner == null || !(partner.admitted().completeness()
@@ -2050,12 +2047,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || (strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
-            if (!runGetsThere.test(room.accountedFor())) {
+            if (!runGetsThere.test(room.place() == null ? Set.of() : Set.of(room.place()))) {
                 continue;
             }
             out.put(mine, strings);
-            accountedFor.addAll(room.accountedFor());
         }
+        // A place parted with the other lengths left open has the claim made of the place itself
+        // met. Where it is the partner's lengths that are held, the claim made of the partner is
+        // not that parting's and is left to its own: it is read off what was recorded for each
+        // place, and not set beside it.
+        out.forEach((place, strings) -> {
+            if (strings.reached() != null) {
+                accountedFor.add(place.subjectPath());
+            }
+        });
         return new Partnering(out, accountedFor);
     }
 
@@ -2063,19 +2068,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What a way leaves of the lengths of the strings at two places: whether it ties the length of
      * one of them to other numbers, and at which lengths the run to the relation still gets there.
      *
+     * @param place        the place whose length the way ties to other numbers, or null where it
+     *                     ties the length of neither
      * @param limitedTo    the place whose strings the way holds to {@code lengths}, or null where
      *                     it holds the strings of neither
      * @param lengths      the lengths at which the run gets to the relation, or null where it does
      *                     so at every length the place holds
-     * @param accountedFor the ties of the way that {@code lengths} takes account of
      * @param statements   the statements of the way that {@code lengths} takes account of, which
      *                     leave the strings as they were where {@code lengths} is null
      */
-    private record RoomOnTheWay(TermPath limitedTo, LengthsPastTheWay.Lengths lengths,
-                                Set<DemandReading.Tie> accountedFor, Set<OnAWay> statements) {
+    private record RoomOnTheWay(TermPath place, TermPath limitedTo,
+                                LengthsPastTheWay.Lengths lengths, Set<OnAWay> statements) {
 
         /** A way that leaves the strings of both as the declarations hold them. */
-        static final RoomOnTheWay UNTOUCHED = new RoomOnTheWay(null, null, Set.of(), Set.of());
+        static final RoomOnTheWay UNTOUCHED = new RoomOnTheWay(null, null, null, Set.of());
     }
 
     /**
@@ -2201,14 +2207,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language.Ends ends = strings == null ? null : strings.lengths();
         BigInteger fewest = BigInteger.valueOf(ends == null ? 0 : ends.least());
         BigInteger most = BigInteger.valueOf(longestOf(strings));
-        return lengths.holds(fewest, most) ? new RoomOnTheWay(null, null, ties, stated)
-                : new RoomOnTheWay(limited, lengths, ties, stated);
+        return lengths.holds(fewest, most) ? new RoomOnTheWay(limited, null, null, stated)
+                : new RoomOnTheWay(limited, limited, lengths, stated);
     }
 
     /**
      * What the way leaves of the lengths of the strings on the two sides, where this relation is
-     * an equality between the strings at two places and neither side is a piece of a string; null
-     * where it is not ({@link #roomOnTheWay}).
+     * an equality between two strings, or null where it is not or that is not worked out
+     * ({@link #roomOnTheWay}). Asked once for a relation: it is the same for both sides.
      */
     private RoomOnTheWay roomAmongTheSides(List<Carrier> carriers, List<OnAWay> written,
                                            DemandReading.Answered past, InputReading read) {
@@ -2218,14 +2224,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         sides.stream().map(Side::weight).toList(), constant)
                 || !(carriers.get(0) instanceof Carrier.Text)
                 || !(carriers.get(1) instanceof Carrier.Text)
-                || sides.stream().anyMatch(side -> side.piece() != null)) {
+                || (sides.get(0).piece() != null && sides.get(1).piece() != null)) {
             return null;
         }
         NumericTerm.ValueOf first = placeOf(sides.get(0));
         NumericTerm.ValueOf second = placeOf(sides.get(1));
+        Quantity.ThePieceAt piece = sides.get(0).piece() != null ? sides.get(0).piece()
+                : sides.get(1).piece();
         return first == null || second == null ? null
                 : roomOnTheWay(first.subjectPath(), second.subjectPath(), written, past, read,
-                        null);
+                        piece);
     }
 
     /** Whether {@code term} is the number of code points of the string at {@code place}. */
@@ -2457,14 +2465,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The same, where the lengths of the strings {@code shown} parts are those some value of the
-     * numbers {@code accountedFor} ties them to gets the run past, so that a run stopped by those
-     * ties is one {@code shown} already leaves open ({@link #roomOnTheWay}).
+     * The same, where the lengths of the strings at {@code accountedFor} are those some value of
+     * the numbers the way ties them to gets the run past, or are parted with the rest left open,
+     * so that a run stopped by a tie reading only such places is not one the relation is
+     * claimed to be reached despite ({@link #roomOnTheWay}).
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
                                       InputReading read, SearchRegion region,
                                       List<OnAWay> conditions, Optional<Set<String>> declined,
-                                      Set<DemandReading.Tie> accountedFor) {
+                                      Set<TermPath> accountedFor) {
         return mayStopOnWhatItReads(past, read, region, conditions, declined, accountedFor)
                 ? shown.mayStopBefore(places()) : shown;
     }
@@ -2488,7 +2497,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean mayStopOnWhatItReads(DemandReading.Answered past, InputReading read,
                                          SearchRegion region, List<OnAWay> conditions,
                                          Optional<Set<String>> declined,
-                                         Set<DemandReading.Tie> accountedFor) {
+                                         Set<TermPath> accountedFor) {
         if (past.unsaid()) {
             return true;
         }
@@ -2517,17 +2526,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * Whether every place {@code tie} touches among {@code reads} is one whose lengths are
+     * accounted for, so that a run stopped by the tie stops on no value of the relation that is
+     * not shown left open.
+     *
+     * <p>Place by place and not tie by tie: what accounts for a place is a claim made of that
+     * place, and a tie that reads another place as well is not met by it.
+     */
+    static boolean readsOnlyWhatIsAccountedFor(DemandReading.Tie tie, List<TermPath> reads,
+                                               Set<TermPath> accountedFor) {
+        for (TermPath read : reads) {
+            if (touchesAny(tie.places(), List.of(read))
+                    && accountedFor.stream().noneMatch(place -> overlap(place, read))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Whether a run working out {@code past} may stop on a value the relation reads, shown of
      * {@code witness} ({@link #mayStopOnWhatItReads}); what the applications before work out is
      * asked as well where {@code applicationsBefore}, and is not where the witness makes none.
      */
     private boolean stopsOn(DemandReading.Answered past, List<TermPath> reads, Witness witness,
-                            boolean applicationsBefore, Set<DemandReading.Tie> accountedFor) {
+                            boolean applicationsBefore, Set<TermPath> accountedFor) {
         if (past.unsaid()) {
             return true;
         }
         for (DemandReading.Tie tie : past.tied()) {
-            if (!accountedFor.contains(tie) && touchesAny(tie.places(), reads)) {
+            if (touchesAny(tie.places(), reads) && !readsOnlyWhatIsAccountedFor(tie, reads,
+                    accountedFor)) {
                 return true;
             }
         }

@@ -9,6 +9,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.LengthsPastTheWay.Ends;
 import souther.compiler.partition.LengthsPastTheWay.Lengths;
+import souther.compiler.values.TextExtents;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -58,8 +59,8 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
                 _ -> new Ends(BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE)));
 
         assertNotNull(lengths);
-        assertTrue(lengths.holds(BigInteger.ZERO, BigInteger.valueOf(Integer.MAX_VALUE)),
-                lengths.toString());
+        assertTrue(lengths.holds(BigInteger.ZERO,
+                BigInteger.valueOf(TextExtents.LONGEST_STRING)), lengths.toString());
     }
 
     /** The number held to the three greatest values of its type leaves only the lengths the
@@ -91,6 +92,52 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
 
         assertNotNull(lengths);
         assertTrue(lengths.isEmpty(), lengths.toString());
+    }
+
+    /**
+     * The lengths are those of strings: a sum the other number cannot bring below nought leaves
+     * no length, and a length past the longest string is no length either.
+     */
+    @Test
+    void aSumNoNumberCanBringBelowNoughtLeavesNoLengthAString() {
+        Lengths lengths = LengthsPastTheWay.of(LENGTH, List.of(
+                statement(1, Rel.LE, Map.of(LENGTH, 1L, N, 1L))),
+                _ -> new Ends(BigInteger.ZERO, BigInteger.valueOf(Long.MAX_VALUE)));
+
+        assertNotNull(lengths);
+        assertTrue(lengths.isEmpty(), lengths.toString());
+        assertNull(lengths.strings());
+        assertFalse(lengths.holds(BigInteger.ZERO, BigInteger.ZERO), lengths.toString());
+    }
+
+    @Test
+    void aLengthPastTheLongestStringIsNoLength() {
+        Lengths lengths = LengthsPastTheWay.of(LENGTH, List.of(
+                statement(-TextExtents.LONGEST_STRING - 1, Rel.GE, Map.of(LENGTH, 1L))),
+                between(0, 0));
+
+        assertNotNull(lengths);
+        assertTrue(lengths.isEmpty(), lengths.toString());
+    }
+
+    @Test
+    void theEndsGivenForALengthAreBroughtInToTheLengthsAStringHas() {
+        assertEquals(new Lengths(BigInteger.ZERO, BigInteger.valueOf(TextExtents.LONGEST_STRING)),
+                new Lengths(BigInteger.valueOf(-5), null));
+        assertEquals(new Lengths(BigInteger.ONE, BigInteger.ZERO),
+                new Lengths(null, BigInteger.valueOf(-1)));
+        assertEquals(new Lengths(BigInteger.ONE, BigInteger.ZERO),
+                new Lengths(BigInteger.valueOf(TextExtents.LONGEST_STRING + 1), null));
+    }
+
+    /** No length is left open by lengths that are none: every string is. */
+    @Test
+    void noLengthsLeaveEveryStringOpenAndShowNone() {
+        Lengths none = new Lengths(null, BigInteger.valueOf(-1));
+
+        assertEquals(1, none.outside().size());
+        assertNull(none.strings());
+        assertNull(none.stringsOutside());
     }
 
     @Test
@@ -125,10 +172,10 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
             List<long[]> rows = new ArrayList<>();
             List<Rel> relations = new ArrayList<>();
             for (int each = 0, many = 1 + random.nextInt(4); each < many; each++) {
-                long onLength = random.nextInt(7) - 3;
-                long onN = random.nextInt(3) - 1;
-                long onM = random.nextInt(3) - 1;
-                long constant = random.nextInt(11) - 5;
+                long onLength = random.nextLong(7) - 3;
+                long onN = random.nextLong(3) - 1;
+                long onM = random.nextLong(3) - 1;
+                long constant = random.nextLong(11) - 5;
                 Rel rel = rels[random.nextInt(rels.length)];
                 Map<NumericTerm, Long> weights = new LinkedHashMap<>();
                 if (onLength != 0) {
@@ -144,10 +191,10 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
                 rows.add(new long[] {constant, onLength, onN, onM});
                 relations.add(rel);
             }
-            long nLeast = -2 - random.nextInt(3);
-            long nGreatest = 1 + random.nextInt(4);
-            long mLeast = -2 - random.nextInt(3);
-            long mGreatest = 1 + random.nextInt(4);
+            long nLeast = -2 - random.nextLong(3);
+            long nGreatest = 1 + random.nextLong(4);
+            long mLeast = -2 - random.nextLong(3);
+            long mGreatest = 1 + random.nextLong(4);
             Lengths lengths = LengthsPastTheWay.of(LENGTH, system,
                     term -> term.equals(N) ? new Ends(BigInteger.valueOf(nLeast),
                             BigInteger.valueOf(nGreatest))
@@ -155,7 +202,8 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
             if (lengths == null) {
                 continue;
             }
-            for (long length = -40; length <= 40; length++) {
+            // Only lengths a string has: no string is shorter than nought.
+            for (long length = 0; length <= 40; length++) {
                 boolean some = false;
                 for (long n = nLeast; n <= nGreatest && !some; n++) {
                     for (long m = mLeast; m <= mGreatest && !some; m++) {
@@ -163,9 +211,8 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
                     }
                 }
                 BigInteger at = BigInteger.valueOf(length);
-                boolean given = !lengths.isEmpty()
-                        && (lengths.least() == null || lengths.least().compareTo(at) <= 0)
-                        && (lengths.most() == null || lengths.most().compareTo(at) >= 0);
+                boolean given = !lengths.isEmpty() && lengths.least().compareTo(at) <= 0
+                        && lengths.most().compareTo(at) >= 0;
                 assertEquals(some, given, "round " + round + " length " + length + " "
                         + system + " gave " + lengths);
             }

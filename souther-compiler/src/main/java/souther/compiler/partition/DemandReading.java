@@ -39,6 +39,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -804,11 +805,19 @@ final class DemandReading {
      * What ties places on the way to a comparison: the places, and what the way states of the
      * numbers read off them where that is known.
      *
-     * @param places the places the tie names
+     * <p>A tie is a statement over places and is equal to every tie of the same statement over the
+     * same places, wherever it is worked out. It is not the site that works it out, and no reader
+     * may take two equal ties to be one run: what is asked of a tie is what it states.
+     *
+     * @param places the places the tie names, in the order they were met
      * @param by     what is stated of their numbers, or null where only the places are known — the
      *               numbers an operator not said may stop the run on
      */
     record Tie(Set<TermPath> places, TakenConstraint by) {
+
+        Tie {
+            places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+        }
 
         /** The tie a statement of numbers makes, between the places it names. */
         static Tie by(TakenConstraint constraint) {

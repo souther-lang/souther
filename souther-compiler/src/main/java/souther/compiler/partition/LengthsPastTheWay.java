@@ -43,33 +43,51 @@ final class LengthsPastTheWay {
 
     private LengthsPastTheWay() { }
 
+    /** The most code points a string holds, as a whole number. */
+    private static final BigInteger LONGEST = BigInteger.valueOf(TextExtents.LONGEST_STRING);
+
     /**
-     * The whole numbers from {@code least} to {@code most}, either null where nothing bounds the
-     * lengths there.
+     * The lengths a string can have from {@code least} to {@code most}, in code points.
+     *
+     * <p>Only lengths a string has: whatever ends are given, the lengths are brought in to nought
+     * and the longest string there is, and no length is said where none is left — which is the one
+     * empty value there is ({@link #isEmpty}), not a pair of ends that cross in some other way. So
+     * every question asked of these is about strings, and none has to read an end as one that
+     * names no length.
+     *
+     * @param least the fewest, and never below nought; one where there are none
+     * @param most  the most, and never past the longest string; nought where there are none
      */
     record Lengths(BigInteger least, BigInteger most) {
 
-        /** Whether no length is between the ends. */
+        Lengths {
+            least = least == null || least.signum() < 0 ? BigInteger.ZERO : least;
+            most = most == null || most.compareTo(LONGEST) > 0 ? LONGEST : most;
+            if (least.compareTo(most) > 0) {
+                least = BigInteger.ONE;
+                most = BigInteger.ZERO;
+            }
+        }
+
+        /** Whether no string has a length of these. */
         boolean isEmpty() {
-            return least != null && most != null && least.compareTo(most) > 0;
+            return least.compareTo(most) > 0;
         }
 
         /** Whether every whole number from {@code from} to {@code to} is among these. */
         boolean holds(BigInteger from, BigInteger to) {
-            return (least == null || least.compareTo(from) <= 0)
-                    && (most == null || most.compareTo(to) >= 0);
+            return !isEmpty() && least.compareTo(from) <= 0 && most.compareTo(to) >= 0;
         }
 
         /**
-         * The strings of these lengths, or null where the ends are past what a pattern counts.
-         * Lengths are counted in code points.
+         * The strings of these lengths, or null where there are none or the ends are past what a
+         * pattern counts.
          */
         PatternPlan strings() {
-            BigInteger from = least == null ? BigInteger.ZERO : least.max(BigInteger.ZERO);
-            if (from.bitLength() >= Integer.SIZE - 1) {
+            if (isEmpty() || least.bitLength() >= Integer.SIZE - 1) {
                 return null;
             }
-            return PatternPlan.of(PatternMeaning.ofAnySymbols(from.intValueExact(), ceiling(most)));
+            return PatternPlan.of(PatternMeaning.ofAnySymbols(least.intValueExact(), ceiling()));
         }
 
         /**
@@ -77,15 +95,21 @@ final class LengthsPastTheWay {
          * what a pattern counts.
          */
         PatternPlan stringsOutside() {
+            if (isEmpty()) {
+                return null;
+            }
             PatternPlan below = null;
-            if (least != null && least.signum() > 0) {
+            if (least.signum() > 0) {
                 if (least.bitLength() >= Integer.SIZE - 1) {
                     return null;
                 }
                 below = PatternPlan.of(PatternMeaning.ofAnySymbols(0, least.intValueExact() - 1));
             }
             PatternPlan above = null;
-            if (most != null && most.signum() >= 0 && most.bitLength() < Integer.SIZE - 1) {
+            if (most.compareTo(LONGEST) < 0) {
+                if (most.bitLength() >= Integer.SIZE - 1) {
+                    return below;
+                }
                 above = PatternPlan.of(PatternMeaning.ofAnySymbols(most.intValueExact() + 1,
                         PatternMeaning.Repeated.NO_CEILING));
             }
@@ -94,22 +118,27 @@ final class LengthsPastTheWay {
 
         /**
          * The strings of every other length, each as long as it is left open at: those short of
-         * the least of these, and those longer than the most.
+         * the least of these, and those longer than the most. Every string where there is no
+         * length of these.
          */
         List<ValuesWithin> outside() {
+            if (isEmpty()) {
+                return List.of(ValuesWithin.all(ValueSet.ANY));
+            }
             List<ValuesWithin> out = new ArrayList<>();
-            if (least != null && least.signum() > 0 && least.bitLength() < Long.SIZE - 1) {
+            if (least.signum() > 0) {
                 out.add(new ValuesWithin(ValueSet.ANY, 0, least.longValueExact() - 1));
             }
-            if (most != null && most.signum() >= 0
-                    && most.compareTo(BigInteger.valueOf(TextExtents.LONGEST_STRING)) < 0) {
+            if (most.compareTo(LONGEST) < 0) {
                 out.add(ValuesWithin.longerThan(ValueSet.ANY, most.longValueExact()));
             }
             return out;
         }
 
-        private static int ceiling(BigInteger most) {
-            return most == null || most.bitLength() >= Integer.SIZE - 1
+        /** The most a pattern of these lengths counts: none at the longest string, which no string
+         *  passes, so that the pattern is not a machine of that many steps. */
+        private int ceiling() {
+            return most.compareTo(LONGEST) >= 0 || most.bitLength() >= Integer.SIZE - 1
                     ? PatternMeaning.Repeated.NO_CEILING : most.intValueExact();
         }
     }
