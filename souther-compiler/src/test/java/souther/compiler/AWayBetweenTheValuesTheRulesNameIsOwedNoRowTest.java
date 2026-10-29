@@ -351,14 +351,14 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
                 "no row saw it, so the proof stands");
         assertInstanceOf(Reachability.Unreachable.class,
                 proven.asRunWith(ReachEvidence.of(Set.of(), Set.of(new SeenConditionOutcome(
-                        proof.at(), !proof.held())))).answers().at(proof),
+                        proof.at(), !proof.held())), Set.of())).answers().at(proof),
                 "a row seeing it come out the other way says nothing against it");
         assertEquals(Set.of(), proven.asRunWith(ReachEvidence.of(Set.of(),
-                        Set.of(new SeenConditionOutcome(proof.at(), !proof.held()))))
+                        Set.of(new SeenConditionOutcome(proof.at(), !proof.held())), Set.of()))
                         .contradicted().places(),
                 "and nothing it says is shown wrong");
         PathReachability.Answers.AsRun ran = proven.asRunWith(ReachEvidence.of(Set.of(),
-                Set.of(new SeenConditionOutcome(proof.at(), proof.held()))));
+                Set.of(new SeenConditionOutcome(proof.at(), proof.held())), Set.of()));
         assertInstanceOf(Reachability.Reachable.class, ran.answers().at(proof),
                 "a row seeing it come out that way takes the proof back");
         assertEquals(Set.of(proof), ran.contradicted().places(),

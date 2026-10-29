@@ -529,7 +529,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void aRowAtAnApplicationTakesBackThatNothingArrivesThere() {
         PathReachability.Answers.AsRun run = APPLIED.proving(
                 new ComparisonArrival.NothingArrives())
-                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame()));
+                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame(), Set.of()));
 
         assertEquals(Set.of(APPLIED.construct()), run.contradicted().emptyArrivals(),
                 "a row answered there, so it came there");
@@ -548,10 +548,10 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonArrival proven = APPLIED.proving(new ComparisonArrival.NothingArrives())
                 .arrivals().arrivalAt(APPLIED.construct());
         ComparisonArrival ran = APPLIED.proving(new ComparisonArrival.NothingArrives())
-                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame())).answers().arrivals()
+                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame(), Set.of())).answers().arrivals()
                 .arrivalAt(APPLIED.construct());
         ComparisonArrival missedAndRan = APPLIED.proving(misses())
-                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame())).answers().arrivals()
+                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame(), Set.of())).answers().arrivals()
                 .arrivalAt(APPLIED.construct());
 
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,

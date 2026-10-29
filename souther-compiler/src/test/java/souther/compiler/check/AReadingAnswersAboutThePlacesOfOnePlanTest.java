@@ -209,7 +209,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
                 () -> capped.arrives.asRunWith(
-                        ReachEvidence.of(Set.of(elsewhere), Set.of())));
+                        ReachEvidence.of(Set.of(elsewhere), Set.of(), Set.of())));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());

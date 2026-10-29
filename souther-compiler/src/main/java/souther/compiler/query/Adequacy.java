@@ -182,6 +182,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -2234,33 +2235,32 @@ public final class Adequacy {
             // The numbering the recordings below are read under, which is this module's own — and
             // none where its bodies were not read, in which case there is nothing to read them as.
             Optional<SiteNumbering> numbering = numberingOf(db, name);
-            // Every row that went there, whether or not it states what the behavior answers. What a
-            // proof about reach is disproved by is a run arriving, and a row whose answer is owed
-            // arrives the same way any other does — so the two are one set here, where the arm
-            // account keeps them apart. The questions are different: whether anything can get here
-            // is about the machine, and whether anything says what it answers is about the rows.
-            List<AlignedObservation> runs = new ArrayList<>();
-            for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
-                for (RowOutcome row : observed.rowsSeen()) {
-                    if (ObservedInputs.of(row, numbering).watched()
-                            instanceof Generator.Watched.Ran(var account)) {
-                        runs.add(account);
-                    }
-                }
-            }
-            return Answer.of(Ordered.map(readAsRun(proven.value(), runs)));
+            return Answer.of(Ordered.map(readAsRun(proven.value(),
+                    db.ask(new RowReadings(name)).value().values(), numbering)));
         }
 
         /**
-         * Every behavior's proofs, taken back where one of {@code runs} went against them.
+         * Every behavior's proofs, taken back where a row of {@code readings} went against them.
          *
-         * <p>Handed the runs and not what they did, so that what a run did is gathered once, from
-         * the runs ({@link ReachEvidence#ofRuns}), and not by whoever hands them over.
+         * <p>Every row that went there, whether or not it states what the behavior answers. What a
+         * proof about reach is disproved by is a run arriving, and a row whose answer is owed
+         * arrives the same way any other does — so the two are one set here, where the arm account
+         * keeps them apart. The questions are different: whether anything can get here is about
+         * the machine, and whether anything says what it answers is about the rows.
+         *
+         * <p>Handed the readings and not what the rows did, so that everything from a row to the
+         * proof it takes back is this method's: the run is read off the row here, and what it did
+         * is gathered once from the runs ({@link ReachEvidence#ofRuns}).
          */
         static Map<String, souther.compiler.check.PathReachability.Answers.AsRun> readAsRun(
                 Map<String, souther.compiler.check.PathReachability.Answers> proven,
-                List<AlignedObservation> runs) {
-            ReachEvidence evidence = ReachEvidence.ofRuns(runs);
+                Collection<RowReading> readings, Optional<SiteNumbering> numbering) {
+            Stream<AlignedObservation> runs = readings.stream()
+                    .flatMap(each -> each.rowsSeen().stream())
+                    .map(row -> ObservedInputs.of(row, numbering).watched())
+                    .flatMap(watched -> watched instanceof Generator.Watched.Ran(var account)
+                            ? Stream.of(account) : Stream.empty());
+            ReachEvidence evidence = ReachEvidence.ofRuns(runs::iterator);
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
                     new LinkedHashMap<>();
             proven.forEach((behavior, answers) -> out.put(behavior, answers.asRunWith(evidence)));

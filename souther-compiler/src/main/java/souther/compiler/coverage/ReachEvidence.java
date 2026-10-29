@@ -57,11 +57,6 @@ public final class ReachEvidence {
         return new ReachEvidence(arms, outcomes, walksOn);
     }
 
-    /** The same, of places no walk is among. */
-    public static ReachEvidence of(Set<ArmProbe> arms, Set<SeenConditionOutcome> outcomes) {
-        return new ReachEvidence(arms, outcomes, Set.of());
-    }
-
     /** The arms some run went through. */
     public Set<ArmProbe> arms() {
         return arms;

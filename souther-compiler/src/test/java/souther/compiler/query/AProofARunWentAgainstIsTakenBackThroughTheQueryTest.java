@@ -2,16 +2,22 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.PathReachability;
-import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmReportAnchor;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.RecordedConditionOutcome;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.observe.Counting;
+import souther.compiler.observe.Run;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.query.Adequacy.RowReading;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
@@ -28,6 +34,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A run recorded at a place a proof says nothing reaches takes that proof back where the runs of a
@@ -83,17 +90,73 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
                         Map.of(WALK, FOLD)));
     }
 
-    /** A run recorded as {@code arms}, {@code ways} and {@code walksOn} say, of the module's
-     *  numbering. */
-    private static AlignedObservation run(Set<Integer> arms,
-                                          Set<RecordedConditionOutcome> ways, boolean walkedOn) {
-        return NUMBERING.align(new Observation(IDENTITY, arms, ways, Set.of(),
-                Set.of(3), walkedOn ? Set.of(3) : Set.of()));
+    /** A module with one row, which is only where a row to record a run on is had from. */
+    private static final String A_ROW = """
+            module demo
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Draft = { cost: Amount }
+            data Submitted = { cost: Amount }
+            data Rejected = { reason: String }
+
+            behavior submit : (request: Draft) -> Submitted | Rejected
+                constructs Submitted, Rejected
+
+            let submit (request) = {
+                guard request.cost.value <= 100 else Rejected { reason = "over" }
+                Submitted { cost = request.cost }
+            }
+
+            example submit
+                | "a small one" : (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
+            """;
+
+    private static RowOutcome aRow() {
+        Compilation compilation = Compilation.ofSources(List.of(A_ROW), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        return compilation.exampleSourcesOf(module).stream()
+                .flatMap(id -> compilation.db()
+                        .ask(Output.Examples.asked(compilation.db(), module, id))
+                        .value().rows().stream())
+                .findFirst().orElseThrow(() -> new AssertionError("a row of the module"));
     }
 
-    private static PathReachability.Answers.AsRun readWith(AlignedObservation... runs) {
-        return Adequacy.Arrived.readAsRun(Map.of(BEHAVIOR, proven()), List.of(runs))
-                .get(BEHAVIOR);
+    private static final RowOutcome ROW = aRow();
+
+    /** The row, recorded as having gone {@code recorded} says, which is all that is changed. */
+    private static RowOutcome recordedAs(RunRecord recorded) {
+        return new RowOutcome(ROW.at(), ROW.target(), ROW.identity(), ROW.expectation(),
+                ROW.stage(), ROW.disposition(), ROW.failurePhase(), ROW.expectedArm(),
+                ROW.resultArm(), ROW.answer(), ROW.inputCases(), ROW.inputs(), ROW.statement(),
+                new Run(ROW.run().applied(), new Counting.Read(0L, recorded)), ROW.replaced());
+    }
+
+    /** What reading a behavior's rows comes to when {@code rows} are the ones it saw. */
+    private static RowReading seeing(RowOutcome... rows) {
+        return new RowReading(new Measurement.Complete<>(new Adequacy.Observed(List.of(rows))),
+                ArmObservation.RECORD);
+    }
+
+    /** A row recorded as {@code arms}, {@code ways} and {@code walksOn} say, of the module's
+     *  numbering. */
+    private static RowReading run(Set<Integer> arms, Set<RecordedConditionOutcome> ways,
+                                  boolean walkedOn) {
+        return seeing(recordedAs(new RunRecord.Recorded(new Observation(IDENTITY, arms, ways,
+                Set.of(), Set.of(3), walkedOn ? Set.of(3) : Set.of()))));
+    }
+
+    private static PathReachability.Answers.AsRun readWith(RowReading... readings) {
+        return readWith(Optional.of(NUMBERING), readings);
+    }
+
+    private static PathReachability.Answers.AsRun readWith(Optional<SiteNumbering> numbering,
+                                                           RowReading... readings) {
+        return Adequacy.Arrived.readAsRun(Map.of(BEHAVIOR, proven()), List.of(readings),
+                numbering).get(BEHAVIOR);
     }
 
     @Test
@@ -110,6 +173,35 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
                         + " none");
         assertInstanceOf(Reachability.Unreachable.class, elsewhere.answers().at(ARM));
         assertInstanceOf(Reachability.Unreachable.class, elsewhere.answers().at(WAY));
+    }
+
+    /** A row nothing watched, or one read under no numbering, is no run: it went nowhere that
+     *  can be said, and so against no proof. */
+    @Test
+    void aRowNothingWatchedGoesAgainstNothing() {
+        RowReading unwatched = seeing(recordedAs(new RunRecord.NoAccount()),
+                recordedAs(new RunRecord.NoAccount()));
+        RowReading unnumbered = run(Set.of(0), Set.of(), true);
+
+        assertEquals(PathReachability.Answers.Contradictions.NONE,
+                readWith(unwatched).contradicted());
+        assertEquals(PathReachability.Answers.Contradictions.NONE,
+                readWith(Optional.empty(), unnumbered).contradicted());
+    }
+
+    /** The query is the reading of the rows put through the method above, and is recomputed when
+     *  that reading changes. */
+    @Test
+    void theQueryReadsTheReadingOfTheRows() {
+        Compilation compilation = Compilation.ofSources(List.of(A_ROW), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        compilation.db().ask(new Adequacy.Arrived(module));
+
+        assertTrue(compilation.db().dependenciesOf(new Adequacy.Arrived(module))
+                        .contains(new Adequacy.RowReadings(module)),
+                "arrived is what the rows' reading says, and nothing else says it");
     }
 
     @Test

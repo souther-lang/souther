@@ -192,7 +192,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 .findFirst().orElseThrow();
         ArmProbe probe = shut.probe().orElseThrow();
         PathReachability.Answers.AsRun ran = answers.asRunWith(
-                ReachEvidence.of(Set.of(probe), Set.of()));
+                ReachEvidence.of(Set.of(probe), Set.of(), Set.of()));
         assertEquals(Set.of(shut), ran.contradicted().places(),
                 "a row through it is what takes the proof back");
         assertEquals(List.of(), ran.answers().found().entrySet().stream()
