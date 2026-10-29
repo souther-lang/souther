@@ -1,11 +1,14 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The decimals a row is built from, chosen inside a run of numbers.
@@ -19,8 +22,9 @@ import java.util.List;
  *
  * <p>The places are worked out from the width of the run and not searched for: a step of at most
  * half the width has a multiple strictly inside any run of that width. A run needing more places
- * than a claim is made of ({@link DecimalOperation#PLACES_A_CLAIM_IS_MADE_OF}) has no row built in
- * it, which is a row not built and not a row there is none of.
+ * than a row is built at ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}) has no row built in
+ * it from its width, which is a row not built and not a row there is none of; the end of the run
+ * far from the line is then the row, where it is a decimal.
  */
 final class DecimalPoints {
 
@@ -57,15 +61,20 @@ final class DecimalPoints {
 
     /**
      * A decimal on each side of {@code line} inside the run from {@code lower} to {@code upper},
-     * each nearest the line: the ones a row stands at to be as near a line no decimal writes as
-     * the term can. One side only where the run lies to the other of the line.
+     * each nearest the line where the width of the run allows, and the end of the run far from the
+     * line where it does not: the ones a row stands at to be as near a line no decimal writes as
+     * the term can. Written at no more places than a row is built at, whichever number the line
+     * is for, so that what is found of the rows beside it does not turn on the number it was put
+     * beside. A side with none is left out, and the caller that needs both asks for two.
      */
     static List<ExactRatio> besideTheLine(ExactRatio line, ExactCut lower, ExactCut upper) {
         List<ExactRatio> beside = new ArrayList<>();
-        ExactRatio below = within(ExactCut.tighterUpper(ExactCut.exclusive(line), upper), lower,
-                false);
-        ExactRatio above = within(ExactCut.tighterLower(ExactCut.exclusive(line), lower), upper,
-                true);
+        ExactCut belowTheLine = ExactCut.tighterUpper(ExactCut.exclusive(line), upper);
+        ExactCut aboveTheLine = ExactCut.tighterLower(ExactCut.exclusive(line), lower);
+        ExactRatio below = within(belowTheLine, lower, false);
+        ExactRatio above = within(aboveTheLine, upper, true);
+        below = below != null ? below : theFarEnd(lower, belowTheLine, true);
+        above = above != null ? above : theFarEnd(upper, aboveTheLine, false);
         if (below != null) {
             beside.add(below);
         }
@@ -75,10 +84,28 @@ final class DecimalPoints {
         return beside;
     }
 
+    /** Whether {@code at} is a decimal written at no more places than a row is built at. */
+    static boolean isBuiltAt(ExactRatio at) {
+        return at.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>> written
+                && written.value().filter(number -> Math.abs((long) number.scale())
+                <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT).isPresent();
+    }
+
+    /**
+     * The end {@code end} of a run, where it is held and a decimal built at, and is inside
+     * {@code near}, the other end of the run on the line's side: null otherwise.
+     */
+    private static ExactRatio theFarEnd(ExactCut end, ExactCut near, boolean endIsLower) {
+        if (end == null || !end.inclusive() || !isBuiltAt(end.at())) {
+            return null;
+        }
+        return lies(end.at(), near, endIsLower) ? end.at() : null;
+    }
+
     /**
      * The fewest places after the point at which a step is at most half the width between
      * {@code near} and {@code far}, so that a multiple of it lies strictly inside; nought where
-     * the run has no far end, and negative where that is more than a claim is made of.
+     * the run has no far end, and negative where that is more than a row is built at.
      */
     private static int placesToFit(ExactCut near, ExactCut far) {
         if (far == null) {
@@ -94,7 +121,7 @@ final class DecimalPoints {
             return -1;
         }
         int places = Math.max(0, (int) (most.bitLength() * DIGITS_PER_BIT) - 1);
-        while (places <= DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF) {
+        while (places <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT) {
             if (BigInteger.TEN.pow(places).compareTo(most) >= 0) {
                 return places;
             }

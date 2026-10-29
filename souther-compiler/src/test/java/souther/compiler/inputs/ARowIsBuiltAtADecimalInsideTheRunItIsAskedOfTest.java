@@ -65,7 +65,7 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
 
     @Test
     void aRunNarrowerThanAnyFixedNumberOfPlacesStillHasARowBuiltInIt() {
-        for (int places : new int[] {61, 200, 5000}) {
+        for (int places : new int[] {61, 200, 4000}) {
             ExactCut lower = ExactCut.exclusive(A_THIRD);
             ExactCut upper = ExactCut.exclusive(A_THIRD.plus(ExactRatio.ONE.dividedBy(
                     ExactRatio.of(BigInteger.TEN.pow(places))).orNull()).orNull());
@@ -75,12 +75,12 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
     }
 
     @Test
-    void aRunWithNothingInsideIsNoRowAndNeitherIsOneNeededMorePlacesThanAClaimIsMadeOf() {
+    void aRunWithNothingInsideIsNoRowAndNeitherIsOneNeededMorePlacesThanARowIsBuiltAt() {
         assertNull(DecimalPoints.within(ExactCut.exclusive(ExactRatio.ONE),
                 ExactCut.inclusive(ExactRatio.ONE), true));
         ExactCut lower = ExactCut.exclusive(A_THIRD);
         ExactCut tooNarrow = ExactCut.exclusive(A_THIRD.plus(ExactRatio.ONE.dividedBy(
-                ExactRatio.of(BigInteger.TEN.pow(DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF + 5)))
+                ExactRatio.of(BigInteger.TEN.pow(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 5)))
                 .orNull()).orNull());
         assertNull(DecimalPoints.within(lower, tooNarrow, true));
     }
@@ -108,5 +108,20 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
         assertEquals(2, both.size());
         assertStandsInside(both.get(0), nought, ExactCut.exclusive(A_THIRD));
         assertStandsInside(both.get(1), ExactCut.exclusive(A_THIRD), one);
+    }
+
+    /** A line as near nought as no row is built at is stood beside by the ends of the run, which
+     *  are held and decimals: the row beside it does not turn on how near nought it is. */
+    @Test
+    void aLineNearerNoughtThanARowIsBuiltAtIsStoodBesideAtTheEndsOfTheRun() {
+        ExactRatio line = A_THIRD.dividedBy(ExactRatio.of(BigInteger.TEN.pow(
+                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 100))).orNull();
+        ExactCut nought = ExactCut.inclusive(ExactRatio.ZERO);
+        ExactCut one = ExactCut.inclusive(ExactRatio.ONE);
+        List<ExactRatio> both = DecimalPoints.besideTheLine(line, nought, one);
+        assertEquals(2, both.size());
+        assertEquals(ExactRatio.ZERO, both.get(0));
+        assertTrue(both.get(1).compareTo(line) > 0 && DecimalPoints.isBuiltAt(both.get(1)),
+                "above: " + both.get(1));
     }
 }

@@ -90,12 +90,13 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     }
 
     /**
-     * Whether the operations of decimals told have room whatever the numbers of a row are, so that
-     * what is found of rows built at the ends of a run holds of every number between
-     * ({@link DecimalOperation#haveRoomWhateverTheNumbers}). True where there is none.
+     * Whether what rows built at the ends of a run find of the operations of decimals told holds
+     * of every number between, for a claim about the values of the term {@code asked} with the
+     * term {@code partner} put where it takes the claim ({@link DecimalOperation#allowAClaimOver}).
+     * True where there is none.
      */
-    boolean decimalsHaveRoomWhateverTheRow() {
-        return DecimalOperation.haveRoomWhateverTheNumbers(operations.decimals());
+    boolean decimalsAllowAClaimOver(Object asked, Object partner) {
+        return DecimalOperation.allowAClaimOver(operations.decimals(), asked, partner);
     }
 
     /**

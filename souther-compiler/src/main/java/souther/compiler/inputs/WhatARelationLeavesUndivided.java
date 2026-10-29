@@ -416,13 +416,14 @@ public final class WhatARelationLeavesUndivided {
      * ({@code OrderedAffineBoundary.productAt}); a reader wanting a row on each side for every
      * value asks that, and not this.
      *
-     * <p><b>What is said of a decimal is said of the numbers written at no more than
-     * {@link DecimalOperation#PLACES_A_CLAIM_IS_MADE_OF} places.</b> A decimal is one number at
-     * every scale it is written at, and whether an operation on it has room is no function of the
-     * number, so a claim about every value of a run needs the room shown for every number it is
-     * made of ({@link DecimalOperation#haveRoomWhateverTheNumbers}) and not rows worked out at its
-     * ends. That one row is worked out in a run is the other claim, that the run has a row, and is
-     * made by building one.
+     * <p><b>What is said of a value is said of the values that have a row.</b> A row is a row where
+     * the program gets to the end of working it out ({@link RowsComputed}), as for a whole number
+     * past where its type stops. A decimal is one number at every scale it is written at, and
+     * whether an operation on it has room turns on the scale and not on the number, so the numbers
+     * with no row are not an interval and no line is drawn for them; they are no counterexample to
+     * a value leaving the relation either way, and are not said of. A claim about every value of a
+     * run is then made of what each operation reads ({@link DecimalOperation#allowAClaimOver}) and
+     * not of rows worked out at its ends; that a run has a row is made by building one.
      */
     public sealed interface Leaves {
 
@@ -3849,8 +3850,9 @@ public final class WhatARelationLeavesUndivided {
         }
         // The rows built at the ends of the run are asked of every value between them. For a sum of
         // whole numbers that holds, each being a straight function of the term. For decimals it
-        // holds only where the operations have room whatever the numbers are.
-        if (!arithmetic.decimalsHaveRoomWhateverTheRow()) {
+        // holds of what each operation reads, and nothing is claimed of an operation that reads
+        // the term asked of together with another.
+        if (!arithmetic.decimalsAllowAClaimOver(terms.get(of).key(), terms.get(by).key())) {
             return false;
         }
         List<ExactRatio> fixed = new ArrayList<>(beside);
@@ -3912,14 +3914,16 @@ public final class WhatARelationLeavesUndivided {
      * and not left to how the values were chosen.
      */
     private static <P> List<ExactRatio> nearTheLine(ExactRatio line, Term<P> reaching) {
-        if (line.fitsWrittenDecimal()) {
+        if (DecimalPoints.isBuiltAt(line)) {
             return List.of(line);
         }
         Interval holds = Interval.of(reaching.holds());
-        List<ExactRatio> near = DecimalPoints.besideTheLine(line,
-                holds == null ? null : holds.lower(), holds == null ? null : holds.upper())
-                .stream().filter(reaching.holds()::admits).toList();
-        return near.isEmpty() ? null : near;
+        List<ExactRatio> beside = DecimalPoints.besideTheLine(line,
+                holds == null ? null : holds.lower(), holds == null ? null : holds.upper());
+        // A line no row stands on is stood beside on both sides, and a row on one side shows
+        // nothing of the other.
+        return beside.size() == 2 && beside.stream().allMatch(reaching.holds()::admits)
+                ? beside : null;
     }
 
     /**

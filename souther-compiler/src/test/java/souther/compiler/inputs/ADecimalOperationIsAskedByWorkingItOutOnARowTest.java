@@ -52,11 +52,11 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     }
 
     @Test
-    void aNumberWrittenAtMorePlacesThanAClaimIsMadeOfIsNoRow() {
+    void aNumberWrittenAtMorePlacesThanARowIsBuiltAtIsNoRowOfThoseBuilt() {
         ExactRatio tiny = ExactRatio.of(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF + 1));
+                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
         ExactRatio atTheLimit = ExactRatio.of(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF));
+                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT));
         assertFalse(completesAt(tiny, TIMES_FOUR));
         assertTrue(completesAt(atTheLimit, TIMES_FOUR));
     }
