@@ -481,7 +481,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "core/GrowingFold", "count", "(" + core + "Ljava/util/function/Predicate;[I)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "rewrite", "(" + core + "L" + c
-                + "core/TheWalk;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+                + "core/TheWalk;ZZ)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/AnswerEmissionIndex", "walk", "(" + core + "L" + c
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/ArmEmissionIndex", "walk", "(" + core + "L" + c
@@ -507,6 +507,16 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
                 + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
+        // Whether a walk reads nothing a run is handed: the names it binds, and the names it reads
+        // that it does not bind.
+        row(out, c + "coverage/CoverageSites$Walk", "bindersIn", "(" + core
+                + "Ljava/util/Set;)V", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "coverage/CoverageSites$Walk", "closedUnder", "(" + core
+                + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
+        // Whether the order of the list a walk goes over is one the language leaves unspecified,
+        // asked of the tree that runs.
+        row(out, c + "coverage/CoverageSites$Walk", "listsWhatHasNoOrder", "(" + core + ")Z",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/PathReachability", "gatherPlaces", "(" + core + reads
                 + "Ljava/util/Map;Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run

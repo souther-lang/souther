@@ -150,7 +150,9 @@ class HowAWrapperIsTakenApartDoesNotChangeWhatIsReadTest {
                 () -> "and the point on the line is met by a total of exactly that: " + said);
         assertTrue(said.contains("List.sum(batch[*].amount) = 100000"),
                 () -> "which is a point about the total of what the elements hold: " + said);
-        assertTrue(said.contains("Line { amount = 100000 }"),
+        // Shared between two lines, which is the row at the point that also tells the sum's fold
+        // apart.
+        assertTrue(said.contains("Batch([Line { amount = 50000 }, Line { amount = 50000 }])"),
                 () -> "and a row is planned that puts it there: " + said);
     }
 

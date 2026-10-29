@@ -16,12 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Where a checked body becomes the body a backend emits.
  *
- * <p>{@code GrowingFold.rewrite} is the one pass between checking and emission, and what it hands
- * out is held to the typing a checked tree is held to by {@code EveryTreeTheBackendIsHandedIsTypedTest}
- * in {@code souther-compiler}. That test reads what each of the queries below hands on — a
- * behavior's body, and the definitions a module's check emits — because there is no one product
- * both come out of. A method that rewrote a body somewhere else would hand the backend a tree that
- * test never reads.
+ * <p>{@code GrowingFold} is the one pass between checking and emission, in two halves: the builds
+ * are made where the check answers, and the joins of two walks into one are made by the backend,
+ * for the classes that record nothing. What either hands out is held to the typing a checked tree
+ * is held to by {@code EveryTreeTheBackendIsHandedIsTypedTest} in {@code souther-compiler}. That
+ * test reads what each of the queries below hands on — a behavior's body, and the definitions a
+ * module's check emits — and the form the backend emits them in, because there is no one product
+ * they all come out of. A method that rewrote a body somewhere else would hand the backend a tree
+ * that test never reads.
  *
  * <p>A row added here is a body the contract does not reach yet: the test reads it too, and then
  * the row is written down.
@@ -35,8 +37,12 @@ class WhoMayRewriteACheckedBodyForTheBackendTest {
     /** The queries whose answers hold a rewritten body, by class: which query hands the body on is
      *  the question, and a lambda one of them rewrites in is compiled into the same class. */
     private static final List<String> REWRITING = List.of(
+            "souther/compiler/codegen/Backend",
             "souther/compiler/query/Bodies$CheckedBehavior",
             "souther/compiler/query/Bodies$ModuleCheck");
+
+    /** What the pass is asked by: the whole of it, its builds, and its joins. */
+    private static final Set<String> ASKED = Set.of("rewrite", "builds", "joins");
 
     @Test
     void everyMethodThatRewritesACheckedBodyIsOneTheContractReads() {
@@ -61,7 +67,7 @@ class WhoMayRewriteACheckedBodyForTheBackendTest {
                 for (var element : code) {
                     if (element instanceof InvokeInstruction call
                             && REWRITE.equals(call.owner().asInternalName())
-                            && "rewrite".equals(call.name().stringValue())) {
+                            && ASKED.contains(call.name().stringValue())) {
                         found.add(owner);
                     }
                 }

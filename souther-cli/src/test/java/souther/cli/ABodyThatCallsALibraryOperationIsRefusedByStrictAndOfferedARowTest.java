@@ -76,7 +76,8 @@ class ABodyThatCallsALibraryOperationIsRefusedByStrictAndOfferedARowTest {
         List<String> offered = generated.lines()
                 .dropWhile(line -> !line.equals("example running"))
                 .skip(1)
-                .takeWhile(line -> line.startsWith("    |"))
+                .takeWhile(line -> line.startsWith("    |") || line.startsWith("//"))
+                .filter(line -> line.startsWith("    |"))
                 .toList();
         assertFalse(offered.isEmpty(), generated);
         assertTrue(offered.stream().allMatch(line -> line.contains("Throw(")

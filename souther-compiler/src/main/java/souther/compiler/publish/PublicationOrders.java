@@ -274,8 +274,9 @@ public final class PublicationOrders {
      *
      * <p>The figures first, since raising one is a thing a reader can do and the rest are not: the
      * fork the classes could not carry, the runs one rewrite may take, the composing, and a run that
-     * did not come back. Then what the rows came to — a statement that could not be read — and last
-     * how a search that ran to its end ended.
+     * did not come back. Then what the rows came to — a statement that could not be read — and how
+     * a search that ran to its end ended. Last the step this compiler cannot run a walk rewritten
+     * with, which no run and no row changes.
      */
     public static final CanonicalSelection.Order<ReplacementEvidence.Undecided.Why>
             REWRITE_UNDECIDED_REASONS = CanonicalSelection.Order.overValues(List.of(
@@ -286,7 +287,8 @@ public final class PublicationOrders {
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ,
                     ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY,
                     ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED,
-                    ReplacementEvidence.Undecided.Why.NOTHING_RAN));
+                    ReplacementEvidence.Undecided.Why.NOTHING_RAN,
+                    ReplacementEvidence.Undecided.Why.STEP_NOT_EXPANDED));
 
     /**
      * Why a weight of a derived value is neither fixed nor shown unfixed, for a reason that is first

@@ -39,8 +39,18 @@ public final class AlignedObservation {
 
     private final Set<SeenVisit> visits;
 
+    private final Set<WalkProbe> walks;
+
+    private final Set<WalkProbe> walksOn;
+
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits) {
+        this(numbering, arms, outcomes, visits, Set.of(), Set.of());
+    }
+
+    AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
+                       Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
+                       Set<WalkProbe> walks, Set<WalkProbe> walksOn) {
         if (numbering == null) {
             throw new IllegalArgumentException(
                     "a run read as places is read as places of some numbering");
@@ -49,9 +59,12 @@ public final class AlignedObservation {
         this.arms = Set.copyOf(arms);
         this.outcomes = Set.copyOf(outcomes);
         this.visits = Set.copyOf(visits);
+        this.walks = Set.copyOf(walks);
+        this.walksOn = Set.copyOf(walksOn);
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
         this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
         this.visits.forEach(each -> requireOurs(each.at().numbering(), each));
+        this.walks.forEach(each -> requireOurs(each.numbering(), each));
     }
 
     /** What this run is read under, which is what a place put to it has to be a place of. */
@@ -73,6 +86,34 @@ public final class AlignedObservation {
     public boolean lit(ArmProbe probe) {
         requireOurs(probe.numbering(), probe);
         return arms.contains(probe);
+    }
+
+    /** The walks the run entered, as places of this numbering. */
+    public Set<WalkProbe> walks() {
+        return walks;
+    }
+
+    /** Whether the run entered the walk at {@code walk}. */
+    public boolean entered(WalkProbe walk) {
+        requireOurs(walk.numbering(), walk);
+        return walks.contains(walk);
+    }
+
+    /**
+     * Whether this run went the way {@code other} did: through the same arms, with every condition
+     * coming out the same, on every visit kept. Which walks either entered, and how far, is not
+     * part of it: no measure but the rewrites of a walk reads that, and a row taking a list one
+     * element longer goes the way a row of one element went.
+     */
+    public boolean wentTheWayOf(AlignedObservation other) {
+        return numbering.equals(other.numbering) && arms.equals(other.arms)
+                && outcomes.equals(other.outcomes) && visits.equals(other.visits);
+    }
+
+    /** Whether the run took a second element of the walk at {@code walk}. */
+    public boolean wentOn(WalkProbe walk) {
+        requireOurs(walk.numbering(), walk);
+        return walksOn.contains(walk);
     }
 
     /** Whether the run had the condition at {@code at} come out {@code held}. Not the same as the
@@ -115,12 +156,14 @@ public final class AlignedObservation {
                         && numbering.equals(that.numbering)
                         && arms.equals(that.arms)
                         && outcomes.equals(that.outcomes)
-                        && visits.equals(that.visits));
+                        && visits.equals(that.visits)
+                        && walks.equals(that.walks)
+                        && walksOn.equals(that.walksOn));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(numbering, arms, outcomes, visits);
+        return Objects.hash(numbering, arms, outcomes, visits, walks, walksOn);
     }
 
     @Override

@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.AnswerChange;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -205,7 +207,8 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
         // Each ask is of a RowToRun made for it, as a generated row makes one every time it is
         // asked to run, so that the row is the same by what it is written as and not by instance.
         Generator.ObservedRun ran = trial.run(rowOf(compilation, "discount", "below nothing"));
-        for (Map<Integer, Integer> replacing : List.of(Map.of(0, 0), Map.of(0, 1))) {
+        for (Rewriting replacing : List.of(Rewriting.ofArms(new TreeMap<>(Map.of(0, 0))),
+                Rewriting.ofArms(new TreeMap<>(Map.of(0, 1))))) {
             Optional<AnswerObservation> shared = trial.runReplacing(
                     rowOf(compilation, "discount", "below nothing"), replacing);
             assertTrue(shared.isPresent(), "the rewrite ran");
@@ -221,7 +224,7 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
         RowToRun written = rowOf(compilation, "discount", "below nothing");
         trial.runReplacing(RowToRun.of(written.inputs().stream()
                 .map(each -> new FixtureTemplate("written otherwise", each.value())).toList()),
-                Map.of(0, 99));
+                Rewriting.ofArms(new TreeMap<>(Map.of(0, 99))));
 
         assertEquals(2, built[0], "and a row written otherwise is built for itself");
     }

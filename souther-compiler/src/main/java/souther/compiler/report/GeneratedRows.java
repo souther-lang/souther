@@ -529,6 +529,20 @@ public final class GeneratedRows {
                                 Adequacy.placeOf(db, module, finding).said(rendering, declaredIn);
                         case ReplacementReportAnchor.AtTheBehavior _ ->
                                 RewriteVocabulary.outOfSight(rewrite, module);
+                        case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
+                                "a rewrite of an arm shown at a walk: " + rewrite);
+                    }));
+            // A fold's rewrite by the fold's place, or by the definition that wrote it where this
+            // build holds no source of it, for the reason an arm's is.
+            case About.ARewriteNoRowTellsApart(var _, ReplacementAsWritten.OfAWalk rewrite,
+                    var reportAt, var _, var _) -> Called.named(owed, name, Optional.of(
+                    switch (reportAt) {
+                        case ReplacementReportAnchor.AtTheWalk _ ->
+                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn);
+                        case ReplacementReportAnchor.AtTheBehavior _ ->
+                                RewriteVocabulary.outOfSight(rewrite, module);
+                        case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
+                                "a rewrite of a walk shown at a fork: " + rewrite);
                     }));
             // A body that decides nothing has one rule and it turns on no condition, so there is
             // no place to say it at.

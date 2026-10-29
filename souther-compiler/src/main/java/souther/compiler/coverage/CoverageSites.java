@@ -2,6 +2,8 @@ package souther.compiler.coverage;
 
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
+import souther.compiler.core.TheWalk;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.WorkFigure;
@@ -19,9 +21,12 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
@@ -375,6 +380,37 @@ public final class CoverageSites {
     }
 
     /**
+     * Where a run entering one walk is recorded: a fold walked from the head of its list, or a build
+     * growing a collection, as the tree that runs carries it.
+     *
+     * <p>Not a {@link Site}. Nothing is owed for entering a walk: the branch measure counts the arms
+     * a run goes through, and a walk has none of its own once it is the loop it is emitted as. What
+     * reads one of these is the replacement measure, asking which rows entered the walk and so can
+     * be asked whether they notice it rewritten ({@link WalkRewrites}).
+     *
+     * @param body        the body the loop is physically in, as for a {@link Site}
+     * @param walk        the walk the source wrote: the fold, in the copy of whatever wrote it
+     * @param index       where the run records entering it
+     * @param writtenHere whether the fold is written in a source this compilation holds, which is
+     *                    where a report about the walk can point; one the language writes is
+     *                    reported at the behavior, as an arm of a fork out of sight is
+     * @param separators  what the body the walk stands in parts strings at, written as the body
+     *                    writes them: a walk over the pieces of a string is handed more elements
+     *                    only through the string, and these are where a piece more is put
+     */
+    public record WalkSite(String body, SourceConstructOrigin walk, WalkProbe index,
+                           boolean writtenHere, List<String> separators) {
+
+        public WalkSite {
+            if (body == null || walk == null || index == null) {
+                throw new IllegalArgumentException("where a walk is entered is one walk, in one"
+                        + " body, at one place");
+            }
+            separators = List.copyOf(separators);
+        }
+    }
+
+    /**
      * The two arms of one {@code if}, so that a threshold read off its condition can ask whether the
      * comparison was ever evaluated.
      *
@@ -445,6 +481,13 @@ public final class CoverageSites {
         private final Map<String, ArmReplacements.Differs> oneValue;
         /** What every arm the walk met means, whether or not a run through it is recorded. */
         private final Map<AsWritten, SourceOutcome.Arm> armsAsWritten;
+        /** Where each walk is entered, in the order they were numbered. */
+        private final List<WalkSite> walks;
+        /** The same, by the call the loop is emitted for. By identity for the reason
+         *  {@code byNode} is. */
+        private final IdentityHashMap<Core, WalkProbe> walksByNode;
+        /** Which rewrites each walk can be run as. */
+        private final WalkRewrites walkRewrites;
 
         /**
          * Made where the bodies are walked, and nowhere a caller can reach.
@@ -472,7 +515,10 @@ public final class CoverageSites {
              IdentityHashMap<Core, int[][]> carried,
              ArmReplacements replacements,
              Map<String, ArmReplacements.Differs> oneValue,
-             Map<AsWritten, SourceOutcome.Arm> armsAsWritten) {
+             Map<AsWritten, SourceOutcome.Arm> armsAsWritten,
+             List<WalkSite> walks,
+             IdentityHashMap<Core, WalkProbe> walksByNode,
+             WalkRewrites walkRewrites) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
             // arithmetic, which is what would have had the emitter copy half a `long` off the
@@ -500,6 +546,9 @@ public final class CoverageSites {
             }
             for (AnsweredAt answer : answered) {
                 addressed.add(answer.site().index());
+            }
+            for (WalkSite walk : walks) {
+                addressed.add(walk.index());
             }
             if (numbering.identity().byNumber().size() != addressed.size()) {
                 throw new IllegalArgumentException("this plan numbered " + addressed.size()
@@ -535,6 +584,39 @@ public final class CoverageSites {
             this.replacements = replacements;
             this.oneValue = Map.copyOf(oneValue);
             this.armsAsWritten = Map.copyOf(armsAsWritten);
+            this.walks = List.copyOf(walks);
+            this.walksByNode = walksByNode;
+            this.walkRewrites = walkRewrites;
+        }
+
+        /** Where every walk of the module is entered, in the order they were numbered. */
+        public List<WalkSite> walks() {
+            return walks;
+        }
+
+        /**
+         * The walks of one behavior: those in its own body and those in the methods it calls, as
+         * {@link #arms} has the arms.
+         */
+        public List<WalkSite> walks(String behavior) {
+            return walks.stream().filter(walk -> methods.owes(behavior, walk.body())).toList();
+        }
+
+        /**
+         * Where entering the walk {@code node} is emitted for is recorded, or empty where this plan
+         * numbered none there: a walk no row that stands can reach.
+         */
+        public Optional<WalkProbe> walkSiteOf(Core node) {
+            return Optional.ofNullable(walksByNode.get(node));
+        }
+
+        /** Which rewrites each numbered walk can be run as. */
+        public WalkRewrites walkRewrites() {
+            return walkRewrites;
+        }
+
+        IdentityHashMap<Core, WalkProbe> walksByNode() {
+            return walksByNode;
         }
 
         /**
@@ -744,7 +826,8 @@ public final class CoverageSites {
                 Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
                 SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE,
-                new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of());
+                new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of(), List.of(),
+                new IdentityHashMap<>(), WalkRewrites.NONE);
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -826,10 +909,11 @@ public final class CoverageSites {
          *
          * <p>A place an application's answer is recorded at is one such site, beside the arms and
          * comparisons: a body whose only condition is what {@code List.any(x -> x, xs)} answers has
-         * no arm and no comparison of its own, and its answer is still recorded.
+         * no arm and no comparison of its own, and its answer is still recorded. So is a walk: a
+         * body whose only loop is a fold has nothing else to record, and entering it still is.
          */
         public boolean hasNoProbes() {
-            return sites.isEmpty() && answersByNode.isEmpty();
+            return sites.isEmpty() && answersByNode.isEmpty() && walks.isEmpty();
         }
 
         /** The probe numbers of {@code node}'s arms, in the order the emitter emits them, or null
@@ -930,8 +1014,9 @@ public final class CoverageSites {
      * filed by which {@code Core} objects were put in it, so one made anywhere but where those
      * objects are held is an index into a graph its holder is not the owner of.
      */
-    public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied) {
-        Walked walked = walked(of, decisions, supplied);
+    public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied,
+                          TheWalk theWalk) {
+        Walked walked = walked(of, decisions, supplied, theWalk);
         return asPlan(walked,
                 walked.walk().numbering.finish(of.module(), walked.executable()));
     }
@@ -950,12 +1035,12 @@ public final class CoverageSites {
                           Methods methods) { }
 
     private static Walked walked(ModuleBodies of, DecisionSources decisions,
-                                 SuppliedRules supplied) {
+                                 SuppliedRules supplied, TheWalk theWalk) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
         ComparisonCatalog comparisons = ComparisonCatalog.of(of);
-        Walk walk = new Walk(of.module(), comparisons, decisions, supplied);
+        Walk walk = new Walk(of.module(), comparisons, decisions, supplied, theWalk);
         Map<String, ExecutableIdentity> executable = new LinkedHashMap<>();
         for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
@@ -970,7 +1055,9 @@ public final class CoverageSites {
         }
         // The methods after the behaviors, so what a behavior's numbers are does not move with which
         // values it happens to call. A method is walked as a body of its own, and which behaviors
-        // owe its places is settled below, off who calls it.
+        // owe its places is settled below, off who calls it. A value is handed nothing, so every
+        // walk in one is part of working out one value, and none is rewritten.
+        walk.walksAreRewritten = false;
         for (Map.Entry<String, Core> method : of.methods().entrySet()) {
             walk.behavior(method.getKey(), method.getValue());
             executable.put(method.getKey(), ExecutableIdentity.of(method.getValue(),
@@ -983,6 +1070,9 @@ public final class CoverageSites {
             executable.put(passage.getKey(), ExecutableIdentity.of(passage.getValue(),
                     Binders.of(of.module(), walk.places)));
         }
+        // The walks after every other place, so the numbers the arms and the conditions were
+        // given do not move with which loops a body holds.
+        walk.numberTheWalks();
         return new Walked(comparisons, walk, executable, Methods.of(of));
     }
 
@@ -1050,10 +1140,22 @@ public final class CoverageSites {
         Map<String, ArmReplacements.Differs> oneValue = new LinkedHashMap<>();
         walk.oneValue.forEach((body, differs) ->
                 oneValue.put(body, differs.placed(numbering, issued)));
+        List<WalkSite> walks = new ArrayList<>();
+        IdentityHashMap<Core, WalkProbe> walksByNode = new IdentityHashMap<>();
+        SequencedMap<Integer, WalkRewrites.AtWalk> walkSites = new LinkedHashMap<>();
+        for (DraftWalk draft : walk.walks) {
+            WalkProbe at = numbering.walk(draft.raw());
+            walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
+                    List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of()))));
+            walksByNode.put(draft.call(), at);
+            walkSites.put(draft.raw(), new WalkRewrites.AtWalk(draft.walk(), at, draft.theSame(),
+                    draft.overAFixedList(), draft.notCarried()));
+        }
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
                 byComparison, armsByNode, answered, walk.mayRepeat, Map.copyOf(walk.reachedAt),
                 comparisons, numbering, found.methods(), walk.carried,
-                new ArmReplacements(bySite), oneValue, walk.armsAsWritten);
+                new ArmReplacements(bySite), oneValue, walk.armsAsWritten, walks, walksByNode,
+                new WalkRewrites(walkSites));
     }
 
     /** The arm {@code raw} addresses, where an arm was numbered at all. */
@@ -1169,6 +1271,22 @@ public final class CoverageSites {
     /** One answer a body can come to, and the arms on the way to it. */
     private record Leaf(Core answer, List<DraftArm> way) {}
 
+    /**
+     * One walk as the walk over the bodies has it: the call the loop is emitted for, where it is,
+     * and which rewrites the source shows are the walk under another spelling. Numbered once every
+     * other place has been ({@link Walk#numberTheWalks}), and then {@code raw} is its number.
+     */
+    private record DraftWalk(Core.Call call, String body, SourceConstructOrigin walk,
+                             NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
+                             boolean overAFixedList, Optional<NotCarriedReason> notCarried,
+                             int raw) {
+
+        DraftWalk numbered(int number) {
+            return new DraftWalk(call, body, walk, at, writtenHere, theSame, overAFixedList,
+                    notCarried, number);
+        }
+    }
+
     /** The two arms of one {@code if} as the walk has them. */
     private record DraftGuard(String behavior, SourceConstructOrigin origin, DecidedBy decided,
                               java.util.OptionalInt whereThen, java.util.OptionalInt whereElse,
@@ -1256,6 +1374,22 @@ public final class CoverageSites {
 
         private final DecisionSources decisions;
         private final SuppliedRules supplied;
+        /** The library's one loop, which says which calls are walks and where their arguments are. */
+        private final TheWalk theWalk;
+        /** The walks met, in the order the walk over the bodies met them. */
+        private List<DraftWalk> walks = new ArrayList<>();
+        /** Whether a walk met in the body being walked is one a rewrite is asked of: in a
+         *  behavior's body, and not in a value's. */
+        private boolean walksAreRewritten = true;
+        /** What each body parts strings at, where it writes the separator out, in the order met. */
+        private final Map<String, Set<String>> separators = new LinkedHashMap<>();
+        /** What each name of the body being walked is bound to by a {@code let}, as the walk passes
+         *  it, which is what says whether reading the name reads something a run is handed
+         *  ({@link #closed}). */
+        private final Map<BindingId, Core> boundTo = new HashMap<>();
+        /** Whether each of those values reads nothing a run is handed, worked out once a walk asks
+         *  and kept: a name read by several walks is one value. */
+        private final Map<BindingId, Boolean> closedNames = new HashMap<>();
 
         /** Whose plan this is. Carried because an arm of a fork nobody here wrote is reported at
          *  the place this compilation reached it, and a number counted within one plan addresses
@@ -1263,11 +1397,208 @@ public final class CoverageSites {
         private final String module;
 
         Walk(String module, ComparisonCatalog comparisons, DecisionSources decisions,
-             SuppliedRules supplied) {
+             SuppliedRules supplied, TheWalk theWalk) {
             this.module = module;
             this.comparisons = comparisons;
             this.decisions = decisions;
             this.supplied = supplied;
+            this.theWalk = theWalk;
+        }
+
+        /** A number for every walk met, in the order they were met, after every other place. */
+        void numberTheWalks() {
+            List<DraftWalk> numbered = new ArrayList<>();
+            for (DraftWalk draft : walks) {
+                numbered.add(draft.numbered(numbering.number(new SiteAddress.Walk(draft.at()))));
+            }
+            walks = numbered;
+        }
+
+        /**
+         * {@code call}, kept as a walk where it is one the tree that runs carries as a loop: a fold
+         * from the head of its list, or a build. Whether its step runs where it stands decides only
+         * whether the walk can be run rewritten. A walk run as a call of the library's method is
+         * handed its step as a value, and the method is one for every such walk, so no switch there
+         * could tell one walk's rewrite from another's: it is kept all the same, with the reason
+         * its classes carry no switch ({@link NotCarriedReason.StepNotExpanded}).
+         */
+        private void walkIfOne(Core.Call call) {
+            if (!call.isWalk(theWalk) || !walksAreRewritten) {
+                return;
+            }
+            // A step that is never applied is run by nothing, and there is nothing to rewrite.
+            Core.Block step = call.stepRunWhereItStands(theWalk);
+            if (step == null && call.omitsFunctionBody(theWalk.step())) {
+                return;
+            }
+            // A walk that reads nothing a run is handed answers one value on every run, and either
+            // rewrite of it answers one value too: changing it is changing a constant, which no
+            // input can tell apart from the walk unless every row already does.
+            if (closed(call)) {
+                return;
+            }
+            if (!call.origin().isWritten()) {
+                throw new IllegalStateException("a walk at " + call.pos() + " carries no call the"
+                        + " source wrote, and a rewrite of it would be of nothing an author wrote");
+            }
+            Core walked = call.args().get(call.fn() instanceof Core.Emitted ? 1
+                    : theWalk.container());
+            // A walk over what a set or a map lists goes in an order the language leaves
+            // unspecified, so its first element and the step before another are no element and no
+            // step the model names: a row telling either rewrite apart would turn on that order.
+            if (listsWhatHasNoOrder(walked)) {
+                return;
+            }
+            Set<WalkRewrite> theSame = EnumSet.noneOf(WalkRewrite.class);
+            // A list written with one element or none is walked no further than its first: both
+            // rewrites leave such a walk as it is.
+            Core.ListLit written = listWrittenOut(walked);
+            if (written != null && written.elements().size() <= 1) {
+                theSame.addAll(EnumSet.allOf(WalkRewrite.class));
+            }
+            // A step that never reads what it carries is handed the seed to no effect.
+            if (step != null
+                    && !reads(step.body(), step.params().get(theWalk.accumulator()).binding())) {
+                theSame.add(WalkRewrite.STEPS_FROM_THE_SEED);
+            }
+            // A step not written where the fold hands it over is a fold the language owes rows of
+            // all the same; what is missing is a way to run it rewritten, and that is said.
+            Optional<NotCarriedReason> notCarried = step == null
+                    ? Optional.of(new NotCarriedReason.StepNotExpanded()) : Optional.empty();
+            walks.add(new DraftWalk(call, behavior, call.origin(), places.of(call),
+                    Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
+                    notCarried, -1));
+        }
+
+        /**
+         * Whether {@code e} reads nothing a run is handed: every name it reads is bound inside it,
+         * or bound outside it to a value that reads nothing a run is handed either, and no call in
+         * it reaches a behavior, whose answer arrives from outside.
+         *
+         * <p>Answered no where it cannot tell: a name bound inside {@code e} by a construct this
+         * does not collect reads as one bound outside, and a walk that is asked about though it
+         * could have been left out costs a search and decides nothing wrongly.
+         */
+        private boolean closed(Core e) {
+            Set<BindingId> inside = new HashSet<>();
+            bindersIn(e, inside);
+            return closedUnder(e, inside);
+        }
+
+        private boolean closedUnder(Core e, Set<BindingId> inside) {
+            if (e instanceof Core.Read read && !inside.contains(read.binding())
+                    && !closedName(read.binding())) {
+                return false;
+            }
+            if (e instanceof Core.Call call && reachesABehavior(call)) {
+                return false;
+            }
+            if (e instanceof Core.Apply apply && !closedUnder(apply.fn(), inside)) {
+                return false;
+            }
+            boolean[] all = {true};
+            Core.forEachChild(e, child -> all[0] = all[0] && closedUnder(child, inside));
+            return all[0];
+        }
+
+        /**
+         * The list literal {@code e} is, or null where it is not one the source wrote out: the
+         * literal itself, a name bound to one, or one put in another order, which holds the elements
+         * it held. A list of the same elements walks as many steps whatever order it is in.
+         */
+        private Core.ListLit listWrittenOut(Core e) {
+            Core plain = Core.withoutStanding(e);
+            if (plain instanceof Core.Read read) {
+                Core bound = boundTo.get(read.binding());
+                return bound == null ? null : listWrittenOut(bound);
+            }
+            if (plain instanceof Core.ListLit literal) {
+                return literal;
+            }
+            if (plain instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)
+                    && (kernel == Kernel.LIST_REVERSE || kernel == Kernel.LIST_SORT)
+                    && call.args().size() == 1) {
+                return listWrittenOut(call.args().getFirst());
+            }
+            return null;
+        }
+
+        /**
+         * Whether the order of the list {@code e} answers is one the language leaves unspecified: it
+         * is what listing a set or a map answers, or a list made of one that is, however it was
+         * bound or worked on. Only ordering it ({@link Kernel#LIST_SORT}) gives it an order again.
+         *
+         * <p>A list-typed node has the order of the lists it is made of, and a node of any other
+         * type has none to speak of: a function handed to {@code List.map} is not a list its answer
+         * is ordered by, and what a {@code let} binds is the order of its body only where the body
+         * reads it, which the name it was bound to says.
+         */
+        private boolean listsWhatHasNoOrder(Core e) {
+            Core plain = Core.withoutStanding(e);
+            if (plain instanceof Core.Read read) {
+                Core bound = boundTo.get(read.binding());
+                return bound != null && listsWhatHasNoOrder(bound);
+            }
+            if (!(plain.type() instanceof Type.ListOf)) {
+                return false;
+            }
+            if (plain instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)) {
+                if (kernel.listsInNoOrder()) {
+                    return true;
+                }
+                if (kernel == Kernel.LIST_SORT) {
+                    return false;
+                }
+            }
+            if (plain instanceof Core.LetIn let) {
+                return listsWhatHasNoOrder(let.body());
+            }
+            boolean[] any = {false};
+            Core.forEachChild(plain, child -> any[0] = any[0] || listsWhatHasNoOrder(child));
+            return any[0];
+        }
+
+        /** Whether {@code name} is bound by a {@code let} to a value that reads nothing a run is
+         *  handed. A parameter, and anything else no {@code let} the walk passed binds, is not. */
+        private boolean closedName(BindingId name) {
+            Boolean known = closedNames.get(name);
+            if (known != null) {
+                return known;
+            }
+            Core value = boundTo.get(name);
+            // Not closed while its own value is being read, so a name reaching itself is not.
+            closedNames.put(name, false);
+            boolean closed = value != null && closed(value);
+            closedNames.put(name, closed);
+            return closed;
+        }
+
+        /** The names {@code e} binds anywhere inside it. */
+        private static void bindersIn(Core e, Set<BindingId> out) {
+            switch (e) {
+                case Core.Block block -> block.params().forEach(each -> out.add(each.binding()));
+                case Core.LetIn let -> out.add(let.binder().binding());
+                case Core.IfConstructed attempt -> {
+                    if (attempt.binder() != null) {
+                        out.add(attempt.binder().binding());
+                    }
+                }
+                case Core.Match match -> match.cases().forEach(each -> {
+                    if (each.binding().binder() != null) {
+                        out.add(each.binding().binder().binding());
+                    }
+                });
+                default -> { }
+            }
+            Core.forEachChild(e, child -> bindersIn(child, out));
+        }
+
+        /** Whether {@code call} reaches a behavior, whose answer a run stands in or injects. */
+        private static boolean reachesABehavior(Core.Call call) {
+            return call.fn() instanceof Core.Reached.OfDeclaration declared
+                    && declared.reaches() instanceof Core.Reaches.ABehavior;
         }
 
         void behavior(String name, Core body) {
@@ -1280,6 +1611,8 @@ public final class CoverageSites {
             this.places = NodeAddresses.of(name, body);
             this.standingIn = OccurrenceLineage.ORIGINAL;
             this.identities.clear();
+            this.boundTo.clear();
+            this.closedNames.clear();
             walk(body, true);
             oneValue.put(name, fromOneValue(body));
         }
@@ -2043,6 +2376,15 @@ public final class CoverageSites {
                         walk(structural.take(new CoreStructure.Edge.CallArgument(i),
                                 c.args().get(i)), inside && !c.omitsFunctionBody(i));
                     }
+                    if (inside) {
+                        walkIfOne(c);
+                    }
+                    if (c.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)
+                            && kernel == Kernel.STRING_SPLIT
+                            && Core.withoutStanding(c.args().getFirst()) instanceof Core.Str sep) {
+                        separators.computeIfAbsent(behavior, _ -> new LinkedHashSet<>())
+                                .add(sep.value());
+                    }
                 }
                 // What a representation kept standing for an analysis to read. Coverage is measured
                 // over the tree that runs, which keeps none of these, so reaching one would mean this
@@ -2062,6 +2404,7 @@ public final class CoverageSites {
                     if (handsInWhatTheCopyWasGiven(li)) {
                         handed.add(li.binder().binding());
                     }
+                    boundTo.put(li.binder().binding(), li.value());
                     walk(structural.take(new CoreStructure.Edge.LetBody(), li.body()), inside);
                 }
                 // A function value, and its arms are arms: what is written here runs when whatever

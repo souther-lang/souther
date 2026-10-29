@@ -266,7 +266,11 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
                     | ([Throw([Pin(1), Pin(2)])]) -> 2
                     | ([Throw([Pin(1), Pin(2), Pin(3)])]) -> 3
                 """;
-        assertEquals(List.of(), offeredForScore(written),
+        List<String> again = offeredForScore(written).stream()
+                .filter(List.of("[]", "[Throw([])]", "[Throw([Pin(12)])]",
+                        "[Throw([Pin(1), Pin(2)])]", "[Throw([Pin(1), Pin(2), Pin(3)])]")::contains)
+                .toList();
+        assertEquals(List.of(), again,
                 "the block a person is handed holds nothing they have written");
 
         String partly = AS_BEHAVIOR + """

@@ -6,6 +6,7 @@ import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.RunSite;
+import souther.compiler.coverage.WalkProbe;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
@@ -448,6 +449,28 @@ final class CodegenContext {
         return coverage.answerSiteOf(node);
     }
 
+    /**
+     * Where entering the walk {@code call} is emitted for is recorded, or empty where the plan
+     * numbered none there. Absent is ordinary: a walk no row that stands can reach has no site.
+     */
+    Optional<WalkProbe> walkSiteOf(Core call) {
+        return coverage.walkSiteOf(call);
+    }
+
+    /**
+     * Whether the measuring classes carry the switch at the walk {@code call}: not where a method
+     * could not hold it, and everywhere else the plan numbered one.
+     */
+    boolean carriesTheWalk(Core call) {
+        if (notCarrying.contains(call) || coverage.walkSiteOf(call).isEmpty()) {
+            return false;
+        }
+        if (carriedSoFar.isEmpty() || carriedSoFar.getLast() != call) {
+            carriedSoFar.add(call);
+        }
+        return true;
+    }
+
     /** Records that one planned arm was emitted. */
     void emitted(int site) {
         emittedSites.add(site);
@@ -471,6 +494,9 @@ final class CodegenContext {
         }
         for (CoverageSites.AnswerSite answer : coverage.answers()) {
             planned.add(answer.index());
+        }
+        for (CoverageSites.WalkSite walk : coverage.walks()) {
+            planned.add(walk.index());
         }
         List<Integer> missing = new java.util.ArrayList<>();
         for (RunSite place : planned) {

@@ -1201,12 +1201,23 @@ public sealed interface Core {
          * @param theWalk the standard library's one loop
          */
         public Block stepRunWhereItStands(TheWalk theWalk) {
-            boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
+            return isWalk(theWalk) ? runsWhereItStands(args.get(0)) : null;
+        }
+
+        /**
+         * Whether this call is a walk of a list from its head, or a build of a list or a map: the
+         * calls an output emits as a loop where it can. What the call is, and not whether it is
+         * emitted as that loop ({@link #stepRunWhereItStands}), which turns on how its step is
+         * written.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean isWalk(TheWalk theWalk) {
+            return fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
                     || (fn instanceof Reached reached
                     && theWalk.operation().equals(reached.denotes()) && theWalk.inTheLoopsOrder()
                     && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
                     && from.value() == 0);
-            return walks ? runsWhereItStands(args.get(0)) : null;
         }
     }
 

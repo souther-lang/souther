@@ -178,6 +178,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                     | "zero is not positive" : ([0]) -> 0
                     | "negative" : ([-1]) -> 0
                     | "mixed" : ([-1, 3]) -> 1
+                    | "positive first" : ([3, -1]) -> 1
                     | "none" : ([]) -> 0
                 """;
         assertTheSame(pick.formatted("List.any(x -> x > 0, xs)"),

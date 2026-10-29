@@ -76,6 +76,15 @@ public final class SiteNumbering {
         return new ConditionOutcomeSite(identity, raw);
     }
 
+    /** The walk {@code raw} addresses, refused where this numbering issued it to anything else. */
+    public WalkProbe walk(int raw) {
+        if (!(at(raw) instanceof SiteAddress.Walk)) {
+            throw new IllegalArgumentException(
+                    raw + " was issued for " + at(raw) + ", which is not a walk");
+        }
+        return new WalkProbe(identity, raw);
+    }
+
     /**
      * {@code seen}, read as places of this numbering.
      *
@@ -108,7 +117,15 @@ public final class SiteNumbering {
         for (RecordedVisit visit : seen.visits()) {
             visits.add(new SeenVisit(outcome(visit.at()), visit.nth(), visit.held()));
         }
-        return new AlignedObservation(identity, arms, ways, visits);
+        Set<WalkProbe> walks = new LinkedHashSet<>();
+        for (int raw : seen.walks()) {
+            walks.add(walk(raw));
+        }
+        Set<WalkProbe> walksOn = new LinkedHashSet<>();
+        for (int raw : seen.walksOn()) {
+            walksOn.add(walk(raw));
+        }
+        return new AlignedObservation(identity, arms, ways, visits, walks, walksOn);
     }
 
     private SiteAddress at(int raw) {

@@ -25,10 +25,13 @@ import souther.compiler.check.TypeView;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.Probe;
+import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.partition.Replacement;
 import souther.compiler.observe.ReplacedRun;
-import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.jvm.GeneratedClass;
@@ -1246,8 +1249,8 @@ public final class ExampleVerifier {
     // --- one row ------------------------------------------------------------------------------
 
     /**
-     * One row evaluated again with arms of the body answering as siblings, under the row's own
-     * budget and with a state of its own, so nothing it does is read as the row's.
+     * One row evaluated again with the body rewritten, under the row's own budget and with a state
+     * of its own, so nothing it does is read as the row's.
      */
     private static final class ReplacedWork implements Callable<RowState> {
 
@@ -1255,15 +1258,15 @@ public final class ExampleVerifier {
         private final ExampleTarget target;
         private final Sig sig;
         private final Hir.ExampleRow row;
-        private final Map<Integer, Integer> replacing;
+        private final Rewriting asked;
 
         ReplacedWork(ExampleVerifier verifier, ExampleTarget target, Sig sig, Hir.ExampleRow row,
-                     Map<Integer, Integer> replacing) {
+                     Rewriting asked) {
             this.verifier = verifier;
             this.target = target;
             this.sig = sig;
             this.row = row;
-            this.replacing = replacing;
+            this.asked = asked;
         }
 
         /**
@@ -1275,7 +1278,7 @@ public final class ExampleVerifier {
         @Override
         public RowState call() {
             RowState state = new RowState();
-            Intervention.begin(replacing);
+            Intervention.begin(asked);
             EvaluationContext.begin(verifier.policy.stepLimit(),
                     verifier.policy.recursionDepthLimit());
             try {
@@ -1336,7 +1339,7 @@ public final class ExampleVerifier {
             // Under the numbering the classes this row runs against were emitted with. Classes
             // that record nothing start no recording, and what comes back is no account of a run.
             if (verifier.probes
-                    instanceof ProbeImage.Instrumented(var numbering, var _)) {
+                    instanceof ProbeImage.Instrumented(var numbering, var _, var _)) {
                 Probe.begin(numbering);
             }
             // On this thread, because this thread is the evaluation: the budget belongs to the row,
@@ -1532,35 +1535,40 @@ public final class ExampleVerifier {
 
     /**
      * The row run again once per arm it went through and sibling the classes carry there, each with
-     * that sibling answering in the arm's place.
+     * that sibling answering in the arm's place, and once per walk it entered and way the classes
+     * can run that walk.
      *
      * <p>Of every row whose run was recorded, whether or not it answered: the arms it went through
-     * are what the recording says, and a row that stopped without an answer may hold under the
-     * rewrite, which tells the two apart. Each run is its own piece of work, after the row's, so
-     * that however these go the row's own outcome is what it was.
+     * and the walks it entered are what the recording says, and a row that stopped without an
+     * answer may hold under the rewrite, which tells the two apart. Each run is its own piece of
+     * work, after the row's, so that however these go the row's own outcome is what it was.
      *
-     * <p>Each run has the row's budget of steps, which is what stops a replacement that would go
-     * round for ever, and the same answer on every machine. The deadline is behind that, for a run
-     * the steps do not stop; once one run of the row is given up on, the row's remaining
-     * replacements are not run, so a row costs at most one deadline past its own however many arms
-     * it went through. Each of them is still here, as a run that ran out of its time: every
-     * rewrite of every arm the row went through has a run in this list, so a reader never has to
+     * <p>Each run has the row's budget of steps, which is what stops a rewrite that would go round
+     * for ever, and the same answer on every machine. The deadline is behind that, for a run the
+     * steps do not stop; once one run of the row is given up on, the row's remaining rewrites are
+     * not run, so a row costs at most one deadline past its own however many arms it went through.
+     * Each of them is still here, as a run that ran out of its time: every rewrite of every arm the
+     * row went through and every walk it entered has a run in this list, so a reader never has to
      * read anything off one being missing.
      */
     private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Hir.ExampleRow row,
                                            RowState state) {
-        if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements))
+        if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements,
+                WalkRewrites walks))
                 || !(state.recorded instanceof RunRecord.Recorded(Observation seen))) {
             return List.of();
         }
+        List<RunRewrite> rewrites = new ArrayList<>(replacements.through(seen.arms()));
+        rewrites.addAll(walks.through(seen.walks()));
         List<ReplacedRun> out = new ArrayList<>();
         boolean givenUp = false;
-        for (ArmReplacements.Rewrite each : replacements.through(seen.arms())) {
+        for (RunRewrite each : rewrites) {
+            Replacement replaced = Replacement.of(each);
             Optional<ReplacedRun> ran = givenUp ? Optional.empty()
-                    : replacedRun(target, sig, row, state.reached, state.disposition,
-                            each.fork(), each.part(), each.with(), each.replacing());
+                    : replacedRun(target, sig, row, state.reached, state.disposition, replaced,
+                            each.asked());
             givenUp = ran.isEmpty();
-            out.add(ran.orElseGet(() -> ranOut(each.fork(), each.part(), each.with(),
+            out.add(ran.orElseGet(() -> ranOut(replaced,
                     Optional.of(WorkFigure.COMPILER_TIME.at(within(deadline))))));
         }
         return out;
@@ -1577,9 +1585,8 @@ public final class ExampleVerifier {
      */
     private Optional<ReplacedRun> replacedRun(ExampleTarget target, Sig sig, Hir.ExampleRow row,
                                               Reached written, Disposition asWritten,
-                                              SourceConstructOrigin fork, int part, int with,
-                                              Map<Integer, Integer> replacing) {
-        ReplacedWork work = new ReplacedWork(this, target, sig, row, replacing);
+                                              Replacement replaced, Rewriting asked) {
+        ReplacedWork work = new ReplacedWork(this, target, sig, row, asked);
         return switch (deadline.given(
                 new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
             case Deadline.Outcome.Finished(RowState state) -> {
@@ -1592,7 +1599,7 @@ public final class ExampleVerifier {
                         && state.disposition == Disposition.INCOMPLETE
                         ? leftUndecidedBy(state.failurePhase).figure().stream().toList()
                         : List.of();
-                yield Optional.of(new ReplacedRun(fork, part, with,
+                yield Optional.of(new ReplacedRun(replaced,
                         state.reached.answer(reader::observed),
                         reader.change(written.answer(reader::structured),
                                 state.reached.answer(reader::structured), sig.outputType()),
@@ -1610,7 +1617,7 @@ public final class ExampleVerifier {
                 // A budget or the stack running out is the replaced program's to have done, and
                 // says nothing either way about whether the row would notice it.
                 if (RunLimits.reached(cause)) {
-                    yield Optional.of(ranOut(fork, part, with, RunLimits.figureOf(cause, policy)));
+                    yield Optional.of(ranOut(replaced, RunLimits.figureOf(cause, policy)));
                 }
                 if (cause instanceof RuntimeException re) {
                     throw re;
@@ -1622,9 +1629,8 @@ public final class ExampleVerifier {
 
     /** A replaced run that ran out, at {@code limit}: where it was a figure, the one figure that
      *  left the row untold. */
-    private static ReplacedRun ranOut(SourceConstructOrigin fork, int part, int with,
-                                      Optional<Figure> limit) {
-        return new ReplacedRun(fork, part, with, new AnswerObservation.RanOut(limit),
+    private static ReplacedRun ranOut(Replacement replaced, Optional<Figure> limit) {
+        return new ReplacedRun(replaced, new AnswerObservation.RanOut(limit),
                 AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL,
                 limit.stream().toList());
     }
