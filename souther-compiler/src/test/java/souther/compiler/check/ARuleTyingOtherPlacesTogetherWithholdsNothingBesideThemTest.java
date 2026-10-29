@@ -64,6 +64,18 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
         assertTrue(read.shownToHoldAValue(), "`a` and `b` empty hold every rule");
     }
 
+    /** And whichever call relates the two, where what it answers is worked out at the values
+     *  written down. */
+    @Test
+    void soDoesAPrefixOrASuffix() {
+        for (String rule : List.of("String.startsWith(a, b)", "String.endsWith(a, b)")) {
+            FieldDomains read = readingOf("    invariant " + rule);
+
+            assertTrue(read.projectionAt(RuleKey.of("total")).isCertified(),
+                    () -> rule + ": " + read.projectionAt(RuleKey.of("total")));
+        }
+    }
+
     /** And of three, each tied to the next. */
     @Test
     void soDoesAChainOfThem() {
@@ -140,12 +152,12 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
     /**
      * Nor where the rule is one no value written down is shown to hold of.
      *
-     * <p>What {@code String.startsWith} answers is not worked out here, so no value of the two is
-     * shown to hold it, and nothing is said of what it refuses.
+     * <p>What {@code String.lowercase} answers is not worked out here, so no value of the two is
+     * shown to hold the rule, and nothing is said of what it refuses.
      */
     @Test
     void norWhereTheRuleIsNotWorkedOutAtAnyValue() {
-        FieldDomains read = readingOf("    invariant String.startsWith(a, b)");
+        FieldDomains read = readingOf("    invariant String.contains(String.lowercase(a), b)");
 
         assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAtTotal(read));
