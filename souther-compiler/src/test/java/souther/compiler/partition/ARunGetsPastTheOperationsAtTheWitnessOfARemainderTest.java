@@ -40,8 +40,16 @@ class ARunGetsPastTheOperationsAtTheWitnessOfARemainderTest {
                 .plus(LinearForm.constant(ExactRatio.of(constant))).orNull();
     }
 
+    /** The run gets past an operation over none of the numbers of the form only where
+     *  {@code apartIsGotPast}. */
+    private static boolean getsPast(boolean apartIsGotPast,
+                                    UndividedByARelation.IntOperation... operations) {
+        return UndividedByARelation.getsPastAtTheWitness(List.of(operations), FORM, X, TOP,
+                each -> apartIsGotPast);
+    }
+
     private static boolean getsPast(UndividedByARelation.IntOperation... operations) {
-        return UndividedByARelation.getsPastAtTheWitness(List.of(operations), FORM, X, TOP);
+        return getsPast(false, operations);
     }
 
     @Test
@@ -52,8 +60,14 @@ class ARunGetsPastTheOperationsAtTheWitnessOfARemainderTest {
     }
 
     @Test
-    void anOperationOverNoNumberOfTheFormIsNotTheWitnessesToGetPast() {
-        assertTrue(getsPast(over(weighing(Y, Long.MAX_VALUE, 0))));
+    void anOperationOverNoNumberOfTheFormIsGotPastOnlyWhereTheRunIsShownToGetPastIt() {
+        // The product of the greatest Int and y stops the run for every y but nought, whatever
+        // the form comes to once it is cancelled against another of the same.
+        UndividedByARelation.IntOperation product = over(weighing(Y, Long.MAX_VALUE, 0));
+        UndividedByARelation.IntOperation shift = over(weighing(X, 3, 5));
+        assertTrue(getsPast(true, shift, product));
+        assertFalse(getsPast(false, shift, product));
+        assertFalse(getsPast(shift, product));
     }
 
     @Test

@@ -113,6 +113,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -1020,18 +1021,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // (theWorkingGetsPastAtTheWitness): it is not one a row is not asked of here.
         NumericTerm witness = null;
         boolean witnessAsked = false;
-        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
-        for (Side each : sides) {
-            if (each.number() != null) {
-                named.merge(each.number(), 1, Integer::sum);
-            }
-        }
+        Map<NumericTerm, Integer> named = namedSides();
         List<WhatARelationLeavesUndivided.IntSum> sums = new ArrayList<>();
         boolean leftOut = false;
         for (IntOperation each : working.operations()) {
-            boolean overTheSides = each.form().coefs().keySet().stream()
-                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
-            if (!overTheSides) {
+            if (!isOverTheSides(each, named)) {
                 if (!witnessAsked && remainder != null) {
                     witness = witnessForEveryRemainder(null, read, conditions, heldWhole);
                     witnessAsked = true;
@@ -1055,6 +1049,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new WhatARelationLeavesUndivided.Operations(sums, decimals,
                 leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
                         : working.told());
+    }
+
+    /** How many sides each number that is one is: the numbers the sides of this relation are. */
+    private Map<NumericTerm, Integer> namedSides() {
+        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
+        for (Side each : sides) {
+            if (each.number() != null) {
+                named.merge(each.number(), 1, Integer::sum);
+            }
+        }
+        return named;
+    }
+
+    /** Whether every number {@code operation} is over is a side of this relation, once. */
+    private static boolean isOverTheSides(IntOperation operation, Map<NumericTerm, Integer> named) {
+        return operation.form().coefs().keySet().stream()
+                .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
     }
 
     /** Whether every number {@code operation} reads from a row is a side of this relation, once. */
@@ -4799,7 +4810,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Carrier carrier = read.quantities().ordersOf(value).answered();
             BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
             if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
-                    carrier) && (held != null || theWorkingGetsPastAtTheWitness(value, window))
+                    carrier) && (held != null
+                    || theWorkingGetsPastAtTheWitness(value, window, read))
                     && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
                 return value;
             }
@@ -4811,7 +4823,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether the run gets past every operation it works out with {@code witness} put at each
      * value from nought to {@code top} and every other number of the form at nought, the values
      * the proof that the form leaves every remainder is made at. An operation over numbers of the
-     * form is asked there; one over none of them does not move with the witness and is not asked.
+     * form is asked there. One over none of them does not move with the witness, but a run that
+     * stops at it reaches nothing, so it is asked too: of the rows of the sides it is over, or of
+     * what the declarations leave its places. Operations not all told, and decimals the sides do
+     * not carry, are not known to be every one, and the proof is given up.
      *
      * <p>An operation over a number of the form and one that is not — a number the form's own
      * arithmetic cancelled, such as the {@code y} of {@code x + M * y - M * y} — has that number
@@ -4822,16 +4837,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the form they sum to: the form is what is left once the cancelling is done. Each is linear
      * in the witness, so its two ends say every value between.
      */
-    private boolean theWorkingGetsPastAtTheWitness(NumericTerm witness, BigInteger top) {
+    private boolean theWorkingGetsPastAtTheWitness(NumericTerm witness, BigInteger top,
+                                                   InputReading read) {
+        // Operations not all told are ones the run may stop at that are not here to be asked.
+        if (working.told() == WhatARelationLeavesUndivided.Told.SOME) {
+            return false;
+        }
+        Map<NumericTerm, Integer> named = namedSides();
+        if (!working.decimals().stream().allMatch(each -> overTheSides(each, named))) {
+            return false;
+        }
         return getsPastAtTheWitness(working.operations(), remainder.dividend().coefs().keySet(),
-                witness, top);
+                witness, top, each -> isOverTheSides(each, named) || stopsNoRow(each, read));
     }
 
+    /**
+     * The same of {@code operations}; {@code apart} says of an operation over none of the numbers
+     * of the form whether the run gets past it however the witness is put: it is over the sides
+     * of the relation, whose rows are asked to, or no row of the places it is over stops at it.
+     * One it cannot say that of may stop every run, and the proof is given up.
+     */
     static boolean getsPastAtTheWitness(List<IntOperation> operations, Set<NumericTerm> ofTheForm,
-                                        NumericTerm witness, BigInteger top) {
+                                        NumericTerm witness, BigInteger top,
+                                        Predicate<IntOperation> apart) {
         for (IntOperation each : operations) {
             Set<NumericTerm> reads = each.form().coefs().keySet();
             if (reads.stream().noneMatch(ofTheForm::contains)) {
+                if (!apart.test(each)) {
+                    return false;
+                }
                 continue;
             }
             if (!ofTheForm.containsAll(reads)) {

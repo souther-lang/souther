@@ -540,6 +540,13 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                     "c == Int.floorMod(" + form + ", 11)");
             assertEquals(List.of("0"), borders, form);
         }
+        // A number only the cancelling reads is one the run stops at all the same: the product
+        // comes first, whatever is added after it, and there is no row for any x.
+        List<String> pinned = bordersOf(linesOf(compiled(
+                "data Top = Int\n    invariant value == " + m + "\n", "x: Int, y: Top, c: Int",
+                "c == Int.floorMod((" + m + " * y.value - " + m + " * y.value) + x, 11)")));
+        assertFalse(pinned.contains("11"), pinned::toString);
+        assertFalse(pinned.contains("-1"), pinned::toString);
         // Nor is it drawn where the cancelled number could stop nothing: no assignment of it is
         // chosen, so there is none to ask the run to get past.
         assertEquals(List.of("0"), bordersOf("x: Int, y: Int, c: Int",
