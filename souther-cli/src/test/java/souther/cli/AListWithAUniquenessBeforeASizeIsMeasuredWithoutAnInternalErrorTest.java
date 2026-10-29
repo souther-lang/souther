@@ -13,9 +13,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -88,6 +90,47 @@ class AListWithAUniquenessBeforeASizeIsMeasuredWithoutAnInternalErrorTest {
         assertEquals(1, code);
         assertTrue(said.contains("internal compiler error"), said);
         assertTrue(said.contains("VerifyError"), "what the JVM said is kept: " + said);
+    }
+
+    /** The JVM verifies a class as it loads it, so the failure arrives from loading and not from a
+     * call, where nothing wraps it. */
+    @Test
+    void aBehaviorClassTheJvmWillNotVerifyEndsRunAsAnInternalError() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream err = new PrintStream(captured, true, StandardCharsets.UTF_8);
+
+        int code = Main.guarded(err, () -> {
+            Runner.invoke(failingToLoad(new VerifyError("Bad type on operand stack")),
+                    "repro", "points", new Object[0]);
+            return 0;
+        });
+
+        String said = captured.toString(StandardCharsets.UTF_8);
+        assertEquals(1, code);
+        assertTrue(said.contains("internal compiler error"), said);
+        assertTrue(said.contains("VerifyError"), said);
+    }
+
+    /** What is not the compiler's output is the behavior not running, and says so as it does. */
+    @Test
+    void aBehaviorClassWhoseInitializerThrewIsTheBehaviorFailing() {
+        Runner.RunException failed = assertThrows(Runner.RunException.class,
+                () -> Runner.invoke(failingToLoad(new ExceptionInInitializerError(
+                        new IllegalStateException("a static that did not hold"))),
+                        "repro", "points", new Object[0]));
+
+        String said = failed.localized(Locale.ENGLISH);
+        assertTrue(said.contains("`points` failed"), said);
+        assertTrue(said.contains("a static that did not hold"), "what it threw is kept: " + said);
+    }
+
+    private static ClassLoader failingToLoad(LinkageError failure) {
+        return new ClassLoader() {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) {
+                throw failure;
+            }
+        };
     }
 
     private static void assertSaysNothingOfLinking(Ran ran) {

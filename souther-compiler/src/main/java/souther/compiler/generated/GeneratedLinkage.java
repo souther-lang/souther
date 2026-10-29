@@ -19,6 +19,11 @@ import java.util.Set;
  * the class would have made. A class initializer that threw: that is the evaluated code failing, and
  * what it failed with is read from its cause.
  *
+ * <p>Only for code this compile generated. The question has no answer from the failure alone, since
+ * a class of another build, a supplied implementation and the runtime link or fail to link the same
+ * way, so it is asked where the call into generated code was made and is not asked of what a
+ * supplied implementation ended with ({@link Attributed}).
+ *
  * <p>Asked of the throwable and of every cause under it, because the failure is raised inside the
  * generated code and reaches a catch through whatever stands between: a reflective call wraps it in
  * an {@code InvocationTargetException}, and a layer that reports its own failure carries it as a
@@ -70,6 +75,9 @@ public final class GeneratedLinkage {
             if (each instanceof GeneratedClassDefect already) {
                 throw already;
             }
+            if (each instanceof Attributed) {
+                return;
+            }
             if (each instanceof LinkageError failure && isDefect(failure)) {
                 throw new GeneratedClassDefect(failure);
             }
@@ -84,6 +92,21 @@ public final class GeneratedLinkage {
                 && failure.getMessage() != null
                 && failure.getMessage().startsWith(INITIALIZER_FAILED));
     }
+
+    /**
+     * A throwable that carries what some code ended with, made after whoever ran that code decided
+     * whose it was.
+     *
+     * <p>A link failure says which class could not be linked and not whose it is: a class this
+     * compile generated, a class of another build or one supplied from outside, and the runtime
+     * all fail the same way. Only the code that made the call knows which it called. So a
+     * carrier of such a failure is made after that was decided: the code that ran its own generated
+     * classes has asked {@link #rejectDefect} before wrapping, and the code that ran what was
+     * supplied has not, because a supplied implementation whose dependency is broken is that
+     * implementation failing and not this compiler's output. {@link #rejectDefect} does not look
+     * under one.
+     */
+    public interface Attributed {}
 
     /** A class this compiler generated that the JVM refused to link. */
     public static final class GeneratedClassDefect extends IllegalStateException {

@@ -2687,7 +2687,7 @@ public final class ExampleVerifier {
      */
     private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
                                    Throwable cause, List<Diagnostic> out, RowState state) {
-        EvaluationContext.rethrowUnlessAboutTheValue(cause);
+        EvaluationContext.rethrowIfOverspent(cause);
         if (cause instanceof FakeMissException fm) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.AFakeHadNoOutputForAnInput(fm.getMessage()))

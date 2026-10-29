@@ -211,11 +211,23 @@ public final class EvaluationContext {
      * first, and so reads neither of them as the value.
      */
     public static void rethrowUnlessAboutTheValue(Throwable thrown) {
+        rethrowIfOverspent(thrown);
+        GeneratedLinkage.rejectDefect(thrown);
+    }
+
+    /**
+     * Rethrows what stopped the evaluation, where {@code thrown} is it or carries it
+     * ({@link #overspent}), and returns where it does not.
+     *
+     * <p>For a failure that was carried out of applied code, whose link failures were attributed
+     * by whoever applied it: opened from its carrier, it would be asked again of code that may be
+     * supplied from outside, and that is not this compile's output.
+     */
+    public static void rethrowIfOverspent(Throwable thrown) {
         RuntimeException stop = overspent(thrown);
         if (stop != null) {
             throw stop;
         }
-        GeneratedLinkage.rejectDefect(thrown);
     }
 
     /**

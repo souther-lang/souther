@@ -95,20 +95,47 @@ class GeneratedLinkageTest {
                 () -> GeneratedLinkage.rejectDefect(new IllegalStateException("a layer's own", first))));
     }
 
-    /** Every reader of what a generated method ended with receives it through this carrier, so the
-     * carrier is where a link failure stops being something a row ended with. */
+    /** A link failure does not say whose class it was, so whoever ran the code decides, and what is
+     * carried out afterwards has been decided. The carrier itself decides nothing: the code it
+     * carries out may be a supplied implementation's. */
     @Test
-    void whatAGeneratedMethodEndedWithIsNeverALinkFailureOfTheClass() {
+    void whatWasCarriedOutOfAppliedCodeIsNotJudgedAgain() {
+        NoSuchMethodError theirs = new NoSuchMethodError("a driver the supplied query calls");
+        InvocationFailure carried = new InvocationFailure(theirs);
+        assertSame(theirs, carried.getCause());
+
+        assertDoesNotThrow(() -> GeneratedLinkage.rejectDefect(carried));
+        assertDoesNotThrow(() -> GeneratedLinkage.rejectDefect(
+                new ExecutionException(carried)), "nor under whatever carried it on");
+        assertDoesNotThrow(() -> GeneratedLinkage.rejectDefect(
+                new ImplementationNotReached("x", new VerifyError("the other build's decoder"))));
+    }
+
+    /** The generated code of this compile is the one thing the carrier is told is its own. */
+    @Test
+    void whatGeneratedCodeOfThisCompileEndedWithIsJudgedBeforeItIsCarried() {
         VerifyError wrong = new VerifyError("Bad type on operand stack");
         GeneratedLinkage.GeneratedClassDefect defect = assertThrows(
-                GeneratedLinkage.GeneratedClassDefect.class, () -> new InvocationFailure(wrong));
+                GeneratedLinkage.GeneratedClassDefect.class,
+                () -> InvocationFailure.ofGeneratedCode(wrong));
         assertSame(wrong, defect.getCause());
-        assertThrows(GeneratedLinkage.GeneratedClassDefect.class, () -> new InvocationFailure(
-                new ExceptionInInitializerError(wrong)));
-        InvocationFailure ended = new InvocationFailure(new StackOverflowError());
+
+        InvocationFailure ended = InvocationFailure.ofGeneratedCode(new StackOverflowError());
         assertInstanceOf(StackOverflowError.class, ended.getCause());
-        assertInstanceOf(InvocationFailure.class, new InvocationFailure(
+        assertDoesNotThrow(() -> InvocationFailure.ofGeneratedCode(
                 new NoClassDefFoundError("Could not initialize class repro.Values")));
+    }
+
+    /** A carrier found above a defect is not what hides it: the walk goes outward in. */
+    @Test
+    void aDefectAboveACarrierIsStillADefect() {
+        InvocationFailure carried = new InvocationFailure(new NoSuchMethodError("theirs"));
+        VerifyError ours = new VerifyError("Bad type on operand stack");
+        ours.initCause(carried);
+        assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rejectDefect(ours));
+        assertDoesNotThrow(() -> new Deadline.Outcome.Threw<>(carried),
+                "work that ended in a supplied implementation's failure has an outcome to read");
     }
 
     @Test
@@ -139,15 +166,6 @@ class GeneratedLinkageTest {
             throw new IllegalStateException("a value that does not hold");
         });
         assertInstanceOf(Deadline.Outcome.Threw.class, stopped);
-    }
-
-    @Test
-    void aClassThatWillNotLinkIsNotAWayOfNotReachingAnImplementation() {
-        VerifyError wrong = new VerifyError("Bad type on operand stack");
-        assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
-                () -> new ImplementationNotReached("x", new InvocationTargetException(wrong)));
-        assertInstanceOf(ImplementationNotReached.class,
-                new ImplementationNotReached("x", new NoSuchMethodException("apply")));
     }
 
     /** A catch that turns a failure into "this value cannot be built" asks this, and so reads

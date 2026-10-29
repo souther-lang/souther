@@ -15,17 +15,17 @@ import souther.compiler.generated.GeneratedLinkage;
  * left to tell them apart by what the throwable happens to be. What the row makes of one is the row's,
  * and today it makes the same thing of this as it made when the two arrived as one.
  */
-public final class ImplementationNotReached extends RuntimeException {
+public final class ImplementationNotReached extends RuntimeException
+        implements GeneratedLinkage.Attributed {
 
     private static final long serialVersionUID = 1L;
 
     /**
-     * A class missing or a method not there is what this says. A generated class that will not
-     * link, held in {@code cause} or under it, is not a way of not being reached: it is this
-     * compiler's output failing, and is raised as such.
+     * A class missing or a method not there is what this says. What {@code cause} is the failure of,
+     * this compile's classes or the other build's, is decided by whoever tried to reach the
+     * implementation and is not decided here.
      */
     public ImplementationNotReached(String why, Throwable cause) {
-        GeneratedLinkage.rejectDefect(cause);
         super(why, cause);
     }
 }

@@ -102,7 +102,9 @@ public interface Deadline {
          *
          * <p>Where that is a generated class failing to link there is no outcome of the work to
          * hand over: it is this compiler's output failing, and it is raised as such here, where
-         * every reader of an outcome receives it, and not left for each to classify.
+         * every reader of an outcome receives it, and not left for each to classify. What a
+         * supplied implementation ended with arrives as an {@code InvocationFailure}, which is
+         * attributed already and is not looked under ({@link GeneratedLinkage.Attributed}).
          */
         record Threw<T>(Throwable cause) implements Outcome<T> {
 
