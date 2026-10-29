@@ -164,7 +164,14 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
                     "how many rows meeting one requirement are looked through for one its arms"
                             + " answer differently on; reaching it stops no search, since a row"
-                            + " is taken either way")));
+                            + " is taken either way"),
+
+            // How many statements taking a number out of a way holds at once. No search runs to
+            // it: past it the lengths are not worked out, which is what any statement this does
+            // not take out leaves them.
+            Map.entry("souther.compiler.partition.LengthsPastTheWay.MOST_ROWS",
+                    "how many statements are held while the numbers a way ties a length to are"
+                            + " taken out; past it nothing is said of the lengths")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

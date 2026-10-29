@@ -45,22 +45,36 @@ import java.util.List;
  * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
  * @param notShown  the values shown on neither side, whatever their length; none where every value
  *                  is shown on one
+ * @param notReached the values of the lengths at which no run gets to the relation, each as long
+ *                  as it is left open at: shown on neither side, because the relation is not
+ *                  worked out for a string of that length; none where a run gets to it at every
+ *                  length
  */
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                           ValueSet whenFalse, PredicateStatement statement,
-                          PredicateOrigin origin, ValueSet notShown) {
+                          PredicateOrigin origin, ValueSet notShown,
+                          List<ValuesWithin> notReached) {
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
-                || statement == null || origin == null || notShown == null) {
+                || statement == null || origin == null || notShown == null
+                || notReached == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
+        notReached = List.copyOf(notReached);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
         // it — so a side inhabited among the strings can be empty at the position, and one empty
         // among them cannot be inhabited there. Which of those a rule is, is a question about the
         // position's values, and it is asked where they are known ({@link Classing}).
+    }
+
+    /** A rule that shows its values at every length a run gets to it at. */
+    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
+                        ValueSet whenFalse, PredicateStatement statement,
+                        PredicateOrigin origin, ValueSet notShown) {
+        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of());
     }
 
     /** Whether every value is shown on one side or the other. */
@@ -69,14 +83,16 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
     }
 
     /**
-     * The values shown on neither side: those of {@code notShown}, and those of the set the true
-     * side is of past the length it is shown at. A string shorter than that is on one side.
+     * The values shown on neither side: those of {@code notShown}, those of the lengths no run
+     * gets to the relation at, and those of the set the true side is of past the length it is
+     * shown at. A string shorter than that is on one side.
      */
     public List<ValuesWithin> leftOpen() {
         List<ValuesWithin> out = new ArrayList<>();
         if (!notShown.isEmpty()) {
             out.add(ValuesWithin.all(notShown));
         }
+        out.addAll(notReached);
         if (whenTrue.longest() != null) {
             out.add(ValuesWithin.longerThan(whenTrue.values(), whenTrue.longest()));
         }

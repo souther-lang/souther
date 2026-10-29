@@ -10,7 +10,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -301,7 +300,7 @@ public sealed interface Reachability {
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
                     Optional<List<TakenConstraint>> narrowedBy,
-                    List<TakenConstraint> gotPast, List<Set<TermPath>> tied, boolean unsaid,
+                    List<TakenConstraint> gotPast, List<DemandReading.Tie> tied, boolean unsaid,
                     List<Pullback.StopObligation> owed,
                     List<DemandReading.PriorApplications> before)
             implements Reachability {
@@ -420,7 +419,7 @@ public sealed interface Reachability {
             if (answered.equals(DemandReading.Answered.NOTHING)) {
                 return this;
             }
-            List<Set<TermPath>> ties = new ArrayList<>(tied);
+            List<DemandReading.Tie> ties = new ArrayList<>(tied);
             ties.addAll(answered.tied());
             // Only what narrows: a bound the region already holds is nothing a reader of this
             // way is to be told of.
