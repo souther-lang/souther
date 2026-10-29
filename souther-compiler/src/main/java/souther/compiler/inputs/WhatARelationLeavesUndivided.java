@@ -3136,14 +3136,19 @@ public final class WhatARelationLeavesUndivided {
      * @param overlap  whether two places are one, or one is part of the other
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
-     * @param operations what the program works out. A value is settled here by the rows the
+     * @param operations what the program works out. Where every one is told and each reads only
+     *                 the two terms and those held still, a row is computed where they hold
+     *                 ({@link RowsOfTheTwo}), and a value is settled, and a run said to have no
+     *                 row, by exactly those rows. Otherwise a value is settled by the rows the
      *                 sizes of the form's addends leave, and a run past them is said to have
      *                 none, so nothing is settled where a row computed may lie outside them
      *                 ({@link Operations#theSizesAreEveryRowComputed}); that a row is on each
      *                 side needs only a row within them
+     * @param standing the value each term held still stands at, by its key, before it is weighed
      * @param sizesAreRowsComputed whether every row within those sizes is computed
      *                 ({@link Operations#theSizesAreRowsComputed}), asked of the whole relation
-     *                 and not of the two terms here; nothing is said otherwise
+     *                 and not of the two terms here; nothing is said otherwise, unless the rows
+     *                 are read from the operations
      */
     public static <P> Leaves leavesByTheirDifference(List<Term<P>> terms, int at,
                                                      Beside beside, Rel relation,
@@ -3151,11 +3156,11 @@ public final class WhatARelationLeavesUndivided {
                                                      BiPredicate<P, P> overlap,
                                                      BigInteger greatest,
                                                      Operations operations,
+                                                     Map<Object, ExactRatio> standing,
                                                      boolean sizesAreRowsComputed) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
         ExactRatio constant = beside == null ? null : beside.constant();
-        if (combination == null || constant == null || !sizesAreRowsComputed
-                || !constant.isWhole()
+        if (combination == null || constant == null || !constant.isWhole()
                 || !apart(terms, 0, overlap)
                 || !terms.get(0).weight().abs().equals(ExactRatio.ONE)) {
             return null;
@@ -3165,6 +3170,10 @@ public final class WhatARelationLeavesUndivided {
         if (it.spacing() != Granularity.DISCRETE || other.spacing() != Granularity.DISCRETE
                 || other.realizes() == null || it.runsTo() == null
                 || !it.runsTo().equals(other.runsTo())) {
+            return null;
+        }
+        RowsOfTheTwo exact = RowsOfTheTwo.of(operations, it.key(), other.key(), standing);
+        if (exact == null && !sizesAreRowsComputed) {
             return null;
         }
         WholeRun order = WholeRun.ofTheValues(it.runsTo());
@@ -3189,12 +3198,16 @@ public final class WhatARelationLeavesUndivided {
         if (holding == null || failing == null) {
             return null;
         }
-        BigInteger stopsAt = operations.sizesStopAt(greatest);
-        WholeRun computed = computedBeside(it.weight(), beside, stopsAt);
-        WholeRun partnerComputed = computedBeside(other.weight(), beside, stopsAt);
-        WholeRun combinedComputed = computedBeside(weight, beside, stopsAt);
-        if (computed == null || partnerComputed == null || combinedComputed == null) {
-            return null;
+        Computed bySizes = null;
+        if (exact == null) {
+            BigInteger stopsAt = operations.sizesStopAt(greatest);
+            WholeRun computed = computedBeside(it.weight(), beside, stopsAt);
+            WholeRun partnerComputed = computedBeside(other.weight(), beside, stopsAt);
+            WholeRun combinedComputed = computedBeside(weight, beside, stopsAt);
+            if (computed == null || partnerComputed == null || combinedComputed == null) {
+                return null;
+            }
+            bySizes = new Computed(computed, partnerComputed, combinedComputed);
         }
         // Three readings of where the other term stands. As the relation reads it, open where its
         // order stops; kept inside the order; and kept to where a row is computed, which is what
@@ -3202,9 +3215,15 @@ public final class WhatARelationLeavesUndivided {
         WholeRun cut = takes.meet(order);
         Reached free = Reached.at(at, combination, holding, failing, takes);
         Reached bounded = Reached.at(at, combination, holding, failing, cut);
-        Reached computedRows = Reached.at(at, combination, meetEach(holding, combinedComputed),
-                meetEach(failing, combinedComputed), cut.meet(partnerComputed));
-        WholeRun rows = holds.meet(computed);
+        Reached computedRows = exact != null
+                ? Reached.byTheRows(at, combination, holding, failing, cut, exact)
+                : Reached.at(at, combination, meetEach(holding, bySizes.combined()),
+                        meetEach(failing, bySizes.combined()), cut.meet(bySizes.partner()));
+        // The values of the term some row is computed at, the partner anywhere in the order.
+        WholeRun rows = holds.meet(exact != null
+                ? wholeRunOf(exact.askedWhere(RowsOfTheTwo.Frame.THE_PARTNER,
+                        new RowsOfTheTwo.Span(order.low(), order.high()), null))
+                : bySizes.holder());
         if (!rows.holdsAWholeNumber()) {
             return null;
         }
@@ -3229,6 +3248,7 @@ public final class WhatARelationLeavesUndivided {
             starts.add(rows.high().add(BigInteger.ONE));
         }
         List<SettledRun> model = new ArrayList<>();
+        List<SettledRun> reachingPastTheRows = new ArrayList<>();
         // The values the type keeps from an outcome: past the rows computed, and kept from one
         // by the order's ends alone.
         List<SettledRun> past = pastTheRows(holds, rows, it, relation);
@@ -3255,6 +3275,12 @@ public final class WhatARelationLeavesUndivided {
             if (freely != Reached.Outcome.EITHER) {
                 model.add(SettledRun.whole(piece.low(), piece.high(),
                         freely == Reached.Outcome.HOLDS));
+                // A run that ends where the rows do draws no line there: past them nothing is
+                // computed, and the run goes on as far as the term may.
+                reachingPastTheRows.add(SettledRun.whole(
+                        Objects.equals(piece.low(), rows.low()) ? holds.low() : piece.low(),
+                        Objects.equals(piece.high(), rows.high()) ? holds.high() : piece.high(),
+                        freely == Reached.Outcome.HOLDS));
             } else if (order.holds(value) && inside != Reached.Outcome.EITHER) {
                 byTheEnds = true;
                 ofTheType.add(SettledRun.whole(piece.low(), piece.high(),
@@ -3276,10 +3302,11 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         if (byTheEnds) {
-            Computed middleHolder = new Computed(computed, partnerComputed, combinedComputed);
-            if (!reachedFromTheMiddle(holding, it.runsTo(), combination, at == 0, middleHolder)
-                    || !reachedFromTheMiddle(failing, it.runsTo(), combination, at == 0,
-                            middleHolder)) {
+            WholeRun middle = exact != null
+                    ? reachedFromTheMiddleByTheRows(it.runsTo(), combination, at == 0, exact)
+                    : WholeRun.reachedFromTheMiddleOf(it.runsTo(), combination, at == 0,
+                            bySizes);
+            if (!reachedFromTheMiddle(holding, middle) || !reachedFromTheMiddle(failing, middle)) {
                 return null;
             }
         }
@@ -3287,12 +3314,13 @@ public final class WhatARelationLeavesUndivided {
             return new Leaves.Undivided();
         }
         List<Line> drawn = model.isEmpty() ? List.of()
-                : Leaves.Settled.ofWhole(inOrder(model, true), holds.low(), holds.high()).lines();
+                : Leaves.Settled.ofWhole(inOrder(reachingPastTheRows, true), holds.low(),
+                        holds.high()).lines();
         List<SettledRun> every = new ArrayList<>(model);
         every.addAll(ofTheType);
-        // A value settled is told by every row computed being within the sizes; a value left
-        // either way needed only a row within them.
-        return operations.theSizesAreEveryRowComputed()
+        // A value settled is told by every row computed being within the rows or the sizes read;
+        // a value left either way needed only a row within them.
+        return exact != null || operations.theSizesAreEveryRowComputed()
                 ? Leaves.Settled.ofWhole(inOrder(every, true), holds.low(), holds.high())
                         .besideWhatTheModelDraws(drawn)
                 : null;
@@ -3337,15 +3365,50 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /** Whether some one of {@code differences} is a difference a value halfway between the ends
-     *  of {@code order} reaches either way ({@link WholeRun#reachedFromTheMiddleOf}). */
-    private static boolean reachedFromTheMiddle(List<WholeRun> differences,
-                                                NumericDomain.Bounds order,
-                                                Combination combination, boolean middleIsFirst,
-                                                Computed computed) {
-        WholeRun middle = WholeRun.reachedFromTheMiddleOf(order, combination, middleIsFirst,
-                computed);
+     *  of the order reaches either way: one of {@code middle}
+     *  ({@link WholeRun#reachedFromTheMiddleOf}), null where there is none. */
+    private static boolean reachedFromTheMiddle(List<WholeRun> differences, WholeRun middle) {
         return middle != null && differences.stream()
                 .anyMatch(each -> each.meet(middle).holdsAWholeNumber());
+    }
+
+    /**
+     * The same as {@link WholeRun#reachedFromTheMiddleOf} for a row that is computed where the
+     * operations of {@code rows} hold: the partners a value halfway between the ends has a row
+     * with, and what the two come to with each of them, from each of the two halfway values. Null
+     * where an end is no number or a halfway value has no row.
+     */
+    private static WholeRun reachedFromTheMiddleByTheRows(NumericDomain.Bounds order,
+                                                           Combination combination,
+                                                           boolean middleIsFirst,
+                                                           RowsOfTheTwo rows) {
+        WholeRun ends = order == null ? null : WholeRun.ofTheValues(order);
+        if (ends == null || ends.low() == null || ends.high() == null) {
+            return null;
+        }
+        BigInteger across = ends.low().add(ends.high());
+        WholeRun reached = new WholeRun(null, null);
+        for (BigInteger middle : List.of(across.shiftRight(1),
+                across.add(BigInteger.ONE).shiftRight(1))) {
+            RowsOfTheTwo.Span partners = rows.partnersAt(middle,
+                    new RowsOfTheTwo.Span(ends.low(), ends.high()));
+            if (partners.isEmpty()) {
+                return null;
+            }
+            WholeRun from = combination == Combination.SUM
+                    ? new WholeRun(middle.add(partners.low()), middle.add(partners.high()))
+                    : middleIsFirst
+                    ? new WholeRun(middle.subtract(partners.high()),
+                            middle.subtract(partners.low()))
+                    : new WholeRun(partners.low().subtract(middle),
+                            partners.high().subtract(middle));
+            reached = reached.meet(from);
+        }
+        return reached;
+    }
+
+    private static WholeRun wholeRunOf(RowsOfTheTwo.Span span) {
+        return new WholeRun(span.low(), span.high());
     }
 
     /**
@@ -3394,6 +3457,32 @@ public final class WhatARelationLeavesUndivided {
                           List<WholeRun> failing, WholeRun takes) {
             return new Reached(movedBy(at, combination, holding, takes),
                     movedBy(at, combination, failing, takes));
+        }
+
+        /**
+         * The same as {@link #at}, kept to where a row is computed: the values of the term at
+         * which some partner in {@code takes} makes the difference one of each run of
+         * {@code holding} and {@code failing} and every operation of {@code rows} hold.
+         */
+        static Reached byTheRows(int at, Combination combination, List<WholeRun> holding,
+                                 List<WholeRun> failing, WholeRun takes, RowsOfTheTwo rows) {
+            RowsOfTheTwo.Frame frame = combination == Combination.SUM
+                    ? RowsOfTheTwo.Frame.OF_THE_SUM
+                    : at == 0 ? RowsOfTheTwo.Frame.FROM_ABOVE : RowsOfTheTwo.Frame.FROM_BELOW;
+            RowsOfTheTwo.Span partners = new RowsOfTheTwo.Span(takes.low(), takes.high());
+            List<List<WholeRun>> out = new ArrayList<>();
+            for (List<WholeRun> differences : List.of(holding, failing)) {
+                List<WholeRun> reached = new ArrayList<>();
+                for (WholeRun each : differences) {
+                    RowsOfTheTwo.Span where = rows.askedWhere(frame,
+                            new RowsOfTheTwo.Span(each.low(), each.high()), partners);
+                    if (!where.isEmpty()) {
+                        reached.add(new WholeRun(where.low(), where.high()));
+                    }
+                }
+                out.add(reached);
+            }
+            return new Reached(out.get(0), out.get(1));
         }
 
         /** Of two terms added, each stands at the sum less the other, which is the sum less

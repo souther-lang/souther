@@ -220,6 +220,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                         Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(terms,
                                 at, Beside.just(ExactRatio.of(constant)), relation, List.of(),
                                 String::equals, BigInteger.valueOf(GREATEST), operations,
+                                Map.of(),
                                 operations.theSizesAreRowsComputed(terms, ExactRatio.of(constant)));
                         verify(program, program.sums(), constant, relation, at, said, -1, 0);
                     }
@@ -263,6 +264,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                             Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(
                                     all.subList(0, 2), at, beside, relation, List.of(),
                                     String::equals, BigInteger.valueOf(GREATEST), operations,
+                                    Map.of(NAMES.get(2), ExactRatio.of(held)),
                                     sizesAreRowsComputed);
                             verify(program, program.sums(), constant, relation, at, said, 2,
                                     held);
@@ -271,6 +273,55 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 }
             }
         }
+    }
+
+    /**
+     * The check above holds for an answer of nothing, so it is held to say something too: a
+     * program whose every operation is told, and that reads the two terms and the third held
+     * still, settles a value by the rows of its operations, one program at a time. Held to the
+     * rows by the checks above, a count of the answers is what a recovery is held to.
+     */
+    @Test
+    void aProgramWhoseOperationsAreAllToldSettlesValuesByTheRowsTheyCompute() {
+        Map<String, Integer> said = new LinkedHashMap<>();
+        for (Program program : PROGRAMS) {
+            if (program.state() != Told.EVERY || program.sums().isEmpty()
+                    || program.weightOf(0).abs().compareTo(ExactRatio.ONE) != 0
+                    || program.weightOf(1).abs().compareTo(ExactRatio.ONE) != 0
+                    || program.weights().size() > 3) {
+                continue;
+            }
+            Operations operations = new Operations(program.sums(), program.state());
+            List<Term<String>> all = termsOf(program);
+            int heldFrom = program.weights().size() == 3 ? LEAST : 0;
+            int heldTo = program.weights().size() == 3 ? GREATEST : 0;
+            for (int constant = -3; constant <= 3; constant++) {
+                for (int held = heldFrom; held <= heldTo; held++) {
+                    Beside beside = program.weights().size() == 3
+                            ? new Beside(List.of(ExactRatio.of(constant),
+                                    program.weightOf(2).times(ExactRatio.of(held)).orNull()))
+                            : Beside.just(ExactRatio.of(constant));
+                    Map<Object, ExactRatio> standing = program.weights().size() == 3
+                            ? Map.of(NAMES.get(2), ExactRatio.of(held)) : Map.of();
+                    for (Rel relation : RELATIONS) {
+                        for (int at = 0; at < 2; at++) {
+                            Leaves leaves = WhatARelationLeavesUndivided.leavesByTheirDifference(
+                                    all.subList(0, 2), at, beside, relation, List.of(),
+                                    String::equals, BigInteger.valueOf(GREATEST), operations,
+                                    standing, false);
+                            if (leaves instanceof Leaves.Settled) {
+                                said.merge(program.name(), 1, Integer::sum);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(said.getOrDefault("a + b", 0) > 0, "a + b settles no value: " + said);
+        assertTrue(said.getOrDefault("(a + b) + c", 0) > 0,
+                "(a + b) + c settles no value with c held still: " + said);
+        assertTrue(said.getOrDefault("a + (b + c)", 0) > 0,
+                "a + (b + c) settles no value with c held still: " + said);
     }
 
     /**
