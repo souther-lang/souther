@@ -9,7 +9,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
-import java.util.SortedSet;
+import java.util.NavigableSet;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -85,13 +85,13 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
                              domainsOf(reach))
             """;
 
-    private static SortedSet<String> reasons(String source) {
+    private static NavigableSet<String> reasons(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        SortedSet<String> out = new TreeSet<>();
+        NavigableSet<String> out = new TreeSet<>();
         Matcher found = Pattern.compile("\"reason\"\\s*:\\s*\"([a-z_]+)\"").matcher(json);
         while (found.find()) {
             out.add(found.group(1));
@@ -101,7 +101,7 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
 
     @Test
     void theConversionsOfTheStringsASideReadsLeaveTheRelationShownOverARegion() {
-        SortedSet<String> reasons = reasons(DECLARATIONS.replace("BODY",
+        NavigableSet<String> reasons = reasons(DECLARATIONS.replace("BODY",
                 "String.contains(String.lowercase(i.a), String.lowercase(i.b))"));
         assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
         assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"),
@@ -119,7 +119,7 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
      */
     @Test
     void aTextPickedOutOfTheCasesOfASumIsTheStringAtThePlaceOfEach() {
-        SortedSet<String> reasons = reasons(PICKED_OUT_OF_A_SUM);
+        NavigableSet<String> reasons = reasons(PICKED_OUT_OF_A_SUM);
         assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
         assertFalse(reasons.contains("unsupported_syntax"), reasons::toString);
         assertEquals(List.of(), reasons.stream()
