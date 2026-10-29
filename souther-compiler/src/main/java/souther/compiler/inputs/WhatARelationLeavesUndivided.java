@@ -3832,7 +3832,9 @@ public final class WhatARelationLeavesUndivided {
      * {@code 2^62 x - 2^62 y < 0}, {@code x} from nought to one, has both
      * rows at nought and none on the true side at one, where a {@code y} of two weighed passes the
      * type; {@code x - y > M}, {@code M} the greatest {@code Int}, has a true row at no {@code x}.
-     * A run open on a side has no end to ask, and nothing is shown.
+     * A run open on a side has no end to ask there, and is asked at the end it has only where no
+     * operation of decimals reads the term ({@link RowsComputed#aRunWithNoEndIsAskedAtTheEndItHas});
+     * otherwise nothing is shown.
      *
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
@@ -3856,7 +3858,11 @@ public final class WhatARelationLeavesUndivided {
             // A row evidence of an operation being worked out stands the term at a value it takes.
             asked = takenRun(terms.get(of), asked);
         }
-        if (constant == null || asked == null || asked.low() == null || asked.high() == null) {
+        if (constant == null || asked == null) {
+            return false;
+        }
+        boolean endless = asked.lower() == null || asked.upper() == null;
+        if (endless && !arithmetic.aRunWithNoEndIsAskedAtTheEndItHas(terms.get(of).key())) {
             return false;
         }
         // The rows built at the ends of the run are asked of every value between them. For a sum of
@@ -3930,12 +3936,24 @@ public final class WhatARelationLeavesUndivided {
      * term takes. Null where the run has no decimal to build a row at.
      */
     private static <P> List<ExactRatio> rowValuesAtTheEnds(Term<P> term, Interval asked) {
-        if (term.spacing() == Granularity.DISCRETE) {
-            return List.of(asked.low(), asked.high());
+        List<ExactRatio> at = new ArrayList<>();
+        if (asked.lower() != null) {
+            ExactRatio lowest = term.spacing() == Granularity.DISCRETE ? asked.low()
+                    : DecimalPoints.within(asked.lower(), asked.upper(), true);
+            if (lowest == null) {
+                return null;
+            }
+            at.add(lowest);
         }
-        ExactRatio lowest = DecimalPoints.within(asked.lower(), asked.upper(), true);
-        ExactRatio highest = DecimalPoints.within(asked.upper(), asked.lower(), false);
-        return lowest == null || highest == null ? null : List.of(lowest, highest);
+        if (asked.upper() != null) {
+            ExactRatio highest = term.spacing() == Granularity.DISCRETE ? asked.high()
+                    : DecimalPoints.within(asked.upper(), asked.lower(), false);
+            if (highest == null) {
+                return null;
+            }
+            at.add(highest);
+        }
+        return at.isEmpty() ? null : at;
     }
 
     /**

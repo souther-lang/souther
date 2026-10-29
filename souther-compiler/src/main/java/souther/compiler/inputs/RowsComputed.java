@@ -105,6 +105,19 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     }
 
     /**
+     * Whether a run of the term {@code asked} with no end on a side is shown by asking its other
+     * end: every operation that can stop a row is an operation of decimals, and none of them reads
+     * the term, so whether a row is computed does not turn on which number of the run it stands at
+     * ({@link DecimalOperation#allowAClaimOver}).
+     */
+    boolean aRunWithNoEndIsAskedAtTheEndItHas(Object asked) {
+        return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()
+                && worksOutDecimals()
+                && DecimalOperation.readsOf(operations.decimals()).stream()
+                        .noneMatch(reads -> reads.contains(asked));
+    }
+
+    /**
      * Whether one row is computed, the row being the {@code addends} of the form at it and the
      * {@code values} of the terms by key.
      */

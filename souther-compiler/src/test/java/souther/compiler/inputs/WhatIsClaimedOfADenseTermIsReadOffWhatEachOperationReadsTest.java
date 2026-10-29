@@ -64,6 +64,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     private static final Formed H = new Formed(Map.of("h", ExactRatio.ONE), ExactRatio.ZERO);
     private static final Formed S = new Formed(Map.of("s", ExactRatio.ONE), ExactRatio.ZERO);
+    private static final Formed A = new Formed(Map.of("a", ExactRatio.ONE), ExactRatio.ZERO);
     private static final BigDecimal AT_THE_FLOOR = new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE);
 
     private static DecimalOperation product(DecimalOperation.Operand one,
@@ -182,6 +183,43 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     void anOperationReadingTheTermPutBesideItIsWorkedOutOverNumbersChosenAtFewPlaces() {
         DecimalOperation timesFour = product(H, new Written(new BigDecimal("4.0")));
         assertInstanceOf(Leaves.Settled.class, left(1, timesFour));
+    }
+
+    /** {@code a - s >= 5} over amounts from nought with no end, the sum {@code s + 5.0} told. */
+    private static Leaves leftOfAmountsAgainstASumOfTheOther(int asked) {
+        return leftOfAmounts(asked, S);
+    }
+
+    /** The same with the sum {@code operand + 5.0} told. */
+    private static Leaves leftOfAmounts(int asked, Formed operand) {
+        NumericDomain.Bounds amounts = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(0)), null);
+        List<Term<String>> terms = List.of(
+                new Term<>(List.of("a"), ExactRatio.ONE, amounts, amounts, null, true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN, "a"),
+                new Term<>(List.of("s"), ExactRatio.of(-1), amounts, amounts, null, true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
+        DecimalOperation plusFive = sum(operand, new Written(new BigDecimal("5.0")));
+        return WhatARelationLeavesUndivided.leavesOf(terms, asked, ExactRatio.of(-5), Rel.GE,
+                String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
+                new Operations(List.of(), List.of(plusFive), Told.EVERY));
+    }
+
+    /**
+     * The sum reads {@code s} and nothing of {@code a}, so it has room at a number of {@code s}
+     * chosen at few places whichever number of {@code a} that is chosen for. A run of {@code a}
+     * with no end is asked at the end it has.
+     */
+    @Test
+    void aRunWithNoEndIsAskedAtTheEndItHasWhenNoOperationReadsTheTermAskedOf() {
+        assertInstanceOf(Leaves.Settled.class, leftOfAmountsAgainstASumOfTheOther(0));
+    }
+
+    /** An operation reading {@code a} has room by the scale {@code a} is written at, which a run
+     *  with no end does not say at its far side. */
+    @Test
+    void aRunWithNoEndIsNotShownWhenAnOperationReadsTheTermAskedOf() {
+        assertNull(leftOfAmounts(0, A));
     }
 
     @Test
