@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -83,17 +84,24 @@ public sealed interface ReplacementOwed {
      * @param separators  what the bodies the walk stands in part strings at: where a string of
      *                    those rows is put with a piece more, since a walk over the pieces of a
      *                    string is handed more elements only through the string
+     * @param over        the lists of the input the walk goes over, as locations rooted at the
+     *                    parameter they are in, at every place the walk is entered. Empty where
+     *                    any of them goes over a list the input does not hold as it is, one a
+     *                    behavior made or a helper was handed: a walk over such a list is not
+     *                    handed more elements by growing any one list of the input
      */
     record OfAWalk(SourceConstructOrigin walk, WalkRewrite how, List<WalkProbe> occurrences,
                    SequencedMap<Integer, WalkRewrite> replacing,
                    List<List<ObservedValue>> seenThrough,
-                   InputsRowsRanWith ranWith, List<String> separators) implements ReplacementOwed {
+                   InputsRowsRanWith ranWith, List<String> separators,
+                   List<TermPath> over) implements ReplacementOwed {
 
         public OfAWalk {
             Objects.requireNonNull(walk, "a walk is some walk an author wrote");
             Objects.requireNonNull(how, "a walk is rewritten some way");
             Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             separators = List.copyOf(separators);
+            over = List.copyOf(over);
             occurrences = List.copyOf(occurrences);
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
             seenThrough = seenThrough.stream().map(List::copyOf).toList();

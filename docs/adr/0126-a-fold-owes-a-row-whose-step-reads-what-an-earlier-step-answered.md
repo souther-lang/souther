@@ -106,8 +106,15 @@ since only a run that came back went through every walk it entered to the end; t
 from runs that answered and from no others, by the one constructor that says so. Everything else is
 asked, and a rewrite no search finds an input for is undecided, never concluded the same.
 
-The search for an input starts from the rows that entered the walk, the ones holding the most
-elements first and a candidate of each in turn. A list one of them holds is grown by one element and
+A candidate is run under a rewrite only if the body's run on it came back and went where the rewrite
+changes something: a walk rewrite changes a run only from a second element of the walk on, so a run
+recorded not taking one is the rewrite's answer already. The search for an input starts from the rows
+that entered the walk, the ones holding the most elements first and a candidate of each in turn. Where
+the walk goes over a list the input holds as it is, a parameter, a name bound to one or a field of one,
+the rows are ordered by the length of that list and only that list is grown: a list inside its
+elements is no step of the walk. The lists of the input are grown last in any case, since a step may
+read what another list holds. Where the walk goes over a list the behavior made, every list is grown
+as before. A list one of them holds is grown by one element and
 then by two, each with the new element put first as well as last, since a walk stopping after one
 step parts from the walk only where what the later elements do differs from what the first does.
 That is how a list grows wherever it stands, in a field of a record as much as the value itself. The

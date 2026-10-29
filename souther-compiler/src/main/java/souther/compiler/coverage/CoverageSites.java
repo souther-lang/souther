@@ -397,14 +397,19 @@ public final class CoverageSites {
      * @param separators  what the body the walk stands in parts strings at, written as the body
      *                    writes them: a walk over the pieces of a string is handed more elements
      *                    only through the string, and these are where a piece more is put
+     * @param over        the list the walk goes over, as the name of the parameter of the body it
+     *                    is read from and the fields taken from it, where it is a list the input
+     *                    holds as it is: a parameter, a name bound to one, or a field of one.
+     *                    Empty for a list the body made, or one a helper was handed
      */
     public record WalkSite(String body, SourceConstructOrigin walk, WalkProbe index,
-                           boolean writtenHere, List<String> separators) {
+                           boolean writtenHere, List<String> separators,
+                           Optional<List<String>> over) {
 
         public WalkSite {
-            if (body == null || walk == null || index == null) {
+            if (body == null || walk == null || index == null || over == null) {
                 throw new IllegalArgumentException("where a walk is entered is one walk, in one"
-                        + " body, at one place");
+                        + " body, at one place, over a list the input holds or not");
             }
             separators = List.copyOf(separators);
         }
@@ -1146,7 +1151,8 @@ public final class CoverageSites {
         for (DraftWalk draft : walk.walks) {
             WalkProbe at = numbering.walk(draft.raw());
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
-                    List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of()))));
+                    List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
+                    draft.over()));
             walksByNode.put(draft.call(), at);
             walkSites.put(draft.raw(), new WalkRewrites.AtWalk(draft.walk(), at, draft.theSame(),
                     draft.overAFixedList(), draft.notCarried()));
@@ -1279,11 +1285,11 @@ public final class CoverageSites {
     private record DraftWalk(Core.Call call, String body, SourceConstructOrigin walk,
                              NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
                              boolean overAFixedList, Optional<NotCarriedReason> notCarried,
-                             int raw) {
+                             Optional<List<String>> over, int raw) {
 
         DraftWalk numbered(int number) {
             return new DraftWalk(call, body, walk, at, writtenHere, theSame, overAFixedList,
-                    notCarried, number);
+                    notCarried, over, number);
         }
     }
 
@@ -1387,6 +1393,9 @@ public final class CoverageSites {
          *  it, which is what says whether reading the name reads something a run is handed
          *  ({@link #closed}). */
         private final Map<BindingId, Core> boundTo = new HashMap<>();
+        /** Every name the body being walked binds somewhere inside it, which a parameter of the body
+         *  is not. */
+        private final Set<BindingId> boundInTheBody = new HashSet<>();
         /** Whether each of those values reads nothing a run is handed, worked out once a walk asks
          *  and kept: a name read by several walks is one value. */
         private final Map<BindingId, Boolean> closedNames = new HashMap<>();
@@ -1467,7 +1476,33 @@ public final class CoverageSites {
                     ? Optional.of(new NotCarriedReason.StepNotExpanded()) : Optional.empty();
             walks.add(new DraftWalk(call, behavior, call.origin(), places.of(call),
                     Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
-                    notCarried, -1));
+                    notCarried, listHeldAs(walked), -1));
+        }
+
+        /**
+         * The location of the input that {@code e} is, where it is one: a parameter of the body, a
+         * name bound to one, or a field of one. A list the body made or filtered is not, and a
+         * helper's parameter is not one of this body's.
+         */
+        private Optional<List<String>> listHeldAs(Core e) {
+            Core plain = Core.withoutStanding(e);
+            if (plain instanceof Core.Read read) {
+                Core bound = boundTo.get(read.binding());
+                if (bound != null) {
+                    return listHeldAs(bound);
+                }
+                // Bound by nothing in the body: a parameter of it.
+                return boundInTheBody.contains(read.binding()) ? Optional.empty()
+                        : Optional.of(List.of(read.name()));
+            }
+            if (plain instanceof Core.FieldAccess access) {
+                return listHeldAs(access.target()).map(path -> {
+                    List<String> longer = new ArrayList<>(path);
+                    longer.add(access.field());
+                    return List.copyOf(longer);
+                });
+            }
+            return Optional.empty();
         }
 
         /**
@@ -1613,6 +1648,8 @@ public final class CoverageSites {
             this.identities.clear();
             this.boundTo.clear();
             this.closedNames.clear();
+            this.boundInTheBody.clear();
+            bindersIn(body, boundInTheBody);
             walk(body, true);
             oneValue.put(name, fromOneValue(body));
         }

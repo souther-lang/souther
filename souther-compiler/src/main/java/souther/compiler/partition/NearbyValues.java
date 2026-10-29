@@ -61,7 +61,7 @@ final class NearbyValues {
         /** What a list becomes beyond its elements moved one at a time: nothing, unless a step
          *  adds to the list itself. */
         default Iterator<ObservedValue> longer(ObservedValue.Sequence unusedHeld,
-                                               Shape.Sequence unusedSequence) {
+                                               Shape.Sequence unusedSequence, TermPath unusedAt) {
             return none();
         }
     }
@@ -113,7 +113,68 @@ final class NearbyValues {
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, Lists.ANY, Put.AFTER);
+        return withAnElement(value, type, reading, ranWith, stoodFor, Lists.ANY, Put.AFTER, null);
+    }
+
+    /**
+     * How many elements the list {@code within} names holds in {@code value}, or the lists it
+     * names between them where the location goes through the elements of another. None where the
+     * value has no such list.
+     */
+    static int heldAt(ObservedValue value, Type type, RuleReadingContext reading, TermPath within) {
+        return heldAt(value, type, reading, new TermPath(within.head(), List.of()), within);
+    }
+
+    private static int heldAt(ObservedValue value, Type type, RuleReadingContext reading,
+                              TermPath at, TermPath within) {
+        if (value.unread() != null || at.steps().size() > within.steps().size()
+                || !within.steps().subList(0, at.steps().size()).equals(at.steps())) {
+            return 0;
+        }
+        var source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        ObservedValue inside = ObservedValue.wearing(view.wrappers(), value);
+        if (inside == null || inside.unread() != null) {
+            return 0;
+        }
+        return switch (view.shape()) {
+            case Shape.Product product -> {
+                int n = 0;
+                if (inside instanceof ObservedValue.Constructed made
+                        && made.type().equals(product.name())) {
+                    for (Map.Entry<String, Type> field : product.fields().entrySet()) {
+                        ObservedValue held = made.field(field.getKey());
+                        if (held != null) {
+                            n += heldAt(held, field.getValue(), reading,
+                                    at.then(field.getKey()), within);
+                        }
+                    }
+                }
+                yield n;
+            }
+            case Shape.Sequence sequence -> {
+                if (!(inside instanceof ObservedValue.Sequence held)) {
+                    yield 0;
+                }
+                if (at.equals(within)) {
+                    yield held.elements().size();
+                }
+                int n = 0;
+                for (ObservedValue each : held.elements()) {
+                    n += heldAt(each, sequence.element(), reading, at.element(), within);
+                }
+                yield n;
+            }
+            case Shape.Sum sum -> inside instanceof ObservedValue.Constructed made
+                    && sum.reaches().cases().contains(made.type())
+                    ? heldAt(inside, Type.ref(made.type()), reading, at, within) : 0;
+            case Shape.Optional optional -> inside instanceof ObservedValue.Absent ? 0
+                    : heldAt(inside, optional.element(), reading, at, within);
+            case Shape.Scalar _, Shape.Mapping _, Shape.Unit _, Shape.Unresolved _, Shape.Cases _,
+                 Shape.Tuple _, Shape.Function _, Shape.Uninhabited _, Shape.Bottom _,
+                 Shape.Erroneous _, Shape.Undecided _ -> 0;
+        };
     }
 
     /** Where a list that grows takes its new element. */
@@ -157,7 +218,22 @@ final class NearbyValues {
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor,
                                          Put where, Lists which) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, which, where);
+        return withAnElement(value, type, reading, ranWith, stoodFor, which, where, null);
+    }
+
+    /**
+     * {@link #grown}, in the one list {@code within} names and no other: the list a walk goes over,
+     * where a list that is not it, however deep, is one no step of the walk reads.
+     *
+     * @param within a location in the position {@code value} stands at, rooted at that position's
+     *               parameter
+     */
+    static Iterator<ObservedValue> grownWithin(ObservedValue value, Type type,
+                                               RuleReadingContext reading,
+                                               InputsRowsRanWith ranWith,
+                                               Function<Type, Iterator<ObservedValue>> stoodFor,
+                                               Put where, Lists which, TermPath within) {
+        return withAnElement(value, type, reading, ranWith, stoodFor, which, where, within);
     }
 
     /**
@@ -173,13 +249,15 @@ final class NearbyValues {
                                              RuleReadingContext reading,
                                              Function<Type, Iterator<ObservedValue>> stoodFor) {
         return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor,
-                Lists.HOLDING_NONE, Put.AFTER);
+                Lists.HOLDING_NONE, Put.AFTER, null);
     }
 
     private static Iterator<ObservedValue> withAnElement(
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
-            Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where) {
-        return of(value, type, reading, null, List.of(), new Leaves() {
+            Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where,
+            TermPath within) {
+        TermPath root = within == null ? null : new TermPath(within.head(), List.of());
+        return of(value, type, reading, root, List.of(), new Leaves() {
 
             @Override
             public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
@@ -189,8 +267,9 @@ final class NearbyValues {
 
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
-                                                  Shape.Sequence sequence) {
-                if (!which.admits(held.elements().size())) {
+                                                  Shape.Sequence sequence, TermPath at) {
+                if (!which.admits(held.elements().size())
+                        || (within != null && !within.equals(at))) {
                     return none();
                 }
                 // One of the rows' and one of the type's in turn, so that however many values the
@@ -240,7 +319,7 @@ final class NearbyValues {
 
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
-                                                  Shape.Sequence sequence) {
+                                                  Shape.Sequence sequence, TermPath unusedAt) {
                 List<ObservedValue> others = ranWith.of(sequence.element());
                 // A list at a time, as the search asks: the element changed, and then the value
                 // it is changed to, so that a long list is copied once for each candidate taken
@@ -529,7 +608,7 @@ final class NearbyValues {
                     ? fieldsOf(made, product, reading, at, along, leaves) : none();
             case Shape.Sequence sequence -> value instanceof ObservedValue.Sequence held
                     ? flat(List.of(elementsOf(held, sequence, reading, at, along, leaves),
-                            leaves.longer(held, sequence)).iterator(), Function.identity())
+                            leaves.longer(held, sequence, at)).iterator(), Function.identity())
                     : none();
             // The case the value is, as a fixture writes a sum.
             case Shape.Sum sum -> value instanceof ObservedValue.Constructed made

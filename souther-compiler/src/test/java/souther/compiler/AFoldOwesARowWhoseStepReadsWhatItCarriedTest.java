@@ -482,6 +482,40 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         }
     }
 
+    private static final String THROWS = """
+            module repro.nested
+
+            data Throw = List<Int>
+
+            behavior score : (throws: List<Throw>) -> Int
+
+            let score (throws) = List.fold((acc, t) -> acc + List.length(t.value), 0, throws)
+
+            example score
+                | ([]) -> 0
+                | ([Throw([])]) -> 0
+                | ([Throw([12])]) -> 1
+                | ([Throw([1, 2])]) -> 2
+                | ([Throw([1, 2, 3])]) -> 3
+            %s""";
+
+    /**
+     * A candidate whose walked list holds fewer than two elements is not run under the rewrite,
+     * so the runs of the search are spent on lists of two, and a row whose answer is right added
+     * to the rows does not leave the rewrites undecided.
+     */
+    @Test
+    void aRowWhoseAnswerIsRightDoesNotLeaveTheFoldUndecidedForLackOfRuns() {
+        for (String more : List.of("", "    | ([Throw([5, 8])]) -> 2\n",
+                "    | ([Throw([5, 8])]) -> 2\n    | ([Throw([4, 6, 9, 7])]) -> 4\n"
+                        + "    | ([Throw([3, 3, 3, 3, 3])]) -> 5\n    | ([Throw([2, 1, 0])]) -> 3\n")) {
+            Compilation compilation = measured(THROWS.formatted(more));
+
+            assertEquals(List.of("fold_after_one_step: unnoticed", "fold_from_the_seed: unnoticed"),
+                    foldVerdicts(compilation), more);
+        }
+    }
+
     /**
      * A run through a fold it cannot see the end of records no second element, and that is not a
      * list of one: a list fixed in the model that holds two is left open all the same.

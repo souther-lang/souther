@@ -2247,13 +2247,24 @@ public final class Generator {
                     // rewrites can part from the walk, and a row grown from nothing reaches two only
                     // with both elements chosen here. In turn and not one row after another, since
                     // what a row holds may be what keeps every list grown from it answering alike.
+                    // Counted in the list the walk goes over where that is known: the elements of
+                    // a list inside one of them are no step of the walk.
                     List<List<ObservedValue>> from = walk.seenThrough().stream()
-                            .sorted(Comparator.comparingInt(Generator::elementsHeld).reversed())
+                            .sorted(Comparator.comparingInt((List<ObservedValue> row) ->
+                                    walk.over().isEmpty() ? elementsHeld(row)
+                                            : elementsWalked(row, walk.over(), axes.subject()))
+                                    .reversed())
                             .toList();
                     int through = from.size();
                     Examining lists = new Examining(looking);
-                    Beside growing =
-                            grownTwice(walk.ranWith(), axes.subject(), check, looking);
+                    Beside growing = grownTwice(walk.ranWith(), axes.subject(), check, looking,
+                            walk.over());
+                    // The lists the walk is not known to go over are grown last, since a step may
+                    // read what another list holds, and no list grown there is one the walk is
+                    // known to take a second step in.
+                    Examining everyList = new Examining(looking);
+                    Beside growingAny = walk.over().isEmpty() ? null
+                            : grownTwice(walk.ranWith(), axes.subject(), check, looking, List.of());
                     // And beside each, a string the body parts with a piece more, and one put as
                     // pieces the body demands: a walk over the pieces is a walk over a list no
                     // input holds, and a string of more pieces is how it is handed more elements.
@@ -2295,9 +2306,14 @@ public final class Generator {
                             }
                         }
                     }
-                    yield seen != null ? seen : taking(looking, List.of(
-                            inOrder(through, at -> movedFrom(from.get(at), axes, purposes,
-                                    looking, check, answers))));
+                    List<Iterator<GeneratedRow>> last = new ArrayList<>();
+                    last.add(inOrder(through, at -> movedFrom(from.get(at), axes, purposes,
+                            looking, check, answers)));
+                    if (growingAny != null) {
+                        last.add(inOrder(through, at -> candidatesBeside(from.get(at), axes,
+                                purposes, check, answers, growingAny, everyList)));
+                    }
+                    yield seen != null ? seen : taking(looking, last);
                 }
                 case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
@@ -2480,7 +2496,7 @@ public final class Generator {
                                      CandidateCheck check, ReplacementWitness looking) {
         Growth growth = aListGrownAmong(ranWith, subject, check, looking, NearbyValues.Put.AFTER);
         return (value, type, reading, _) ->
-                growth.of(value, type, reading, NearbyValues.Lists.ANY);
+                growth.of(value, type, reading, NearbyValues.Lists.ANY, null);
     }
 
     /** {@link #aListGrown}, the element put as {@code where} says, in the lists of the kind the
@@ -2509,8 +2525,10 @@ public final class Generator {
                                 WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
                     }
                 });
-        return (value, type, reading, which) -> NearbyValues.grown(value, type, reading, ranWith,
-                elements::of, where, which);
+        return (value, type, reading, which, within) -> within == null
+                ? NearbyValues.grown(value, type, reading, ranWith, elements::of, where, which)
+                : NearbyValues.grownWithin(value, type, reading, ranWith, elements::of, where,
+                        which, within);
     }
 
     /** How many elements the lists in {@code row} hold between them, at every depth. */
@@ -2518,6 +2536,20 @@ public final class Generator {
         int n = 0;
         for (ObservedValue each : row) {
             n += elementsIn(each);
+        }
+        return n;
+    }
+
+    /** How many elements the lists {@code over} names hold in {@code row}, between them. */
+    private static int elementsWalked(List<ObservedValue> row, List<TermPath> over,
+                                      MeasuredInput subject) {
+        int n = 0;
+        for (TermPath each : over) {
+            int at = subject.parameters().indexOf(each.head());
+            if (at >= 0 && at < row.size()) {
+                n += NearbyValues.heldAt(row.get(at), subject.types().get(at),
+                        subject.ruleReading(), each);
+            }
         }
         return n;
     }
@@ -2548,22 +2580,40 @@ public final class Generator {
      * go past its first element on first ({@link GrownTwice}), the new element put before the
      * others as well as after: a walk stopping after its first element parts from one that goes on
      * only where what the elements after the first do differs from what the first does.
+     *
+     * <p>In the lists {@code over} names where the walk is known to go over them, and in none of
+     * the others: a step of the walk reads an element of the list it is handed and no length of
+     * another, so a list that is not walked is not where a second step is made. Every list, where
+     * the walk is not known to go over one list the input holds.
      */
     private static Beside grownTwice(InputsRowsRanWith ranWith, MeasuredInput subject,
-                                     CandidateCheck check, ReplacementWitness looking) {
+                                     CandidateCheck check, ReplacementWitness looking,
+                                     List<TermPath> over) {
         Growth growth = aListGrownAmong(ranWith, subject, check, looking,
                 NearbyValues.Put.BEFORE_AND_AFTER);
-        return (value, type, reading, _) -> GrownTwice.of(value,
-                (each, which) -> growth.of(each, type, reading, which));
+        if (over.isEmpty()) {
+            return (value, type, reading, _) -> GrownTwice.of(value,
+                    (each, which) -> growth.of(each, type, reading, which, null));
+        }
+        return (value, type, reading, parameter) -> {
+            List<Iterator<ObservedValue>> inEach = new ArrayList<>();
+            for (TermPath each : over) {
+                if (each.head().equals(parameter)) {
+                    inEach.add(GrownTwice.of(value,
+                            (grown, which) -> growth.of(grown, type, reading, which, each)));
+                }
+            }
+            return NearbyValues.flat(inEach.iterator(), Function.identity());
+        };
     }
 
     /** The values a value becomes with a list of the kind {@code which} names one element
-     *  longer. */
+     *  longer, in the list {@code within} names where one is. */
     @FunctionalInterface
     private interface Growth {
 
         Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading,
-                                   NearbyValues.Lists which);
+                                   NearbyValues.Lists which, TermPath within);
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
@@ -10113,6 +10163,10 @@ public final class Generator {
             if (body == null) {
                 return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
             }
+            if (rewriteLeavesAnswerAsItWas(body)) {
+                alike = true;
+                return Acceptance.PASSED;
+            }
             AnswerObservation rewritten = switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> ranUnder(row, Rewriting.ofArms(arm.replacing()));
                 case ReplacementOwed.OfAWalk walk ->
@@ -10138,6 +10192,26 @@ public final class Generator {
                             ReplacementDisposition.Met::and);
                     yield Acceptance.PASSED;
                 }
+            };
+        }
+
+        /**
+         * Whether the rewrite is shown to answer as the body did without running it: the body came
+         * back with an answer and was recorded not going where the rewrite changes anything. A
+         * rewrite of a walk changes a run only from a second element of the walk on, and one of an
+         * arm only in a run through the arm. A run that did not answer, or that nothing recorded,
+         * shows neither, since it may have gone further than it was seen to.
+         */
+        private boolean rewriteLeavesAnswerAsItWas(ObservedRun body) {
+            if (!(body.answer() instanceof AnswerObservation.Answered)
+                    || !(body.watched() instanceof Watched.Ran(AlignedObservation seen))) {
+                return false;
+            }
+            return switch (asked) {
+                case ReplacementOwed.OfAWalk walk ->
+                        walk.occurrences().stream().noneMatch(seen::wentOn);
+                case ReplacementOwed.OfAnArm arm -> arm.occurrences().stream().noneMatch(seen::lit);
+                case ReplacementOwed.ByOneAnswer _ -> false;
             };
         }
 
