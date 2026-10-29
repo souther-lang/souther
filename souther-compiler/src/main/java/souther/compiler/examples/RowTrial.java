@@ -20,6 +20,7 @@ import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
@@ -244,12 +245,16 @@ public final class RowTrial {
                 return Optional.empty();
             }
             applying = applies.applying(standins);
-        } catch (StandinNotBuilt | LinkageError e) {
-            // Nothing was applied, and these are the two ways that happens before an application:
-            // a stand-in that could not be made, and this compiler's own output not linking. Named
-            // rather than taken by category — anything else out of here is this compiler failing at
-            // something it does not have a word for, and turning that into a fact about where a row
-            // went is how a defect in the runner comes back as a defect in the model.
+        } catch (StandinNotBuilt e) {
+            // Nothing was applied, because a stand-in could not be made. Named rather than taken by
+            // category — anything else out of here is this compiler failing at something it does
+            // not have a word for, and turning that into a fact about where a row went is how a
+            // defect in the runner comes back as a defect in the model.
+            return Optional.empty();
+        } catch (LinkageError e) {
+            // Nothing was applied, because there is no runtime to apply it with. A class that was
+            // generated wrongly is not that, and is this compiler failing.
+            GeneratedLinkage.requireRuntimeAbsent(e);
             return Optional.empty();
         }
         return Optional.of(new Ready(applying, over,

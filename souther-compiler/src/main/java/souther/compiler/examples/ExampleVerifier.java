@@ -6,6 +6,7 @@ import souther.compiler.observe.Observations;
 import souther.compiler.observe.WaitShown;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.generated.EvaluationArtifact;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.core.Contract;
@@ -202,14 +203,13 @@ public final class ExampleVerifier {
             Hir.Example ex = block.read();
             try {
                 v.checkExample(ex, failures, rows);
-            } catch (LinkageError _) {
-                // The generated classes would not link, so nothing could be evaluated here. The
-                // case this was written for is the runtime being off the classpath (it is
-                // `provided`, like CTFE), where the build-time pass still checks this example — but
-                // a `LinkageError` is also what a class that will not verify raises, so what is
-                // recorded is that the linking failed and not which of its causes it was. Nothing
-                // was observed, and a measure that read the empty result as "no row covers this"
-                // would report a gap nobody left.
+            } catch (LinkageError e) {
+                // The runtime is off the classpath (it is `provided`, like CTFE), so nothing could
+                // be evaluated here, and the build-time pass still checks this example. Any other
+                // link failure is a class this compiler generated wrongly, which is not a fact
+                // about the example. Nothing was observed, and a measure that read the empty result
+                // as "no row covers this" would report a gap nobody left.
+                GeneratedLinkage.requireRuntimeAbsent(e);
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
                         Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
             }

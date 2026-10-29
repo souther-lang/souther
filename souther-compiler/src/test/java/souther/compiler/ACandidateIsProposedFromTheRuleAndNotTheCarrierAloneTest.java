@@ -677,7 +677,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 data Tags = List<String>
                     invariant distinct = List.allDistinctBy(x -> x, value)
                         && List.length(value) >= 2
-                    invariant notTwo = List.length(value) /= 2
+                    invariant hasA = List.contains("a", value)
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
         souther.compiler.partition.FillResult filled = generated(source);
 
