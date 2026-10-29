@@ -8,6 +8,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -211,6 +212,43 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
             assertEquals(aboutTheRelation(byPattern), reasons, guard);
             assertEquals(classes(byPattern), classes(byLength), guard);
         });
+    }
+
+    /** The operations each report entry names as open, in the order the entries are written. */
+    private static List<String> imagesNotShown(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        Matcher found = Pattern.compile("\"imagesNotShown\"\\s*:\\s*\\[([^\\]]*)\\]")
+                .matcher(json(compilation));
+        while (found.find()) {
+            out.add(found.group(1).strip());
+        }
+        return out;
+    }
+
+    /**
+     * A conversion is open wherever the strings the length rule leaves are strings it is not
+     * exactly a map on, and only there: beside a length of one code point or more the lowercase of
+     * a need is named open at both places the relation parts, as it is beside a pattern of every
+     * code point, and the shown strings do not turn into the whole of them.
+     *
+     * <p>Nor does a position that holds the empty string alone, which no conversion changes, read
+     * differently from the pattern that holds it: that relation is not read over one string, in
+     * either form, and so names nothing open.
+     */
+    @Test
+    void aConversionIsNamedOpenWhereTheLengthRuleLeavesStringsItIsNotExactOn() {
+        String relation = "String.contains(String.lowercase(p.value), i.text)";
+        List<String> byLength = imagesNotShown(measuredNeed("String.length(value) >= 1", relation));
+        assertEquals(List.of("\"String.lowercase\"", "\"String.lowercase\""), byLength);
+        assertEquals(imagesNotShown(measuredNeed("String.matches(\"[\\\\s\\\\S]+\", value)", relation)),
+                byLength);
+
+        Compilation empty = measuredNeed("String.length(value) == 0", relation);
+        assertEquals(imagesNotShown(measuredNeed("String.matches(\"\", value)", relation)),
+                imagesNotShown(empty));
+        assertEquals(List.of(), imagesNotShown(empty));
+        assertEquals(aboutTheRelation(measuredNeed("String.matches(\"\", value)", relation)),
+                aboutTheRelation(empty));
     }
 
     /**
