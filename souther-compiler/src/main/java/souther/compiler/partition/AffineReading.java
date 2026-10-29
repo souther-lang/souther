@@ -450,6 +450,30 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 told.exact = false;
             }
 
+            @Override
+            public boolean readsATotalOfWhatIsWrittenOut() {
+                return true;
+            }
+
+            /**
+             * A total over a list written out, told as the one operation it is: the library adds
+             * the numbers up exactly and holds only the total to the type, so a run stops at the
+             * call where the total passes the ends an {@code Int} sum has, and at no partial sum.
+             * It is worked out after the operations of the elements it adds.
+             */
+            @Override
+            public void totalled(Core call, LinearForm<NumericTerm> total,
+                                 List<Core> elements) {
+                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD, Type.INT,
+                        List.of(Type.INT, Type.INT))
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+                    told.add(call, new UndividedByARelation.IntOperation(total, held.least(),
+                            held.greatest(), told.workedOutOf(elements)));
+                } else {
+                    told.exact = false;
+                }
+            }
+
             /**
              * Whether {@code node}, an expression nothing here reads other than the stopped one,
              * ends no run, or is one the analysis that drew the lines answers for. Any other that
@@ -488,7 +512,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 return false;
             }
-
 
             @Override
             public boolean makingEndsNoRun(Core.Construct construct) {
@@ -729,11 +752,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * is told at no node of its own and is missed the same way.
          */
         List<Integer> workedOutOf(Core node) {
-            List<Core> operands = switch (Core.withoutStanding(node)) {
+            return workedOutOf(switch (Core.withoutStanding(node)) {
                 case Core.Neg neg -> List.of(neg.operand());
                 case Core.Binary binary -> List.of(binary.left(), binary.right());
-                default -> List.of();
-            };
+                default -> List.<Core>of();
+            });
+        }
+
+        /** The same, of a node worked out of {@code operands}. */
+        List<Integer> workedOutOf(List<Core> operands) {
             List<Integer> out = new ArrayList<>();
             for (Core operand : operands) {
                 Core bare = Core.withoutStanding(operand);

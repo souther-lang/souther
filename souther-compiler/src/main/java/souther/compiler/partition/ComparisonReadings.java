@@ -566,12 +566,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads);
         DemandReading.Answered upTo = workedOut(first.parts(), comparison, ofTheRelation, in,
                 reads);
-        List<Set<TermPath>> ties = new ArrayList<>(before.tied());
+        List<DemandReading.Tie> ties = new ArrayList<>(before.tied());
         for (TakenConstraint each : before.narrowing()) {
             if (!upTo.narrowing().contains(each)) {
-                Set<TermPath> places = new LinkedHashSet<>();
-                each.terms().forEach(term -> places.add(term.subjectPath()));
-                ties.add(places);
+                ties.add(DemandReading.Tie.by(each));
             }
         }
         return upTo.after(new DemandReading.PriorApplications(
