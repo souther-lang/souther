@@ -549,7 +549,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
-                new BlockReason.RelationShownOverARegion(false, 1L),
+                new BlockReason.RelationShownOverARegion(false, 1L, List.of()),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

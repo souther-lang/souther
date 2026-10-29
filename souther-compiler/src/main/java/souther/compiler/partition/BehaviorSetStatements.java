@@ -190,11 +190,12 @@ public final class BehaviorSetStatements {
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
-                         AdmittedPlan notShown, Long trueUpTo, List<ValuesWithin> notReached) {
+                         AdmittedPlan notShown, Long trueUpTo, List<ValuesWithin> notReached,
+                         List<String> imagesNotShown) {
 
         Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
               AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
-            this(by, states, term, whenTrue, whenFalse, null, null, List.of());
+            this(by, states, term, whenTrue, whenFalse, null, null, List.of(), List.of());
         }
     }
 
@@ -330,7 +331,7 @@ public final class BehaviorSetStatements {
             }
             asked.add(new Asked(each.by(), each.states(), each.term(),
                     shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
-                    strings.upTo(), notReached));
+                    strings.upTo(), notReached, strings.imagesNotShown()));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -613,7 +614,7 @@ public final class BehaviorSetStatements {
                             built.of(each.whenFalse()), each.states(), each.by(),
                             each.notShown() == null ? ValueSet.NONE
                                     : built.of(each.notShown()),
-                            each.notReached())));
+                            each.notReached(), each.imagesNotShown())));
         }
     }
 

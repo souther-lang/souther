@@ -877,6 +877,7 @@ public final class GuardThresholds {
                     case ComparisonAssessment.AcrossPositions across ->
                             across.left().partnered();
                     case ComparisonAssessment.AgainstAnotherValue against -> against.partnered();
+                    case ComparisonAssessment.Several several -> several.partnered();
                     default -> Map.of();
                 };
         List<BehaviorSetStatements.Partnered> out = new ArrayList<>();

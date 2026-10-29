@@ -1185,6 +1185,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
+            case Proposition.OnAnApplication applied
+                    when againstAnotherValueOnEach(applied) instanceof Read.AgainstAnotherValue
+                    each -> each;
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
                     boolean holds, String _) when term.atOnePosition() != null ->
@@ -1759,15 +1762,62 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return new Read.AgainstAnotherValue(over, relations);
     }
 
-    /** {@code stated} held as the two values of its one statement that two values are one. */
+    /**
+     * What a statement made on each of the values a name stands for relates, where every statement
+     * relates the input to another value: the relation of each, read on the rows its value is the
+     * name's — as the applications of a closure are — or null where one of them is anything else.
+     */
+    private static Read.AgainstAnotherValue againstAnotherValueOnEach(
+            Proposition.OnAnApplication applied) {
+        List<FilingCoordinate> over = new ArrayList<>();
+        List<UndividedByARelation> relations = new ArrayList<>();
+        for (Proposition each : applied.each()) {
+            List<FilingCoordinate> related =
+                    each instanceof Proposition.Compared ? relatedToAnotherValue(each) : null;
+            if (related == null) {
+                return null;
+            }
+            related.stream().filter(at -> !over.contains(at)).forEach(over::add);
+            relations.addAll(against(related, each).relations());
+        }
+        return new Read.AgainstAnotherValue(over, relations);
+    }
+
+    /**
+     * {@code stated} held as the two values of its one statement that two values are one, or the
+     * two strings of its one statement that one string stands inside another.
+     */
     private static UndividedByARelation oneValue(Proposition stated) {
         List<Proposition.SameValue> same = new ArrayList<>();
         sameValuesIn(stated, same);
-        return same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
+        if (same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath other),
-                boolean _, String _)
-                ? UndividedByARelation.ofTwoPositions(one, other)
+                boolean _, String _)) {
+            return UndividedByARelation.ofTwoPositions(one, other);
+        }
+        List<Proposition.StringInside> inside = new ArrayList<>();
+        stringsInsideIn(stated, inside);
+        return same.isEmpty() && inside.size() == 1
+                ? UndividedByARelation.ofAStringInside(inside.getFirst().inner(),
+                        inside.getFirst().outer(), inside.getFirst().where())
                 : UndividedByARelation.SHOWING_NOTHING;
+    }
+
+    /** Every statement of one string standing inside another {@code stated} is made of. */
+    private static void stringsInsideIn(Proposition stated, List<Proposition.StringInside> out) {
+        switch (stated) {
+            case Proposition.StringInside inside -> out.add(inside);
+            case Proposition.Some some -> stringsInsideIn(some.ofTheElement(), out);
+            case Proposition.All all -> all.parts().forEach(each -> stringsInsideIn(each, out));
+            case Proposition.Any any -> any.parts().forEach(each -> stringsInsideIn(each, out));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(each -> stringsInsideIn(each, out));
+            case Proposition.WhereItAnswers where -> {
+                stringsInsideIn(where.answers(), out);
+                stringsInsideIn(where.states(), out);
+            }
+            default -> { }
+        }
     }
 
     /** Every statement of two values being one {@code stated} is made of. */
@@ -1850,8 +1900,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     yield false;
                 }
                 for (NumericTerm each : Stream.concat(inner.stream(), outer.stream()).toList()) {
-                    if (!out.contains(FilingCoordinate.at(each.subjectPath()))) {
-                        out.add(FilingCoordinate.at(each.subjectPath()));
+                    if (!out.contains(FilingCoordinate.of(each))) {
+                        out.add(FilingCoordinate.of(each));
                     }
                 }
                 yield true;

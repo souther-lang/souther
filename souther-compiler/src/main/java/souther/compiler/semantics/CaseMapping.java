@@ -2,6 +2,9 @@ package souther.compiler.semantics;
 
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * What a string is made into by case conversions before it is counted, or none where it is counted
  * as it stands. A conversion of a conversion is a conversion: the outermost is the last applied.
@@ -12,6 +15,14 @@ import souther.compiler.types.ValueName;
  * count of the answer is therefore asked of the answer and never taken back to the code points of
  * the string it was made from; what a conversion makes of a text is worked out where the run
  * time's operations are applied ({@code evaluate.BoundUnderEvaluation#mapped}).
+ *
+ * <p>The one place that says which operations of the library are case conversions
+ * ({@link #isAConversion}), and the only one a reader of a relation asks: it works with what a
+ * conversion is exactly a map on ({@code regex.CodeMap}, worked out from the run time) and never
+ * names an operation. A conversion added to the library is added here, with the facts about it
+ * that {@link OperationFacts} states for every operation (what it keeps, how long its answer is);
+ * what a relation over it comes to follows from the map and is not written again where the
+ * relation is read.
  */
 public sealed interface CaseMapping {
 
@@ -49,6 +60,44 @@ public sealed interface CaseMapping {
         }
         return ValueName.Stdlib.operation("String", "uppercase").equals(operation)
                 ? new Uppercase(inner) : null;
+    }
+
+    /**
+     * The operations of the library this is made of, each as the library names it, the one done
+     * first before the one done last: none for the string as it stands.
+     */
+    default List<String> operations() {
+        return switch (this) {
+            case None _ -> List.of();
+            case Lowercase lowercase -> concat(lowercase.of().operations(),
+                    ValueName.Stdlib.operation("String", "lowercase").qualified());
+            case Uppercase uppercase -> concat(uppercase.of().operations(),
+                    ValueName.Stdlib.operation("String", "uppercase").qualified());
+        };
+    }
+
+    private static List<String> concat(List<String> before, String last) {
+        List<String> out = new ArrayList<>(before);
+        out.add(last);
+        return List.copyOf(out);
+    }
+
+    /**
+     * Each conversion this is made of as far as it has been done, the one done first alone and
+     * this whole last: the same count and order as {@link #operations}, so the operation at a
+     * place is the last one done by the conversion at the same place. None for the string as it
+     * stands.
+     */
+    default List<CaseMapping> doneSoFar() {
+        List<CaseMapping> out = switch (this) {
+            case None _ -> new ArrayList<>();
+            case Lowercase lowercase -> new ArrayList<>(lowercase.of().doneSoFar());
+            case Uppercase uppercase -> new ArrayList<>(uppercase.of().doneSoFar());
+        };
+        if (!(this instanceof None)) {
+            out.add(this);
+        }
+        return List.copyOf(out);
     }
 
     /** {@code value} as it is written where it has been converted by this. */
