@@ -194,6 +194,9 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method walkRewrites() : souther.compiler.coverage.WalkRewrites",
             "method walkSiteOf(souther.compiler.core.Core) :"
                     + " java.util.Optional<souther.compiler.coverage.WalkProbe>",
+            // Which argument of a walk's call is the list it goes over: a position, and nothing of
+            // the tree the call stands in.
+            "method walkedArgumentOf(souther.compiler.core.Core) : java.util.OptionalInt",
             // Where a body could answer other than one value, asked by its name and answered with
             // the places of the arms on each way.
             "method fromOneValue(java.lang.String) :"

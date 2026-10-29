@@ -9,7 +9,6 @@ import souther.compiler.core.TheWalk;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.WorkFigure;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
@@ -22,10 +21,8 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
@@ -496,7 +494,7 @@ public final class CoverageSites {
         private final List<WalkSite> walks;
         /** The same, by the call the loop is emitted for. By identity for the reason
          *  {@code byNode} is. */
-        private final IdentityHashMap<Core, WalkProbe> walksByNode;
+        private final IdentityHashMap<Core, WalkedAt> walksByNode;
         /** Which rewrites each walk can be run as. */
         private final WalkRewrites walkRewrites;
 
@@ -528,7 +526,7 @@ public final class CoverageSites {
              Map<String, ArmReplacements.Differs> oneValue,
              Map<AsWritten, SourceOutcome.Arm> armsAsWritten,
              List<WalkSite> walks,
-             IdentityHashMap<Core, WalkProbe> walksByNode,
+             IdentityHashMap<Core, WalkedAt> walksByNode,
              WalkRewrites walkRewrites) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
@@ -618,7 +616,17 @@ public final class CoverageSites {
          * numbered none there: a walk no row that stands can reach.
          */
         public Optional<WalkProbe> walkSiteOf(Core node) {
-            return Optional.ofNullable(walksByNode.get(node));
+            WalkedAt walked = walksByNode.get(node);
+            return walked == null ? Optional.empty() : Optional.of(walked.at());
+        }
+
+        /**
+         * Which argument of the call {@code node} is the list the walk goes over, or empty where
+         * this plan numbered no walk there ({@link #walkSiteOf}).
+         */
+        public OptionalInt walkedArgumentOf(Core node) {
+            WalkedAt walked = walksByNode.get(node);
+            return walked == null ? OptionalInt.empty() : OptionalInt.of(walked.argument());
         }
 
         /** Which rewrites each numbered walk can be run as. */
@@ -626,9 +634,12 @@ public final class CoverageSites {
             return walkRewrites;
         }
 
-        IdentityHashMap<Core, WalkProbe> walksByNode() {
+        IdentityHashMap<Core, WalkedAt> walksByNode() {
             return walksByNode;
         }
+
+        /** Where a walk is entered, and which argument of its call is the list it goes over. */
+        record WalkedAt(WalkProbe at, int argument) {}
 
         /**
          * The parts of the siblings the classes carry in arm {@code part} of {@code node}, in the
@@ -1153,14 +1164,14 @@ public final class CoverageSites {
         walk.oneValue.forEach((body, differs) ->
                 oneValue.put(body, differs.placed(numbering, issued)));
         List<WalkSite> walks = new ArrayList<>();
-        IdentityHashMap<Core, WalkProbe> walksByNode = new IdentityHashMap<>();
+        IdentityHashMap<Core, Plan.WalkedAt> walksByNode = new IdentityHashMap<>();
         SequencedMap<Integer, WalkRewrites.AtWalk> walkSites = new LinkedHashMap<>();
         for (DraftWalk draft : walk.walks) {
             WalkProbe at = numbering.walk(draft.raw());
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
                     draft.over()));
-            walksByNode.put(draft.call(), at);
+            walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.listArgument()));
             walkSites.put(draft.raw(), new WalkRewrites.AtWalk(draft.walk(), at, draft.theSame(),
                     draft.overAFixedList(), draft.notCarried()));
         }
@@ -1289,14 +1300,14 @@ public final class CoverageSites {
      * and which rewrites the source shows are the walk under another spelling. Numbered once every
      * other place has been ({@link Walk#numberTheWalks}), and then {@code raw} is its number.
      */
-    private record DraftWalk(Core.Call call, String body, SourceConstructOrigin walk,
-                             NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
+    private record DraftWalk(Core.Call call, int listArgument, String body,
+                             SourceConstructOrigin walk, NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
                              boolean overAFixedList, Optional<NotCarriedReason> notCarried,
                              Optional<List<String>> over, int raw) {
 
         DraftWalk numbered(int number) {
-            return new DraftWalk(call, body, walk, at, writtenHere, theSame, overAFixedList,
-                    notCarried, over, number);
+            return new DraftWalk(call, listArgument, body, walk, at, writtenHere, theSame,
+                    overAFixedList, notCarried, over, number);
         }
     }
 
@@ -1400,8 +1411,6 @@ public final class CoverageSites {
          *  it, which is what says whether reading the name reads something a run is handed
          *  ({@link #closed}). */
         private final Map<BindingId, Core> boundTo = new HashMap<>();
-        /** The conditions the walk is inside the arm of, the outermost first. */
-        private final Deque<Holding> holding = new ArrayDeque<>();
 
         /** Every name the body being walked binds somewhere inside it, which a parameter of the body
          *  is not. */
@@ -1465,8 +1474,8 @@ public final class CoverageSites {
                 throw new IllegalStateException("a walk at " + call.pos() + " carries no call the"
                         + " source wrote, and a rewrite of it would be of nothing an author wrote");
             }
-            Core walked = call.args().get(call.fn() instanceof Core.Emitted ? 1
-                    : theWalk.container());
+            int listArgument = call.fn() instanceof Core.Emitted ? 1 : theWalk.container();
+            Core walked = call.args().get(listArgument);
             // A walk over what a set or a map lists goes in an order the language leaves
             // unspecified, so its first element and the step before another are no element and no
             // step the model names: a row telling either rewrite apart would turn on that order.
@@ -1477,8 +1486,7 @@ public final class CoverageSites {
             // A list written with one element or none is walked no further than its first: both
             // rewrites leave such a walk as it is.
             Core.ListLit written = listWrittenOut(walked);
-            if ((written != null && written.elements().size() <= 1)
-                    || heldToOneAtMostHere(walked)) {
+            if (written != null && written.elements().size() <= 1) {
                 theSame.addAll(EnumSet.allOf(WalkRewrite.class));
             }
             // A step that never reads what it carries is handed the seed to no effect.
@@ -1490,90 +1498,9 @@ public final class CoverageSites {
             // all the same; what is missing is a way to run it rewritten, and that is said.
             Optional<NotCarriedReason> notCarried = step == null
                     ? Optional.of(new NotCarriedReason.StepNotExpanded()) : Optional.empty();
-            walks.add(new DraftWalk(call, behavior, call.origin(), places.of(call),
+            walks.add(new DraftWalk(call, listArgument, behavior, call.origin(), places.of(call),
                     Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
                     notCarried, listHeldAs(walked), -1));
-        }
-
-        /** A condition the walk is inside the arm of, and which arm: the one where it held or the
-         *  one where it did not. */
-        private record Holding(Core cond, boolean holds) {}
-
-        /**
-         * Whether every run that reaches {@code walked} holds one element of it at most, because a
-         * condition the walk is inside the arm of says so: the length of the very list, compared
-         * with a number that leaves room for one element at most.
-         *
-         * <p>The list is the same list where both stand at one location of the input
-         * ({@link #listHeldAs}), and values do not change, so the length asked there is the length
-         * walked here. Only what a condition says outright is read: an arm that holds, a conjunction
-         * of such, and the arm where a comparison did not hold; anything else says nothing.
-         */
-        private boolean heldToOneAtMostHere(Core walked) {
-            Optional<List<String>> where = listHeldAs(walked);
-            return where.isPresent() && holding.stream()
-                    .anyMatch(each -> entailsOneAtMost(each.cond(), each.holds(), where.get()));
-        }
-
-        private boolean entailsOneAtMost(Core cond, boolean holds, List<String> where) {
-            if (!(Core.withoutStanding(cond) instanceof Core.Binary binary)) {
-                return false;
-            }
-            BinOp op = binary.op();
-            if (op == (holds ? BinOp.AND : BinOp.OR)) {
-                return entailsOneAtMost(binary.left(), holds, where)
-                        || entailsOneAtMost(binary.right(), holds, where);
-            }
-            if (!holds) {
-                op = switch (op) {
-                    case EQ -> BinOp.NE;
-                    case NE -> BinOp.EQ;
-                    case LT -> BinOp.GE;
-                    case LE -> BinOp.GT;
-                    case GT -> BinOp.LE;
-                    case GE -> BinOp.LT;
-                    default -> null;
-                };
-            }
-            if (op == null) {
-                return false;
-            }
-            // The length on the left; a length on the right is the same comparison turned round.
-            boolean lengthOnTheLeft = lengthOf(binary.left(), where);
-            if (!lengthOnTheLeft && !lengthOf(binary.right(), where)) {
-                return false;
-            }
-            if (!lengthOnTheLeft) {
-                op = switch (op) {
-                    case LT -> BinOp.GT;
-                    case LE -> BinOp.GE;
-                    case GT -> BinOp.LT;
-                    case GE -> BinOp.LE;
-                    default -> op;
-                };
-            }
-            if (!(Core.withoutStanding(lengthOnTheLeft ? binary.right() : binary.left())
-                    instanceof Core.Int number)) {
-                return false;
-            }
-            return switch (op) {
-                case EQ, LE -> number.value() <= 1;
-                case LT -> number.value() <= 2;
-                default -> false;
-            };
-        }
-
-        /** Whether {@code e} is the length of the list at {@code where}, read through the names
-         *  the body bound to it. */
-        private boolean lengthOf(Core e, List<String> where) {
-            Core plain = Core.withoutStanding(e);
-            if (plain instanceof Core.Read read && boundTo.get(read.binding()) != null) {
-                return lengthOf(boundTo.get(read.binding()), where);
-            }
-            return plain instanceof Core.Call call
-                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)
-                    && kernel == Kernel.LIST_LENGTH && call.args().size() == 1
-                    && listHeldAs(call.args().getFirst()).filter(where::equals).isPresent();
         }
 
         /**
@@ -1751,7 +1678,6 @@ public final class CoverageSites {
             this.boundTo.clear();
             this.closedNames.clear();
             this.boundInTheBody.clear();
-            this.holding.clear();
             bindersIn(body, boundInTheBody);
             walk(body, true);
             oneValue.put(name, fromOneValue(body));
@@ -2598,20 +2524,10 @@ public final class CoverageSites {
                             decidedAt(iff.origin(), iff.expansion(), decisions, supplied);
                     DraftArm then =
                             armOf(HELD, iff, iff.occurrence(), 0, iff.then(), inside, decided);
-                    holding.addLast(new Holding(iff.cond(), true));
-                    try {
-                        walk(structural.take(new CoreStructure.Edge.IfThen(), iff.then()), inside);
-                    } finally {
-                        holding.removeLast();
-                    }
+                    walk(structural.take(new CoreStructure.Edge.IfThen(), iff.then()), inside);
                     DraftArm els =
                             armOf(FAILED, iff, iff.occurrence(), 1, iff.els(), inside, decided);
-                    holding.addLast(new Holding(iff.cond(), false));
-                    try {
-                        walk(structural.take(new CoreStructure.Edge.IfElse(), iff.els()), inside);
-                    } finally {
-                        holding.removeLast();
-                    }
+                    walk(structural.take(new CoreStructure.Edge.IfElse(), iff.els()), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, iff.occurrence(), new DraftArm[] {then, els});
                     replacements(iff, iff.origin(), new DraftArm[] {then, els},

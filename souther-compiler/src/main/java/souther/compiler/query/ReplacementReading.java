@@ -176,6 +176,10 @@ public final class ReplacementReading {
      * says is another program ({@link WalkRewrites#askedOf}), {@code walkedNoFurther} being what
      * the rows' runs showed of how far each walk went. A walk is no fork of the body's, so a body
      * whose only loops are walks is asked about the values it answered as well.
+     *
+     * <p>{@code heldToOneAtMost} says of a place a walk is entered whether the list it goes over
+     * holds one element at most there. A walk shown so at every place it is entered is not asked
+     * about.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
                                    ArmReplacements carried, WalkRewrites walksCarried,
@@ -186,6 +190,7 @@ public final class ReplacementReading {
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                    Comparing comparing,
+                                   Predicate<WalkProbe> heldToOneAtMost,
                                    Supplier<InputsRowsRanWith> ranWith) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
@@ -276,6 +281,12 @@ public final class ReplacementReading {
                         : Optional.empty());
             }
         }
+        // A walk shown, at every place it is entered, to go over a list of one element at most is
+        // the walk under either spelling on every run: no row tells a rewrite of it apart, and
+        // none is owed.
+        walkOccurrences.keySet().removeIf(replaced -> plan.walks(behavior).stream()
+                .filter(site -> site.walk().equals(replaced.walk()))
+                .allMatch(site -> heldToOneAtMost.test(site.index())));
         walkOccurrences.forEach((replaced, at) -> out.add(new Account(
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),

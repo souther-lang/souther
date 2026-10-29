@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.ProbeImage;
@@ -148,8 +149,19 @@ public final class Replacements {
                                 return Comparisons.verdict(stated, answered, types, at)
                                         instanceof Verdict.Held;
                             }
-                        }, ranWith);
+                        }, heldToOneAtMostIn(arrived, behavior.name()), ranWith);
             });
+        }
+
+        /** Whether the reading of the paths to {@code behavior}'s body shows the list a walk is
+         *  entered with to hold one element at most at that place. */
+        private static Predicate<WalkProbe> heldToOneAtMostIn(
+                Map<String, PathReachability.Answers.AsRun> arrived, String behavior) {
+            PathReachability.Answers.AsRun asRun = arrived == null ? null : arrived.get(behavior);
+            if (asRun == null) {
+                return _ -> false;
+            }
+            return asRun.answers().arrivals().walksHeldToOneAtMost()::contains;
         }
 
         /**

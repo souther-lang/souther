@@ -557,8 +557,104 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 AdequacyReport.of(compilation).adequacy());
     }
 
+    private static String foldOverWhatAnInvariantHolds(String bound, String rows) {
+        return """
+                module repro.few
+
+                data Few = List<Int>
+                    invariant atMost = List.length(value) <= %s
+
+                behavior total : (xs: Few) -> Int
+
+                let total (xs) = List.fold((acc, x) -> acc + x, 0, xs.value)
+
+                example total
+                %s""".formatted(bound, rows);
+    }
+
+    /** The rules of the input's own declarations hold the list to one element at most, with no
+     *  condition in the body saying so: there is nothing for a row to tell a rewrite by. */
+    @Test
+    void aWalkOverAListTheDeclarationsHoldToOneElementAtMostOwesNothing() {
+        Compilation compilation = measured(foldOverWhatAnInvariantHolds("1", """
+                    | (Few([])) -> 0
+                    | (Few([5])) -> 5
+                """));
+
+        assertEquals(List.of(), foldVerdicts(compilation));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AdequacyReport.of(compilation).adequacy());
+    }
+
+    /** Room for a second element is room for a row that tells the rewrites apart. */
+    @Test
+    void aWalkOverAListTheDeclarationsLeaveRoomForTwoElementsIsStillAsked() {
+        Compilation compilation = measured(foldOverWhatAnInvariantHolds("2", """
+                    | (Few([])) -> 0
+                    | (Few([5])) -> 5
+                """));
+
+        assertEquals(2, foldVerdicts(compilation).size());
+    }
+
     private static final String FOLD_OF_XS = "List.fold((acc, x) -> acc + x, 0, i.xs)";
 
+    /** A second element is looked for and not found, or the list is dropped past its first and
+     *  nothing is left: either way the walk is entered with one element at most. */
+    @Test
+    void aWalkWhereTheSecondElementIsAbsentOwesNothing() {
+        String body = "match List.get(1, i.xs) with\n | Some s -> 0\n | None -> " + FOLD_OF_XS;
+
+        assertEquals(List.of(), verdictsOfTheFoldIn(body, ONE_OR_NONE_ANSWER_ROWS));
+    }
+
+    /**
+     * {@code List.drop} is a fold of the library's, which is asked about like any other: its two
+     * rewrites are what is left once the model's own fold is shown to owe nothing.
+     */
+    @Test
+    void aWalkWhereNothingIsLeftAfterTheFirstElementOwesNothing() {
+        String body = "if List.isEmpty(List.drop(1, i.xs)) then " + FOLD_OF_XS + " else 0";
+
+        assertEquals(List.of("fold_after_one_step: noticed", "fold_from_the_seed: noticed"),
+                verdictsOfTheFoldIn(body, ONE_OR_NONE_ANSWER_ROWS));
+    }
+
+    /** One fold written once but entered from two places is owed where any of them is not shown. */
+    @Test
+    void aWalkShownToHoldOneElementAtMostAtOnePlaceOnlyIsStillAsked() {
+        Compilation compilation = measured("""
+                module repro.twice
+
+                data In = { xs: List<Int>, ys: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                let sum (zs: List<Int>) = List.fold((acc, x) -> acc + x, 0, zs)
+
+                let total (i) =
+                    if List.length(i.xs) <= 1 then sum(i.xs) + sum(i.ys) else 0
+
+                example total
+                    | (In { xs = [], ys = [] }) -> 0
+                    | (In { xs = [5], ys = [] }) -> 5
+                    | (In { xs = [5], ys = [1, 2] }) -> 8
+                """);
+
+        assertEquals(2, foldVerdicts(compilation).size());
+    }
+
+    /** The same shapes with the walk on the other side of the condition leave room for two. */
+    @Test
+    void aWalkWhereTheSecondElementIsPresentIsStillAsked() {
+        Map<String, Integer> bodies = new java.util.LinkedHashMap<>();
+        bodies.put("match List.get(1, i.xs) with\n | Some s -> " + FOLD_OF_XS + "\n | None -> 0",
+                2);
+        bodies.put("if List.isEmpty(List.drop(1, i.xs)) then 0 else " + FOLD_OF_XS, 4);
+
+        bodies.forEach((body, count) -> assertEquals(count,
+                verdictsOfTheFoldIn(body, ROOM_FOR_TWO_ROWS.formatted(0, 3)).size(), body));
+    }
     private static List<String> verdictsOfTheFoldIn(String body, String rows) {
         return foldVerdicts(measured("""
                 module repro.guarded

@@ -10037,6 +10037,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String next(AdequacyUncertainty unanswered) {
         ReaderDisposition disposition = ReaderDisposition.of(unanswered);
         String next = next(disposition);
+        // A search that stopped at a figure did not look past it, and a rewrite it left open may
+        // be told apart by a row nobody has written: that is the one thing such a line is owed
+        // beyond the figure, since nothing proves there is no row.
+        if (disposition instanceof ReaderDisposition.StoppedAtAFigure
+                && unanswered instanceof AdequacyUncertainty.ByWeakening(
+                        Weakening.RewriteUndecided _)) {
+            next += ": a row that tells the rewrite apart may exist past it, and writing one"
+                    + " settles it";
+        }
         return disposition instanceof ReaderDisposition.StoppedAtAFigure
                 || unanswered.figures().isEmpty() ? next
                 : next + "; it stopped at " + figuresSaid(unanswered.figures()) + " as well";

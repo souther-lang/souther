@@ -1,6 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.NumberingIdentity;
@@ -44,7 +49,9 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -103,23 +111,29 @@ public final class PathReachability {
      *                   where it answers ({@link PathCompletion.Past#mayStop}). What
      *                   arrives there is what has to hold for a run to get there, and a construct
      *                   here is one where that is not all that getting there takes
+     * @param walksHeldToOneAtMost the walks entered where what holds on the way there, with what
+     *                   the declarations leave, shows the list walked to hold one element at most.
+     *                   A walk absent here is one nothing was shown of, which includes one the
+     *                   walk over the body did not get to
      */
     public record Arrivals(Optional<NumberingIdentity> numbering,
                            Map<ConstructOccurrence, ComparisonArrival> arriving,
                            Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt,
-                           Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore) {
+                           Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore,
+                           Set<WalkProbe> walksHeldToOneAtMost) {
 
         /** No reading, which goes with any plan because it says nothing about one. */
         public static final Arrivals NONE =
-                new Arrivals(Optional.empty(), Map.of(), Map.of(), Map.of());
+                new Arrivals(Optional.empty(), Map.of(), Map.of(), Map.of(), Set.of());
 
         public Arrivals {
             if (numbering == null) {
                 throw new IllegalArgumentException(
                         "a reading either was made under some numbering or was not made");
             }
+            walksHeldToOneAtMost = Set.copyOf(walksHeldToOneAtMost);
             if (numbering.isEmpty() && !(arriving.isEmpty() && recordedAt.isEmpty()
-                    && stopsBefore.isEmpty())) {
+                    && stopsBefore.isEmpty() && walksHeldToOneAtMost.isEmpty())) {
                 throw new IllegalArgumentException("a reading that answered about "
                         + arriving.size() + " constructs was made under some numbering; they are"
                         + " of a plan and nothing here would say which");
@@ -190,7 +204,7 @@ public final class PathReachability {
             }
             Map<ConstructOccurrence, ComparisonArrival> out = new LinkedHashMap<>(arriving);
             takenBack.forEach(construct -> out.put(construct, new ComparisonArrival.NoProjection()));
-            return new Arrivals(numbering, out, recordedAt, stopsBefore);
+            return new Arrivals(numbering, out, recordedAt, stopsBefore, walksHeldToOneAtMost);
         }
     }
 
@@ -513,7 +527,8 @@ public final class PathReachability {
                 .ifPresent(way -> recordedAt.put(construct, way.at())));
         Optional<NumberingIdentity> numbering = Optional.of(plan.identity());
         return new Answers(numbering, out,
-                new Arrivals(numbering, arriving, recordedAt, walker.stopsBefore));
+                new Arrivals(numbering, arriving, recordedAt, walker.stopsBefore,
+                        walker.walksHeldToOneAtMost));
     }
 
     /**
@@ -627,6 +642,9 @@ public final class PathReachability {
      *  says ({@link #mayStopBefore}), for the ones where it may. */
     private final Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore =
             new LinkedHashMap<>();
+    /** The walks entered where the list walked is shown to hold one element at most
+     *  ({@link #walkHeldToOneAtMost}). */
+    private final Set<WalkProbe> walksHeldToOneAtMost = new LinkedHashSet<>();
     /** The steps the walk is inside, the innermost last. */
     private final List<StepEntered> steps = new ArrayList<>();
     /**
@@ -928,6 +946,33 @@ public final class PathReachability {
     }
 
     /**
+     * Files {@code call} when it is a walk and what holds once its operands are worked out leaves
+     * the list it goes over one element at most.
+     *
+     * <p>Asked of the size of the very list the walk is handed, as the declarations and the
+     * conditions on the way state it, so a bound that was shown of another list, or of the same
+     * list at another place, is not this one.
+     */
+    private void walkHeldToOneAtMost(Core.Call call, Known k, Denotations at) {
+        Optional<WalkProbe> probe = plan.walkSiteOf(call);
+        OptionalInt argument = plan.walkedArgumentOf(call);
+        if (probe.isEmpty() || argument.isEmpty()) {
+            return;
+        }
+        Core walked = call.args().get(argument.getAsInt());
+        ValueName counting = NumericMeasures.takenOf(walked.type(),
+                engine.terms().newtypeInners());
+        FactSubject size = counting == null ? null
+                : engine.terms().sizeAtomFor(counting, walked, at);
+        if (size != null
+                && LinearForm.atom(size).minus(LinearForm.constant(ExactRatio.of(BigInteger.ONE)))
+                        instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var overOne)
+                && k.numbers().entails(overOne, Rel.LE)) {
+            walksHeldToOneAtMost.add(probe.get());
+        }
+    }
+
+    /**
      * What a run holds past {@code e}, given what it held once its operands were worked out.
      */
     private Walked pastOperands(Core e, Walked operands, Denotations at, InputReads reads) {
@@ -941,6 +986,9 @@ public final class PathReachability {
         if (operands.known().reachesNothing()) {
             // No run worked the operands out, so none makes this evaluation either.
             return operands;
+        }
+        if (Core.withoutStanding(e) instanceof Core.Call call) {
+            walkHeldToOneAtMost(call, operands.known(), at);
         }
         // What a run past this evaluation holds is what its operands left with what its operator
         // asks of them, or nothing where it answers nothing. What is taken in there is a step on
