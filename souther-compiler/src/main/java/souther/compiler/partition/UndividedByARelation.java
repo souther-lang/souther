@@ -4754,6 +4754,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * remainder where it comes to none. {@code held} is a number of the form left out of the
      * others: it stands at whatever value is asked of it, and which of its values have a row is
      * asked of the row.
+     *
+     * <p>With no {@code held}, the witness is also one at which the run gets past every
+     * operation it works out ({@link #theWorkingGetsPastAtTheWitness}): the remainders are a
+     * row's, and a row gets there. With one, the others are not put anywhere, so there is no
+     * assignment to ask the operations at, and what is shown is the form's alone; the operations
+     * over the numbers of the relation are judged where they are told
+     * ({@link #operationsOverTheSides}).
      */
     private boolean reachesEveryRemainder(NumericTerm held, InputReading read,
                                           List<OnAWay> conditions, boolean heldWhole) {
@@ -4792,7 +4799,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Carrier carrier = read.quantities().ordersOf(value).answered();
             BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
             if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
-                    carrier) && theWorkingGetsPastAtTheWitness(value, window)
+                    carrier) && (held != null || theWorkingGetsPastAtTheWitness(value, window))
                     && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
                 return value;
             }
@@ -4801,21 +4808,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether every operation over {@code witness} alone comes to a number its type holds with
-     * the witness put at each value from nought to {@code top}. An operation over another number
-     * as well is not the witness's to say: that number stands at whatever value its rows put it
-     * at, and which of them get past the operation is asked as the operations over the sides are.
+     * Whether the run gets past every operation it works out with {@code witness} put at each
+     * value from nought to {@code top} and every other number of the form at nought, the values
+     * the proof that the form leaves every remainder is made at. An operation over numbers of the
+     * form is asked there; one over none of them does not move with the witness and is not asked.
      *
-     * <p>The operations are sums of the form with the number it is moved by, which the quantity
-     * holds taken by the divisor, so they are asked here with the number as it was written. Each
-     * is linear in the witness, so its two ends say every value between.
+     * <p>An operation over a number of the form and one that is not — a number the form's own
+     * arithmetic cancelled, such as the {@code y} of {@code x + M * y - M * y} — has that number
+     * at a value nothing here chooses, and the run may stop at it however the witness is put.
+     * It is no witness's to get past, so there is none: the proof is given up.
+     *
+     * <p>The operations are the ones the run works out, each over the numbers it reads, and not
+     * the form they sum to: the form is what is left once the cancelling is done. Each is linear
+     * in the witness, so its two ends say every value between.
      */
     private boolean theWorkingGetsPastAtTheWitness(NumericTerm witness, BigInteger top) {
-        for (IntOperation each : working.operations()) {
-            if (!isOverOnly(each, witness)) {
+        return getsPastAtTheWitness(working.operations(), remainder.dividend().coefs().keySet(),
+                witness, top);
+    }
+
+    static boolean getsPastAtTheWitness(List<IntOperation> operations, Set<NumericTerm> ofTheForm,
+                                        NumericTerm witness, BigInteger top) {
+        for (IntOperation each : operations) {
+            Set<NumericTerm> reads = each.form().coefs().keySet();
+            if (reads.stream().noneMatch(ofTheForm::contains)) {
                 continue;
             }
-            ExactRatio weight = each.form().coefs().get(witness);
+            if (!ofTheForm.containsAll(reads)) {
+                return false;
+            }
+            ExactRatio weight = each.form().coefs().getOrDefault(witness, ExactRatio.ZERO);
             for (BigInteger at : List.of(BigInteger.ZERO, top)) {
                 ExactRatio value = weight.times(ExactRatio.of(at)).orNull() instanceof ExactRatio
                         product ? product.plus(each.form().constant()).orNull() : null;

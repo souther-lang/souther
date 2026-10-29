@@ -37,6 +37,13 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             let f (k, m, q) = (Map.get(k, m) |> Option.withDefault(0)) >= q
             """;
 
+    private static final String MAPPED = """
+            module p
+            behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+            let f (k, m, q) =
+                (Map.get(k, m) |> Option.map(v -> v + 1 - 1) |> Option.withDefault(0)) >= q
+            """;
+
     private static final String WRITTEN_OUT = """
             module p
             behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
@@ -167,6 +174,23 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
         assertTrue(called.contains("read as f/q: = 1"), called);
         assertTrue(called.contains("read as f/q: = 0"), called);
         assertTrue(called.contains("read as f/m[*]: = q"), called);
+    }
+
+    /**
+     * The sum a closure works out on the entry stops the run at the greatest {@code Int}, and a
+     * row that stops is no row: held against that number, the line at the entry is drawn but no
+     * row is composed at it, which the report says. Without the closure the same line has its
+     * row.
+     */
+    @Test
+    void theLineAtTheNumberAClosuresSumStopsAtHasNoRowComposedAtIt() {
+        String stops = lineAbout(report(measured(
+                MAPPED.replace(">= q", ">= 9223372036854775807"))), "= 9223372036854775807");
+        assertTrue(stops.contains("nothing composed one: no row composed here was run to an answer"),
+                stops);
+        String reaches = lineAbout(report(measured(MAPPED.replace(">= q", ">= 9223372036854775807")
+                .replace("|> Option.map(v -> v + 1 - 1) ", ""))), "= 9223372036854775807");
+        assertFalse(reaches.contains("nothing composed one"), reaches);
     }
 
     /**

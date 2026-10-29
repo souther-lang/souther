@@ -523,6 +523,29 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 "c == Int.floorMod(a + x, 11)"));
     }
 
+    /**
+     * What the form comes to once it is cancelled is not what the run works out: the {@code y} of
+     * {@code x + M * y - M * y} is gone from the form and is in the products, which stop the run
+     * at every {@code y} but nought. The form is {@code x}, but {@code x} is not put through
+     * every remainder by any assignment of the numbers the run reads, so the proof is given up
+     * and no line is drawn on the remainder.
+     */
+    @Test
+    void aNumberTheFormCancelledIsStillOneTheRunStopsAt() {
+        String m = "9223372036854775807";
+        for (String form : List.of(
+                m + " * (x + y) - " + m + " * (x - y) + x - (" + m + " * y + " + m + " * y)",
+                "x + " + m + " * y - " + m + " * y")) {
+            List<String> borders = bordersOf("x: Int, y: Int, c: Int",
+                    "c == Int.floorMod(" + form + ", 11)");
+            assertEquals(List.of("0"), borders, form);
+        }
+        // Nor is it drawn where the cancelled number could stop nothing: no assignment of it is
+        // chosen, so there is none to ask the run to get past.
+        assertEquals(List.of("0"), bordersOf("x: Int, y: Int, c: Int",
+                "c == Int.floorMod(x + y - y, 11)"));
+    }
+
     private static boolean notShownAt(Compilation compilation, String place) {
         return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").notRead()
                 .stream().anyMatch(each -> each.at().equals(place) && each.reason()
