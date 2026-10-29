@@ -2196,11 +2196,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 accountedFor.add(room.place());
             }
             Position partner = read.domain().at(theirs.subjectPath());
-            if (partner == null || !(partner.admitted().completeness()
-                    instanceof AdmissibleSet.Completeness.Complete)) {
+            Source theirSource = sourceOf(theirs, read);
+            ValueSet theirStrings = partner == null || theirSource == null ? null
+                    : StringsHeld.at(partner, !theirSource.named());
+            if (theirStrings == null) {
                 continue;
             }
-            ValueSet theirStrings = partner.admitted().approximation();
             String called = inside ? calledInside(at == 0, there.text(), theirs.subjectPath())
                     : there.piece() == null ? theirs.subjectPath().toString()
                     : there.piece().calledOver(theirs.subjectPath().toString());
@@ -2762,7 +2763,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** The strings {@code set} is, where it is a language of strings, or null. */
-    private static Language languageOf(ValueSet set) {
+    static Language languageOf(ValueSet set) {
         if (set instanceof ValueSet.Matching(Language language)) {
             return language;
         }

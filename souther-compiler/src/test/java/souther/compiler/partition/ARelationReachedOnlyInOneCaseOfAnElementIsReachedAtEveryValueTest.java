@@ -148,7 +148,8 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
 
     @Test
     void aRuleKeepingTheElementsApartIsStillAskedOfThem() {
-        assertEquals(List.of(), whyNoLine("keptApart"),
+        assertEquals(List.of(new BlockReason.PredicateTellingNothingApart()),
+                whyNoLine("keptApart"),
                 "the owners differ, so an owner is not every value of an element, and the"
                         + " comparison is not said to relate two values");
     }
