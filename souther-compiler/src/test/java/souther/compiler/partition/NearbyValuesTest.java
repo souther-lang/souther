@@ -299,7 +299,8 @@ class NearbyValuesTest {
                                                NearbyValues.Put where) {
         List<ObservedValue> out = new ArrayList<>();
         NearbyValues.grown(value, type, READING, ranWithInts(1),
-                _ -> List.<ObservedValue>of().iterator(), where).forEachRemaining(out::add);
+                _ -> List.<ObservedValue>of().iterator(), where, NearbyValues.Lists.ANY)
+                .forEachRemaining(out::add);
         return out;
     }
 

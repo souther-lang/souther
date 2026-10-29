@@ -31,7 +31,9 @@ import java.util.Set;
  * filtered list only to walk it again, and since {@code fold} is the one loop the language has, the
  * shape to recognise is a single one — a build whose list is another build. The outer step takes the
  * place of the inner one's append, so the list in between is never built and the outer step is
- * applied where it stands rather than through an {@code Fn}.
+ * applied where it stands rather than through an {@code Fn}. That is {@link #joins}, and it is not
+ * part of {@link #builds}: the emitter does it for the classes that record nothing, since a loop of
+ * two walks is neither of them for what a run is asked of a walk.
  *
  * <p>It runs after the check and before emission, on {@link Core} rather than on the AST, which is
  * what keeps it out of the analyses' way: the invariant discharge, the {@code .field} desugar and the
@@ -110,13 +112,41 @@ public final class GrowingFold {
      * nothing else here has a name in it.
      */
     public static Core rewrite(Core body, TheWalk walk) {
-        Core mapped = Core.mapChildren(body, each -> rewrite(each, walk), s -> s,
-                nd -> Core.mapChildren(nd, each -> rewrite(each, walk)));
-        if (mapped instanceof Core.Call call) {
+        return rewrite(body, walk, true, true);
+    }
+
+    /**
+     * {@code body} with every growing fold in it a build, and no two of them joined: each walk the
+     * source wrote is a loop of its own, with the step and the list it was written with.
+     *
+     * <p>What an analysis reads and what the classes that record a run are emitted from. A rewrite
+     * of a walk is a rewrite of the walk an author wrote, and a loop that is two of them is neither
+     * ({@link #joins}).
+     */
+    public static Core builds(Core body, TheWalk walk) {
+        return rewrite(body, walk, true, false);
+    }
+
+    /**
+     * {@code body}, already {@link #builds built}, with every build whose list is another build
+     * joined with it. What the classes that record nothing are emitted from: the join is a change
+     * in when each step runs, which no answer notices and a rewrite of one walk would.
+     */
+    public static Core joins(Core body, TheWalk walk) {
+        return rewrite(body, walk, false, true);
+    }
+
+    private static Core rewrite(Core body, TheWalk walk, boolean build, boolean join) {
+        Core mapped = Core.mapChildren(body, each -> rewrite(each, walk, build, join), s -> s,
+                nd -> Core.mapChildren(nd, each -> rewrite(each, walk, build, join)));
+        if (build && mapped instanceof Core.Call call) {
             Core built = built(call, walk);
             if (built != null) {
                 mapped = built;
             }
+        }
+        if (!join) {
+            return mapped;
         }
         if (mapped instanceof Core.Call call && call.fn() == BUILD) {
             Core joined = joined(call);

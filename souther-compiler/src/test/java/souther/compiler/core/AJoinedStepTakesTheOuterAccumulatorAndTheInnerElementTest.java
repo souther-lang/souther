@@ -2,6 +2,7 @@ package souther.compiler.core;
 
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Scopes;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -68,14 +69,24 @@ class AJoinedStepTakesTheOuterAccumulatorAndTheInnerElementTest {
     private static Core.Block theJoinedStep(String source) {
         Compilation c = Compilation.ofSource(source, "Main");
         Bodies.CheckedBody checked = c.db().ask(new Bodies.CheckedBehavior("demo", "run")).value();
+        // What the check hands on keeps each walk the source wrote a loop of its own; joining
+        // them is the emitter's, for the classes that record nothing.
+        assertEquals(2, buildsIn(checked.body()).size(),
+                "the check leaves the two walks two: " + checked.body());
+        TheWalk walk = Scopes.resolved(c.db(), "demo").value().theWalk();
+        List<Core.Call> builds = buildsIn(GrowingFold.joins(checked.body(), walk));
+        assertEquals(1, builds.size(), "joined, the two walks are one: " + builds);
+        return (Core.Block) Core.withoutStanding(builds.getFirst().args().getFirst());
+    }
+
+    private static List<Core.Call> buildsIn(Core body) {
         List<Core.Call> builds = new ArrayList<>();
-        each(checked.body(), e -> {
+        each(body, e -> {
             if (e instanceof Core.Call call && call.fn() == Core.Emitted.BUILD_LIST) {
                 builds.add(call);
             }
         });
-        assertEquals(1, builds.size(), "the two walks are one: " + builds);
-        return (Core.Block) Core.withoutStanding(builds.getFirst().args().getFirst());
+        return builds;
     }
 
     private static void each(Core e, Consumer<Core> f) {

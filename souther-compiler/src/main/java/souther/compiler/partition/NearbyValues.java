@@ -113,7 +113,7 @@ final class NearbyValues {
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, false, Put.AFTER);
+        return withAnElement(value, type, reading, ranWith, stoodFor, Lists.ANY, Put.AFTER);
     }
 
     /** Where a list that grows takes its new element. */
@@ -127,16 +127,37 @@ final class NearbyValues {
         BEFORE_AND_AFTER
     }
 
+    /** Which of the lists a value holds are the ones that grow. */
+    enum Lists {
+
+        /** Every one. */
+        ANY,
+
+        /** The ones that hold an element: grown, they hold two or more. */
+        HOLDING_SOME,
+
+        /** The ones that hold nothing: grown, they hold one. */
+        HOLDING_NONE;
+
+        boolean admits(int elements) {
+            return switch (this) {
+                case ANY -> true;
+                case HOLDING_SOME -> elements > 0;
+                case HOLDING_NONE -> elements == 0;
+            };
+        }
+    }
+
     /**
-     * {@link #grown}, the new element put as {@code where} says. The same wherever the list stands:
-     * a list in a field of a record or in an element of another list takes its new element where
-     * a list that is the value itself does.
+     * {@link #grown}, the new element put as {@code where} says in the lists {@code which} names.
+     * The same wherever the list stands: a list in a field of a record or in an element of another
+     * list takes its new element where a list that is the value itself does.
      */
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor,
-                                         Put where) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, false, where);
+                                         Put where, Lists which) {
+        return withAnElement(value, type, reading, ranWith, stoodFor, which, where);
     }
 
     /**
@@ -151,13 +172,13 @@ final class NearbyValues {
     static Iterator<ObservedValue> populated(ObservedValue value, Type type,
                                              RuleReadingContext reading,
                                              Function<Type, Iterator<ObservedValue>> stoodFor) {
-        return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor, true,
-                Put.AFTER);
+        return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor,
+                Lists.HOLDING_NONE, Put.AFTER);
     }
 
     private static Iterator<ObservedValue> withAnElement(
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
-            Function<Type, Iterator<ObservedValue>> stoodFor, boolean onlyWhereEmpty, Put where) {
+            Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where) {
         return of(value, type, reading, null, List.of(), new Leaves() {
 
             @Override
@@ -169,7 +190,7 @@ final class NearbyValues {
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
                                                   Shape.Sequence sequence) {
-                if (onlyWhereEmpty && !held.elements().isEmpty()) {
+                if (!which.admits(held.elements().size())) {
                     return none();
                 }
                 // One of the rows' and one of the type's in turn, so that however many values the
@@ -613,7 +634,7 @@ final class NearbyValues {
     }
 
     /** The ones of {@code from} that {@code keep} says yes to, asked as they are reached. */
-    private static <A> Iterator<A> filtered(Iterator<A> from, Predicate<A> keep) {
+    static <A> Iterator<A> filtered(Iterator<A> from, Predicate<A> keep) {
         return new Iterator<>() {
             private A next;
             private boolean ready;
@@ -661,7 +682,7 @@ final class NearbyValues {
      * flat map reads the whole of one inner source before handing its first element on, which for
      * a record holding a long list is the list's candidates all made at once.
      */
-    private static <A, B> Iterator<B> flat(Iterator<A> outer, Function<A, Iterator<B>> how) {
+    static <A, B> Iterator<B> flat(Iterator<A> outer, Function<A, Iterator<B>> how) {
         return new Iterator<>() {
             private Iterator<B> inner = none();
 

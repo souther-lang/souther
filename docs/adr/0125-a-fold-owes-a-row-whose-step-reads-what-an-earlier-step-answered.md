@@ -42,9 +42,14 @@ elements as it was, and each tells a different fault: a step that never reads it
 after one step tells it from a fold keeping the first element.
 
 A walk is a fold walked from the head of its list, or the build a fold that only grows a collection
-became, and the tree that runs carries it as a loop where its step runs where it stands. Two builds the
-lowering joins into one loop are one walk, the outer one, whose seed and step the loop carries. A
-walk is written by the source that wrote the fold, in the copy of whatever wrote it, so a fold inside
+became, and the tree that runs carries it as a loop where its step runs where it stands. Every walk
+the source wrote is a loop of its own there. Two builds the emitter joins into one loop, a `map` over
+a `filter`, are not one walk: the joined loop goes over the list the inner one goes over and runs the
+outer step where the inner one adds, so stopping it after a step is the inner walk stopping and
+resetting it is the inner walk reset, and says nothing of the outer one, whose steps are the elements
+the inner one kept. The join changes when each step runs and no answer, so it is the emitter's, made
+in the classes that record nothing, and the classes that record a run keep each walk the loop it is.
+A walk is written by the source that wrote the fold, in the copy of whatever wrote it, so a fold inside
 `List.map` is the language's fold, and a rewrite of it is one for every call that reaches it, as an
 arm of a library helper is (ADR-0121). It is shown at the fold where this compilation holds the
 source it is written in, and at the behavior otherwise, by the definition that wrote it.
@@ -105,10 +110,13 @@ The search for an input starts from the rows that entered the walk, the ones hol
 elements first and a candidate of each in turn. A list one of them holds is grown by one element and
 then by two, each with the new element put first as well as last, since a walk stopping after one
 step parts from the walk only where what the later elements do differs from what the first does.
-That is how a list grows wherever it stands, in a field of a record as much as the value itself, and
-a value that holds no list of two elements is asked after every one that does and not left out. The
-elements are taken from what the rows of the module ran with, which now counts each element of a
-list a row held as a value its type was run with. Beside those, a list of the same length with one
+That is how a list grows wherever it stands, in a field of a record as much as the value itself. The
+candidates come in the order a list of two is reached in: a list holding something grown, a list
+holding nothing grown and then the list it made, and only then what no list of two was reached by,
+which is not left out. The order is the kind of list each growth is of, so the first candidate is
+the first one made, and nothing is made and set aside to find it. The elements are taken from what
+the rows of the module ran with, which counts every value a row holds at the position it stands at,
+an element of a list, a field of a record, the case of a sum, what an optional or a map holds. Beside those, a list of the same length with one
 element changed for another the rows hold, and a string the body parts with a piece more at a
 separator the body parts strings at, a walk over the pieces of a string being handed more elements
 only through the string. Each of these is made as the search asks for it, one candidate at a time,

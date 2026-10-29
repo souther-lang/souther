@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.PathReachability;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
@@ -31,7 +32,6 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -185,7 +185,8 @@ public final class Replacements {
                     db.ask(new Adequacy.RowReadings(module)).value();
             Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
             Sig sig = sigs == null ? null : sigs.get(behavior);
-            if (byTarget == null || sig == null) {
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            if (byTarget == null || sig == null || !reading.present()) {
                 return List.of();
             }
             List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
@@ -195,27 +196,12 @@ public final class Replacements {
                 }
                 List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
                 for (int p = 0; p < row.inputs().size(); p++) {
-                    taken(sig.inputTypes().get(p), row.inputs().get(p), inputs);
+                    InputsRowsRanWith.takenAt(sig.inputTypes().get(p), row.inputs().get(p),
+                            reading.value(), inputs);
                 }
                 rows.add(inputs);
             }
             return rows;
-        }
-
-        /**
-         * {@code value}, at a position of {@code type}, and each element of it where it is a list:
-         * an element stands at a position of the element's type as surely as the list stands at its
-         * own, and a list grown by an element another row's list held is a list the rows already
-         * speak of.
-         */
-        private static void taken(Type type, ObservedValue value,
-                                  List<InputsRowsRanWith.Taken> out) {
-            out.add(new InputsRowsRanWith.Taken(type, value));
-            if (type instanceof Type.ListOf list && value instanceof ObservedValue.Sequence held) {
-                for (ObservedValue element : held.elements()) {
-                    taken(list.element(), element, out);
-                }
-            }
         }
 
         /**

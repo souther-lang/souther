@@ -452,28 +452,34 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         assertEquals(2, rewriteLines(compilation).size(), "the written fold is asked");
     }
 
-    /** A list written with one element is walked no further than its first, whatever the step. */
+    /**
+     * A list written with one element is walked no further than its first, whatever the step and
+     * however the list reaches the fold: written there, bound to a name, or put in another order.
+     */
     @Test
     void aListOfOneElementIsNotAskedWhateverTheStepIs() {
-        Compilation compilation = measured("""
-                module repro.single
+        for (String walked : List.of("[i.n]", "ys", "List.reverse(ys)", "List.sort([i.n])")) {
+            Compilation compilation = measured("""
+                    module repro.single
 
-                data In = { flag: Bool, n: Int }
+                    data In = { flag: Bool, n: Int }
 
-                behavior total : (i: In) -> Int
+                    behavior total : (i: In) -> Int
 
-                %s
-                let total (i) = {
-                    let step = if i.flag then add else sub
-                    List.fold(step, 0, [i.n])
-                }
+                    %s
+                    let total (i) = {
+                        let ys = [i.n]
+                        let step = if i.flag then add else sub
+                        List.fold(step, 0, %s)
+                    }
 
-                example total
-                    | "t" : (In { flag = true, n = 1 }) -> 1
-                    | "f" : (In { flag = false, n = 1 }) -> -1
-                """.formatted(STEPS));
+                    example total
+                        | "t" : (In { flag = true, n = 1 }) -> 1
+                        | "f" : (In { flag = false, n = 1 }) -> -1
+                    """.formatted(STEPS, walked));
 
-        assertEquals(List.of(), foldVerdicts(compilation));
+            assertEquals(List.of(), foldVerdicts(compilation), walked);
+        }
     }
 
     /**
@@ -532,6 +538,52 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
 
         assertEquals(LEFT_OPEN, foldVerdicts(compilation));
         assertEquals(List.of(), rewriteLines(compilation));
+    }
+
+    /** Each rewrite of each fold, by the definition that wrote the fold: how it stands. */
+    private static List<String> verdictsByFold(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(compilation.texts())))
+                .get("modules").get(0).get("behaviors").get(0).get("replacement");
+        for (JsonNode each : replacement.get("obligations")) {
+            JsonNode id = each.get("obligationId");
+            if (id.get("rewrite").asString().startsWith("fold_")) {
+                out.add(id.get("definition").asString() + " " + id.get("rewrite").asString()
+                        + ": " + each.get("disposition").asString());
+            }
+        }
+        return out.stream().sorted().toList();
+    }
+
+    /**
+     * Two folds the language joins into one loop are two folds for what a row is asked: the rewrite
+     * of one is the rewrite of that one. A {@code map} over a {@code filter} goes over what the
+     * filter kept, so stopping the map after its first step stops it after the first element kept,
+     * and a row the filter keeps one element of cannot tell that from the map going on. The loop the
+     * two would be joined into stops after the first element of the list the filter goes over, which
+     * is the filter stopping and tells nothing of the map.
+     */
+    @Test
+    void aMapOverAFilterIsAskedOfTheMapAndOfTheFilterEachByItself() {
+        Compilation compilation = measured("""
+                module repro.chain
+
+                behavior kept : (xs: List<Int>) -> List<Int>
+
+                let kept (xs) = List.map(x -> x * 2, List.filter(x -> x > 1, xs))
+
+                example kept
+                    | "up" : ([1, 2]) -> [4]
+                    | "down" : ([2, 1]) -> [4]
+                """);
+
+        assertEquals(List.of(
+                        "filter fold_after_one_step: noticed",
+                        "filter fold_from_the_seed: noticed",
+                        "map fold_after_one_step: unnoticed",
+                        "map fold_from_the_seed: unnoticed"),
+                verdictsByFold(compilation));
     }
 
     private static String page(Compilation compilation) {

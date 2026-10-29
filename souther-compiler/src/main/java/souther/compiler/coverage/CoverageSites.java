@@ -1452,8 +1452,8 @@ public final class CoverageSites {
             Set<WalkRewrite> theSame = EnumSet.noneOf(WalkRewrite.class);
             // A list written with one element or none is walked no further than its first: both
             // rewrites leave such a walk as it is.
-            if (Core.withoutStanding(walked) instanceof Core.ListLit lit
-                    && lit.elements().size() <= 1) {
+            Core.ListLit written = listWrittenOut(walked);
+            if (written != null && written.elements().size() <= 1) {
                 theSame.addAll(EnumSet.allOf(WalkRewrite.class));
             }
             // A step that never reads what it carries is handed the seed to no effect.
@@ -1499,6 +1499,29 @@ public final class CoverageSites {
             boolean[] all = {true};
             Core.forEachChild(e, child -> all[0] = all[0] && closedUnder(child, inside));
             return all[0];
+        }
+
+        /**
+         * The list literal {@code e} is, or null where it is not one the source wrote out: the
+         * literal itself, a name bound to one, or one put in another order, which holds the elements
+         * it held. A list of the same elements walks as many steps whatever order it is in.
+         */
+        private Core.ListLit listWrittenOut(Core e) {
+            Core plain = Core.withoutStanding(e);
+            if (plain instanceof Core.Read read) {
+                Core bound = boundTo.get(read.binding());
+                return bound == null ? null : listWrittenOut(bound);
+            }
+            if (plain instanceof Core.ListLit literal) {
+                return literal;
+            }
+            if (plain instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)
+                    && (kernel == Kernel.LIST_REVERSE || kernel == Kernel.LIST_SORT)
+                    && call.args().size() == 1) {
+                return listWrittenOut(call.args().getFirst());
+            }
+            return null;
         }
 
         /**

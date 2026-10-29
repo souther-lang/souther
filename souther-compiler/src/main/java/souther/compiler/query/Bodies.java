@@ -3383,11 +3383,13 @@ public final class Bodies {
                 // check: a fold that only grows a list is turned into a build (see GrowingFold).
                 // What the operations of the language hand their closures, read here because here
                 // is where they are still operations. The rewrite below turns a fold that only
-                // grows a collection into a walk over a builder and joins two such walks into one,
-                // after which nothing in the tree says which container an element came from. It
-                // renames no binding, so what is read now is as true of what it answers with.
+                // grows a collection into a walk over a builder, after which nothing in the tree
+                // says which container an element came from. It renames no binding, so what is
+                // read now is as true of what it answers with. Two such walks are not joined
+                // here: every walk the source wrote is a loop of its own for what reads the tree,
+                // and the emitter joins them in the classes that record nothing.
                 return Answer.of(new CheckedBody(
-                        GrowingFold.rewrite(core, scope.value().theWalk()),
+                        GrowingFold.builds(core, scope.value().theWalk()),
                         ElementBindings.of(core,
                                 body.value().provenance(), Shapes.declarationNewtypes(db)),
                         // Who owns the rule each fork decides by, read off the declarations that
@@ -3685,7 +3687,7 @@ public final class Bodies {
             Map<String, EmittedDefinition> definitions = new LinkedHashMap<>();
             reported.emittedDefinitions().forEach((h, definition) ->
                     definitions.put(h, new EmittedDefinition(
-                            GrowingFold.rewrite(definition.body(), scope.value().theWalk()),
+                            GrowingFold.builds(definition.body(), scope.value().theWalk()),
                             definition.parameters(), definition.role())));
             return Answer.of(new ModuleCheck.Of(definitions, sound, reported.stopped(),
                     reported.settledValues().snapshot()),

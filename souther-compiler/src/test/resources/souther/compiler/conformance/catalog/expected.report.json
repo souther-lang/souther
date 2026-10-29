@@ -9133,7 +9133,7 @@
   }, {
     "module" : "conformance.searching",
     "status" : "partial",
-    "weakening" : [ "reachable_node_cases_unmeasured", "rewrite_undecided" ],
+    "weakening" : [ "reachable_node_cases_unmeasured" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -9795,8 +9795,7 @@
         "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "rewrite_undecided" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -10358,8 +10357,7 @@
         } ]
       },
       "replacement" : {
-        "status" : "partial",
-        "weakening" : [ "rewrite_undecided" ],
+        "status" : "complete",
         "obligations" : [ {
           "obligationId" : {
             "behavior" : "restockByFold",
@@ -10407,8 +10405,7 @@
             "part" : 1,
             "with" : 0
           },
-          "disposition" : "undecided",
-          "undecidedBecause" : [ "no_row_answered_differently" ]
+          "disposition" : "unnoticed"
         }, {
           "obligationId" : {
             "behavior" : "restockByFold",
@@ -10459,6 +10456,29 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "shelf.counts"
+      }, {
+        "kind" : "rewrite_unnoticed",
+        "disposition" : "refused",
+        "subject" : "restockByFold",
+        "obligationId" : {
+          "behavior" : "restockByFold",
+          "rewrite" : "arm_as_sibling",
+          "module" : "conformance.searching",
+          "definition" : "restockByFold",
+          "construct" : 0,
+          "lowered" : 0,
+          "part" : 1,
+          "with" : 0
+        },
+        "code" : "E1939",
+        "at" : {
+          "sourceId" : "4",
+          "line" : 42,
+          "column" : 13,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       }, {
         "kind" : "rewrite_unnoticed",
         "disposition" : "refused",
