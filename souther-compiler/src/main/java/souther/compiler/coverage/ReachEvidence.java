@@ -1,8 +1,10 @@
 package souther.compiler.coverage;
 
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * What the runs of a module did that can show a proof about reach wrong.
@@ -38,12 +40,13 @@ public final class ReachEvidence {
         this.walksOn = Set.copyOf(walksOn);
     }
 
-    /** What {@code runs} did, between them. */
-    public static ReachEvidence ofRuns(Iterable<AlignedObservation> runs) {
+    /** What {@code runs} did, between them. Read once, which is what a stream is for. */
+    public static ReachEvidence ofRuns(Stream<AlignedObservation> runs) {
         Set<ArmProbe> arms = new LinkedHashSet<>();
         Set<SeenConditionOutcome> outcomes = new LinkedHashSet<>();
         Set<WalkProbe> walksOn = new LinkedHashSet<>();
-        for (AlignedObservation run : runs) {
+        for (Iterator<AlignedObservation> each = runs.iterator(); each.hasNext();) {
+            AlignedObservation run = each.next();
             arms.addAll(run.arms());
             outcomes.addAll(run.outcomes());
             run.walks().stream().filter(run::wentOn).forEach(walksOn::add);

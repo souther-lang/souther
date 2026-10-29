@@ -461,7 +461,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 ways.stream().map(each -> new RecordedConditionOutcome(each.at().raw(),
                         each.held())).collect(Collectors.toSet()),
                 Set.of(), walks, walks);
-        return ReachEvidence.ofRuns(List.of(SiteNumbering.of(identity.get()).align(seen)));
+        return ReachEvidence.ofRuns(Stream.of(SiteNumbering.of(identity.get()).align(seen)));
     }
 
     /**

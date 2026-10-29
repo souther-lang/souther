@@ -2260,7 +2260,7 @@ public final class Adequacy {
                     .map(row -> ObservedInputs.of(row, numbering).watched())
                     .flatMap(watched -> watched instanceof Generator.Watched.Ran(var account)
                             ? Stream.of(account) : Stream.empty());
-            ReachEvidence evidence = ReachEvidence.ofRuns(runs::iterator);
+            ReachEvidence evidence = ReachEvidence.ofRuns(runs);
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
                     new LinkedHashMap<>();
             proven.forEach((behavior, answers) -> out.put(behavior, answers.asRunWith(evidence)));

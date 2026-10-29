@@ -9,6 +9,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -86,6 +87,6 @@ class ARowIsOfferedOnlyTheRewritesTheMeasureOwesTest {
     private static ReachEvidence evidenceOf(Compilation compilation, String row) {
         Generator.Watched.Ran ran = assertInstanceOf(Generator.Watched.Ran.class,
                 ComposedRows.watched(compilation, "total", row));
-        return ReachEvidence.ofRuns(List.of(ran.seen()));
+        return ReachEvidence.ofRuns(Stream.of(ran.seen()));
     }
 }
