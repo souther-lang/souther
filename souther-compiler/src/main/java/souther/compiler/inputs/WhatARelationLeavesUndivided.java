@@ -1017,9 +1017,7 @@ public final class WhatARelationLeavesUndivided {
      * rows at the two ends of the run, which are rows of every value between, each operation
      * being with the others held still a straight function of the term's value.
      *
-     * <p>The first is not accepted where the run is the least value of the type alone
-     * ({@link #isTheLeastValueOfTheTypeAlone}); the second is not asked of a run open at an end
-     * the term holds no end at.
+     * <p>The second is not asked of a run open at an end the term holds no end at.
      */
     private static <P> boolean aRowOfTheRunComputes(RowsComputed arithmetic, List<Term<P>> terms,
                                                     int at, SettledRun run, WholeRun held,
@@ -1030,9 +1028,8 @@ public final class WhatARelationLeavesUndivided {
             return arithmetic.computesAsTheFormIsAdded(row);
         }
         return computedAtBothEnds(arithmetic, terms, at, run, held)
-                || (!isTheLeastValueOfTheTypeAlone(arithmetic, run)
-                        && arithmetic.computedAt(() -> valuesByKey(terms,
-                                i -> i == at ? nearest : heldNearestNought(terms.get(i)))));
+                || arithmetic.computedAt(() -> valuesByKey(terms,
+                        i -> i == at ? nearest : heldNearestNought(terms.get(i))));
     }
 
     /**
@@ -1058,33 +1055,6 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return true;
-    }
-
-    /**
-     * Whether {@code run}, cut to the values the type holds, is the least value of the type
-     * alone: the one more than the negation of the greatest, which has no negation the type
-     * holds.
-     *
-     * <p>The sizes a row is composed in are the greatest either way, and the least value is the
-     * one thing they do not reach. With {@code y <= 2 * x}, {@code x} held to the rows that get
-     * past {@code 2 * x}, the least {@code Int} settles it true for {@code y} whatever {@code x}
-     * is, and that is a class of the model's there. The search for a row telling the lines of a
-     * border apart composes no row beside a class of that one value: the row that rules a line
-     * out is not offered. So such a run is settled only on the rows at both its ends, which an
-     * end the term holds no end at leaves unasked, and the term is then not shown.
-     */
-    private static boolean isTheLeastValueOfTheTypeAlone(RowsComputed arithmetic, SettledRun run) {
-        if (!arithmetic.stopsAtASize()) {
-            return false;
-        }
-        BigInteger least = arithmetic.greatest().add(BigInteger.ONE).negate();
-        BigInteger from = run.from() != null && run.from().at() != null
-                ? run.from().at().floor().orNull() : null;
-        BigInteger to = run.to() != null && run.to().at() != null
-                ? run.to().at().floor().orNull() : null;
-        BigInteger low = from == null ? least : from.max(least);
-        BigInteger high = to == null ? arithmetic.greatest() : to.min(arithmetic.greatest());
-        return low.equals(least) && high.equals(least);
     }
 
     /** Whether {@code bounds} is there and each end it has is a number. */

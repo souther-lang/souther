@@ -6339,7 +6339,9 @@ public final class Adequacy {
         /**
          * What the search for a row telling {@code untold}'s line from the one beside it came to.
          *
-         * <p>Found by the line the finding is about, in the readings this generation searched. A
+         * <p>Found by the line the finding is about, in the readings this generation searched, all
+         * of them: a line has a reading for each way its terms are held, and the first of them
+         * need not be the one that composed the row. A
          * finding is made wherever the lines were read and a reading that composed nothing carries
          * no search, so the answer is the searched reading's — asked of the finding's own, a run
          * that composed a row would report that nothing was offered.
@@ -6350,10 +6352,15 @@ public final class Adequacy {
          */
         private static GenerationOutcome tellingApart(About.ALineTheRowsDoNotTellFromAnother untold,
                                                       List<BorderAssessment> edges) {
+            ARowTellingTheLinesApart searched = null;
             for (BorderAssessment each : edges) {
                 if (each.border().obligation().equals(untold.line().border().obligation())) {
-                    return each.toldApart().outcome(untold.direction());
+                    searched = searched == null ? each.toldApart()
+                            : searched.and(each.toldApart());
                 }
+            }
+            if (searched != null) {
+                return searched.outcome(untold.direction());
             }
             throw new IllegalStateException("a finding about a line this generation searched no"
                     + " reading of: " + untold.line().border().obligation());
