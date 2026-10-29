@@ -490,7 +490,7 @@ final class DemandReading {
                     Optional<ModelOccurrence> copy = copyOf(leaf);
                     if (copy.isPresent()) {
                         for (String key : List.of(leaf.part().key(),
-                                leaf.part().denied().key())) {
+                                leaf.part().deniedKey())) {
                             found.computeIfAbsent(key, _ -> new ModelOccurrences.Gathering())
                                     .add(copy.get());
                         }
@@ -1238,7 +1238,8 @@ final class DemandReading {
             // and asked by the kind it would be read as a count a row composes.
             case Proposition.Compared compared when Proposition.aboutAnAnswer(compared) ->
                     List.of(anAnswerARowStandsIn(compared));
-            case Proposition.Compared compared -> List.of(ofARelation(compared, read));
+            case Proposition.Compared compared -> List.of(RelationsAsked.of(read)
+                    .of(compared, () -> ofARelation(compared, read)));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
