@@ -19,11 +19,27 @@ final class CaseMaps {
     private CaseMaps() {
     }
 
-    /** The map {@code mapping} is on the code points it is exactly one for. */
+    /**
+     * The map {@code mapping} is on the code points it is exactly one for.
+     *
+     * <p>What it leaves be is what its outermost conversion leaves be. Converting what a
+     * conversion answered changes nothing more only for the one conversion done again; of
+     * {@code lowercase(uppercase(s))} that is not so ({@code ß} is what it answers of {@code ẞ},
+     * and it answers {@code ss} of that), but every code point of its answer is one of the outer
+     * conversion's.
+     */
     static CodeMap of(CaseMapping mapping) {
         CodeMap had = MADE.get(mapping);
         if (had == null) {
             had = CodeMap.of(text -> BoundUnderEvaluation.mapped(mapping, text));
+            CaseMapping outermost = switch (mapping) {
+                case CaseMapping.None it -> it;
+                case CaseMapping.Lowercase _ -> CaseMapping.LOWERCASE;
+                case CaseMapping.Uppercase _ -> CaseMapping.UPPERCASE;
+            };
+            if (!outermost.equals(mapping) && !(mapping instanceof CaseMapping.None)) {
+                had = had.leavingBe(of(outermost).leftAlone());
+            }
             CodeMap raced = MADE.putIfAbsent(mapping, had);
             if (raced != null) {
                 had = raced;

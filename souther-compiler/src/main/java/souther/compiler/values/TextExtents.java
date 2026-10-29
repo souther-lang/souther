@@ -210,6 +210,17 @@ public final class TextExtents {
     }
 
     /**
+     * The fewest code points of a string {@code set} holds as written
+     * ({@link Language#shortestHeldAsWritten}), or -1 where it is not shown to hold one: the
+     * strings it holds are not worked out, or are held only through a code point normalization
+     * changes. Which is not to be shown to hold none.
+     */
+    public static long fewestCodePointsHeldAsWritten(ValueSet set) {
+        Language admitted = languageOf(set, PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter());
+        return admitted == null || admitted.isEmpty() ? -1 : admitted.shortestHeldAsWritten();
+    }
+
+    /**
      * Whether {@code set} holds a value of the carrier it stands at. A set of strings that names a
      * language is {@link #holdsAValue(Language)}'s; any other set lists its values or leaves out a
      * few, and holds one wherever it is not the empty set.

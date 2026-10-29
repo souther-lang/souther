@@ -1,8 +1,10 @@
 package souther.compiler.regex;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
@@ -24,8 +26,9 @@ import net.unit8.notation199x.pattern.Meter;
  * depends on what stands beside it, such as the capital sigma that closes a word, is outside it.
  *
  * <p>What is outside the domain is not said anything of here, except by {@link #leftAlone}: the
- * code points the conversion answers as they stand, which every code point of its answer is, since
- * converting what was converted changes nothing more.
+ * code points the conversion answers as they stand, which every code point of its answer is where
+ * converting what was converted changes nothing more. A conversion made of two does not have that,
+ * and says what it leaves be by its outer one ({@link #leavingBe}).
  *
  * <p>Worked out by asking the conversion itself of every code point, once, so that the map is the
  * run time's and not a table kept beside it.
@@ -71,13 +74,20 @@ public final class CodeMap {
     /**
      * The map {@code conversion} is on the code points it is exactly one for.
      *
+     * <p>What it leaves be is what {@code conversion} answers of each code point as it stands,
+     * which is every code point of its answers only where it is done again to an answer with
+     * nothing more changed: said by whoever made it of two ({@link #leavingBe}).
+     *
      * @param conversion what the run time answers of a text; it answers a text for a text
      */
     public static CodeMap of(UnaryOperator<String> conversion) {
         CodePoints stable = StableStarters.all();
-        List<Run> runs = new ArrayList<>();
         List<CodePoints.Range> alone = new ArrayList<>();
         int aloneFrom = -1;
+        // The code points that are sent alone to one stable starter, and where.
+        int[] candidates = new int[CodePoints.LAST + 1];
+        int[] targets = new int[CodePoints.LAST + 1];
+        int found = 0;
         for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
             if (CodePoints.isSurrogate(codePoint)) {
                 if (aloneFrom >= 0) {
@@ -97,56 +107,109 @@ public final class CodeMap {
                 alone.add(new CodePoints.Range(aloneFrom, codePoint - 1));
                 aloneFrom = -1;
             }
-            if (unchanged && !stable.has(codePoint)) {
+            int target = sentAloneTo(stable, codePoint, answer);
+            if (target >= 0) {
+                candidates[found] = codePoint;
+                targets[found] = target;
+                found++;
+            }
+        }
+        if (aloneFrom >= 0) {
+            alone.add(new CodePoints.Range(aloneFrom, CodePoints.LAST));
+        }
+        BitSet dependsOnWhatStandsBeside = dependingOnWhatStandsBeside(conversion, candidates,
+                targets, found);
+        List<Run> runs = new ArrayList<>();
+        for (int at = 0; at < found; at++) {
+            if (dependsOnWhatStandsBeside.get(at)) {
                 continue;
             }
-            int target = targetOf(conversion, stable, codePoint, one, answer);
-            if (target < 0) {
-                continue;
-            }
+            int codePoint = candidates[at];
             Run last = runs.isEmpty() ? null : runs.getLast();
-            int shift = target - codePoint;
+            int shift = targets[at] - codePoint;
             if (last != null && last.to() + 1 == codePoint && last.shift() == shift) {
                 runs.set(runs.size() - 1, new Run(last.from(), codePoint, shift));
             } else {
                 runs.add(new Run(codePoint, codePoint, shift));
             }
         }
-        if (aloneFrom >= 0) {
-            alone.add(new CodePoints.Range(aloneFrom, CodePoints.LAST));
-        }
         return new CodeMap(runs, new CodePoints(alone));
     }
 
     /**
-     * The code point {@code codePoint} is sent to wherever it stands, or -1 where it is not a stable
-     * starter sent to one: where the answer is more than one code point, is not a stable starter, or
-     * depends on what stands beside it.
+     * The same map, with the code points it leaves be said by {@code alone}: for a conversion made
+     * of two, the code points of what the outer one answers, which are its own.
      */
-    private static int targetOf(UnaryOperator<String> conversion, CodePoints stable, int codePoint,
-                                String one, String answer) {
+    public CodeMap leavingBe(CodePoints alone) {
+        return new CodeMap(runs, alone);
+    }
+
+    /**
+     * The code point {@code codePoint} is sent to when it is alone, or -1 where it is not a stable
+     * starter sent to one: where the answer is more than one code point, or is not a stable
+     * starter.
+     */
+    private static int sentAloneTo(CodePoints stable, int codePoint, String answer) {
         if (!stable.has(codePoint) || answer == null
                 || answer.codePointCount(0, answer.length()) != 1) {
             return -1;
         }
         int target = answer.codePointAt(0);
-        if (!stable.has(target)) {
-            return -1;
+        return stable.has(target) ? target : -1;
+    }
+
+    /** How many code points are asked of the conversion together. */
+    private static final int ASKED_TOGETHER = 1024;
+
+    /**
+     * Which of the first {@code count} of {@code candidates} are sent somewhere else beside a
+     * letter than they are alone — those at the places of the result.
+     *
+     * <p>The conversion of a text can turn on what stands beside a code point, and what it turns
+     * on is whether a cased letter stands before it and whether one stands after: the capital sigma
+     * that closes a word is lowercased as one that does not. So each is asked with a letter before
+     * and none after, one after and none before, and one on both sides; and none of them is let off
+     * for being sent to itself, since a conversion made of two can send a code point to itself
+     * alone and not beside a letter. They are asked in turn, a thousand at a time, each with a
+     * space where it has no letter, which is neither cased nor ignored in a word. A group whose
+     * answer is not the answers of its members is asked again in halves.
+     */
+    private static BitSet dependingOnWhatStandsBeside(UnaryOperator<String> conversion,
+                                                      int[] candidates, int[] targets,
+                                                      int count) {
+        String letter = conversion.apply("a");
+        String gap = conversion.apply(" ");
+        BitSet depends = new BitSet(count);
+        Deque<int[]> asked = new ArrayDeque<>();
+        for (int from = count; from > 0; from -= ASKED_TOGETHER) {
+            asked.push(new int[] {Math.max(0, from - ASKED_TOGETHER), from});
         }
-        // A letter on either side, or on both, is what a code point that closes a word is told
-        // apart by: it is sent where it was alone only if it is sent there beside them too.
-        String letter = "a";
-        String converted = conversion.apply(letter);
-        for (int beside = 1; beside < 4 && target != codePoint; beside++) {
-            boolean before = (beside & 1) != 0;
-            boolean after = (beside & 2) != 0;
-            String together = conversion.apply(
-                    (before ? letter : "") + one + (after ? letter : ""));
-            if (!together.equals((before ? converted : "") + answer + (after ? converted : ""))) {
-                return -1;
+        while (!asked.isEmpty()) {
+            int[] group = asked.pop();
+            StringBuilder text = new StringBuilder();
+            StringBuilder expected = new StringBuilder();
+            for (int at = group[0]; at < group[1]; at++) {
+                String own = Character.toString(candidates[at]);
+                String sent = Character.toString(targets[at]);
+                text.append("a").append(own).append(" ")
+                        .append(" ").append(own).append("a")
+                        .append("a").append(own).append("a");
+                expected.append(letter).append(sent).append(gap)
+                        .append(gap).append(sent).append(letter)
+                        .append(letter).append(sent).append(letter);
             }
+            if (conversion.apply(text.toString()).equals(expected.toString())) {
+                continue;
+            }
+            if (group[1] - group[0] == 1) {
+                depends.set(group[0]);
+                continue;
+            }
+            int middle = (group[0] + group[1]) >>> 1;
+            asked.push(new int[] {middle, group[1]});
+            asked.push(new int[] {group[0], middle});
         }
-        return target;
+        return depends;
     }
 
     /** The code points the map is defined on. A string of only these converts to the string its
