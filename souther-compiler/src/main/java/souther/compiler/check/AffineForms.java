@@ -1286,11 +1286,6 @@ public final class AffineForms {
             List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                     ValueStanding.eliminated(here, at, reading, following);
             if (eliminated != null) {
-                NewtypeMade<A, E> made = newtypeEliminated(here.target(), at, reading, following);
-                if (made != null) {
-                    form = made.read(following, stop);
-                    break;
-                }
                 reading.unobserved(here);
                 form = commonForm(eliminated, here, at, following, stop);
                 break;

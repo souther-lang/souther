@@ -3268,6 +3268,42 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A construction written inside another is not the value a field is read off: the access takes
+     * the field out of the outer one, whose other parts are made all the same. Here {@code other}
+     * is refused wherever {@code d} is above nought, and a run stops there, so the field read is
+     * not told as the check of the inner construction alone.
+     */
+    @Test
+    void aFieldTakenOffAConstructionInsideAnotherIsNotToldAsTheInnerOnesCheck() {
+        String source = """
+                module w1
+                data Yen = Int invariant value >= 0
+                data Pay = { base: Yen, other: Yen }
+                behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
+                    constructs Yen, Pay
+                let m (a, b, d) = {
+                    guard Pay { base = Yen(a.value + b.value), other = Yen(0 - d.value) }
+                        .base.value >= d.value else Exceeds
+                    Yen(d.value)
+                }
+                """;
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
+                leftIn(source, whereWritten(source, ">= d.value")));
+    }
+
+    /**
+     * A type whose rules say nothing refuses nothing, so the construction ends no run and the sum
+     * built into it is read as the sum of {@code Int} is.
+     */
+    @Test
+    void aConstructionOfATypeWithNoRuleEndsNoRun() {
+        String source = CONSTRUCTED_ABOVE.formatted("data Id = Int", "Yen, Id",
+                "guard Id(a.value + b.value).value >= d.value else Exceeds");
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(source, whereWritten(source, ">= d.value")));
+    }
+
+    /**
      * A premise nothing proves, over positions none of the sum's are related to, leaves the sum's
      * positions the runs their ends give them: it bounds nothing of them, and some row holds it.
      * The sum is then read as beside a premise that is proved.
