@@ -216,9 +216,13 @@ class AnArmsSiteAndItsPlaceAreOneValueTest {
                         + " holds no numbering to ask");
     }
 
-    /** The probes a run lit, which is the one thing a run tells this reading. */
+    /**
+     * The probes a run lit and the walks it took a second element of, which are what a run tells
+     * this reading. Both are only ever told in order to be corrected by them: a walk is the third
+     * kind of address this rule was written to meet, and it meets it the way an arm does.
+     */
     private static boolean namesTheArmsARunLit(Type taken) {
-        return mentions(taken, each -> each == ArmProbe.class);
+        return mentions(taken, each -> each == ArmProbe.class || each == WalkProbe.class);
     }
 
     /** Anything else a run is written and read in, which this reading is never asked with. */

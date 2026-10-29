@@ -97,6 +97,49 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
         return new WalkRewrites(out);
     }
 
+    /**
+     * These rewrites at the places {@code walks} enter, and at no other.
+     *
+     * <p>A walk written once stands at as many places as the behaviors that reach it have, and
+     * what is shown of a rewrite — by the paths, by the rows, by the source — is shown of the
+     * places of one behavior. A behavior is asked about the places it has, so what it owes is the
+     * same with another behavior calling the same walk or not ({@link #askedOf}).
+     */
+    public WalkRewrites within(List<CoverageSites.WalkSite> walks) {
+        Set<WalkProbe> places = new HashSet<>();
+        walks.forEach(walk -> places.add(walk.index()));
+        SequencedMap<Integer, AtWalk> out = new TreeMap<>();
+        bySite.forEach((site, at) -> {
+            if (places.contains(at.at())) {
+                out.put(site, at);
+            }
+        });
+        return new WalkRewrites(out);
+    }
+
+    /**
+     * These rewrites with each walk entered at one of {@code places} shown to be the walk under
+     * either spelling there, because what holds on the way to it limits its list to one element at
+     * most.
+     *
+     * <p>Applied on top of what the source shows, by whoever holds a reading of the paths, and not
+     * made with the plan: the plan is made before the meaning of the bodies is read. A rewrite is
+     * asked of a walk only where it is asked at every place the walk is entered, so a walk shown at
+     * some of its places is asked as before ({@link #askedOf}). A place of another numbering is
+     * none of these.
+     */
+    public WalkRewrites provingTheSameAt(Set<WalkProbe> places) {
+        if (places.isEmpty()) {
+            return this;
+        }
+        SequencedMap<Integer, AtWalk> out = new TreeMap<>();
+        bySite.forEach((site, at) -> out.put(site, places.contains(at.at())
+                ? new AtWalk(at.walk(), at.at(), EnumSet.allOf(WalkRewrite.class),
+                        at.overAFixedList(), at.notCarried())
+                : at));
+        return new WalkRewrites(out);
+    }
+
     /** Every site of {@code walk}, in the order of the sites. */
     public List<AtWalk> ofWalk(SourceConstructOrigin walk) {
         return bySite.values().stream().filter(at -> at.walk().equals(walk)).toList();

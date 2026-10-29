@@ -2241,17 +2241,19 @@ public final class Adequacy {
             // is about the machine, and whether anything says what it answers is about the rows.
             Set<ArmProbe> lit = new LinkedHashSet<>();
             Set<SeenConditionOutcome> seen = new LinkedHashSet<>();
+            Set<WalkProbe> wentOn = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
                     Generator.Watched watched = ObservedInputs.of(row, numbering).watched();
                     lit.addAll(armsSeenIn(watched));
                     seen.addAll(outcomesSeenIn(watched));
+                    wentOn.addAll(walksTakenOnIn(watched));
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
                     new LinkedHashMap<>();
             proven.value().forEach((behavior, answers) ->
-                    out.put(behavior, answers.asRunWith(lit, seen)));
+                    out.put(behavior, answers.asRunWith(lit, seen, wentOn)));
             return Answer.of(Ordered.map(out));
         }
     }
@@ -7365,6 +7367,40 @@ public final class Adequacy {
     }
 
     /**
+     * The rewrites of the walks of {@code behavior} that the classes carry, with the walks the
+     * model's own rules show to go over one element at most taken as the walk under either
+     * spelling.
+     *
+     * <p>The one place that proof is put with the walks, so that the measure of the rows written
+     * and the choosing of a row to offer ask the same question of the same walks. Held to the plan
+     * the walks are places of, as {@link #unreachedIn} is.
+     */
+    static WalkRewrites walksOwedIn(WalkRewrites carried,
+                                    Map<String, PathReachability.Answers.AsRun> arrived,
+                                    String behavior, Bodies.Elaborated checked) {
+        WalkRewrites here = carried.within(checked.plan().walks(behavior));
+        PathReachability.Answers.AsRun arrives = arrived == null ? null : arrived.get(behavior);
+        if (arrives == null) {
+            return here;
+        }
+        arrives.answers().requireNumbering(checked.numberingIdentity());
+        return here.provingTheSameAt(
+                arrives.answers().arrivals().walksHeldToOneAtMost().keySet());
+    }
+
+    /**
+     * The sibling rewrites of the arms of {@code behavior} that the classes carry, at the arms the
+     * behavior has and at no other.
+     *
+     * <p>The arms' counterpart of {@link #walksOwedIn}: what is shown of a sibling, the ways
+     * nothing arrives at, is shown of the places of one behavior.
+     */
+    static ArmReplacements armsOwedIn(ArmReplacements carried, String behavior,
+                                      Bodies.Elaborated checked) {
+        return checked.plan().keepingTheArmsOf(behavior, carried);
+    }
+
+    /**
      * A way to run one behavior's composed rows, said in the generator's words.
      *
      * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
@@ -7394,10 +7430,11 @@ public final class Adequacy {
         SiteNumbering numbering = SiteNumbering.of(checked.numberingIdentity());
         List<CoverageSites.ArmSite> arms = checked.plan().arms(behavior);
         List<CoverageSites.WalkSite> walks = checked.plan().walks(behavior);
-        Predicate<ControlPlace.Arm> unreached =
-                unreachedIn(db.ask(new Arrived(module)).value(), behavior, checked);
-        ArmReplacements carried = trials.carried();
-        WalkRewrites walksCarried = trials.walksCarried();
+        Map<String, PathReachability.Answers.AsRun> arrived = db.ask(new Arrived(module)).value();
+        Predicate<ControlPlace.Arm> unreached = unreachedIn(arrived, behavior, checked);
+        ArmReplacements carried = armsOwedIn(trials.carried(), behavior, checked);
+        WalkRewrites walksCarried =
+                walksOwedIn(trials.walksCarried(), arrived, behavior, checked);
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
         // Each row once, for every search that holds this: a search runs a row to choose it, its
         // reader runs the row it was handed to see where it stands, and the searches of one
@@ -10635,6 +10672,16 @@ public final class Adequacy {
     static Set<ArmProbe> armsSeenIn(Generator.Watched watched) {
         return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.arms();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
+        };
+    }
+
+    /** The walks a row's run took a second element of — and none where the run's account was not
+     *  read. */
+    static Set<WalkProbe> walksTakenOnIn(Generator.Watched watched) {
+        return switch (watched) {
+            case Generator.Watched.Ran(var account) -> account.walks().stream()
+                    .filter(account::wentOn).collect(Collectors.toSet());
             case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
     }
