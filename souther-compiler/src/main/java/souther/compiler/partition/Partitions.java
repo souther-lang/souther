@@ -4171,6 +4171,17 @@ public final class Partitions {
     }
 
     /**
+     * The strings of {@code strings} that have one of {@code lengths}, or null where the allowance
+     * of {@code meter} would not pay for them.
+     */
+    static Language ofTheLengths(Language strings, LengthsPastTheWay.Lengths lengths,
+                                 Meter meter) {
+        PatternPlan plan = lengths.strings();
+        Language counted = plan == null ? null : plan.compile(meter);
+        return counted == null ? null : strings.and(counted, meter);
+    }
+
+    /**
      * {@code strings} less the ones the rules leave no room for, with nothing to draw from where
      * the count leaves none at all, and with what the allowance refused where it would not pay for
      * the narrowing.

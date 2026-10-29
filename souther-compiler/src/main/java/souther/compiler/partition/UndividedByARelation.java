@@ -2182,8 +2182,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (mine == null || theirs == null
                     || (here.piece() != null && there.piece() != null)
                     || !(carriers.get(at) instanceof Carrier.Text)
-                    || !(carriers.get(1 - at) instanceof Carrier.Text)
-                    || (inside && room.lengths() != null)) {
+                    || !(carriers.get(1 - at) instanceof Carrier.Text)) {
                 continue;
             }
             // A side already shown undivided needs no other word, but for the strings a run does
@@ -2195,25 +2194,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (room.lengths() == null && room.place() != null) {
                 accountedFor.add(room.place());
             }
-            Position partner = read.domain().at(theirs.subjectPath());
-            if (partner == null || !(partner.admitted().completeness()
-                    instanceof AdmissibleSet.Completeness.Complete)) {
+            ValueSet theirStrings = stringsShownAt(theirs.subjectPath(), read);
+            if (theirStrings == null) {
                 continue;
             }
-            ValueSet theirStrings = partner.admitted().approximation();
+            // A string is inside the partner's only if the partner is a string the run gets to the
+            // relation with, so the strings it is inside are those of the lengths it gets there at.
+            boolean partnerHeld = room.lengths() != null
+                    && room.limitedTo().equals(theirs.subjectPath());
+            if (inside && partnerHeld) {
+                Language partner = languageOf(theirStrings);
+                Language reaching = partner == null ? null : Partitions.ofTheLengths(partner,
+                        room.lengths(), PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+                if (reaching == null) {
+                    continue;
+                }
+                theirStrings = ValueSet.matching(reaching);
+            }
             String called = inside ? calledInside(at == 0, there.text(), theirs.subjectPath())
                     : there.piece() == null ? theirs.subjectPath().toString()
                     : there.piece().calledOver(theirs.subjectPath().toString());
-            Position mineHolds = read.domain().at(mine.subjectPath());
+            ValueSet mineHolds = stringsAtMostAt(mine.subjectPath(), read);
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, theirStrings,
                     mineHolds, called);
             if (room.lengths() != null && room.lengths().strings() == null) {
                 continue;
             }
             if (strings != null && room.lengths() != null) {
-                strings = room.limitedTo().equals(theirs.subjectPath())
-                        ? strings.partnerHeldTo(room.lengths())
-                        : strings.reachedAt(room.lengths());
+                strings = !partnerHeld ? strings.reachedAt(room.lengths())
+                        : inside ? strings : strings.partnerHeldTo(room.lengths());
             }
             // Nothing to part where every string is shown on one side: none may be the partner's,
             // or every one is shown to be. Where every one only may be, some are open, and the
@@ -2305,7 +2314,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             if (reaches(each, mine) || reaches(each, theirs)) {
-                if (each.whatStands() || !(each.relation() instanceof TakenConstraint.Affine)) {
+                if ((each.whatStands() && !endsTheLengthOfAStringAt(each, mine, theirs))
+                        || !(each.relation() instanceof TakenConstraint.Affine)) {
                     return null;
                 }
                 system.add(each.relation());
@@ -2409,11 +2419,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TermPath limited = length.subjectPath();
         LengthsPastTheWay.Lengths lengths = LengthsPastTheWay.of(length, system,
                 number -> endsOfAFreeNumber(number, places, mine, theirs, read));
-        Position held = read.domain().at(limited);
-        if (lengths == null || held == null || lengths.isEmpty()) {
+        if (lengths == null || read.domain().at(limited) == null || lengths.isEmpty()) {
             return null;
         }
-        Language strings = held.admitted().approximation() instanceof ValueSet.Matching(
+        Language strings = stringsAtMostAt(limited, read) instanceof ValueSet.Matching(
                 Language language) ? language : null;
         Language.Ends ends = strings == null ? null : strings.lengths();
         BigInteger fewest = BigInteger.valueOf(ends == null ? 0 : ends.least());
@@ -2463,6 +2472,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }));
         return beside;
+    }
+
+    /**
+     * Whether {@code statement} is an end on the length of the string at {@code mine} or at
+     * {@code theirs} and on nothing else. Such an end is on the strings themselves, whereas the
+     * count of a container says nothing of what its elements are ({@link OnAWay#whatStands}).
+     */
+    private static boolean endsTheLengthOfAStringAt(OnAWay statement, TermPath mine,
+                                                    TermPath theirs) {
+        return statement.relation() instanceof TakenConstraint.Affine(var form, _)
+                && !form.coefs().isEmpty()
+                && form.coefs().keySet().stream().allMatch(term ->
+                        isTheLengthOfAStringAt(term, mine) || isTheLengthOfAStringAt(term, theirs));
     }
 
     /** Whether {@code term} is the number of code points of the string at {@code place}. */
@@ -2552,7 +2574,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private StringsAPartnerCanHold stringsInside(boolean hereIsFirst, ConvertedText mine,
                                                  ConvertedText theirs, ValueSet theirStrings,
-                                                 Position mineHolds, String called) {
+                                                 ValueSet mineHolds, String called) {
         Language partner = languageOf(theirStrings);
         if (mine == null || theirs == null || partner == null) {
             return null;
@@ -2609,7 +2631,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ? TextExtents.LONGEST_STRING - 2L * (shownOther.size() + 1L)
                 : TextExtents.LONGEST_STRING;
         List<String> operations = new ArrayList<>(
-                operationsNotExactOver(mine.through(), languageHeldAt(mineHolds)));
+                operationsNotExactOver(mine.through(), languageOf(mineHolds)));
         operations.addAll(operationsNotExactOver(theirs.through(), partner));
         if (upTo < 0) {
             return new StringsAPartnerCanHold(ValueSet.NONE, ValueSet.matching(mayBe), null,
@@ -2625,7 +2647,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * place holds, and {@code mine} what this side's does.
      */
     private StringsAPartnerCanHold partnerCanHold(boolean hereIsFirst, Side here, Side there,
-                                                  ValueSet theirStrings, Position mine,
+                                                  ValueSet theirStrings, ValueSet mine,
                                                   String called) {
         if (kind.inside() != null) {
             return stringsInside(hereIsFirst, here.text(), there.text(), theirStrings, mine,
@@ -2651,7 +2673,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private StringsAPartnerCanHold onlyWhereTheRunGetsPast(
             StringsAPartnerCanHold strings, List<ConvertedOn> conversions, boolean hereIsFirst,
             Side here, Side there, TermPath mine, TermPath theirs, ValueSet theirStrings,
-            Position mineHolds) {
+            ValueSet mineHolds) {
         if (conversions.isEmpty()) {
             return strings;
         }
@@ -2709,7 +2731,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<String> operations = new ArrayList<>();
         for (ConvertedOn each : conversions) {
             operations.addAll(operationsNotExactOver(each.conversion(),
-                    each.place().equals(mine) ? languageHeldAt(mineHolds)
+                    each.place().equals(mine) ? languageOf(mineHolds)
                             : languageOf(theirStrings)));
         }
         return out.withTheImagesNotShownOf(operations);
@@ -2755,14 +2777,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return named;
     }
 
-    /** The strings the place {@code held} is of holds, or null where they are not shown to be a
-     *  language; every string where there is no position to ask. */
-    private static Language languageHeldAt(Position held) {
-        return held == null ? Language.EVERY_STRING : languageOf(held.admitted().approximation());
+    /**
+     * The strings the place holds, as far as they are shown to be all of them ({@link
+     * StringsHeld}), or null where they are not. The strings of the other side of a relation are
+     * parted by these, so a place not shown has nothing to part by.
+     */
+    private static ValueSet stringsShownAt(TermPath place, InputReading read) {
+        Position at = read.domain().at(place);
+        // A place the declarations are not shown to leave a set of values is not shown to hold
+        // any of its strings ({@link #takes}).
+        return at == null || sourceOf(new NumericTerm.ValueOf(place), read) == null ? null
+                : StringsHeld.at(at);
+    }
+
+    /**
+     * The strings the place holds at most: those shown to be all of them where they are, and
+     * what its set of values admits where they are not; any string where there is no position.
+     * Every question of this side of a relation that is asked of the strings it holds is asked
+     * of these.
+     */
+    private static ValueSet stringsAtMostAt(TermPath place, InputReading read) {
+        ValueSet shown = stringsShownAt(place, read);
+        if (shown != null) {
+            return shown;
+        }
+        Position at = read.domain().at(place);
+        return at == null ? ValueSet.ANY : at.admitted().approximation();
     }
 
     /** The strings {@code set} is, where it is a language of strings, or null. */
-    private static Language languageOf(ValueSet set) {
+    static Language languageOf(ValueSet set) {
         if (set instanceof ValueSet.Matching(Language language)) {
             return language;
         }
@@ -2799,7 +2843,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the piece ({@link CodeMap}), and a string it is not exactly a map on is shown neither way.
      */
     private static StringsAPartnerCanHold stringsWithAPiece(PiecesOfAString piece,
-                                                            ValueSet partner, Position mineHolds,
+                                                            ValueSet partner, ValueSet mineHolds,
                                                             String called) {
         ConvertedText whole = piece.whole();
         if (whole == null || !(partner instanceof ValueSet.Matching(Language language))) {
@@ -2824,7 +2868,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : new StringsAPartnerCanHold(ValueSet.matching(converted),
                         ValueSet.matching(mayBe), null, called)
                         .withTheImagesNotShownOf(operationsNotExactOver(whole.through(),
-                                languageHeldAt(mineHolds)));
+                                languageOf(mineHolds)));
     }
 
     /**
@@ -2840,7 +2884,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * between are told neither way.
      */
     private static StringsAPartnerCanHold stringsThatAreThePiece(PiecesOfAString piece,
-                                                                 ValueSet whole, Position mine,
+                                                                 ValueSet whole, ValueSet mine,
                                                                  String called) {
         ConvertedText made = piece.whole();
         if (made == null || !(whole instanceof ValueSet.Matching(Language language))) {
@@ -2855,9 +2899,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (shown == null) {
             return null;
         }
-        Language held = mine == null ? null
-                : mine.admitted().approximation() instanceof ValueSet.Matching(Language strings)
-                ? strings : null;
+        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
         long longest = longestOf(held);
         if (shown.allUpTo(longest)) {
             return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheStrings()), called);
@@ -2892,7 +2934,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * way unless the exact strings answer it.
      */
     private static StringsAPartnerCanHold piecesOfWhatAConversionAnswers(
-            PiecesOfAString piece, CaseMapping conversion, Language whole, Position mine,
+            PiecesOfAString piece, CaseMapping conversion, Language whole, ValueSet mine,
             String called) {
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         CodeMap map = CaseMaps.of(conversion);
@@ -2913,9 +2955,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new StringsAPartnerCanHold(ValueSet.NONE, ValueSet.matching(mayBe), null,
                     called).withTheImagesNotShownOf(notShown);
         }
-        Language held = mine == null ? null
-                : mine.admitted().approximation() instanceof ValueSet.Matching(Language strings)
-                ? strings : null;
+        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
         long longest = longestOf(held);
         return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(mayBe), longest <= shown.upTo() ? null : shown.upTo(), called)
