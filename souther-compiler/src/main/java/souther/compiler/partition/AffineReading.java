@@ -17,6 +17,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.core.Kernel;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
@@ -41,6 +42,7 @@ import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -718,7 +720,37 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private boolean theStopIsAnsweredFor(Core node, InputReads at) {
                 return reached.endsOnlyWhereItsAnswerHasNoPlace(new Denotation(node, at))
                         || stoppedAt.answersFor(node)
-                        || addsUpTheFormItIsReadAs(node, at);
+                        || addsUpTheFormItIsReadAs(node, at)
+                        || countsAListThatEndsOnlyWhereItHasNoPlace(node, at);
+            }
+
+            /**
+             * Whether {@code node} is the count of a list whose working out ends a run only where
+             * the list it makes has no place, and the comparison is held against a count a list
+             * holds: a row on its line has a list with a place, so working the list out ends no
+             * run there. That the count has a place says nothing of the list's where the line is
+             * past what a list holds, which is why the line is asked.
+             */
+            private boolean countsAListThatEndsOnlyWhereItHasNoPlace(Core node, InputReads at) {
+                if (!stoppedAt.lineAtACountAListHolds()
+                        || !(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                        || call.args().size() != 1
+                        || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
+                        || ruleSource.symbols().kernelOf(operation) != Kernel.LIST_LENGTH) {
+                    return false;
+                }
+                return theListEndsOnlyWhereItHasNoPlace(new Denotation(call.args().get(0), at));
+            }
+
+            /** Whether {@code list}, or what a name it is was given, ends a run only where the
+             *  list it makes has no place. */
+            private boolean theListEndsOnlyWhereItHasNoPlace(Denotation list) {
+                if (Core.withoutStanding(list.value()) instanceof Core.Read) {
+                    List<Denotation> given = reached.boundTo(list);
+                    return !given.isEmpty() && given.stream()
+                            .allMatch(this::theListEndsOnlyWhereItHasNoPlace);
+                }
+                return reached.endsOnlyWhereItsAnswerHasNoPlace(list);
             }
 
             /**
@@ -1552,6 +1584,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final Map<Core, Held> byExpression = new IdentityHashMap<>();
         private final Map<NumericTerm, Held> byAtom = new LinkedHashMap<>();
         private Held theStop;
+        /** Whether the comparison is held against a count a list holds, so that the rows on the
+         *  line are at lists that have a place. */
+        private boolean lineAtACountAListHolds;
 
         StoppedValues(Core stop, boolean quotientAwayFromNought, InputReading read,
                       WhatTheAnalysisAnswersFor answersFor) {
@@ -1644,6 +1679,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** The operand of {@code held} whose form the analysis that drew the lines reads it as,
          *  or null where it reads it so by none. */
+        boolean lineAtACountAListHolds() {
+            return lineAtACountAListHolds;
+        }
+
         Core readByTheFormOf(Core held) {
             return answersFor.readByTheFormOf().apply(held);
         }
@@ -1712,7 +1751,23 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Core.forEachChild(here, child -> collectUnder(child, into));
         }
 
+        /**
+         * Whether one side of the comparison folds to a count that a list, and the counts beside
+         * it, can be: the rows on a line drawn there hold lists a run can make.
+         */
+        private boolean theLineIsAtACountAListHolds() {
+            for (Core side : List.of(comparison.left(), comparison.right())) {
+                if (reads.folded(side, ofTheInput.rules().symbols(),
+                        ofTheInput.rules().newtypes()).orElse(null) instanceof Long count
+                        && count >= -1 && count <= Integer.MAX_VALUE - 2) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private UndividedByARelation.Working beside(StoppedValues stoppedAt) {
+            stoppedAt.lineAtACountAListHolds = theLineIsAtACountAListHolds();
             WhatWasTold told = new WhatWasTold();
             AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
                     new LinkedHashSet<>(), new ElementsMet(), told, stoppedAt);

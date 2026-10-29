@@ -26,6 +26,11 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
 
     /** The same, with {@code before} worked out ahead of the screening. */
     private static PartitionEvidence screened(String before, String codes) {
+        return screened(before, codes, "1");
+    }
+
+    /** The same, asking for at least {@code found} of what the join found. */
+    private static PartitionEvidence screened(String before, String codes, String found) {
         String model = """
                 module probe
 
@@ -45,10 +50,10 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                     %s
                     let codes = %s
                     let found = List.flatMap(e -> List.filter(c -> c.code == e, contacts), codes)
-                    guard List.length(found) >= 1 else NoMatch
+                    guard List.length(found) >= %s else NoMatch
                     Matched { ids = List.map(c -> c.id, found) }
                 }
-                """.formatted(before, codes);
+                """.formatted(before, codes, found);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -111,35 +116,41 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                 .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
     }
 
-    /**
-     * What a reading of a rule stopped short of, apart from a relation it read and did not show to
-     * reach every value — which is not a reading that stopped, and is what the guard on how many
-     * were found leaves where the list is a name: that the codes joined to the contacts make a
-     * list a list holds is what the join's own reading shows, and the guard counting them is not
-     * told it.
-     */
-    private static List<String> stoppedShortOfReading(PartitionEvidence evidence) {
-        return evidence.notRead().stream().filter(PartitionEvidence.NotRead::readingStopped)
-                .filter(each -> each.reason()
-                        != UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE)
-                .map(PartitionEvidence.NotRead::at).toList();
-    }
-
     /** The filter that keeps the one code where the lead is known, which is read already. */
     @Test
     void theSameListAFilterKeepsIsRead() {
         PartitionEvidence evidence = screened("List.filter(k -> lead.known, [ lead.code ])");
 
-        assertEquals(List.of(), stoppedShortOfReading(evidence),
-                () -> evidence.notRead().toString());
+        assertEquals(List.of(), stopped(evidence), () -> evidence.notRead().toString());
     }
 
     @Test
     void aListAnIfChoosesIsRead() {
         PartitionEvidence evidence = screened("if lead.known then [ lead.code ] else []");
 
-        assertEquals(List.of(), stoppedShortOfReading(evidence),
-                () -> evidence.notRead().toString());
+        assertEquals(List.of(), stopped(evidence), () -> evidence.notRead().toString());
+    }
+
+    /**
+     * The guard on how many were found is a line at one, where the list the join makes has a
+     * place, so the join is not one a row of the line stops at. A guard asking for as many as a
+     * list holds is a line at lists the join may not make, and the count is not told to get there.
+     */
+    @Test
+    void aGuardCountingAJoinIsReadWhereTheCountIsOneAListHolds() {
+        PartitionEvidence few = screened("", "[ lead.code ]", "1");
+        assertEquals(List.of(), stopped(few), () -> few.notRead().toString());
+        assertEquals(List.of(), aboutARun(few), () -> few.notRead().toString());
+        PartitionEvidence all = screened("", "[ lead.code ]", "2147483647");
+        assertEquals(List.of("contacts[*].code", "lead.code"), aboutARun(all),
+                () -> all.notRead().toString());
+    }
+
+    /** Where what the rule states is about a run that may stop on the way to it. */
+    private static List<String> aboutARun(PartitionEvidence evidence) {
+        return evidence.notRead().stream()
+                .filter(each -> each.reason() == UndividedPosition.Reason.RULE_ABOUT_A_RUN)
+                .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
     }
 
     /** A value an arm binds is read where the arm is entered. */
