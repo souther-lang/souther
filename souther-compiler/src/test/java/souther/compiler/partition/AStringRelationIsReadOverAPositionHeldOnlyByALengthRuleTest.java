@@ -8,7 +8,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -20,52 +22,141 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A string relation is read over a position whose only rule is a bound on the length of its
- * strings, as it is over one held by a pattern: the strings it holds are those of the lengths the
- * bound leaves, where the bounds are shown to be all the rules say. Where they are not shown to be,
- * nothing is said of the strings and the relation is not shown to reach every value of the other
- * side.
+ * strings, as it is over one held by a pattern for the same strings: the strings it holds are
+ * those of the set that have a length the bounds leave, where the bounds are shown to be the whole
+ * of the rules. Where they are not shown to be, nothing is said of the strings, and the relation is
+ * not shown to reach every value of the other side.
  */
 class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
 
-    private static NavigableSet<String> reasons(String needRule, String relation) {
+    private static final String CONTAINS_LOWERED =
+            "String.contains(String.lowercase(p.value), String.lowercase(i.text))";
+
+    private static Compilation measured(String types, String relation) {
         Compilation compilation = Compilation.ofSource("""
                 module demo
 
-                data Need = String
-                    invariant %s
+                %s
 
                 data In = { needs: List<Need>, text: String }
 
                 behavior f : (i: In) -> Bool
                 let f (i) = List.any(p -> %s, i.needs)
-                """.formatted(needRule, relation), "Main");
+                """.formatted(types, relation), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String json = AdequacyReport.of(compilation)
+        return compilation;
+    }
+
+    private static Compilation measuredNeed(String rule, String relation) {
+        return measured("data Need = String invariant " + rule, relation);
+    }
+
+    private static String json(Compilation compilation) {
+        return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+    }
+
+    /** Every reason the report gives. */
+    private static NavigableSet<String> reasons(Compilation compilation) {
         NavigableSet<String> out = new TreeSet<>();
-        Matcher found = Pattern.compile("\"reason\"\\s*:\\s*\"([a-z_]+)\"").matcher(json);
+        Matcher found = Pattern.compile("\"reason\"\\s*:\\s*\"([a-z_]+)\"").matcher(json(compilation));
         while (found.find()) {
             out.add(found.group(1));
         }
         return out;
     }
 
-    private static final String CONTAINS_LOWERED =
-            "String.contains(String.lowercase(p.value), String.lowercase(i.text))";
+    /** What is said of the relation, apart from the other things a report says of the rules. */
+    private static NavigableSet<String> aboutTheRelation(Compilation compilation) {
+        NavigableSet<String> out = reasons(compilation);
+        out.removeIf(each -> !each.startsWith("relation_"));
+        return out;
+    }
 
-    /** The relation is read whichever end of the length the rule places, and the strings held at
-     *  the position are not asked for by the pattern it is held with. */
+    /** The classes each axis of the behavior is parted into. */
+    private static Map<String, List<String>> classes(Compilation compilation) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").axes()
+                .forEach(axis -> out.put(axis.path(), axis.classes()));
+        return out;
+    }
+
+    /** The relation is read whichever end of the length the rule places. */
     @Test
     void theLengthBoundDoesNotDecideWhetherTheRelationIsRead() {
         for (String rule : List.of("String.length(value) >= 0", "String.length(value) >= 1",
                 "String.length(value) >= 2", "String.length(value) > 0",
                 "String.length(value) >= 1 && String.length(value) <= 5",
                 "String.length(value) == 3", "String.length(value) < 8")) {
-            NavigableSet<String> reasons = reasons(rule, CONTAINS_LOWERED);
+            NavigableSet<String> reasons = aboutTheRelation(measuredNeed(rule, CONTAINS_LOWERED));
             assertTrue(reasons.contains("relation_shown_over_a_region"), () -> rule + " " + reasons);
             assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"),
                     () -> rule + " " + reasons);
+        }
+    }
+
+    /**
+     * A position held by a pattern for the same strings is the control, and what is asked of the
+     * two is the classes each axis is parted into as well as what is said of the relation: the
+     * same reason over different classes would not be the same reading. The pattern is made of
+     * every code point, as a dot leaves out the line terminators and so is not the same strings.
+     */
+    @Test
+    void aPatternForTheSameStringsPartsThePlacesAsTheLengthRuleDoes() {
+        Map<String, String> sameStrings = new LinkedHashMap<>();
+        sameStrings.put("String.length(value) >= 1", "[\\\\s\\\\S]+");
+        sameStrings.put("String.length(value) >= 2", "[\\\\s\\\\S]{2,}");
+        sameStrings.put("String.length(value) == 3", "[\\\\s\\\\S]{3}");
+        sameStrings.put("String.length(value) >= 1 && String.length(value) <= 5",
+                "[\\\\s\\\\S]{1,5}");
+        for (String relation : List.of(CONTAINS_LOWERED, "String.contains(p.value, i.text)",
+                "String.contains(i.text, p.value)", "String.startsWith(p.value, i.text)",
+                "String.endsWith(i.text, p.value)")) {
+            sameStrings.forEach((lengthRule, regex) -> {
+                Compilation byLength = measuredNeed(lengthRule, relation);
+                Compilation byPattern = measuredNeed("String.matches(\"" + regex + "\", value)",
+                        relation);
+                assertEquals(aboutTheRelation(byPattern), aboutTheRelation(byLength),
+                        () -> lengthRule + " " + relation);
+                assertEquals(classes(byPattern), classes(byLength), () -> lengthRule + " " + relation);
+            });
+        }
+    }
+
+    /**
+     * Over a position of at least one code point, the empty string is shown to be no string that
+     * holds a need, and the strings that can are another class. The strings shown never to hold
+     * one are what the length rule proves; a position this compiler cannot prove the strings of
+     * has no such class, and the strings it did not find are not called unreachable.
+     */
+    @Test
+    void aStringTheLengthRuleLeavesNoRoomForIsShownNeverToHoldANeed() {
+        Map<String, List<String>> held = classes(
+                measuredNeed("String.length(value) >= 1", "String.contains(p.value, i.text)"));
+        assertEquals(List.of("i.text/x can be a string holding i.needs[*]",
+                "i.text/x is never a string holding i.needs[*]"), held.get("i.text"));
+
+        Compilation tied = measured("""
+                data Need = { value: String, room: Int } invariant String.length(value) <= room""",
+                "String.contains(p.value, i.text)");
+        assertFalse(classes(tied).containsKey("i.text"), () -> classes(tied).toString());
+        assertTrue(reasons(tied).contains("relation_not_shown_to_reach_every_value"),
+                () -> reasons(tied).toString());
+    }
+
+    /**
+     * A rule on the order of the strings is a bound the length rule beside it does not state, so
+     * the strings are not those of the lengths and the relation is not read over them.
+     */
+    @Test
+    void aRuleOnTheOrderOfTheStringsIsNotReadAsTheStringsOfTheirLengths() {
+        for (String rule : List.of("value < \"B\"",
+                "value < \"B\" && String.length(value) >= 1")) {
+            Compilation order = measuredNeed(rule, "String.contains(p.value, i.text)");
+            assertFalse(classes(order).containsKey("i.text"), () -> rule + classes(order));
+            assertTrue(reasons(order).contains("relation_not_shown_to_reach_every_value"),
+                    () -> rule + " " + reasons(order));
         }
     }
 
@@ -89,51 +180,8 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String json = AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String json = json(compilation);
         assertFalse(json.contains("relation_not_shown_to_reach_every_value"), json);
         assertTrue(json.contains("relation_shown_over_a_region"), json);
-    }
-
-    /** A length tied to a number of another position is a rule the bounds on the length do not
-     *  state, so the strings are not shown and the relation is not shown to reach every value. */
-    @Test
-    void aLengthTiedToAnotherPositionIsNotReadAsTheStringsOfThoseLengths() {
-        Compilation compilation = Compilation.ofSource("""
-                module demo
-
-                data Need = { value: String, room: Int }
-                    invariant String.length(value) <= room
-
-                data In = { needs: List<Need>, text: String }
-
-                behavior f : (i: In) -> Bool
-                let f (i) = List.any(p -> String.contains(p.value, i.text), i.needs)
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String json = AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        assertFalse(json.contains("\"relation_shown_over_a_region\"")
-                && !json.contains("relation_not_shown_to_reach_every_value"), json);
-    }
-
-    /** What is said of the relation, apart from the other things a report says of the rules. */
-    private static NavigableSet<String> aboutTheRelation(String needRule, String relation) {
-        NavigableSet<String> out = new TreeSet<>(reasons(needRule, relation));
-        out.removeIf(each -> !each.startsWith("relation_"));
-        return out;
-    }
-
-    /** A position held by a pattern for the same strings is the control: what is said of the
-     *  relation is the same, so the length rule is read as the pattern is. */
-    @Test
-    void aPatternForTheSameStringsAnswersAsTheLengthRuleDoes() {
-        for (String relation : List.of(CONTAINS_LOWERED, "String.contains(p.value, i.text)",
-                "String.contains(i.text, p.value)", "String.startsWith(p.value, i.text)",
-                "String.endsWith(i.text, p.value)")) {
-            assertEquals(aboutTheRelation("String.matches(\".+\", value)", relation),
-                    aboutTheRelation("String.length(value) >= 1", relation), relation);
-        }
     }
 }
