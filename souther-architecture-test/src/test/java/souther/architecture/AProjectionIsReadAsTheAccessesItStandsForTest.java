@@ -288,6 +288,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
                 + "check/AffineForms$Stop;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/AffineForms", "isANewtypesValue", "(L" + CORE + "$FieldAccess;L" + c
+                + "check/AffineForms$Reading;)Z", Reading.ONE_ACCESS,
+                "asks of one access the type of its target, which says whether the field is the"
+                        + " value a newtype wraps; a projection reaches it as its last access, whose"
+                        + " target is the projection one name shorter and has a type of its own");
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
