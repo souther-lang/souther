@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -67,8 +68,7 @@ class CoverageSitesTest {
     private static CoverageSites.Plan planOf(Checked checked) {
         return CoverageSites.of(
                 HandBuiltBodies.ofBehaviors(checked.module(), checked.bodies()),
-                souther.compiler.coverage.DecisionSources.NONE,
-                souther.compiler.coverage.SuppliedRules.NONE);
+                DecisionSources.NONE, SuppliedRules.NONE, DefaultStdlib.get().walk());
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {

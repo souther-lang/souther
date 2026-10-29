@@ -30,6 +30,8 @@ import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.coverage.WalkRewrite;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
@@ -51,6 +53,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -1611,10 +1614,10 @@ final class BodyGen {
                 return false;
             }
             Core seed = call.args().get(1);
-            return walked(call.args().get(0), call.args().get(2), () -> {
+            return walked(call, call.args().get(0), call.args().get(2), () -> {
                 Type produced = emitValue(seed, null);
                 asAccumulator(produced, accumulatorOf(call.args().get(0)));
-            }, () -> { });
+            }, () -> { }, false);
         }
 
         /** The same walk, accumulating into a builder that is sealed at the end (see
@@ -1622,9 +1625,9 @@ final class BodyGen {
          *  walk answers with. */
         private boolean walked(Core.Call call, ClassDesc helpers,
                                MethodTypeDesc builder, MethodTypeDesc sealed, Work making) {
-            return walked(call.args().get(0), call.args().get(1),
+            return walked(call, call.args().get(0), call.args().get(1),
                     () -> ctx.callRuntime(code, helpers, "builder", builder, making),
-                    () -> code.invokestatic(helpers, "sealed", sealed));
+                    () -> code.invokestatic(helpers, "sealed", sealed), true);
         }
 
         /** The accumulator's type, as the checker put it on the step. */
@@ -1641,13 +1644,38 @@ final class BodyGen {
             }
         }
 
-        private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
+        /**
+         * The loop {@code call} is, over {@code walked}, with {@code stepValue}'s body as the loop
+         * body.
+         *
+         * <p>Where this generation measures and the plan numbered the walk, entering it is recorded,
+         * and where the classes carry its switch, the run is asked how to walk it
+         * ({@link WalkRewrite}): stopping after the first step, or handing each step the seed where
+         * it is handed what the step before it answered. The seed handed again is the value the
+         * walk started from, worked out once, or — where the seed is a builder, which the steps
+         * write into — a new builder, which is what an empty seed is.
+         *
+         * @param freshSeed whether the seed is a builder the steps write into, so that handing it
+         *                  again is making another rather than reading the first
+         */
+        private boolean walked(Core.Call call, Core stepValue, Core walked, Runnable seed,
+                               Runnable answer, boolean freshSeed) {
             Core.Block step = Core.runsWhereItStands(stepValue);
             if (step == null) {
                 return false;
             }
             Type accType = step.paramTypes().get(0);
             Type elementType = step.paramTypes().get(1);
+
+            Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
+                    ? ctx.walkSiteOf(call) : Optional.empty();
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
+            // A copy carried in another arm's place carries nothing of its own, as at a fork.
+            boolean switched = site.isPresent() && carrying == 0 && ctx.carriesTheWalk(call);
 
             int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
             genExpr(walked);
@@ -1657,6 +1685,27 @@ final class BodyGen {
             int acc = slot(accType);
             seed.run();
             store(code, acc, accType);
+            // How many elements the walk has taken, where entering it is recorded: so is its
+            // taking a second, which is what tells a list of one element from a longer one.
+            int taken = -1;
+            if (site.isPresent()) {
+                taken = slot(Type.BOOL);   // an int slot
+                code.iconst_0();
+                code.istore(taken);
+            }
+            int how = -1;
+            int startedFrom = -1;
+            if (switched) {
+                how = slot(Type.BOOL);   // an int slot, holding a rewrite's code or -1
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Intervention, "walkAt", MTD_Intervention_walkAt);
+                code.istore(how);
+                if (!freshSeed) {
+                    startedFrom = slot(accType);
+                    load(code, acc, accType);
+                    store(code, startedFrom, accType);
+                }
+            }
 
             // The step's body is emitted here rather than in a class of its own, so the names it binds
             // would otherwise stay bound after the walk — and a step that destructures its accumulator
@@ -1676,10 +1725,38 @@ final class BodyGen {
             code.aload(iterator);
             code.invokeinterface(CD_Iterator, "next", MTD_next);
             unbox(code, elementType, element);
+            if (site.isPresent()) {
+                Label notTheSecond = code.newLabel();
+                code.iload(taken);
+                code.iconst_1();
+                code.if_icmpne(notTheSecond);
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walkedOn", MTD_Probe_hit);
+                code.labelBinding(notTheSecond);
+                code.iinc(taken, 1);
+            }
+            if (switched) {
+                Label asCarried = code.newLabel();
+                code.iload(how);
+                code.loadConstant(WalkRewrite.STEPS_FROM_THE_SEED.code());
+                code.if_icmpne(asCarried);
+                if (freshSeed) {
+                    seed.run();
+                } else {
+                    load(code, startedFrom, accType);
+                }
+                store(code, acc, accType);
+                code.labelBinding(asCarried);
+            }
             Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
             asAccumulator(stepped, accType);
             store(code, acc, accType);
             countOneStep();
+            if (switched) {
+                code.iload(how);
+                code.loadConstant(WalkRewrite.STOPS_AFTER_ONE_STEP.code());
+                code.if_icmpeq(done);
+            }
             code.goto_(next);
             code.labelBinding(done);
 

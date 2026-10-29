@@ -6,6 +6,7 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.observe.ArmObservation;
@@ -30,6 +31,7 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -87,15 +89,18 @@ public final class Replacements {
             // where the rows went: those are the classes that carry any, and asking where none
             // were run would build them for nothing.
             ArmReplacements carried = ArmReplacements.NONE;
+            WalkRewrites walksCarried = WalkRewrites.NONE;
             if (byTarget.values().stream().anyMatch(Adequacy.RowReading::recordedArms)) {
                 EvaluationArtifact image = db.ask(
                         new Output.EvaluationLinked(name, ArmObservation.RECORD)).value();
-                if (image != null
-                        && image.probes() instanceof ProbeImage.Instrumented(var _, var held)) {
+                if (image != null && image.probes()
+                        instanceof ProbeImage.Instrumented(var _, var held, var walks)) {
                     carried = held;
+                    walksCarried = walks;
                 }
             }
             ArmReplacements inTheClasses = carried;
+            WalkRewrites walksInTheClasses = walksCarried;
             // Read off the rows only when a body answering one value is asked about, which most
             // modules never are.
             Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule = new HashMap<>();
@@ -125,7 +130,9 @@ public final class Replacements {
                 Predicate<ControlPlace.Arm> unreached =
                         Adequacy.unreachedIn(arrived, behavior.name(), checked);
                 return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
-                        row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
+                        walksInTheClasses, row -> Adequacy.armsSeenIn(row, numbering),
+                        row -> Adequacy.walksSeenIn(row, numbering), unreached,
+                        Adequacy.walkedNoFurtherIn(rows, numbering), rows,
                         row -> stoppedAt.getOrDefault(RowRef.of(row),
                                 ReplacementDisposition.Met.AT_NO_FIGURE),
                         new ReplacementReading.Comparing() {
@@ -188,12 +195,27 @@ public final class Replacements {
                 }
                 List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
                 for (int p = 0; p < row.inputs().size(); p++) {
-                    inputs.add(new InputsRowsRanWith.Taken(sig.inputTypes().get(p),
-                            row.inputs().get(p)));
+                    taken(sig.inputTypes().get(p), row.inputs().get(p), inputs);
                 }
                 rows.add(inputs);
             }
             return rows;
+        }
+
+        /**
+         * {@code value}, at a position of {@code type}, and each element of it where it is a list:
+         * an element stands at a position of the element's type as surely as the list stands at its
+         * own, and a list grown by an element another row's list held is a list the rows already
+         * speak of.
+         */
+        private static void taken(Type type, ObservedValue value,
+                                  List<InputsRowsRanWith.Taken> out) {
+            out.add(new InputsRowsRanWith.Taken(type, value));
+            if (type instanceof Type.ListOf list && value instanceof ObservedValue.Sequence held) {
+                for (ObservedValue element : held.elements()) {
+                    taken(list.element(), element, out);
+                }
+            }
         }
 
         /**

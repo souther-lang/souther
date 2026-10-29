@@ -504,6 +504,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
                 + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
+        // Whether a walk reads nothing a run is handed: the names it binds, and the names it reads
+        // that it does not bind.
+        row(out, c + "coverage/CoverageSites$Walk", "bindersIn", "(" + core
+                + "Ljava/util/Set;)V", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "coverage/CoverageSites$Walk", "closedUnder", "(" + core
+                + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "check/PathReachability", "gatherPlaces", "(" + core + reads
                 + "Ljava/util/Map;Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run

@@ -3,13 +3,14 @@ package souther.compiler.execute;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -38,6 +39,14 @@ public interface RowTrials {
     }
 
     /**
+     * Which walks the classes rows are run in carry a switch at, which are the other rewrites a run
+     * here can be asked for. Nothing, unless those classes say otherwise.
+     */
+    default WalkRewrites walksCarried() {
+        return WalkRewrites.NONE;
+    }
+
+    /**
      * A way to run one row's inputs and see what it did.
      *
      * <p>Empty is an ordinary answer and not a failure. Nothing having run a row leaves every
@@ -62,7 +71,7 @@ public interface RowTrials {
     }
 
     /**
-     * One row built, which can be run as it is and run again with arms rewritten.
+     * One row built, which can be run as it is and run again rewritten.
      *
      * <p>Built once for the row: a search that runs a row under each of its rewrites asks the same
      * values of the same row each time, and building them is a share of what a run costs.
@@ -73,12 +82,11 @@ public interface RowTrials {
         Optional<Ran> run();
 
         /**
-         * What running the row answered with the arms at {@code replacing}'s sites answering as the
-         * parts it maps them to, or empty where nothing could run it.
+         * What running the row answered under {@code asked}, or empty where nothing could run it.
          *
          * <p>Nothing is recorded: the program run is not the one the module's places are of.
          */
-        Optional<AnswerObservation> runReplacing(Map<Integer, Integer> replacing);
+        Optional<AnswerObservation> runReplacing(Rewriting asked);
     }
 
     /**

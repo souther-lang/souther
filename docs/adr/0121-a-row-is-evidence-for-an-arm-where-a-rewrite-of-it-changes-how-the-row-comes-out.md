@@ -1,6 +1,7 @@
 # ADR-0121: A row is evidence for an arm where a rewrite of it changes how the row comes out
 
 Status: Accepted. Extends ADR-0089 with one measure; the measures it lists keep their meaning.
+Extended by ADR-0125, which adds the rewrites of a walk.
 
 ## Context
 

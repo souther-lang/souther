@@ -164,6 +164,45 @@ final class NearbyValues {
     }
 
     /**
+     * The values {@code value} becomes where one element of a list it holds is another value a run
+     * took at a position of the element's type ({@code ranWith}), one element at a time, and
+     * everything else stays as it was.
+     *
+     * <p>For a walk over a list a row holds, where what the step does with one element and what it
+     * does with another is the difference a rewrite of the walk is seen by: a list as long as the
+     * row's, with an element the rows speak of elsewhere in the place of one of its own.
+     */
+    static Iterator<ObservedValue> withAnElementChanged(ObservedValue value, Type type,
+                                                        RuleReadingContext reading,
+                                                        InputsRowsRanWith ranWith) {
+        return of(value, type, reading, null, List.of(), new Leaves() {
+
+            @Override
+            public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                                  List<Narrowing> along, TypeView view) {
+                return none();
+            }
+
+            @Override
+            public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
+                                                  Shape.Sequence sequence) {
+                List<ObservedValue> others = ranWith.of(sequence.element());
+                List<ObservedValue> out = new ArrayList<>();
+                for (int at = 0; at < held.elements().size(); at++) {
+                    for (ObservedValue other : others) {
+                        if (!other.equals(held.elements().get(at))) {
+                            List<ObservedValue> elements = new ArrayList<>(held.elements());
+                            elements.set(at, other);
+                            out.add(new ObservedValue.Sequence(elements));
+                        }
+                    }
+                }
+                return out.iterator();
+            }
+        });
+    }
+
+    /**
      * The values {@code value}, the one a run had at {@code parameter}, becomes where a string it
      * holds is put as a string a body parts into pieces that are all ones it builds a newtype of
      * ({@link PieceDemand}), and everything else stays as it was.
@@ -195,6 +234,35 @@ final class NearbyValues {
                     shape -> made(Partitions.stringsPartedInto(view, reading, demand.attempted(),
                             demand.separator(), demand.through(), shape), stoppedAt)));
             return mapped(filtered(strings, offered::add), ObservedValue.Text::new);
+        });
+    }
+
+    /**
+     * The values {@code value} becomes where a string it holds has one piece more at one of
+     * {@code separators}: an empty piece after it, an empty piece before it, and the string again
+     * after it. Everything else stays as it was.
+     *
+     * <p>For a walk over the pieces of a string a body parts, which a row is handed more elements
+     * of only through the string: a string of one piece is walked no further than its first
+     * element. Whether the string so written is one its type admits is the candidate's check to
+     * say, as it is for every candidate.
+     */
+    static Iterator<ObservedValue> withAPieceMore(ObservedValue value, Type type,
+                                                  RuleReadingContext reading, String parameter,
+                                                  List<String> separators) {
+        return of(value, type, reading, TermPath.of(parameter), List.of(),
+                (prim, leaf, _, _, _) -> {
+            if (prim != Type.Prim.STRING || !(leaf instanceof ObservedValue.Text text)) {
+                return none();
+            }
+            Set<String> offered = new HashSet<>(List.of(text.value()));
+            List<String> strings = new ArrayList<>();
+            for (String separator : separators) {
+                strings.add(text.value() + separator);
+                strings.add(separator + text.value());
+                strings.add(text.value() + separator + text.value());
+            }
+            return mapped(filtered(strings.iterator(), offered::add), ObservedValue.Text::new);
         });
     }
 

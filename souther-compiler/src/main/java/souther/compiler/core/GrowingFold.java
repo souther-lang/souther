@@ -173,7 +173,7 @@ public final class GrowingFold {
         }
         Core joined = joined(new Core.Call(BUILD,
                 List.of(outer.args().get(0), inner, outer.args().get(2)),
-                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                outer.occurrence(), Core.CallSettlement.None.INSTANCE,
                 outer.type(), outer.pos()));
         if (joined == null) {
             return null;
@@ -211,8 +211,10 @@ public final class GrowingFold {
         if (step == null) {
             return null;
         }
+        // The fold's own occurrence: the build is that walk run another way, and a rewrite of the
+        // walk is asked of the call the source wrote.
         return new Core.Call(build, List.of(step, call.args().get(2), call.args().get(3)),
-                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                call.occurrence(), Core.CallSettlement.None.INSTANCE,
                 call.type(), call.pos());
     }
 
@@ -356,8 +358,11 @@ public final class GrowingFold {
         Core step = new Core.Block(innerStep.params(),
                 List.of(outer.paramTypes().getFirst(), innerStep.paramTypes().get(1)), body,
                 innerStep.pos());
+        // The outer walk's occurrence. What the joined walk carries and answers is what the outer
+        // step grows from the outer seed, so it is the outer walk a rewrite of this loop is of; the
+        // inner walk is no loop of its own any more.
         return new Core.Call(BUILD, List.of(step, inner.args().get(1), inner.args().get(2)),
-                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                build.occurrence(), Core.CallSettlement.None.INSTANCE,
                 build.type(), build.pos());
     }
 

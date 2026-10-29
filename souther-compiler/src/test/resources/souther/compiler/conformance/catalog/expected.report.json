@@ -7342,7 +7342,7 @@
             "with" : 0
           },
           "disposition" : "undecided",
-          "undecidedBecause" : [ "no_row_answered_differently" ]
+          "undecidedBecause" : [ "runs_spent", "no_row_answered_differently" ]
         }, {
           "obligationId" : {
             "behavior" : "出荷する",
@@ -10433,6 +10433,27 @@
             "with" : 0
           },
           "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "fold_after_one_step",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 7,
+            "lowered" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "fold_from_the_seed",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 7,
+            "lowered" : 0
+          },
+          "disposition" : "undecided",
+          "undecidedBecause" : [ "runs_spent", "no_row_answered_differently" ]
         } ]
       },
       "findings" : [ {
@@ -12186,6 +12207,26 @@
             "with" : 0
           },
           "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "everyDealPriced",
+            "rewrite" : "fold_after_one_step",
+            "module" : "souther.list",
+            "definition" : "filterMap",
+            "construct" : 5,
+            "lowered" : 0
+          },
+          "disposition" : "unnoticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "everyDealPriced",
+            "rewrite" : "fold_from_the_seed",
+            "module" : "souther.list",
+            "definition" : "filterMap",
+            "construct" : 5,
+            "lowered" : 0
+          },
+          "disposition" : "unnoticed"
         } ]
       },
       "findings" : [ {
@@ -12267,6 +12308,32 @@
           "clause" : 0
         },
         "reason" : "position_restricted_to_what_a_rule_admits"
+      }, {
+        "kind" : "rewrite_unnoticed",
+        "disposition" : "refused",
+        "subject" : "everyDealPriced",
+        "obligationId" : {
+          "behavior" : "everyDealPriced",
+          "rewrite" : "fold_after_one_step",
+          "module" : "souther.list",
+          "definition" : "filterMap",
+          "construct" : 5,
+          "lowered" : 0
+        },
+        "code" : "E1939"
+      }, {
+        "kind" : "rewrite_unnoticed",
+        "disposition" : "refused",
+        "subject" : "everyDealPriced",
+        "obligationId" : {
+          "behavior" : "everyDealPriced",
+          "rewrite" : "fold_from_the_seed",
+          "module" : "souther.list",
+          "definition" : "filterMap",
+          "construct" : 5,
+          "lowered" : 0
+        },
+        "code" : "E1939"
       } ]
     } ]
   } ],

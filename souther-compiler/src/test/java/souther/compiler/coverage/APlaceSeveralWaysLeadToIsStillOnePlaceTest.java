@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.diag.SourcePos;
@@ -106,7 +107,7 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> CoverageSites.of(HandBuiltBodies.ofBehaviors("demo", bodies),
-                        DecisionSources.NONE, SuppliedRules.NONE));
+                        DecisionSources.NONE, SuppliedRules.NONE, DefaultStdlib.get().walk()));
 
         assertTrue(refused.getMessage().contains("twice"),
                 () -> "the numbering says the place was numbered twice: " + refused.getMessage());

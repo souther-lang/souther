@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.ArmReportAnchor;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.partition.Replacement;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Objects;
 
@@ -28,20 +30,40 @@ public sealed interface ReplacementReportAnchor {
         }
     }
 
+    /** Shown where the walk is written, in a source this compilation holds. */
+    record AtTheWalk(SourceConstructOrigin walk) implements ReplacementReportAnchor {
+
+        public AtTheWalk {
+            if (walk == null || !walk.isWritten()) {
+                throw new IllegalArgumentException("a rewrite shown at its walk is shown at a walk"
+                        + " some source wrote: " + walk);
+            }
+        }
+    }
+
     /** Shown at the behavior whose body it rewrites. */
     record AtTheBehavior() implements ReplacementReportAnchor {}
 
     /**
-     * Whether a rewrite can be shown here: one of the body as a whole stands at no fork, and one of
-     * an arm shown at a fork is shown at its own.
+     * Whether a rewrite can be shown here: one of the body as a whole stands at no fork and at no
+     * walk, and one of an arm or of a walk shown at its fork or walk is shown at its own.
      */
     default boolean shows(Replacement replacement) {
         return switch (this) {
             case AtTheFork(ArmReportAnchor.WhereItIsWritten fork) ->
                     replacement instanceof Replacement.OfAnArm arm
                             && arm.fork().equals(fork.origin());
+            case AtTheWalk(SourceConstructOrigin walk) ->
+                    replacement instanceof Replacement.OfAWalk rewritten
+                            && rewritten.walk().equals(walk);
             case AtTheBehavior _ -> true;
         };
+    }
+
+    /** Where a rewrite of the walk at {@code site} is shown. */
+    static ReplacementReportAnchor ofAWalk(CoverageSites.WalkSite site) {
+        // A place this compilation reached is one per call, and the rewrite is one for all.
+        return site.writtenHere() ? new AtTheWalk(site.walk()) : new AtTheBehavior();
     }
 
     /** Where a rewrite of an arm reported at {@code arm} is shown. */

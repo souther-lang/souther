@@ -184,6 +184,16 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             // answered as a value a run can be told.
             "method carriedAt(souther.compiler.core.Core,int) : int[]",
             "method replacements() : souther.compiler.coverage.ArmReplacements",
+            // Where each walk is entered, and which rewrites each can be run as: values like the
+            // sites, a walk site saying which fold it is and carrying no way into the tree. And
+            // the place of the walk a node is, asked by the emitter of a node it is holding.
+            "method walks() :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$WalkSite>",
+            "method walks(java.lang.String) :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$WalkSite>",
+            "method walkRewrites() : souther.compiler.coverage.WalkRewrites",
+            "method walkSiteOf(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.coverage.WalkProbe>",
             // Where a body could answer other than one value, asked by its name and answered with
             // the places of the arms on each way.
             "method fromOneValue(java.lang.String) :"

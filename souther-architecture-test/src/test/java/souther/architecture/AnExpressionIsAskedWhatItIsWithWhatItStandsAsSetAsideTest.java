@@ -653,6 +653,15 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "types/BindingId;)Z", 1,
                 "whether the node a walk stands at reads one binding: a Widen does not, and the"
                         + " read under it is met one step down");
+        row(out, c + "coverage/CoverageSites$Walk", "closedUnder",
+                "(" + core + "Ljava/util/Set;)Z", 3,
+                "whether the node a walk stands at reads a name, calls a behavior or applies a"
+                        + " value: a Widen does none of them, and what it holds is met one step"
+                        + " down");
+        row(out, c + "coverage/CoverageSites$Walk", "bindersIn",
+                "(" + core + "Ljava/util/Set;)V", 1,
+                "whether the node a walk stands at binds a name: a Widen binds none, and what it"
+                        + " holds is met one step down");
         row(out, c + "coverage/ComparisonCatalog", "occurrenceAt",
                 "(" + core + ")Ljava/util/Optional;", 1,
                 "whether the node a walk stands at is a comparison: a Widen is not, and the"

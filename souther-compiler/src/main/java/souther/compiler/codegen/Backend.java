@@ -33,6 +33,7 @@ import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.WalkProbe;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
@@ -60,6 +61,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -331,9 +333,17 @@ public final class Backend {
         // And which siblings the classes carry, which is the plan's less the forks a method could not
         // hold them in: what a run may ask for is what was written, and a reading of the runs is
         // handed this image rather than the plan for that reason.
+        // A walk's switch is left out with the siblings of the method it stands in, for the same
+        // reason, and the walk is then one no run can be asked to rewrite.
         Set<Integer> leftOut = new HashSet<>();
-        for (Core fork : notCarrying) {
-            for (int site : coverage.probesOf(fork)) {
+        Set<Integer> walksLeftOut = new HashSet<>();
+        for (Core node : notCarrying) {
+            Optional<WalkProbe> walk = coverage.walkSiteOf(node);
+            if (walk.isPresent()) {
+                walksLeftOut.add(walk.get().raw());
+                continue;
+            }
+            for (int site : coverage.probesOf(node)) {
                 if (site != CoverageSites.NO_SITE) {
                     leftOut.add(site);
                 }
@@ -341,7 +351,8 @@ public final class Backend {
         }
         ProbeImage probes = instrumentation.measuresCoverage()
                 ? new ProbeImage.Instrumented(coverage.identity(),
-                        coverage.replacements().carryingNothingAt(leftOut))
+                        coverage.replacements().carryingNothingAt(leftOut),
+                        coverage.walkRewrites().carryingNothingAt(walksLeftOut))
                 : new ProbeImage.Uninstrumented();
         ctx.setCoveragePlan(coverage);
         ctx.setNotCarrying(notCarrying);

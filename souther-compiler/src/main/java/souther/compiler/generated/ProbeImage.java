@@ -2,6 +2,7 @@ package souther.compiler.generated;
 
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.WalkRewrites;
 
 import java.util.Objects;
 
@@ -28,12 +29,14 @@ public sealed interface ProbeImage {
     record Uninstrumented() implements ProbeImage {}
 
     /**
-     * Classes that record where a run goes, in the numbers {@code numbering} handed out, and that
-     * carry at each of the arms {@code replacements} names the siblings a run can ask for in its
-     * place. The second travels with the first for the reason the first does: it is a fact about
-     * what the classes were emitted with, and nothing in them says it.
+     * Classes that record where a run goes, in the numbers {@code numbering} handed out, that carry
+     * at each of the arms {@code replacements} names the siblings a run can ask for in its place, and
+     * at each of the walks {@code walks} names the switch a run asks to rewrite it by. The last two
+     * travel with the first for the reason the first does: they are facts about what the classes
+     * were emitted with, and nothing in them says them.
      */
-    record Instrumented(NumberingIdentity numbering, ArmReplacements replacements)
+    record Instrumented(NumberingIdentity numbering, ArmReplacements replacements,
+                        WalkRewrites walks)
             implements ProbeImage {
 
         public Instrumented {
@@ -43,6 +46,8 @@ public sealed interface ProbeImage {
             }
             Objects.requireNonNull(replacements,
                     "classes that record a run say which arms they carry siblings at, or none");
+            Objects.requireNonNull(walks,
+                    "classes that record a run say which walks they carry a switch at, or none");
         }
     }
 }

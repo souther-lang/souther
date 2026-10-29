@@ -301,7 +301,11 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
     @Test
     void aFieldHeldStillIsAValueOfItsPosition() {
         String rows = rowsOf(measured(HELD_STILL.formatted("Int", "x.p", 8)));
-        assertTrue(rows.contains("Line { q = Q(2), p = 4 }"), rows);
+        // How many elements the row on the line holds is the fold's to decide, which a row of two
+        // tells from the fold stopping after one; each of them holds the field still at two.
+        RowsOfABlock.Row on = RowsOfABlock.forThe(rows, "ON point of comparison@0:null");
+        assertTrue(on.values().contains("q = Q(2)") && !on.values().contains("q = Q(3)"), rows);
+        assertFalse(rows.contains("Q(1)"), rows);
         assertFalse(rows.contains("no row for"), rows);
     }
 
