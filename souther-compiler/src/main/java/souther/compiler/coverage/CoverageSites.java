@@ -1380,6 +1380,10 @@ public final class CoverageSites {
         /** Whether a walk met in the body being walked is one a rewrite is asked of: in a
          *  behavior's body, and not in a value's. */
         private boolean walksAreRewritten = true;
+        /** The operations that list what a set or a map holds, in the order the host happens to
+         *  keep it, which the language does not specify. */
+        private static final Set<Kernel> LISTS_WITHOUT_AN_ORDER = EnumSet.of(Kernel.SET_TO_LIST,
+                Kernel.MAP_TO_LIST, Kernel.MAP_KEYS, Kernel.MAP_VALUES);
         /** What each body parts strings at, where it writes the separator out, in the order met. */
         private final Map<String, Set<String>> separators = new LinkedHashMap<>();
         /** What each name of the body being walked is bound to by a {@code let}, as the walk passes
@@ -1489,16 +1493,40 @@ public final class CoverageSites {
             return all[0];
         }
 
-        /** Whether {@code e} is what listing a set or a map answers, written there or bound to a
-         *  name that is read there. */
+        /**
+         * Whether the order of the list {@code e} answers is one the language leaves unspecified: it
+         * is what listing a set or a map answers, or a list made of one that is, however it was
+         * bound or worked on. Only ordering it ({@link Kernel#LIST_SORT}) gives it an order again.
+         *
+         * <p>A list-typed node has the order of the lists it is made of, and a node of any other
+         * type has none to speak of: a function handed to {@code List.map} is not a list its answer
+         * is ordered by, and what a {@code let} binds is the order of its body only where the body
+         * reads it, which the name it was bound to says.
+         */
         private boolean listsWhatHasNoOrder(Core e) {
             Core plain = Core.withoutStanding(e);
-            if (plain instanceof Core.Read read && boundTo.containsKey(read.binding())) {
-                return listsWhatHasNoOrder(boundTo.get(read.binding()));
+            if (plain instanceof Core.Read read) {
+                Core bound = boundTo.get(read.binding());
+                return bound != null && listsWhatHasNoOrder(bound);
             }
-            return plain instanceof Core.Call call
-                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)
-                    && (kernel == Kernel.SET_TO_LIST || kernel == Kernel.MAP_TO_LIST);
+            if (!(plain.type() instanceof Type.ListOf)) {
+                return false;
+            }
+            if (plain instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)) {
+                if (LISTS_WITHOUT_AN_ORDER.contains(kernel)) {
+                    return true;
+                }
+                if (kernel == Kernel.LIST_SORT) {
+                    return false;
+                }
+            }
+            if (plain instanceof Core.LetIn let) {
+                return listsWhatHasNoOrder(let.body());
+            }
+            boolean[] any = {false};
+            Core.forEachChild(plain, child -> any[0] = any[0] || listsWhatHasNoOrder(child));
+            return any[0];
         }
 
         /** Whether {@code name} is bound by a {@code let} to a value that reads nothing a run is

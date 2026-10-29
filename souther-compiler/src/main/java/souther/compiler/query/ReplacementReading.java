@@ -7,6 +7,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.coverage.WalkedNoFurther;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Disposition;
@@ -168,7 +169,7 @@ public final class ReplacementReading {
                                    Function<RowOutcome, Set<ArmProbe>> wentThrough,
                                    Function<RowOutcome, Set<WalkProbe>> entered,
                                    Predicate<ControlPlace.Arm> unreached,
-                                   Predicate<WalkProbe> walkedNoFurther,
+                                   WalkedNoFurther walkedNoFurther,
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                    Comparing comparing,

@@ -52,6 +52,7 @@ import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.coverage.WalkedNoFurther;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
@@ -7455,7 +7456,7 @@ public final class Adequacy {
             }
 
             /** What the rows written say of the walks they entered, read once a row asks. */
-            private volatile Predicate<WalkProbe> walkedNoFurther;
+            private volatile WalkedNoFurther walkedNoFurther;
 
             @Override
             public List<RunRewrite> rewritesThrough(AlignedObservation ran) {
@@ -7466,11 +7467,11 @@ public final class Adequacy {
                 return out;
             }
 
-            private Predicate<WalkProbe> walkedNoFurther() {
-                Predicate<WalkProbe> read = walkedNoFurther;
+            private WalkedNoFurther walkedNoFurther() {
+                WalkedNoFurther read = walkedNoFurther;
                 if (read == null) {
                     Map<String, RowReading> byTarget = db.ask(new RowReadings(module)).value();
-                    read = byTarget == null ? _ -> false : walkedNoFurtherIn(
+                    read = byTarget == null ? WalkedNoFurther.NOTHING : walkedNoFurtherIn(
                             RowReadings.readingFor(byTarget, behavior).rowsSeen(),
                             Optional.of(numbering));
                     walkedNoFurther = read;
@@ -10653,29 +10654,22 @@ public final class Adequacy {
      * that answered.
      *
      * <p>Only those: a run that answered went through every walk it entered to the end, and one
-     * that stopped may have stopped inside one before its second element. What this says of a walk
-     * over a list that is one list on every run is that the list holds one element at most
-     * ({@link WalkRewrites.AtWalk#overAFixedList}); of any other walk, nothing.
+     * that stopped may have stopped inside one before its second element ({@link
+     * WalkedNoFurther}). What this says of a walk over a list that is one list on every run is
+     * that the list holds one element at most ({@link WalkRewrites.AtWalk#overAFixedList}); of any
+     * other walk, nothing.
      */
-    static Predicate<WalkProbe> walkedNoFurtherIn(List<RowOutcome> rows,
-                                                 Optional<SiteNumbering> numbering) {
-        Set<WalkProbe> entered = new HashSet<>();
-        Set<WalkProbe> wentOn = new HashSet<>();
+    static WalkedNoFurther walkedNoFurtherIn(List<RowOutcome> rows,
+                                             Optional<SiteNumbering> numbering) {
+        List<AlignedObservation> answered = new ArrayList<>();
         for (RowOutcome row : rows) {
-            if (!(row.answer() instanceof AnswerObservation.Answered)) {
-                continue;
-            }
-            if (ObservedInputs.of(row, numbering).watched()
+            if (row.answer() instanceof AnswerObservation.Answered
+                    && ObservedInputs.of(row, numbering).watched()
                     instanceof Generator.Watched.Ran(var account)) {
-                for (WalkProbe walk : account.walks()) {
-                    entered.add(walk);
-                    if (account.wentOn(walk)) {
-                        wentOn.add(walk);
-                    }
-                }
+                answered.add(account);
             }
         }
-        return walk -> entered.contains(walk) && !wentOn.contains(walk);
+        return WalkedNoFurther.ofRunsThatAnswered(answered);
     }
 
     /** The ways a run's conditions came out, read the same way — and none where the run's

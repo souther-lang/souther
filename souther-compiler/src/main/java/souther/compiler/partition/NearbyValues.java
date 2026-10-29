@@ -113,7 +113,30 @@ final class NearbyValues {
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, false);
+        return withAnElement(value, type, reading, ranWith, stoodFor, false, Put.AFTER);
+    }
+
+    /** Where a list that grows takes its new element. */
+    enum Put {
+
+        /** After the elements it has. */
+        AFTER,
+
+        /** After them, and then before them: what a list does with an element it is handed first
+         *  is not what it does with one it is handed last. */
+        BEFORE_AND_AFTER
+    }
+
+    /**
+     * {@link #grown}, the new element put as {@code where} says. The same wherever the list stands:
+     * a list in a field of a record or in an element of another list takes its new element where
+     * a list that is the value itself does.
+     */
+    static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
+                                         InputsRowsRanWith ranWith,
+                                         Function<Type, Iterator<ObservedValue>> stoodFor,
+                                         Put where) {
+        return withAnElement(value, type, reading, ranWith, stoodFor, false, where);
     }
 
     /**
@@ -128,12 +151,13 @@ final class NearbyValues {
     static Iterator<ObservedValue> populated(ObservedValue value, Type type,
                                              RuleReadingContext reading,
                                              Function<Type, Iterator<ObservedValue>> stoodFor) {
-        return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor, true);
+        return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor, true,
+                Put.AFTER);
     }
 
     private static Iterator<ObservedValue> withAnElement(
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
-            Function<Type, Iterator<ObservedValue>> stoodFor, boolean onlyWhereEmpty) {
+            Function<Type, Iterator<ObservedValue>> stoodFor, boolean onlyWhereEmpty, Put where) {
         return of(value, type, reading, null, List.of(), new Leaves() {
 
             @Override
@@ -151,13 +175,23 @@ final class NearbyValues {
                 // One of the rows' and one of the type's in turn, so that however many values the
                 // rows ran with, the type's are reached within the runs the search is given. The
                 // type's are asked for when the second is.
-                return mapped(filtered(alternating(ranWith.of(sequence.element()).iterator(),
+                return flat(filtered(alternating(ranWith.of(sequence.element()).iterator(),
                                 () -> stoodFor.apply(sequence.element())),
                                 new HashSet<ObservedValue>()::add),
                         more -> {
-                            List<ObservedValue> elements = new ArrayList<>(held.elements());
-                            elements.add(more);
-                            return new ObservedValue.Sequence(elements);
+                            List<ObservedValue> after = new ArrayList<>(held.elements());
+                            after.add(more);
+                            ObservedValue.Sequence appended = new ObservedValue.Sequence(after);
+                            if (where == Put.AFTER || held.elements().isEmpty()) {
+                                return List.<ObservedValue>of(appended).iterator();
+                            }
+                            List<ObservedValue> before = new ArrayList<>();
+                            before.add(more);
+                            before.addAll(held.elements());
+                            ObservedValue.Sequence prepended = new ObservedValue.Sequence(before);
+                            return prepended.equals(appended)
+                                    ? List.<ObservedValue>of(appended).iterator()
+                                    : List.<ObservedValue>of(appended, prepended).iterator();
                         });
             }
         });
@@ -187,17 +221,17 @@ final class NearbyValues {
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
                                                   Shape.Sequence sequence) {
                 List<ObservedValue> others = ranWith.of(sequence.element());
-                List<ObservedValue> out = new ArrayList<>();
-                for (int at = 0; at < held.elements().size(); at++) {
-                    for (ObservedValue other : others) {
-                        if (!other.equals(held.elements().get(at))) {
+                // A list at a time, as the search asks: the element changed, and then the value
+                // it is changed to, so that a long list is copied once for each candidate taken
+                // and not once for each there could be.
+                return flat(indexes(held.elements().size()), at -> mapped(
+                        filtered(others.iterator(),
+                                other -> !other.equals(held.elements().get(at))),
+                        other -> {
                             List<ObservedValue> elements = new ArrayList<>(held.elements());
                             elements.set(at, other);
-                            out.add(new ObservedValue.Sequence(elements));
-                        }
-                    }
-                }
-                return out.iterator();
+                            return new ObservedValue.Sequence(elements);
+                        }));
             }
         });
     }

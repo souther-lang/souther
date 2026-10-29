@@ -53,9 +53,14 @@ Three walks are not rewritten. A walk that reads nothing a run is handed — no 
 to anything that reads one, no behavior called — answers one value on every run, and either rewrite
 of it answers one value too: changing it is changing a constant, which ADR-0121 does not ask about.
 So is every walk in a value, which is handed nothing. And a walk over what listing a set or a map
-answers goes in an order the language leaves unspecified, as the library says of `Set.fold`, so its
-first element and the step before another are no element and no step the model names, and a row
-telling either rewrite apart would turn on that order.
+answers (`Set.toList`, `Map.toList`, `Map.keys`, `Map.values`) goes in an order the language leaves
+unspecified, as the library says of `Set.fold`, so its first element and the step before another are
+no element and no step the model names, and a row telling either rewrite apart would turn on that
+order. The order is a property of the list, not of the call that made it: a list made of one that has
+none has none, however it was bound or worked on (`List.reverse`, `List.map`, `List.take`, a helper
+that returns it), and only `List.sort` gives it one again. A list-typed node has the order of the
+lists it is made of, and a node of another type, a function handed to `List.map` among them, is none
+of its order.
 
 A run records entering a walk at a place of its own, a third family of the one numbering beside arms
 and conditions. Nothing is owed for entering one, and no branch measure counts it. What it is for is
@@ -76,18 +81,24 @@ walked no further than its first, by either rewrite. A step whose body never rea
 is handed is the walk under another spelling when handed the seed. And a list that reads nothing a
 run is handed is one list on every run, so a run that answered and was seen walking it no further
 than its first element shows every run does: that is the one proof read off a run, and it rests on
-the list being the same value wherever it is worked out. Everything else is asked, and a rewrite no
-search finds an input for is undecided, never concluded the same.
+the list being the same value wherever it is worked out. It also rests on the run having answered,
+since only a run that came back went through every walk it entered to the end; the evidence is made
+from runs that answered and from no others, by the one constructor that says so. Everything else is
+asked, and a rewrite no search finds an input for is undecided, never concluded the same.
 
 The search for an input starts from the rows that entered the walk, the ones holding the most
 elements first and a candidate of each in turn. A list one of them holds is grown by one element and
 then by two, each with the new element put first as well as last, since a walk stopping after one
-step parts from the walk only where what the later elements do differs from what the first does. The
+step parts from the walk only where what the later elements do differs from what the first does.
+That is how a list grows wherever it stands, in a field of a record as much as the value itself, and
+a value that holds no list of two elements is asked after every one that does and not left out. The
 elements are taken from what the rows of the module ran with, which now counts each element of a
 list a row held as a value its type was run with. Beside those, a list of the same length with one
 element changed for another the rows hold, and a string the body parts with a piece more at a
 separator the body parts strings at, a walk over the pieces of a string being handed more elements
-only through the string. Then a row in each class of each position, and last a row with one position
+only through the string. Each of these is made as the search asks for it, one candidate at a time,
+so what a long list or many values cost follows the runs the search is given. Then a row in each
+class of each position, and last a row with one position
 moved. The row `--generate` offers is chosen among the rows meeting its requirement for the rewrites
 it tells apart (ADR-0123), and the walks a row entered are among what it is asked; which walks a row
 entered and how far it took them is no part of the way a row went, so a row of two elements is

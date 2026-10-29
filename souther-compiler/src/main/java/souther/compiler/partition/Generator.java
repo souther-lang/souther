@@ -91,6 +91,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * Rows for the classes and the arms a caller says are owed one.
@@ -2252,8 +2253,8 @@ public final class Generator {
                             .toList();
                     int through = from.size();
                     Examining lists = new Examining(looking);
-                    Beside growing = grownTwice(
-                            aListGrown(walk.ranWith(), axes.subject(), check, looking));
+                    Beside growing = grownTwice(aListGrown(walk.ranWith(), axes.subject(), check,
+                            looking, NearbyValues.Put.BEFORE_AND_AFTER));
                     // And beside each, a string the body parts with a piece more, and one put as
                     // pieces the body demands: a walk over the pieces is a walk over a list no
                     // input holds, and a string of more pieces is how it is handed more elements.
@@ -2478,6 +2479,13 @@ public final class Generator {
      */
     private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
                                      CandidateCheck check, ReplacementWitness looking) {
+        return aListGrown(ranWith, subject, check, looking, NearbyValues.Put.AFTER);
+    }
+
+    /** {@link #aListGrown}, the element put as {@code where} says in every list that grows. */
+    private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
+                                     CandidateCheck check, ReplacementWitness looking,
+                                     NearbyValues.Put where) {
         // What stands for a type is the same for every row and list the search grows, so it is one
         // for the search and made as far as the search asks, its stops said as they are met. A
         // type's values are bounded as a composing's candidates are, and the bound is said as that
@@ -2500,7 +2508,7 @@ public final class Generator {
                     }
                 });
         return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
-                elements::of);
+                elements::of, where);
     }
 
     /** How many elements the lists in {@code row} hold between them, at every depth. */
@@ -2513,31 +2521,86 @@ public final class Generator {
     }
 
     private static int elementsIn(ObservedValue value) {
+        return (value instanceof ObservedValue.Sequence sequence ? sequence.elements().size() : 0)
+                + elementsHeld(partsOf(value));
+    }
+
+    /** Whether a list in {@code value}, at any depth, holds two elements or more. */
+    private static boolean holdsAListOfTwo(ObservedValue value) {
+        return (value instanceof ObservedValue.Sequence sequence && sequence.elements().size() >= 2)
+                || partsOf(value).stream().anyMatch(Generator::holdsAListOfTwo);
+    }
+
+    /** What {@code value} is made of, one level down: its elements, its fields, its keys and
+     *  values. */
+    private static List<ObservedValue> partsOf(ObservedValue value) {
         return switch (value) {
-            case ObservedValue.Sequence sequence ->
-                    sequence.elements().size() + elementsHeld(sequence.elements());
+            case ObservedValue.Sequence sequence -> sequence.elements();
             case ObservedValue.Constructed constructed ->
-                    elementsHeld(List.copyOf(constructed.fields().values()));
+                    List.copyOf(constructed.fields().values());
             case ObservedValue.Mapping mapping -> mapping.entries().stream()
-                    .mapToInt(each -> elementsIn(each.key()) + elementsIn(each.value())).sum();
+                    .flatMap(each -> Stream.of(each.key(), each.value())).toList();
             case ObservedValue.Bool _, ObservedValue.Integer _, ObservedValue.Decimal _,
                  ObservedValue.Text _, ObservedValue.Temporal _, ObservedValue.Unit _,
-                 ObservedValue.Absent _, ObservedValue.Unknown _, ObservedValue.Truncated _ -> 0;
+                 ObservedValue.Absent _, ObservedValue.Unknown _, ObservedValue.Truncated _ ->
+                    List.of();
+        };
+    }
+
+    /**
+     * The values of {@code from} that {@code first} says yes to, as they come, and the others after
+     * them: put later in the order and not left out, since a search that is given runs for all of
+     * them reaches the others only when the ones it prefers are spent.
+     */
+    private static <A> Iterator<A> afterwards(Iterator<A> from, Predicate<A> first) {
+        return new Iterator<>() {
+
+            private final Deque<A> later = new ArrayDeque<>();
+
+            private A next;
+
+            private boolean ready;
+
+            @Override
+            public boolean hasNext() {
+                while (!ready && from.hasNext()) {
+                    A taken = from.next();
+                    if (first.test(taken)) {
+                        next = taken;
+                        ready = true;
+                    } else {
+                        later.add(taken);
+                    }
+                }
+                if (!ready && !later.isEmpty()) {
+                    next = later.poll();
+                    ready = true;
+                }
+                return ready;
+            }
+
+            @Override
+            public A next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                ready = false;
+                return next;
+            }
         };
     }
 
     /**
      * {@code once}'s values, and after them each of those grown by {@code once} again: a list one
-     * element longer, then two. Each with the element it was given last put first as well, where
-     * the list is the value itself.
+     * element longer, then two.
      *
      * <p>For a rewrite of a walk, which parts from the walk only from a second step on. A row a run
      * entered the walk with may hold no element, and that list one element longer is still a list no
      * rewrite of the walk answers differently on. Those grown by one are asked first, so a row
      * holding one element is grown to two before anything is grown from nothing. And a walk
      * stopping after its first element parts from one that goes on only where what the elements
-     * after the first do differs from what the first does: the element a row held is put after the
-     * new one as well as before it.
+     * after the first do differs from what the first does, which is why {@code once} puts the new
+     * element before the others as well as after.
      */
     private static Beside grownTwice(Beside once) {
         Beside grown = (value, type, reading, parameter) -> new Iterator<>() {
@@ -2575,42 +2638,12 @@ public final class Generator {
                 return second.next();
             }
         };
-        return (value, type, reading, parameter) -> new Iterator<>() {
-
-            private final Iterator<ObservedValue> each = grown.of(value, type, reading, parameter);
-
-            private final Deque<ObservedValue> ready = new ArrayDeque<>();
-
-            @Override
-            public boolean hasNext() {
-                while (ready.isEmpty() && each.hasNext()) {
-                    ObservedValue taken = each.next();
-                    if (!(taken instanceof ObservedValue.Sequence list)) {
-                        ready.add(taken);
-                        continue;
-                    }
-                    // A list of one element is walked no further than its first, and no rewrite of
-                    // a walk over it answers differently: it is grown again, and not asked.
-                    if (list.elements().size() < 2) {
-                        continue;
-                    }
-                    ready.add(taken);
-                    List<ObservedValue> moved = new ArrayList<>();
-                    moved.add(list.elements().getLast());
-                    moved.addAll(list.elements().subList(0, list.elements().size() - 1));
-                    ready.add(new ObservedValue.Sequence(moved));
-                }
-                return !ready.isEmpty();
-            }
-
-            @Override
-            public ObservedValue next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
-                return ready.poll();
-            }
-        };
+        // A walk over a list that holds one element is walked no further than its first, and no
+        // rewrite of it answers differently: a value holding no list of two is asked after every
+        // one that does, so that the runs go first to the candidates a rewrite can part from the
+        // walk on. Wherever the list stands, since the walk may be over a field of a record.
+        return (value, type, reading, parameter) ->
+                afterwards(grown.of(value, type, reading, parameter), Generator::holdsAListOfTwo);
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had

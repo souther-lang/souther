@@ -189,6 +189,166 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                         .toList());
     }
 
+    /** The rewrites asked of the fold, with where it stands left out. */
+    private static List<String> rewritesAsked(Compilation compilation) {
+        return rewriteLines(compilation).stream()
+                .map(line -> line.replaceAll("\\(\\d+:\\d+\\)", "(here)")).toList();
+    }
+
+    private static final List<String> BOTH_ASKED = List.of(
+            "! no row would come out differently if the fold (here) stopped after its first element",
+            "! no row would come out differently if the fold (here) handed each step the seed in"
+                    + " place of what the step before it answered");
+
+    /** A step spelled as a name is the step all the same: the fold is walked, and asked. */
+    @Test
+    void aStepBoundToANameIsAskedLikeOneWrittenWhereItIsHanded() {
+        assertEquals(BOTH_ASKED, rewritesAsked(measured("""
+                module repro.local
+
+                behavior total : (xs: List<Int>) -> Int
+
+                let total (xs) = {
+                    let step = (acc, x) -> acc + x
+                    List.fold(step, 0, xs)
+                }
+
+                example total
+                    | "nothing" : ([]) -> 0
+                    | "one" : ([1]) -> 1
+                """)));
+        assertEquals(BOTH_ASKED, rewritesAsked(measured("""
+                module repro.declared
+
+                behavior total : (xs: List<Int>) -> Int
+
+                let step (acc: Int, x: Int): Int = acc + x
+
+                let total (xs) = List.fold(step, 0, xs)
+
+                example total
+                    | "nothing" : ([]) -> 0
+                    | "one" : ([1]) -> 1
+                """)));
+        assertEquals(BOTH_ASKED, rewritesAsked(measured("""
+                module repro.handed
+
+                behavior total : (xs: List<Int>) -> Int
+
+                let summed (step: (Int, Int) -> Int, ys: List<Int>): Int = List.fold(step, 0, ys)
+
+                let total (xs) = summed((acc, x) -> acc + x, xs)
+
+                example total
+                    | "nothing" : ([]) -> 0
+                    | "one" : ([1]) -> 1
+                """)));
+    }
+
+    private static String overASet(String listed) {
+        return """
+                module repro.unordered
+
+                behavior total : (s: Set<Int>) -> Int
+
+                let total (s) = List.fold((acc, x) -> acc + x, 0, %s)
+
+                example total
+                    | "nothing" : (Set.fromList([])) -> 0
+                    | "one" : (Set.fromList([1])) -> 1
+                """.formatted(listed);
+    }
+
+    /**
+     * A list made of what a set lists has the order the host happened to keep, and the model names
+     * no first element in it: the walk is not asked, however the list was worked on after it was
+     * made. Ordering it gives it an order, and the walk is asked again.
+     */
+    @Test
+    void aListMadeOfWhatASetListsIsWalkedInNoOrderTheModelNames() {
+        for (String listed : List.of("Set.toList(s)", "List.reverse(Set.toList(s))",
+                "List.map(x -> x, Set.toList(s))", "List.take(1, List.reverse(Set.toList(s)))")) {
+            assertEquals(List.of(), rewritesAsked(measured(overASet(listed))), listed);
+        }
+        assertEquals(List.of(), rewritesAsked(measured("""
+                module repro.helped
+
+                behavior total : (s: Set<Int>) -> Int
+
+                let items (t: Set<Int>): List<Int> = Set.toList(t)
+
+                let total (s) = List.fold((acc, x) -> acc + x, 0, items(s))
+
+                example total
+                    | "nothing" : (Set.fromList([])) -> 0
+                    | "one" : (Set.fromList([1])) -> 1
+                """)), "a helper that lists it is the list it lists");
+        assertEquals(BOTH_ASKED.size(), rewritesAsked(measured(overASet(
+                "List.sort(Set.toList(s))"))).size(), "sorted, it has an order again");
+        assertEquals(BOTH_ASKED.size(), rewritesAsked(measured(overASet(
+                "List.reverse(List.sort(Set.toList(s)))"))).size());
+    }
+
+    /** What a map lists is as unordered as what a set lists. */
+    @Test
+    void aListMadeOfWhatAMapListsIsWalkedInNoOrderTheModelNames() {
+        for (String listed : List.of("Map.values(m)", "List.reverse(Map.values(m))")) {
+            assertEquals(List.of(), rewritesAsked(measured("""
+                    module repro.mapped
+
+                    behavior total : (m: Map<String, Int>) -> Int
+
+                    let total (m) = List.fold((acc, x) -> acc + x, 0, %s)
+
+                    example total
+                        | "nothing" : (Map.empty) -> 0
+                        | "one" : (Map.fromList([("a", 1)])) -> 1
+                    """.formatted(listed))), listed);
+        }
+        assertEquals(List.of(), rewritesAsked(measured("""
+                module repro.keyed
+
+                behavior total : (m: Map<String, Int>) -> Int
+
+                let total (m) = List.fold((acc, k) -> acc + String.length(k), 0, Map.keys(m))
+
+                example total
+                    | "nothing" : (Map.empty) -> 0
+                    | "one" : (Map.fromList([("a", 1)])) -> 1
+                """)));
+    }
+
+    /** A list held in a field of a record is a list the rows tell the rewrites apart on all the same. */
+    @Test
+    void aListInAFieldOfARecordIsGivenARowOfTwoElements() {
+        Compilation compilation = measured("""
+                module repro.held
+
+                data Input = { xs: List<Int> }
+
+                behavior total : (input: Input) -> Int
+
+                let total (input) = List.fold((acc, x) -> acc + (1 - acc) * x, 0, input.xs)
+
+                example total
+                    | "nothing" : (Input { xs = [] }) -> 0
+                    | "one" : (Input { xs = [1] }) -> 1
+                """);
+        String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("repro.held")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+
+        List<RowsOfABlock.Row> rows = RowsOfABlock.of(block);
+        // Stopping after one step parts from the fold where the second element is read before the
+        // first has lifted the accumulator, and the seed where it is read after: one row each.
+        assertEquals(2, rows.size(), () -> block);
+        assertTrue(rows.stream().anyMatch(row -> row.isFor("the fold stopping after its first element")
+                        && row.values().contains("xs = [0, 1]")), () -> block);
+        assertTrue(rows.stream().anyMatch(row -> row.isFor("each step of the fold handed the seed")
+                        && row.values().contains("xs = [1, 0]")), () -> block);
+    }
+
     private static String page(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));

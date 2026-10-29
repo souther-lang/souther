@@ -14,7 +14,6 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.Predicate;
 
 /**
  * Which rewrites each numbered walk can be run as ({@link WalkRewrite}).
@@ -73,8 +72,8 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
          * a run that walked a list the same on every run no further than its first element
          * ({@code walkedNoFurther}).
          */
-        boolean leaves(WalkRewrite how, Predicate<WalkProbe> walkedNoFurther) {
-            return theSame.contains(how) || (overAFixedList && walkedNoFurther.test(at));
+        boolean leaves(WalkRewrite how, WalkedNoFurther walkedNoFurther) {
+            return theSame.contains(how) || (overAFixedList && walkedNoFurther.at(at));
         }
     }
 
@@ -195,7 +194,7 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
      * <p>The one answer to which rewrites a row entering the walk is asked, whoever asks: the
      * measure of the rows written and the composer choosing a row to offer put the same questions.
      */
-    public List<Asked> askedOf(SourceConstructOrigin walk, Predicate<WalkProbe> walkedNoFurther) {
+    public List<Asked> askedOf(SourceConstructOrigin walk, WalkedNoFurther walkedNoFurther) {
         List<AtWalk> sites = ofWalk(walk);
         List<Asked> out = new ArrayList<>();
         for (WalkRewrite how : WalkRewrite.values()) {
@@ -216,7 +215,7 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
      * {@code walks} and then of the rewrites.
      */
     public List<Rewrite> askedOfARun(List<CoverageSites.WalkSite> walks, AlignedObservation run,
-                                     Predicate<WalkProbe> walkedNoFurther) {
+                                     WalkedNoFurther walkedNoFurther) {
         List<Rewrite> out = new ArrayList<>();
         Set<OfAWalk> seen = new HashSet<>();
         for (CoverageSites.WalkSite walk : walks) {
