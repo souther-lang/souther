@@ -236,6 +236,25 @@ public final class InputNumber {
      */
     private static ObservationSource movedFromALocation(Core of, InputReads reads,
                                                         RuleReadingSource source) {
+        return movedFromALocation(of, reads, source, new ArrayList<>());
+    }
+
+    /**
+     * The shifts of a date a number taken of {@code date} stands for, each where it is written:
+     * every one on the chain from {@code date} to the location it moves, which the number's
+     * translation keeps defined only at the dates each leaves ({@link ValueTransformation}). So
+     * working each out gets there wherever the number has a value. None where {@code date} is no
+     * such chain.
+     */
+    public static List<Core> theShiftsATakingOfItStandsFor(Core date, InputReads reads,
+                                                           RuleReadingSource source) {
+        List<Core> shifts = new ArrayList<>();
+        return movedFromALocation(date, reads, source, shifts) == null ? List.of() : shifts;
+    }
+
+    private static ObservationSource movedFromALocation(Core of, InputReads reads,
+                                                        RuleReadingSource source,
+                                                        List<Core> shifts) {
         // A shift of a date answers a date, so anything else is no chain and the walk below, which
         // resolves names, is not spent on it.
         if (!Type.DATE.equals(Core.withoutStanding(of).type())) {
@@ -247,6 +266,7 @@ public final class InputNumber {
         for (DateShifts.Step step = shiftOf(met, source); step != null;
                 step = shiftOf(met, source)) {
             days.add(step.days());
+            shifts.add(Core.withoutStanding(met.value()));
             met = met.at().denotes(step.date(), symbols, source.newtypes());
         }
         if (days.isEmpty()

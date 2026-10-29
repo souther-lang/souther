@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.StatedComparison;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -326,11 +328,11 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     }
 
     /**
-     * A number of the input read through a name stands where what the name was given got there
-     * only as far as the library's operations on the way go: a date moved by a count stands only
-     * where the moved date is one. An operator's sum on the way is folded into what the number is
-     * read as, and {@code n + 1 - 1} stops at the greatest {@code Int} where the count it comes to
-     * moves the date to one. A sum of numbers written down is the same on every run.
+     * The year of a date moved by a count written down is a number defined only where the move
+     * leaves a date, as the shift it is taken through keeps it, so the move gets there
+     * wherever the number has a value, read through a name or not; the count, folded, is worked
+     * out on every run. Moved by {@code n + 1 - 1} the date is no such number, and the sum stops
+     * at the greatest {@code Int} whatever year it would have come to.
      */
     @Test
     void aNumberReadThroughANameStandsOnlyWhereTheLibraryWorkedItOut() {
@@ -348,6 +350,53 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                 }""");
         assertEquals(WhatARelationLeavesUndivided.Told.EVERY, byAWrittenCount.told(),
                 byAWrittenCount::toString);
+    }
+
+    /** The left side of the comparison {@code condition} of a behavior taking {@code inputs},
+     *  where it is read, as what a run works out to reach it. */
+    private static boolean theLeftSideGetsThereWhereItsAnswerHasAPlace(String inputs,
+                                                                       String condition) {
+        ReadComparisons read = ReadComparisons.ofTheAnalysis("""
+                module w1
+                data Unused = Int
+                behavior m : (%s) -> Bool
+                let m (%s) = %s
+                """.formatted(inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), condition), "m");
+        ComparisonReadings.Reading only = read.only();
+        StatedComparison stated =
+                ((ComparisonReadings.Stated.AComparison) only.statement()).comparison();
+        return WorkedOutToReachIt.of(read.inputs().reading(read.rules()))
+                .endsOnlyWhereItsAnswerHasNoPlace(new Denotation(stated.left(), only.reads()));
+    }
+
+    /**
+     * That a total has a place says nothing of a part of it: the total of {@code 2 * n} and
+     * {@code -n} is {@code n}, which has a place where {@code 2 * n} does not, and the length of a
+     * list of {@code 2 * n} is one wherever doubling stops. Only the answer a row stands at is
+     * answered for by where it stands. An operator over numbers written down is worked out where it
+     * is folded, past the type or not.
+     */
+    @Test
+    void thatTheWholeHasAPlaceSaysNothingOfAPart() {
+        String inputs = "n: Int, m: Int, k: Int";
+        assertFalse(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs,
+                "List.sum([Int.multiply(n, 2), Int.multiply(n, -1)]) >= k"));
+        assertFalse(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs,
+                "List.length(List.reverse([Int.multiply(n, 2)])) >= k"));
+        assertTrue(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs, "List.sum([n, m]) >= k"));
+        assertTrue(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs,
+                "List.sum([n, 0 - 1]) >= k"));
+        assertFalse(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs,
+                "List.sum([n, " + MAX + " + 1]) >= k"));
+        for (String condition : List.of(
+                "List.sum([Int.multiply(n, 2), Int.multiply(n, -1)]) >= k",
+                "List.length(List.reverse([Int.multiply(n, 2)])) >= k")) {
+            UndividedByARelation.Working read = workingOf(inputs, condition);
+            assertFalse(read.told() == WhatARelationLeavesUndivided.Told.EVERY
+                            && read.operations().isEmpty(), read::toString);
+            assertFalse(read.told() == WhatARelationLeavesUndivided.Told.NOTHING_SAID,
+                    read::toString);
+        }
     }
 
     /**

@@ -5,17 +5,22 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
  * What a run has worked out once it has the value of an expression: the expression's own parts,
  * as {@link Evaluated#inOrder} has them and every arm of a branch, and what each name read in it
- * was given ({@link souther.compiler.inputs.InputReads#boundTo}), where it was given.
+ * was given ({@link InputReads#boundTo}), where it was given.
  *
  * <p>The one place this is followed. Whether working something out may end a run before a row
  * of a comparison gets past it is a question about all of it: a name stands for a value worked
@@ -59,6 +64,35 @@ final class WorkedOutToReachIt {
         return new WorkedOutToReachIt(read, itself, false);
     }
 
+    /**
+     * The same, for a number of the input that stands for {@code shifts}, each a shift of a date
+     * the number is defined only where it leaves a date
+     * ({@link InputNumber#theShiftsATakingOfItStandsFor}): wherever the number has a value, each
+     * of them got there, though it ends a run where its answer has no place.
+     */
+    WorkedOutToReachIt whereANumberStandsFor(List<Core> shifts) {
+        if (shifts.isEmpty()) {
+            return this;
+        }
+        Set<Core> standsFor = Collections.newSetFromMap(new IdentityHashMap<>());
+        standsFor.addAll(shifts);
+        Predicate<Denotation> before = itself;
+        return new WorkedOutToReachIt(read, value -> before.test(value)
+                || (standsFor.contains(Core.withoutStanding(value.value()))
+                        && endsOnlyWhereItsOwnAnswerHasNoPlace(
+                                Core.withoutStanding(value.value()))),
+                closuresApart);
+    }
+
+    private boolean endsOnlyWhereItsOwnAnswerHasNoPlace(Core written) {
+        WhatARunMayEndFor.Endings own = closuresApart
+                ? WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written)
+                : WhatARunMayEndFor.itself(written);
+        return own instanceof WhatARunMayEndFor.Endings.Known(var kinds)
+                && kinds.kinds().stream()
+                        .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+    }
+
     /** Whether working out {@code value}, and what each name read in it was given, ends no run. */
     boolean endsNoRun(Denotation value) {
         Core written = Core.withoutStanding(value.value());
@@ -80,14 +114,26 @@ final class WorkedOutToReachIt {
             Denotation defined = value.at().taken(written);
             return defined != null && endsNoRun(defined);
         }
+        // An operator over numbers the same on every run is worked out where it is folded, by the
+        // arithmetic the run time does: one that aborts there folds to nothing.
+        if (closuresApart && (written instanceof Core.Binary || written instanceof Core.Neg)
+                && value.at().folded(written, read.rules().symbols(), read.rules().newtypes())
+                        .isPresent()) {
+            return true;
+        }
         return itself.test(value) && partsAndNamesEndNoRun(value);
     }
 
     /**
-     * Whether working out {@code value} gets there wherever its answer has a place: it ends a
-     * run itself only where its own answer has none, which a row standing at a value of the answer
-     * is not at, and so does everything on the way to that answer
-     * ({@link #onTheWayToTheAnswer}).
+     * Whether working out {@code value} gets there wherever its own answer has a place: it ends a
+     * run itself only where its answer has none, which a row standing at a value of that answer
+     * is not at, and nothing it is made of or reads by name ends one at all.
+     *
+     * <p>Only the answer the row stands at is answered for by where it stands. That a part's
+     * answer has a place is no consequence of the whole's having one: a total of {@code 2 * n}
+     * and {@code -n} is {@code n}, which has a place where {@code 2 * n} does not. An owner that
+     * shows a part gets there wherever the whole does shows it on its own account
+     * ({@link NumbersOnTheWayToATotal}).
      */
     boolean endsOnlyWhereItsAnswerHasNoPlace(Denotation value) {
         Core written = Core.withoutStanding(value.value());
@@ -96,71 +142,7 @@ final class WorkedOutToReachIt {
                     && endsOnlyWhereItsAnswerHasNoPlace(new Denotation(let.body(),
                             value.at().and(let.binder(), let.value())));
         }
-        return endsOnlyWhereItsOwnAnswerHasNoPlace(written)
-                && partsAndNamesAreOnTheWayToTheAnswer(value);
-    }
-
-    /**
-     * Whether {@code value}, worked out on the way to an answer that has a place, gets there. An
-     * operation of the library ends a run only where its own answer has no place, and then the
-     * answer made of it has none either: a row standing at a value of that answer is a row where
-     * this one had a value. An operator is another thing: its answer is folded into the form the
-     * answer is read as, and a run stops at it where the form has a place, so it ends none, or
-     * works out only numbers written down. The body of a closure is worked out the same way, as
-     * numbers folded into what the call answers, and a function value applied is answered by
-     * nothing here.
-     */
-    private boolean onTheWayToTheAnswer(Denotation value) {
-        Core written = Core.withoutStanding(value.value());
-        if (closuresApart && written instanceof Core.Block closure) {
-            return endsNoRun(new Denotation(closure.body(), value.at()));
-        }
-        if (written instanceof Core.LetIn || written instanceof Core.Construct
-                || written instanceof Core.MaterialisedValue) {
-            return endsNoRun(value);
-        }
-        boolean answers = (written instanceof Core.Binary || written instanceof Core.Neg)
-                ? ownEndings(written).endsNone() || readsNoName(written)
-                : endsOnlyWhereItsOwnAnswerHasNoPlace(written);
-        return answers && partsAndNamesAreOnTheWayToTheAnswer(value);
-    }
-
-    private boolean partsAndNamesAreOnTheWayToTheAnswer(Denotation value) {
-        for (Core part : whatIsRunWith(Core.withoutStanding(value.value()))) {
-            if (!onTheWayToTheAnswer(new Denotation(part, value.at()))) {
-                return false;
-            }
-        }
-        for (Denotation bound : boundTo(value)) {
-            if (!onTheWayToTheAnswer(bound)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean endsOnlyWhereItsOwnAnswerHasNoPlace(Core written) {
-        return ownEndings(written) instanceof WhatARunMayEndFor.Endings.Known(var kinds)
-                && kinds.kinds().stream()
-                        .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
-    }
-
-    /** What {@code written} itself may end a run for, apart from the closures written at it
-     *  where their bodies are worked out with it. */
-    private WhatARunMayEndFor.Endings ownEndings(Core written) {
-        return closuresApart ? WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written)
-                : WhatARunMayEndFor.itself(written);
-    }
-
-    /** Whether nothing under {@code e} is a name, so that it works out numbers written down. */
-    private static boolean readsNoName(Core e) {
-        Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Read) {
-            return false;
-        }
-        boolean[] none = {true};
-        Core.forEachChild(here, child -> none[0] = none[0] && readsNoName(child));
-        return none[0];
+        return endsOnlyWhereItsOwnAnswerHasNoPlace(written) && partsAndNamesEndNoRun(value);
     }
 
     private boolean partsAndNamesEndNoRun(Denotation value) {

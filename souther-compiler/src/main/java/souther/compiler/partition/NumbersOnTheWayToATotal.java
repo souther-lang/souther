@@ -9,6 +9,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementValue;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -19,12 +20,14 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -71,11 +74,31 @@ final class NumbersOnTheWayToATotal {
                                                    InputReading read, InputReads at) {
         WorkedOutToReachIt reached = WorkedOutToReachIt.of(read);
         Denotation it = new Denotation(node, at);
-        if (reached.endsOnlyWhereItsAnswerHasNoPlace(it)) {
+        if (reached.whereANumberStandsFor(theShiftsItIsReadThrough(node, answer, read, at))
+                .endsOnlyWhereItsAnswerHasNoPlace(it)) {
             return true;
         }
         return noughtOrMoreFromEachElement(answer, read)
                 && addsUpWhatItsClosuresAnswer(it, reached);
+    }
+
+    /**
+     * The shifts of a date {@code answer}, a number taken of a date moved from a location, stands
+     * for, as the reading that took it read them ({@link InputNumber#theShiftsATakingOfItStandsFor});
+     * none where it is no such number.
+     */
+    private static List<Core> theShiftsItIsReadThrough(Core node, LinearForm<NumericTerm> answer,
+                                                       InputReading read, InputReads at) {
+        boolean ofAMovedDate = answer.coefs().keySet().stream().anyMatch(term ->
+                term instanceof NumericTerm.TakenOf taken
+                        && taken.transformation() instanceof ValueTransformation.DateShift);
+        if (!ofAMovedDate) {
+            return List.of();
+        }
+        List<Core> shifts = new ArrayList<>();
+        Core.forEachChild(Core.withoutStanding(node), date -> shifts.addAll(
+                InputNumber.theShiftsATakingOfItStandsFor(date, at, read.rules())));
+        return shifts;
     }
 
     /**

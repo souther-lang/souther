@@ -17,7 +17,6 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
-import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
@@ -553,12 +552,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *
              * <p>Not one the walk read the name of through a node it read as numbers of the input:
              * what the name was given was asked there with the node. One that composes no form is
-             * told by no operation here. Where the expression held aside at the stop reads the
-             * name, the lines are drawn on what that expression answers, so a value that ends a
-             * run only where its answer has no place gets through on their rows; any other is a
-             * node read without telling of every operation. That the body reads the name on
-             * another way than the walk took says nothing of a run that takes this way, which
-             * works the value out all the same.
+             * told by no operation here, and gets through only where working it out ends no run
+             * ({@link WorkedOutToReachIt#endsNoRun}); any other is a node read without telling of
+             * every operation. That what reads the name answers on the rows of a line is no
+             * evidence for the value: its answer having a place does not give this one one. Nor
+             * is it that the body reads the name on another way than the walk took, since a run
+             * that takes this way works the value out all the same.
              */
             @Override
             public void bound(Core.LetIn binding, InputReads at) {
@@ -571,9 +570,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 LinearForm<NumericTerm> value) ? value : null) != null) {
                     return;
                 }
-                if (name != null && stoppedAt != null && stoppedAt.reads(name)
-                        && WorkedOutToReachIt.of(ofTheInput).endsOnlyWhereItsAnswerHasNoPlace(
-                                new Denotation(binding.value(), at))) {
+                if (WorkedOutToReachIt.of(ofTheInput)
+                        .endsNoRun(new Denotation(binding.value(), at))) {
                     return;
                 }
                 told.exact = false;
@@ -1560,13 +1558,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Map<NumericTerm, FormRange> out = new HashMap<>();
             byAtom.forEach((atom, held) -> out.put(atom, held.range));
             return out;
-        }
-
-        /** Whether an expression held aside reads {@code name}, so that the lines are drawn on
-         *  an answer worked out of what the name was given. */
-        boolean reads(BindingId name) {
-            return byExpression.keySet().stream()
-                    .anyMatch(held -> WhatABodyReads.binding(held, name));
         }
 
         /** Whether the analysis that drew the lines answers for what working {@code held}, an
