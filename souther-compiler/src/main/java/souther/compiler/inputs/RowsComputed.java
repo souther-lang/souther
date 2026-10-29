@@ -113,7 +113,8 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         }
         Map<Object, ExactRatio> standing = new LinkedHashMap<>(held);
         standing.putAll(values.get());
-        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing));
+        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing))
+                && DecimalOperation.allCompleteAt(operations.decimals(), standing);
     }
 
     /**

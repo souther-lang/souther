@@ -132,6 +132,15 @@ public final class AffineForms {
         }
 
         /**
+         * The same, with the forms of the operands the operation was composed from, in the order
+         * they are written. A reader that wants only the operation is told through
+         * {@link #composed(Core, LinearForm)}.
+         */
+        default void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
+            composed(operation, form);
+        }
+
+        /**
          * That the walk read {@code node} as a form without telling of every operation a run
          * works out for it: a library call it took as arithmetic over its arguments, a
          * construction or a projection it read through, a quotient whose operands may not have
@@ -333,6 +342,11 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form) {
             of.composed(operation, form);
+        }
+
+        @Override
+        public void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
+            of.composed(operation, form, operands);
         }
 
         @Override
@@ -891,11 +905,21 @@ public final class AffineForms {
     /** {@code form}, with the reading told {@code operation} came to it ({@link Reading#composed})
      *  — where it came to one. */
     private static <A, E> LinearForm<A> told(Core operation, LinearForm<A> form,
-                                             Reading<A, E> reading) {
+                                             Reading<A, E> reading, List<LinearForm<A>> operands) {
         if (form != null) {
-            reading.composed(operation, form);
+            reading.composed(operation, form, operands);
         }
         return form;
+    }
+
+    /** The sum, difference or product {@code b} writes, composed by {@code rule} and told. */
+    private static <A, E> LinearForm<A> binaryTold(
+            Core.Binary b, E at, Reading<A, E> reading, Walk<A, E> following, Stop<A, E> stopped,
+            BiFunction<LinearForm<A>, LinearForm<A>, Terms.Operated<A>> rule) {
+        LinearForm<A> left = formOf(b.left(), at, reading, following, stopped);
+        LinearForm<A> right = formOf(b.right(), at, reading, following, stopped);
+        LinearForm<A> form = operated(b, at, left, right, rule, stopped);
+        return form == null ? null : told(b, form, reading, List.of(left, right));
     }
 
     /**
@@ -950,24 +974,20 @@ public final class AffineForms {
             // form of the operand negated would put a number there that no run has.
             case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) ->
                     halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
-            case Core.Neg n -> told(n, Terms.negate(formOf(n.operand(), at, reading, following,
-                    stopped)), reading);
-            case Core.Binary b when b.op() == BinOp.ADD -> told(b,
-                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> Terms.sum(left, right, false), stopped), reading);
-            case Core.Binary b when b.op() == BinOp.SUB -> told(b,
-                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> Terms.sum(left, right, true), stopped), reading);
+            case Core.Neg n -> {
+                LinearForm<A> operand = formOf(n.operand(), at, reading, following, stopped);
+                yield told(n, Terms.negate(operand), reading, operand == null ? List.of()
+                        : List.of(operand));
+            }
+            case Core.Binary b when b.op() == BinOp.ADD -> binaryTold(b, at, reading, following,
+                    stopped, (left, right) -> Terms.sum(left, right, false));
+            case Core.Binary b when b.op() == BinOp.SUB -> binaryTold(b, at, reading, following,
+                    stopped, (left, right) -> Terms.sum(left, right, true));
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two — unless the caller's atoms make it one (`Reading.productOf`).
-            case Core.Binary b when b.op() == BinOp.MUL -> told(b,
-                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> productAsRead(left, right, reading), stopped),
-                    reading);
+            case Core.Binary b when b.op() == BinOp.MUL -> binaryTold(b, at, reading, following,
+                    stopped, (left, right) -> productAsRead(left, right, reading));
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all

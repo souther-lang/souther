@@ -21,6 +21,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.EveryRunStops;
@@ -208,8 +209,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The operations of whole numbers a comparison works out, and how much of what can stop a run
-     * in working it out they are.
+     * The operations of whole numbers and of decimals a comparison works out, and how much of what
+     * can stop a run in working it out they are.
      *
      * @param told whether the reading of the comparison told of every operation that can stop a
      *             run, only some, or was not made
@@ -217,12 +218,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   and works out nothing that can stop it before them: not where they are
      *                   those of one arm of a choice, or those beside an expression another
      *                   analysis answers for
+     * @param decimals the operations of decimals, which a row is asked by working them out
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun) {
+                   boolean onEveryRun, List<DecimalOperation> decimals) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
+        }
+
+        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
+                boolean onEveryRun) {
+            this(operations, told, onEveryRun, List.of());
         }
 
         /** No reading of the comparison was made, and the program is taken to add the form up.
@@ -250,6 +257,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         Working {
             operations = List.copyOf(operations);
+            decimals = List.copyOf(decimals);
             Objects.requireNonNull(told, "what the reading told, or that there was none");
         }
 
@@ -272,15 +280,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         each.after().stream().map(at -> at + earlier.operations.size())
                                 .toList()));
             }
+            List<DecimalOperation> bothDecimals = new ArrayList<>(earlier.decimals);
+            for (DecimalOperation each : decimals) {
+                bothDecimals.add(each.shifted(earlier.decimals.size()));
+            }
             return new Working(both, earlier.exact() && exact()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    earlier.onEveryRun && onEveryRun);
+                    earlier.onEveryRun && onEveryRun, bothDecimals);
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false);
+            return new Working(operations, told, false, decimals);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -840,7 +852,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * could stop at it.
      */
     private WhatARelationLeavesUndivided.Operations operationsOverTheSides(InputReading read) {
-        if (working.operations().isEmpty()) {
+        if (working.operations().isEmpty() && working.decimals().isEmpty()) {
             return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
         }
         Map<NumericTerm, Integer> named = new LinkedHashMap<>();
@@ -862,10 +874,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     new LinkedHashMap<Object, ExactRatio>(each.form().coefs()),
                     each.form().constant(), each.least(), each.greatest()));
         }
+        // A decimal operation reads the results of those worked out before it by where they stand
+        // among them, so none is left out alone: one over a number that is no side of this
+        // relation, or is two sides, leaves them all out.
+        boolean decimalsOverTheSides = working.decimals().stream()
+                .allMatch(each -> overTheSides(each, named));
+        List<DecimalOperation> decimals = decimalsOverTheSides ? working.decimals() : List.of();
+        leftOut |= !decimalsOverTheSides;
         // An operation left out is one a row is not asked to get past here: not every one told.
-        return new WhatARelationLeavesUndivided.Operations(sums,
+        return new WhatARelationLeavesUndivided.Operations(sums, decimals,
                 leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
                         : working.told());
+    }
+
+    /** Whether every number {@code operation} reads from a row is a side of this relation, once. */
+    private static boolean overTheSides(DecimalOperation operation,
+                                        Map<NumericTerm, Integer> named) {
+        return operation.operands().stream().allMatch(operand -> !(operand
+                instanceof DecimalOperation.Formed formed)
+                || formed.coefs().keySet().stream()
+                        .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
     }
 
     /**
@@ -1015,7 +1043,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                of the rows a run stops at
      */
     List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
-        if (!working.exact() || !working.onEveryRun()) {
+        if (!working.exact() || !working.onEveryRun() || !working.decimals().isEmpty()) {
             return List.of();
         }
         List<IntOperation> operations = working.operations();

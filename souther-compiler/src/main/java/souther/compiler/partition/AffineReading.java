@@ -14,6 +14,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -32,6 +33,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -403,7 +405,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * operations told are not every one.
              */
             @Override
-            public void composed(Core operation, LinearForm<NumericTerm> form) {
+            public void composed(Core operation, LinearForm<NumericTerm> form,
+                                 List<LinearForm<NumericTerm>> operands) {
                 WhereAnOperatorAnswers where = switch (Core.withoutStanding(operation)) {
                     case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
                             binary.type(), List.of(binary.left().type(), binary.right().type()));
@@ -429,7 +432,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             && !told.operations.contains(operationTold)) {
                         told.add(operation, operationTold);
                     }
-                } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
+                } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)
+                        // A decimal operation has no region; a row is asked by working it out.
+                        && !(where instanceof WhereAnOperatorAnswers.NotStated
+                                && told.addsDecimal(operation, operands))) {
                     told.exact = false;
                 }
             }
@@ -671,6 +677,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
+        /** The operations of decimals, and the node each was told at, by where it is among them. */
+        private final List<DecimalOperation> decimals = new ArrayList<>();
+        private final List<Core> decimalAt = new ArrayList<>();
         /** The forms of the operations over a stopped value that are told of nowhere, to be asked
          *  of the form of the comparison. */
         private final List<LinearForm<NumericTerm>> sumsOverTheStop = new ArrayList<>();
@@ -711,10 +720,65 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return out;
         }
 
+        /**
+         * Tells {@code operation}, a sum, a difference or a product of decimals, as an operation a
+         * row is asked by working it out, over the numbers of {@code operands}; false where it is
+         * none of those, and nothing is told.
+         *
+         * <p>An operand is the decimal as written where it is a literal, the result of the
+         * operation told at it where there is one — its scale is the scale that operation left —
+         * and otherwise the number its form comes to at a row.
+         */
+        boolean addsDecimal(Core operation, List<LinearForm<NumericTerm>> operands) {
+            if (!(Core.withoutStanding(operation) instanceof Core.Binary binary)
+                    || binary.type() != Type.DECIMAL
+                    || (binary.op() != BinOp.ADD && binary.op() != BinOp.SUB
+                    && binary.op() != BinOp.MUL)
+                    || operands.size() != 2) {
+                return false;
+            }
+            List<DecimalOperation.Operand> over = new ArrayList<>();
+            List<Integer> after = new ArrayList<>();
+            List<Core> written = List.of(binary.left(), binary.right());
+            for (int i = 0; i < 2; i++) {
+                Core bare = Core.withoutStanding(written.get(i));
+                int worked = decimalWorkedOutAt(bare);
+                if (bare instanceof Core.Decimal literal) {
+                    over.add(new DecimalOperation.Written(literal.value()));
+                } else if (worked >= 0) {
+                    over.add(new DecimalOperation.Worked(worked));
+                    after.add(worked);
+                    after.addAll(decimals.get(worked).after());
+                } else {
+                    LinearForm<NumericTerm> form = operands.get(i);
+                    over.add(new DecimalOperation.Formed(
+                            new LinkedHashMap<Object, ExactRatio>(form.coefs()),
+                            form.constant()));
+                }
+            }
+            DecimalOperation told = new DecimalOperation(binary.op(), over, after);
+            if (!decimals.contains(told)) {
+                decimalAt.add(Core.withoutStanding(operation));
+                decimals.add(told);
+            }
+            return true;
+        }
+
+        /** Where the operation of decimals told at {@code node} is among those told, or -1. */
+        private int decimalWorkedOutAt(Core node) {
+            for (int i = decimalAt.size() - 1; i >= 0; i--) {
+                if (decimalAt.get(i) == node) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
         UndividedByARelation.Working working() {
             return new UndividedByARelation.Working(operations, exact
                     ? WhatARelationLeavesUndivided.Told.EVERY
-                    : WhatARelationLeavesUndivided.Told.SOME);
+                    : WhatARelationLeavesUndivided.Told.SOME,
+                    true, decimals);
         }
     }
 

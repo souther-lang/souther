@@ -209,15 +209,24 @@ public final class WhatARelationLeavesUndivided {
      * <p>Every one of {@code sums} is a condition on a row that is computed, whatever was told: a
      * row an operation does not hold at is no row. That a row is computed because they hold is
      * said only where every operation is told.
+     *
+     * <p>The operations of decimals ({@code decimals}) have no region: a row is asked by working
+     * them out ({@link DecimalOperation}), and no size of the form says anything of them.
      */
-    public record Operations(List<IntSum> sums, Told told) {
+    public record Operations(List<IntSum> sums, List<DecimalOperation> decimals, Told told) {
 
         /** Nothing said of the program. */
         public static final Operations NONE = new Operations(List.of(), Told.NOTHING_SAID);
 
         public Operations {
             sums = List.copyOf(sums);
+            decimals = List.copyOf(decimals);
             Objects.requireNonNull(told, "what was told, or that nothing was said");
+        }
+
+        /** The operations of whole numbers alone. */
+        public Operations(List<IntSum> sums, Told told) {
+            this(sums, List.of(), told);
         }
 
         /** What a reading told: every operation that can stop a run, or only some. */
@@ -239,7 +248,7 @@ public final class WhatARelationLeavesUndivided {
             return switch (told) {
                 case NOTHING_SAID -> false;
                 case SOME -> true;
-                case EVERY -> !sums.isEmpty();
+                case EVERY -> !sums.isEmpty() || !decimals.isEmpty();
             };
         }
 
@@ -280,7 +289,7 @@ public final class WhatARelationLeavesUndivided {
          * there is none, since then nothing stops a row at a size, and {@code greatest} otherwise.
          */
         public BigInteger sizesStopAt(BigInteger greatest) {
-            return told == Told.EVERY && sums.isEmpty() ? null : greatest;
+            return told == Told.EVERY && sums.isEmpty() && decimals.isEmpty() ? null : greatest;
         }
 
         /** The weight the relation gives each term by key, or null where a term has no key or
@@ -335,6 +344,9 @@ public final class WhatARelationLeavesUndivided {
          * operations are worked out over.
          */
         <P> ExactRatio multipleOfTheForm(List<Term<P>> terms, ExactRatio constant) {
+            if (!decimals.isEmpty()) {
+                return null;
+            }
             Map<Object, ExactRatio> weights = weightsOf(terms);
             ExactRatio most = ExactRatio.ONE;
             for (IntSum each : sums) {
@@ -1924,13 +1936,15 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>A run that settles the relation is a run of rows only where the program gets to the end
      * of working them out, and the runs here are drawn from the terms' ends alone. Where
-     * something can stop a row, no run is taken, and the term is not shown.
+     * something untold can stop a row, no run is taken, and the term is not shown. Where every
+     * operation is told, a run is taken only if a row is built in it and the operations are
+     * worked out on that row ({@link #aValueOfTheRunComputes}).
      */
     private static <P> Leaves leavesOfADenseTerm(List<Term<P>> terms, int at, ExactRatio constant,
                                                  Asking asking, BiPredicate<P, P> overlap,
                                                  Independence independent,
                                                  RowsComputed arithmetic) {
-        if (arithmetic.mayStopARow()) {
+        if (arithmetic.mayStopARow() && !arithmetic.tellsEveryOperation()) {
             return null;
         }
         Term<P> it = terms.get(at);
@@ -1985,6 +1999,10 @@ public final class WhatARelationLeavesUndivided {
         if (runs.isEmpty()) {
             return null;
         }
+        if (arithmetic.mayStopARow() && !runs.stream().allMatch(run ->
+                aValueOfTheRunComputes(arithmetic, terms, at, run))) {
+            return null;
+        }
         for (Span each : between) {
             Interval values = new Interval(each.lower(), each.upper());
             if (!asking.leftBy().stream().allMatch(relation -> reachedBySome(terms, at, values,
@@ -1994,6 +2012,51 @@ public final class WhatARelationLeavesUndivided {
         }
         return new Leaves.Settled(inOrder(runs, false), held.lower(), held.upper(), false,
                 List.of());
+    }
+
+    /**
+     * Whether a row in {@code run}, a run of the dense term at {@code at}, is computed: the term
+     * at a value of the run and each other term at the value nearest nought, and every operation
+     * told worked out on that row. The row is built and the operations run on it, so a run is
+     * taken as rows the program computes only by a row that was; the values of the run that were
+     * not built are not asked.
+     *
+     * <p>The values tried are the ends the run holds, then one between its ends, and one past the
+     * end it has where it has one end alone. A value no decimal writes is no row.
+     */
+    private static <P> boolean aValueOfTheRunComputes(RowsComputed arithmetic, List<Term<P>> terms,
+                                                      int at, SettledRun run) {
+        List<ExactRatio> tried = new ArrayList<>();
+        if (run.from() != null && run.from().inclusive()) {
+            tried.add(run.from().at());
+        }
+        if (run.to() != null && run.to().inclusive()) {
+            tried.add(run.to().at());
+        }
+        tried.add(aValueWithin(run));
+        for (ExactRatio value : tried) {
+            if (value != null && arithmetic.computedAt(() -> valuesByKey(terms,
+                    i -> i == at ? value : heldNearestNought(terms.get(i))))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A value of {@code run} that is in neither end: halfway between them, one inside the end it
+     *  has alone, or nought; null where that is not a number. */
+    private static ExactRatio aValueWithin(SettledRun run) {
+        if (run.from() != null && run.to() != null) {
+            return run.from().at().plus(run.to().at())
+                    .flatMap(sum -> sum.dividedBy(ExactRatio.of(2))).orNull();
+        }
+        if (run.from() != null) {
+            return run.from().at().plus(ExactRatio.ONE).orNull();
+        }
+        if (run.to() != null) {
+            return run.to().at().minus(ExactRatio.ONE).orNull();
+        }
+        return ExactRatio.ZERO;
     }
 
     /** {@code value} weighed {@code weight}, or null where either is no number. */
