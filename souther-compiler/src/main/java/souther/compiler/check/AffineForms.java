@@ -1144,13 +1144,13 @@ public final class AffineForms {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
-                    // A newtype's value taken off its construction is that construction, and the
-                    // check made when it is made is told as it is where the construction stands
-                    // alone.
-                    NewtypeMade<A, E> made =
-                            newtypeEliminated(fa.target(), at, reading, following);
-                    if (made != null) {
-                        yield made.read(following, stopped);
+                    // A newtype's value is the target itself, so it is read as the target is: the
+                    // construction it stands at is told as any construction is, and the names, the
+                    // bindings and the constructions around it are read as the walk reads them
+                    // anywhere. Taking the value off what the target stands at instead would skip
+                    // whatever the walk does on the way there.
+                    if (isANewtypesValue(fa, reading)) {
+                        yield formOf(fa.target(), at, reading, following, stopped);
                     }
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
@@ -1219,36 +1219,15 @@ public final class AffineForms {
     }
 
     /**
-     * The newtype construction a field taken off {@code target} is, where the target stands at one
-     * and no other — with the environment it stands in, which is where it is read.
-     *
-     * @param standing where the construction stands
+     * Whether {@code fa} reads the number a newtype wraps off a value of the newtype. That is a
+     * fact about the types alone, as {@link Location#isStep} has it: the value is the value the
+     * target is, whatever the target stands at.
      */
-    private record NewtypeMade<A, E>(Core.Construct construct, TypeView view,
-                                     ValueStanding.Standing<E, Reading<A, E>> standing) {
-
-        LinearForm<A> read(Walk<A, E> following, Stop<A, E> stopped) {
-            return construction(construct, view, standing.at(), standing.names(), following,
-                    stopped);
-        }
-    }
-
-    /**
-     * {@code target}'s construction, where a newtype's value is taken off it and nothing else
-     * stands there: a data of several fields has parts of its own to work out, and several
-     * constructions are several checks of which one is made.
-     */
-    private static <A, E> NewtypeMade<A, E> newtypeEliminated(Core target, E at,
-                                                              Reading<A, E> reading,
-                                                              Walk<A, E> following) {
-        ValueStanding.Standing<E, Reading<A, E>> one =
-                ValueStanding.theOneConstructionAt(target, at, reading, following);
-        if (one == null) {
-            return null;
-        }
-        Core.Construct nd = (Core.Construct) Core.withoutStanding(one.value());
-        TypeView made = newtypeMadeBy(nd, reading);
-        return made == null ? null : new NewtypeMade<>(nd, made, one);
+    private static <A, E> boolean isANewtypesValue(Core.FieldAccess fa, Reading<A, E> reading) {
+        return fa.field().equals("value")
+                && TypeView.asWritten(fa.target().type(), reading.symbols(),
+                        reading.declarations().kinds(), reading.declarations().sums())
+                        .isWrapped();
     }
 
     /**

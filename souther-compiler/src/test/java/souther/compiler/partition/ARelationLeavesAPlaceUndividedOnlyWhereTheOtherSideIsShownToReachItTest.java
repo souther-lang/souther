@@ -3304,6 +3304,41 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A name that stands for one element of a list written out is one of the values the list
+     * holds, and is read the way the walk reads a name that is one of several, however many there
+     * are. The construction written in the list is made before the comparison reads the element,
+     * so a run may stop there and the places are not shown reached; the same list of {@code Int}
+     * makes nothing that can stop.
+     */
+    @Test
+    void aNameForTheOnlyElementOfAListOfConstructionsIsReadAsOneOfSeveral() {
+        String over = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard List.any(g -> g.value >= d.value, [Yen(a.value + b.value)]) else Exceeds");
+        String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard List.any(g -> g >= d.value, [a.value + b.value]) else Exceeds");
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+                leftIn(over, whereWritten(over, ">= d.value")));
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(ofInt, whereWritten(ofInt, ">= d.value")));
+    }
+
+    /**
+     * What an earlier binding works out is read the same whether the value a comparison is read of
+     * is a construction or the number it wraps: a binding the comparison does not read adds
+     * nothing to what is told of it either way.
+     */
+    @Test
+    void aBindingBeforeAConstructionIsReadAsItIsBeforeTheNumberItWraps() {
+        String earlier = "let unused = a.value + 9223372036854775807\n    ";
+        String built = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                earlier + "guard Yen(b.value).value >= d.value else Exceeds");
+        String number = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                earlier + "guard b.value >= d.value else Exceeds");
+        assertEquals(leftIn(number, whereWritten(number, ">= d.value")),
+                leftIn(built, whereWritten(built, ">= d.value")));
+    }
+
+    /**
      * A premise nothing proves, over positions none of the sum's are related to, leaves the sum's
      * positions the runs their ends give them: it bounds nothing of them, and some row holds it.
      * The sum is then read as beside a premise that is proved.

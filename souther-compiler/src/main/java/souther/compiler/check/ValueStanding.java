@@ -245,19 +245,6 @@ public final class ValueStanding {
     /** The same, inside a walk already following names, which says where following one stops. */
     static <E, N extends Names<E, N>> List<Standing<E, N>> of(Core asPlaced, E at, N names,
                                                               BindingWalk<?> following) {
-        return of(asPlaced, at, names, following, true);
-    }
-
-    /**
-     * The same, going down through the eliminations only where {@code eliminating} says so.
-     *
-     * <p>A walk that does not stops at a field access, a projection or a tuple element and has
-     * that as the value: what it reaches is what a name was bound to and nothing taken out of
-     * something, so a construction it reaches is the value itself and not a part of one written
-     * around it.
-     */
-    private static <E, N extends Names<E, N>> List<Standing<E, N>> of(
-            Core asPlaced, E at, N names, BindingWalk<?> following, boolean eliminating) {
         // What a value is does not turn on the type it stands as at its position.
         Core e = Core.withoutStanding(asPlaced);
         return switch (e) {
@@ -268,12 +255,11 @@ public final class ValueStanding {
                 }
                 List<Standing<E, N>> reached = switch (led) {
                     case Named.One<E, N>(Standing<E, N> one) ->
-                            of(one.value(), one.at(), one.names(), following, eliminating);
+                            of(one.value(), one.at(), one.names(), following);
                     case Named.OneOf<E, N>(List<Standing<E, N>> members) -> {
                         List<Standing<E, N>> each = new ArrayList<>();
                         for (Standing<E, N> one : members) {
-                            each.addAll(of(one.value(), one.at(), one.names(), following,
-                                    eliminating));
+                            each.addAll(of(one.value(), one.at(), one.names(), following));
                         }
                         yield each;
                     }
@@ -281,14 +267,11 @@ public final class ValueStanding {
                 following.leave(r.binding());
                 yield reached;
             }
-            case Core.LetIn li ->
-                    of(li.body(), names.inside(li, at), names, following, eliminating);
-            case Core.Widen w -> of(w.value(), at, names, following, eliminating);
+            case Core.LetIn li -> of(li.body(), names.inside(li, at), names, following);
+            case Core.Widen w -> of(w.value(), at, names, following);
             // The elimination below a name at a time, along the names rather than down the stack.
             // A name with nothing written to stand against leaves the whole projection standing,
             // as it leaves every access above it standing when they are written out.
-            case Core.FieldProjection _, Core.FieldAccess _, Core.TupleGet _ when !eliminating ->
-                    List.of(new Standing<>(e, at, names));
             case Core.FieldProjection p -> {
                 names.noticed(p, at);
                 List<Standing<E, N>> reached = of(p.base(), at, names, following);
@@ -328,7 +311,7 @@ public final class ValueStanding {
             default -> {
                 Standing<E, N> taken = taken(e, at, names);
                 yield taken == null ? List.of(new Standing<>(e, at, names))
-                        : of(taken.value(), taken.at(), names, following, eliminating);
+                        : of(taken.value(), taken.at(), names, following);
             }
         };
     }
@@ -380,23 +363,6 @@ public final class ValueStanding {
             }
             default -> null;
         };
-    }
-
-    /**
-     * The one construction {@code target} stands at, with where it stands, or null where it stands
-     * at none or at several.
-     *
-     * <p>Asked of the target of an elimination that produced a successor, for a reader that reads
-     * what the elimination takes off a construction as that construction: the check made when it
-     * is made is then its own to tell of. Several constructions are several checks of which one is
-     * made, and no one of them is told as the check of the value.
-     */
-    static <E, N extends Names<E, N>> Standing<E, N> theOneConstructionAt(
-            Core target, E at, N names, BindingWalk<?> following) {
-        List<Standing<E, N>> reached = of(target, at, names, following, false);
-        return reached.size() == 1
-                && Core.withoutStanding(reached.getFirst().value()) instanceof Core.Construct
-                ? reached.getFirst() : null;
     }
 
     /**
