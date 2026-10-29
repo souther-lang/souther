@@ -366,6 +366,23 @@ public final class ValueStanding {
     }
 
     /**
+     * The one construction {@code target} stands at, with where it stands, or null where it stands
+     * at none or at several.
+     *
+     * <p>Asked of the target of an elimination that produced a successor, for a reader that reads
+     * what the elimination takes off a construction as that construction: the check made when it
+     * is made is then its own to tell of. Several constructions are several checks of which one is
+     * made, and no one of them is told as the check of the value.
+     */
+    static <E, N extends Names<E, N>> Standing<E, N> theOneConstructionAt(
+            Core target, E at, N names, BindingWalk<?> following) {
+        List<Standing<E, N>> reached = of(target, at, names, following);
+        return reached.size() == 1
+                && Core.withoutStanding(reached.getFirst().value()) instanceof Core.Construct
+                ? reached.getFirst() : null;
+    }
+
+    /**
      * Whether making the construction a field access is read off, and working out its parts other
      * than the field it reads, end no run: both are done all the same, and one that ends a run is
      * an operation the reading of the field does not tell of. The construction itself ends one

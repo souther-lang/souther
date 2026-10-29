@@ -1129,23 +1129,9 @@ public final class AffineForms {
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
-            case Core.Construct nd when !nd.values().isEmpty() -> {
-                TypeView made = TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                        reading.declarations().kinds(), reading.declarations().sums());
-                if (!made.isWrapped()) {
-                    yield null;
-                }
-                // The construction checks the clauses of the type it makes, which stops a run where
-                // the number is not one they leave. Told after the operations of the number it
-                // wraps, as the run works it out after them.
-                LinearForm<A> wrapped =
-                        formOf(nd.values().get(0).value(), at, reading, following, stopped);
-                if (wrapped == null) {
-                    reading.unobserved(e);
-                } else {
-                    reading.constructed(nd, made, wrapped);
-                }
-                yield wrapped;
+            case Core.Construct nd -> {
+                TypeView made = newtypeMadeBy(nd, reading);
+                yield made == null ? null : construction(nd, made, at, reading, following, stopped);
             }
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather
@@ -1158,6 +1144,14 @@ public final class AffineForms {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
+                    // A newtype's value taken off its construction is that construction, and the
+                    // check made when it is made is told as it is where the construction stands
+                    // alone.
+                    NewtypeMade<A, E> made =
+                            newtypeEliminated(fa.target(), at, reading, following);
+                    if (made != null) {
+                        yield made.read(following, stopped);
+                    }
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
                     if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
@@ -1196,6 +1190,68 @@ public final class AffineForms {
     }
 
     /**
+     * The view of the type {@code nd} makes where that is a newtype, or null where it is a data
+     * of one field or more, whose construction is a value of its own.
+     */
+    private static <A, E> TypeView newtypeMadeBy(Core.Construct nd, Reading<A, E> reading) {
+        if (nd.values().isEmpty()) {
+            return null;
+        }
+        TypeView made = TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
+                reading.declarations().kinds(), reading.declarations().sums());
+        return made.isWrapped() ? made : null;
+    }
+
+    /**
+     * A newtype's construction read as the number it wraps, and told as the check it makes
+     * ({@link Reading#constructed}) after the operations of that number.
+     */
+    private static <A, E> LinearForm<A> construction(Core.Construct nd, TypeView made, E at,
+                                                     Reading<A, E> reading, Walk<A, E> following,
+                                                     Stop<A, E> stopped) {
+        LinearForm<A> wrapped = formOf(nd.values().get(0).value(), at, reading, following, stopped);
+        if (wrapped == null) {
+            reading.unobserved(nd);
+        } else {
+            reading.constructed(nd, made, wrapped);
+        }
+        return wrapped;
+    }
+
+    /**
+     * The newtype construction a field taken off {@code target} is, where the target stands at one
+     * and no other — with the environment it stands in, which is where it is read.
+     *
+     * @param standing where the construction stands
+     */
+    private record NewtypeMade<A, E>(Core.Construct construct, TypeView view,
+                                     ValueStanding.Standing<E, Reading<A, E>> standing) {
+
+        LinearForm<A> read(Walk<A, E> following, Stop<A, E> stopped) {
+            return construction(construct, view, standing.at(), standing.names(), following,
+                    stopped);
+        }
+    }
+
+    /**
+     * {@code target}'s construction, where a newtype's value is taken off it and nothing else
+     * stands there: a data of several fields has parts of its own to work out, and several
+     * constructions are several checks of which one is made.
+     */
+    private static <A, E> NewtypeMade<A, E> newtypeEliminated(Core target, E at,
+                                                              Reading<A, E> reading,
+                                                              Walk<A, E> following) {
+        ValueStanding.Standing<E, Reading<A, E>> one =
+                ValueStanding.theOneConstructionAt(target, at, reading, following);
+        if (one == null) {
+            return null;
+        }
+        Core.Construct nd = (Core.Construct) Core.withoutStanding(one.value());
+        TypeView made = newtypeMadeBy(nd, reading);
+        return made == null ? null : new NewtypeMade<>(nd, made, one);
+    }
+
+    /**
      * {@code p} read as arithmetic: the arm above for a field access, asked of each of its names in
      * turn from the last one down.
      *
@@ -1230,6 +1286,11 @@ public final class AffineForms {
             List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                     ValueStanding.eliminated(here, at, reading, following);
             if (eliminated != null) {
+                NewtypeMade<A, E> made = newtypeEliminated(here.target(), at, reading, following);
+                if (made != null) {
+                    form = made.read(following, stop);
+                    break;
+                }
                 reading.unobserved(here);
                 form = commonForm(eliminated, here, at, following, stop);
                 break;

@@ -3193,9 +3193,78 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         // The capped allowance is a call whose arms are expanded into relations of their own,
         // which carry none of the operations the comparison works out: nothing is shown of the
-        // places, and that is a reading short of what the comparison states.
-        assertEquals(Set.of("insurance", "p.base", "p.commuting", "p.other", "uplift"),
+        // places beside the allowance, and that is a reading short of what the comparison
+        // states. The allowance itself is read: a constant built into a Yen is inside its run.
+        assertEquals(Set.of("insurance", "p.base", "p.other", "uplift"),
                 notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
+    }
+
+    private static final String CONSTRUCTED_ABOVE = """
+            module w1
+            data Yen = Int invariant value >= 0
+            %s
+            behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
+                constructs %s
+            let m (a, b, d) = {
+                %s
+                Yen(d.value)
+            }
+            """;
+
+    /**
+     * What a newtype's value is when it is taken off the construction that gave it is what the
+     * construction is: the number it wraps, with the check made when it is made told as an
+     * operation over that number. Written as the construction with the value read off it, with
+     * the construction bound to a name first, or as the sum of the type, the sum of two amounts
+     * is read the same, and as the same arithmetic over {@code Int} is.
+     */
+    @Test
+    void aNewtypesValueTakenOffItsConstructionIsReadAsTheConstructionIs() {
+        Map<String, String> related = Map.of("a", RELATES, "b", RELATES);
+        for (String body : List.of(
+                "guard Yen(a.value + b.value).value >= d.value else Exceeds",
+                "let g = Yen(a.value + b.value)\n    guard g.value >= d.value else Exceeds",
+                "guard (a + b).value >= d.value else Exceeds")) {
+            String source = CONSTRUCTED_ABOVE.formatted("", "Yen", body);
+            assertEquals(related, leftIn(source, whereWritten(source, ">= d.value")), body);
+            assertEquals(List.of("d/0 <= x <= 0", "d/0 < x"), classesIn(source, "d"), body);
+        }
+    }
+
+    /**
+     * A construction is told as an operation only where the rules of its type leave a run of
+     * numbers and every number of it. A type that holds a number out of its run, or leaves two
+     * numbers and none between, refuses the construction at numbers its ends admit, and the sum
+     * built into it is not told as stopping at its ends: nothing is shown of the places.
+     */
+    @Test
+    void aConstructionOfATypeWithHolesInItsRunIsNotToldAtItsEnds() {
+        for (String amount : List.of(
+                "data Amount = Int invariant value >= 0 && value /= 50",
+                "data Amount = Int invariant value == 0 || value == 100")) {
+            String source = CONSTRUCTED_ABOVE.formatted(amount, "Yen, Amount",
+                    "guard Amount(a.value + b.value).value >= d.value else Exceeds");
+            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
+                    leftIn(source, whereWritten(source, ">= d.value")), amount);
+        }
+    }
+
+    /**
+     * A value taken off one of several constructions is not taken off any one of them: the check
+     * that is made is the one of the construction the run reaches, and the arithmetic over
+     * {@code Int} of the same choice is read the way the choice of constructions is.
+     */
+    @Test
+    void aValueTakenOffOneOfSeveralConstructionsIsNotToldAsTheCheckOfAny() {
+        String choice = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard (if a.value > b.value then Yen(a.value + b.value) else Yen(b.value)).value"
+                        + " >= d.value else Exceeds");
+        String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard (if a.value > b.value then a.value + b.value else b.value)"
+                        + " >= d.value else Exceeds");
+        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN);
+        assertEquals(notShown, leftIn(choice, whereWritten(choice, ">= d.value")));
+        assertEquals(notShown, leftIn(ofInt, whereWritten(ofInt, ">= d.value")));
     }
 
     /**
