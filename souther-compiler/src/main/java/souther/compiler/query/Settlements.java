@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ReadingSeat;
@@ -955,8 +956,10 @@ public record Settlements(List<ObligationIdentity> requested,
                 return new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             }
             AnswerObservation rewritten = switch (asked) {
-                case ReplacementOwed.OfAnArm arm ->
-                        trial.runReplacing(asRead.toRun(), arm.replacing()).orElse(null);
+                case ReplacementOwed.OfAnArm arm -> trial.runReplacing(asRead.toRun(),
+                        Rewriting.ofArms(arm.replacing())).orElse(null);
+                case ReplacementOwed.OfAWalk walk -> trial.runReplacing(asRead.toRun(),
+                        Rewriting.ofWalks(walk.replacing())).orElse(null);
                 case ReplacementOwed.ByOneAnswer one ->
                         new AnswerObservation.Answered(one.answer());
             };

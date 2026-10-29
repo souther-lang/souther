@@ -15,7 +15,9 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Probe;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
@@ -111,9 +113,8 @@ public final class RowTrial {
                     }
 
                     @Override
-                    public Optional<AnswerObservation> runReplacing(
-                            Map<Integer, Integer> replacing) {
-                        Intervention.begin(replacing);
+                    public Optional<AnswerObservation> runReplacing(Rewriting asked) {
+                        Intervention.begin(asked);
                         try {
                             return applied(ready.applying(), ready.over(), steps, ready.reading());
                         } finally {
@@ -146,10 +147,12 @@ public final class RowTrial {
                 return new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
             }
         };
-        // The siblings these classes carry, which are the only rewrites a run of them can be asked
-        // for.
-        ArmReplacements held = probes instanceof ProbeImage.Instrumented(var _, var carried)
+        // The siblings and the walks these classes carry, which are the only rewrites a run of them
+        // can be asked for.
+        ArmReplacements held = probes instanceof ProbeImage.Instrumented(var _, var carried, var _)
                 ? carried : ArmReplacements.NONE;
+        WalkRewrites walks = probes instanceof ProbeImage.Instrumented(var _, var _, var at)
+                ? at : WalkRewrites.NONE;
         return new RowTrials() {
 
             @Override
@@ -160,6 +163,11 @@ public final class RowTrial {
             @Override
             public ArmReplacements carried() {
                 return held;
+            }
+
+            @Override
+            public WalkRewrites walksCarried() {
+                return walks;
             }
         };
     }
@@ -186,7 +194,7 @@ public final class RowTrial {
             case ProbeImage.Uninstrumented _ ->
                     applied(ready.applying(), ready.over(), steps, ready.reading())
                             .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
-            case ProbeImage.Instrumented(NumberingIdentity numbering, var _) -> {
+            case ProbeImage.Instrumented(NumberingIdentity numbering, var _, var _) -> {
                 Probe.begin(numbering);
                 try {
                     yield applied(ready.applying(), ready.over(), steps, ready.reading())

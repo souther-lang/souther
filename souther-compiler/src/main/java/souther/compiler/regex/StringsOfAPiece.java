@@ -102,7 +102,19 @@ public final class StringsOfAPiece {
      * allows.
      */
     public static Shown piecesOfValuesAt(Language whole, int separator, int index, Meter meter) {
-        Language ofTheStrings = piecesAt(whole, separator, index, meter);
+        return piecesOfValuesIn(whole, separator, index, index + 1L, meter);
+    }
+
+    /**
+     * What is shown of the pieces of the values of {@code whole} at the indexes from {@code from}
+     * up to, and not including, {@code until}, or to the last piece where {@code until} is below
+     * nought ({@link Shown}), or null where making the machines for them is more than
+     * {@code meter} allows. A string is among them when it is the piece at some index of the
+     * window, and a piece is shown the piece of a value at the index that needs the least round it.
+     */
+    public static Shown piecesOfValuesIn(Language whole, int separator, long from, long until,
+                                         Meter meter) {
+        Language ofTheStrings = piecesIn(whole, separator, from, until, meter);
         if (ofTheStrings == null) {
             return null;
         }
@@ -110,11 +122,20 @@ public final class StringsOfAPiece {
         if (written == null) {
             return null;
         }
-        Language ofTheWritten = piecesAt(written, separator, index, meter);
+        Language ofTheWritten = piecesIn(written, separator, from, until, meter);
         if (ofTheWritten == null) {
             return null;
         }
-        long around = mostAround(written.machine(), separator, index);
+        Beginnings beginnings = beginningsIn(written.machine(), separator, from, until,
+                meter.making());
+        if (beginnings == null) {
+            return null;
+        }
+        long around = 0;
+        for (long index : beginnings.indexes()) {
+            around = Math.max(around, mostAround(written.machine(), separator,
+                    Math.toIntExact(index)));
+        }
         return new Shown(ofTheStrings, ofTheWritten, Strings.LONGEST_TEXT - around);
     }
 
@@ -291,26 +312,45 @@ public final class StringsOfAPiece {
         if (index < 0) {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
         }
-        Automaton machine = whole.machine();
-        meter.starting();
-        Meter.Making making = meter.making();
-        CodePoints apart = CodePoints.of(separator);
-        CodePoints within = apart.not();
+        return piecesIn(whole, separator, index, index + 1L, meter);
+    }
+
+    /**
+     * Where a walk may begin the pieces of a window, and the indexes of the window that need
+     * looking at to find them all.
+     *
+     * @param states  the machine's states a piece begins in, at any index of the window
+     * @param indexes the indexes of the window the states were found at, which are all of them
+     *                where the window is short, and otherwise as many as come round to the same
+     *                states again
+     */
+    private record Beginnings(BitSet states, List<Long> indexes) {}
+
+    /**
+     * The states of {@code machine} a piece begins in, at any index from {@code from} up to, and
+     * not including, {@code until} — to the last where {@code until} is below nought — or null
+     * where finding them is more than {@code making} allows, or an index they are found at is more
+     * than an {@code int} holds.
+     *
+     * <p>A walk is in some states after passing a number of separators, and the states it is in
+     * after the next one are fixed by those. Where they come round to a set they were before, the
+     * indexes after that repeat, so an index far into a window costs a round and not itself.
+     */
+    private static Beginnings beginningsIn(Automaton machine, int separator, long from,
+                                           long until, Meter.Making making) {
+        CodePoints within = CodePoints.of(separator).not();
+        List<BitSet> after = new ArrayList<>();
+        Map<BitSet, Integer> seen = new HashMap<>();
         BitSet begin = new BitSet();
         begin.set(Automaton.START);
-        // Where the states a walk begins a piece in come round to a set they were before, the
-        // passes left are those of one round, so a large index costs a round and not itself.
-        Map<BitSet, Integer> seen = new HashMap<>();
-        int limit = index;
-        for (int passed = 0; passed < limit && !begin.isEmpty(); passed++) {
-            Integer before = seen.put(begin, passed);
+        int cycleAt = -1;
+        while (!begin.isEmpty()) {
+            Integer before = seen.putIfAbsent(begin, after.size());
             if (before != null) {
-                limit = passed + (index - passed) % (passed - before);
-                seen.clear();
-                if (passed >= limit) {
-                    break;
-                }
+                cycleAt = before;
+                break;
             }
+            after.add(begin);
             if (!making.work(machine.size())) {
                 return null;
             }
@@ -324,6 +364,47 @@ public final class StringsOfAPiece {
             }
             begin = next;
         }
+        int counted = after.size();
+        int period = cycleAt < 0 ? 0 : counted - cycleAt;
+        long last = until < 0 ? Long.MAX_VALUE : until - 1;
+        long through = Math.min(last, (cycleAt < 0 ? counted : Math.max(from, counted) + period) - 1L);
+        if (through >= Integer.MAX_VALUE) {
+            return null;
+        }
+        BitSet states = new BitSet();
+        List<Long> indexes = new ArrayList<>();
+        for (long index = from; index <= through; index++) {
+            BitSet here = index < counted ? after.get((int) index)
+                    : cycleAt < 0 ? new BitSet()
+                    : after.get(cycleAt + (int) ((index - cycleAt) % period));
+            if (!here.isEmpty()) {
+                states.or(here);
+                indexes.add(index);
+            }
+        }
+        return new Beginnings(states, indexes);
+    }
+
+    /**
+     * The pieces at the indexes from {@code from} up to, and not including, {@code until} of the
+     * strings of {@code whole} parted at {@code separator}, however long, or to the last piece
+     * where {@code until} is below nought ({@link #piecesAt}); or null where making the machine
+     * for them is more than {@code meter} allows.
+     */
+    static Language piecesIn(Language whole, int separator, long from, long until, Meter meter) {
+        if (from < 0) {
+            throw new IllegalArgumentException("a piece is at an index of nought or more: " + from);
+        }
+        Automaton machine = whole.machine();
+        meter.starting();
+        Meter.Making making = meter.making();
+        CodePoints apart = CodePoints.of(separator);
+        CodePoints within = apart.not();
+        Beginnings beginnings = beginningsIn(machine, separator, from, until, making);
+        if (beginnings == null) {
+            return null;
+        }
+        BitSet begin = beginnings.states();
         boolean[] stopsAhead = machine.reachingSomewhereItStops();
         int states = machine.size();
         // State 0 begins the piece wherever a walk may, and state 1 + q is where the machine is
@@ -361,36 +442,88 @@ public final class StringsOfAPiece {
         if (index < 0) {
             throw new IllegalArgumentException("a piece is at an index of nought or more: " + index);
         }
+        return wholesWithAPieceInWindow(piece, separator, index, index + 1L, meter);
+    }
+
+    /**
+     * The strings that have a piece in {@code piece} at some index from {@code from} up to, and not
+     * including, {@code until} — to the last where {@code until} is below nought — when they are
+     * parted at {@code separator}, or null where making the machine for them is more than
+     * {@code meter} allows.
+     *
+     * <p>The walk passes {@code from} separators, then at each index of the window either reads a
+     * piece of {@code piece} there and goes on as anything, or reads a piece that is none and
+     * passes its separator to the next index, until the window's last index, where it must read
+     * one.
+     */
+    public static Language wholesWithAPieceInWindow(Language piece, int separator, long from,
+                                                    long until, Meter meter) {
+        if (from < 0) {
+            throw new IllegalArgumentException("a piece is at an index of nought or more: " + from);
+        }
         Automaton machine = piece.machine();
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         int states = machine.size();
+        boolean endless = until < 0;
+        long stages = endless ? 1 : Math.max(0, until - from);
         meter.starting();
-        if (!meter.making().states((long) index + states + 1)) {
+        if (stages == 0) {
+            return Language.canonical(Automaton.madeOf(List.of(List.of()), new BitSet()), meter);
+        }
+        if (!meter.making().states(from + 2 * stages + states + 1)) {
             return null;
         }
-        // States 0 to index - 1 are the walk before the piece, one for each separator still to
-        // pass. State index + q is the machine of the piece in state q, so the walk's last
-        // separator leads to where the machine starts, and the last state is the rest of the
-        // string after the piece, which is anything.
-        int rest = index + states;
+        // States 0 to from - 1 are the walk before the window, one for each separator still to
+        // pass. Then two states for each index of the window: at the start of a piece, and inside
+        // one that is passed over. Then the machine of the piece, each state of it, and the last
+        // state, which is the rest of the string after the piece, which is anything.
+        int before = Math.toIntExact(from);
+        int windowed = Math.toIntExact(stages);
+        int started = before;
+        int machines = started + 2 * windowed;
+        int rest = machines + states;
         List<List<Automaton.Step>> steps = new ArrayList<>();
         BitSet accepting = new BitSet();
-        for (int passed = 0; passed < index; passed++) {
+        for (int passed = 0; passed < before; passed++) {
             steps.add(List.of(new Automaton.Step(within, passed),
                     new Automaton.Step(apart, passed + 1)));
+        }
+        for (int stage = 0; stage < windowed; stage++) {
+            boolean last = !endless && stage == windowed - 1;
+            int atTheStart = started + 2 * stage;
+            int inside = atTheStart + 1;
+            int next = endless ? started : atTheStart + 2;
+            List<Automaton.Step> opening = new ArrayList<>();
+            for (Automaton.Step each : machine.stepsFrom(Automaton.START)) {
+                CodePoints stays = each.over().and(within);
+                if (!stays.isEmpty()) {
+                    opening.add(new Automaton.Step(stays, machines + each.to()));
+                }
+            }
+            if (machine.stopsAt(Automaton.START)) {
+                opening.add(new Automaton.Step(apart, rest));
+                accepting.set(atTheStart);
+            }
+            if (!last) {
+                opening.add(new Automaton.Step(within, inside));
+                opening.add(new Automaton.Step(apart, next));
+            }
+            steps.add(opening);
+            steps.add(last ? List.of() : List.of(new Automaton.Step(within, inside),
+                    new Automaton.Step(apart, next)));
         }
         for (int state = 0; state < states; state++) {
             List<Automaton.Step> out = new ArrayList<>();
             for (Automaton.Step each : machine.stepsFrom(state)) {
                 CodePoints stays = each.over().and(within);
                 if (!stays.isEmpty()) {
-                    out.add(new Automaton.Step(stays, index + each.to()));
+                    out.add(new Automaton.Step(stays, machines + each.to()));
                 }
             }
             if (machine.stopsAt(state)) {
                 out.add(new Automaton.Step(apart, rest));
-                accepting.set(index + state);
+                accepting.set(machines + state);
             }
             steps.add(out);
         }

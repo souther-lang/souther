@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.Rewriting;
+import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.AnswerChange;
@@ -39,6 +41,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatARunCostsAndWhatAChoiceCountsTest {
 
+    /** The one rewrite the runs below are asked for: an arm at site 3 answering as part 1. */
+    private static final Rewriting REWRITE = Rewriting.ofArms(new TreeMap<>(Map.of(3, 1)));
+
     /** A run of the row and a run of it under a rewrite, each asked for twice. */
     @Test
     void aRunMadeBeforeIsNotSpentAgainForTheRowOrForItsRewrite() {
@@ -52,8 +57,8 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         };
 
         assertEquals(once.run(row, spend), once.run(row, spend), "the same run, answered twice");
-        assertEquals(once.runReplacing(row, Map.of(3, 1), spend),
-                once.runReplacing(row, Map.of(3, 1), spend), "and under the rewrite");
+        assertEquals(once.runReplacing(row, REWRITE, spend),
+                once.runReplacing(row, REWRITE, spend), "and under the rewrite");
 
         assertEquals(2, spent[0], "one run of the row and one under the rewrite were made");
         assertEquals(List.of("run 7", "rewritten 7"), trial.made);
@@ -65,10 +70,10 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         Generator.RunOnce once = Generator.runningOnce(new Counting(numbering(), _ -> 0));
         RowToRun row = row(7);
         assertNotNull(once.run(row));
-        assertNotNull(once.runReplacing(row, Map.of(3, 1)));
+        assertNotNull(once.runReplacing(row, REWRITE));
 
         assertNotNull(once.run(row, () -> false), "the row was run already");
-        assertNotNull(once.runReplacing(row, Map.of(3, 1), () -> false),
+        assertNotNull(once.runReplacing(row, REWRITE, () -> false),
                 "and so was it under the rewrite");
         assertNull(once.run(row(8), () -> false), "a row nobody ran needs a run");
     }
@@ -384,8 +389,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         }
 
         @Override
-        public Optional<AnswerObservation> runReplacing(RowToRun row,
-                                                        Map<Integer, Integer> replacing) {
+        public Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
             made.add("rewritten " + row.inputs().getFirst().text());
             return Optional.of(new AnswerObservation.Answered(new ObservedValue.Integer(
                     answering.applyAsLong(Long.parseLong(row.inputs().getFirst().text())))));
@@ -397,7 +401,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         }
 
         @Override
-        public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+        public List<RunRewrite> rewritesThrough(AlignedObservation ran) {
             return List.of(new ArmReplacements.Rewrite(SourceConstructOrigin.unwritten(), 0, 1,
                     new TreeMap<>(Map.of(3, 1))));
         }

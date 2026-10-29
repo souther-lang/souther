@@ -209,7 +209,8 @@ public final class LinesWhereTheyFall {
             case RuleEvidence.BySet(SetStatement division) ->
                     new RuleEvidence.BySet(new SetStatement(here, division.whenTrue(),
                             division.whenFalse(), division.statement(), division.origin(),
-                            division.notShown(), division.notReached()));
+                            division.notShown(), division.notReached(),
+                            division.imagesNotShown()));
         };
     }
 

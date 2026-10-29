@@ -11,12 +11,15 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -269,11 +272,12 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     }
 
     /**
-     * The statement stops no longer being a form nobody reads, whichever way it is written: the
-     * report says the relation is not shown to reach every value, and nothing else of it.
+     * The statement is read to the end, whichever way it is written: each string is parted by the
+     * strings the other can come to, and the strings the lowercase is not exactly a map on are
+     * said to be left open. The report does not say the relation is not shown to reach the values.
      */
     @Test
-    void theReportOfARelationBetweenStringsSaysOnlyThatItIsNotShownToReach() {
+    void theReportOfARelationBetweenStringsSaysItIsShownOverARegion() {
         for (String body : List.of(
                 "List.any(p -> String.contains(String.lowercase(i.businessCase),"
                         + " String.lowercase(p.value)), i.points)",
@@ -286,8 +290,38 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
             assertFalse(json.contains("unsupported_syntax"), () -> "read to the end: " + body);
             assertFalse(json.contains("rule_about_a_derived_value"),
                     () -> "not about a derived value: " + body);
-            assertTrue(json.contains("relation_not_shown_to_reach_every_value"),
-                    () -> "said not shown to reach: " + body);
+            assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
+                    () -> "both strings are parted: " + body);
+            assertTrue(json.contains("relation_shown_over_a_region"),
+                    () -> "said shown over a region: " + body);
+        }
+    }
+
+    /** The report names the function whose image over the strings is not shown, whichever case
+     *  mapping it is, and says nothing of the other. */
+    @Test
+    void theReportNamesTheFunctionWhoseImageIsNotShown() {
+        String lower = reported("List.any(p -> String.contains(String.lowercase(i.businessCase),"
+                + " String.lowercase(p.value)), i.points)");
+        String upper = reported("List.any(p -> String.contains(String.uppercase(i.businessCase),"
+                + " String.uppercase(p.value)), i.points)");
+        assertTrue(lower.contains("imagesNotShown"), lower);
+        assertTrue(lower.contains("lowercase"), "lowercase is named");
+        assertFalse(lower.contains("uppercase"), "only the function applied is named");
+        assertTrue(upper.contains("uppercase"), "uppercase is named");
+        assertFalse(upper.contains("lowercase"), "only the function applied is named");
+    }
+
+    /** startsWith, endsWith and contains are three relations, and each is read to the end. */
+    @Test
+    void everySpellingOfTheRelationIsReadToTheEnd() {
+        for (String function : List.of("contains", "startsWith", "endsWith")) {
+            String json = reported("List.any(p -> String." + function
+                    + "(String.lowercase(i.businessCase), String.lowercase(p.value)), i.points)");
+            assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
+                    () -> function + " is read");
+            assertTrue(json.contains("relation_shown_over_a_region"),
+                    () -> function + " is shown over a region");
         }
     }
 
@@ -312,5 +346,30 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
         Proposition appended = stated("String.contains(i.a, String.append(i.b, \"x\"))");
         assertTrue(!(appended instanceof Proposition.StringInside),
                 () -> "a string with a constant in it is no value of the input: " + appended);
+    }
+
+    /**
+     * The places a side is made of are all of them places the run reads, and each the place of an
+     * argument the side was read at: never a union of the places of several ways a value may have
+     * been made. What leaves a place out of the places a run that reaches the relation stands at
+     * ({@link WhereARunReachingARelationStands}) rests on this, so it is held here, where the
+     * sides are made, and not only where it is used.
+     */
+    @Test
+    void aSideIsMadeOfTheEveryPlaceItIsReadAtAndNoPlaceItMayHaveComeFrom() {
+        Quantity joined = new Quantity.WhatAnOperationAnswers(
+                ValueName.Stdlib.operation("String", "append"), List.of(value("a"), value("b")));
+        UndividedByARelation relation = UndividedByARelation.ofAForm(
+                LinearForm.atom(joined), Rel.EQ);
+        assertEquals(List.of(FilingCoordinate.of(new NumericTerm.ValueOf(
+                        TermPath.of("i").then("a"))),
+                FilingCoordinate.of(new NumericTerm.ValueOf(TermPath.of("i").then("b")))),
+                relation.sides().getFirst().madeOf());
+        UndividedByARelation inside = UndividedByARelation.ofAStringInside(lowercased("a"),
+                value("b"), StringContainment.ANYWHERE);
+        assertEquals(List.of(FilingCoordinate.of(new NumericTerm.ValueOf(
+                        TermPath.of("i").then("a")))), inside.sides().get(0).madeOf());
+        assertEquals(List.of(FilingCoordinate.of(new NumericTerm.ValueOf(
+                        TermPath.of("i").then("b")))), inside.sides().get(1).madeOf());
     }
 }

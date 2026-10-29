@@ -213,11 +213,16 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
      * {@code with}, at {@code replacing}'s sites ({@link #replacing}).
      */
     public record Rewrite(SourceConstructOrigin fork, int part, int with,
-                          SequencedMap<Integer, Integer> replacing) {
+                          SequencedMap<Integer, Integer> replacing) implements RunRewrite {
 
         public Rewrite {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
+        }
+
+        @Override
+        public Rewriting asked() {
+            return Rewriting.ofArms(replacing);
         }
     }
 

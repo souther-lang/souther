@@ -46,6 +46,12 @@ public final class Probe {
         /** The arms, as bits, because an arm is a number and a run passes many. */
         private final BitSet arms = new BitSet();
 
+        /** The walks entered, as bits, for the reason the arms are. */
+        private final BitSet walks = new BitSet();
+
+        /** The walks that went on to a second element. */
+        private final BitSet walksOn = new BitSet();
+
         /** The conditions, as the ways they came out: bit {@code 2 * site} for failing and the next
          *  for holding. A condition is recorded by how it answered and by nothing else: that a way
          *  out of it exists is its having been reached.
@@ -86,6 +92,24 @@ public final class Probe {
 
     /** How many sites a recording starts with room for. */
     private static final int INITIAL_SITES = 64;
+
+    /** Called by probed code where a walk is entered, before its first step. Public and static for
+     *  the reason {@link #hit} is. */
+    public static void walked(int site) {
+        Recording recording = RECORDING.get();
+        if (recording != null) {
+            recording.walks.set(site);
+        }
+    }
+
+    /** Called by probed code where a walk takes a second element, once per entering. Public and
+     *  static for the reason {@link #hit} is. */
+    public static void walkedOn(int site) {
+        Recording recording = RECORDING.get();
+        if (recording != null) {
+            recording.walksOn.set(site);
+        }
+    }
 
     /** Called by probed code where an arm ran. Public and static because that is what an
      * {@code invokestatic} from a generated class needs. */
@@ -161,7 +185,17 @@ public final class Probe {
                 visits.add(new RecordedVisit(site, at / 2, at % 2 == 1));
             }
         }
-        return new Observation(recording.numbering, arms, outcomes, visits);
+        Set<Integer> walks = new LinkedHashSet<>();
+        for (int at = recording.walks.nextSetBit(0); at >= 0;
+                at = recording.walks.nextSetBit(at + 1)) {
+            walks.add(at);
+        }
+        Set<Integer> walksOn = new LinkedHashSet<>();
+        for (int at = recording.walksOn.nextSetBit(0); at >= 0;
+                at = recording.walksOn.nextSetBit(at + 1)) {
+            walksOn.add(at);
+        }
+        return new Observation(recording.numbering, arms, outcomes, visits, walks, walksOn);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a

@@ -572,38 +572,61 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * not see inside.
      */
     public static Core theOneElementWritten(Core body) {
+        ElementWritten written = theOneElementWrittenAfter(body);
+        return written == null ? null : written.element();
+    }
+
+    /**
+     * The one element a list is written with, and what decided the arm that writes it, outermost
+     * first: the attempt that held, the case taken, the condition that came out one way.
+     *
+     * <p>What a name the element reads was bound to is only so under the decisions: the name
+     * {@code if Name(d) as n then [n] else []} writes stands for what was built where the attempt
+     * held.
+     */
+    public record ElementWritten(Core element, List<Choice.Decides> decided) {
+
+        public ElementWritten {
+            decided = List.copyOf(decided);
+        }
+    }
+
+    /**
+     * {@link #theOneElementWritten}, with the decisions of the arm that writes it, or null where
+     * the lists are written with none or with more than one.
+     */
+    public static ElementWritten theOneElementWrittenAfter(Core body) {
         Core written = Core.withoutStanding(body);
-        return switch (written) {
-            case Core.ListLit list when list.elements().size() == 1 ->
-                    list.elements().getFirst();
-            case Core.If fork -> sharedElement(List.of(fork.then(), fork.els()));
-            case Core.IfConstructed fork -> {
-                List<Core> arms = new ArrayList<>();
-                arms.add(fork.then());
-                fork.els().forEach(arm -> arms.add(arm.body()));
-                yield sharedElement(arms);
-            }
-            case Core.Match match -> sharedElement(match.cases().stream()
-                    .map(Core.Case::body).toList());
-            default -> null;
-        };
+        if (written instanceof Core.ListLit list) {
+            return list.elements().size() == 1
+                    ? new ElementWritten(list.elements().getFirst(), List.of()) : null;
+        }
+        Choice choice = Choice.of(written);
+        return choice == null || choice.kind() == Choice.Kind.THE_ARGUMENTS ? null
+                : sharedElement(choice.arms());
     }
 
     /** The element the arms agree on, ignoring those that answer no list written with one. Arms
      *  agree where they write one value ({@link Core#sameValue}): the same name, or the same field
      *  of one value, whichever node each is written as. */
-    private static Core sharedElement(List<Core> arms) {
-        Core agreed = null;
-        for (Core arm : arms) {
-            if (Core.withoutStanding(arm) instanceof Core.ListLit list
+    private static ElementWritten sharedElement(List<Choice.Arm> arms) {
+        ElementWritten agreed = null;
+        for (Choice.Arm arm : arms) {
+            if (Core.withoutStanding(arm.answers()) instanceof Core.ListLit list
                     && list.elements().isEmpty()) {
                 continue;
             }
-            Core element = theOneElementWritten(arm);
-            if (element == null || (agreed != null && !Core.sameValue(agreed, element))) {
+            ElementWritten inner = theOneElementWrittenAfter(arm.answers());
+            if (inner == null
+                    || (agreed != null && !Core.sameValue(agreed.element(), inner.element()))) {
                 return null;
             }
-            agreed = element;
+            if (agreed == null) {
+                List<Choice.Decides> decided = new ArrayList<>();
+                decided.add(arm.decidedBy());
+                decided.addAll(inner.decided());
+                agreed = new ElementWritten(inner.element(), decided);
+            }
         }
         return agreed;
     }

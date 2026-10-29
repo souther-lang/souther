@@ -30,6 +30,24 @@ public final class RewriteVocabulary {
                 + "` this build holds no source of";
     }
 
+    /**
+     * Where the fold of a rewrite this build holds no source of is, as far as this build can say:
+     * the definition that wrote it, as {@link #outOfSight(ReplacementAsWritten.OfAnArm, String)}
+     * says a fork's.
+     */
+    public static String outOfSight(ReplacementAsWritten.OfAWalk rewrite, String module) {
+        return "in `" + rewrite.writtenBy().saidIn(module) + "` this build holds no source of";
+    }
+
+    /** What {@code rewrite} has the fold do, as the end of a sentence about the fold. */
+    public static String walked(ReplacementAsWritten.OfAWalk rewrite) {
+        return switch (rewrite.replacement().how()) {
+            case STOPS_AFTER_ONE_STEP -> "stopped after its first element";
+            case STEPS_FROM_THE_SEED ->
+                    "handed each step the seed in place of what the step before it answered";
+        };
+    }
+
     /** The word for the arm {@code rewrite} rewrites. */
     public static String rewritten(ReplacementAsWritten.OfAnArm rewrite) {
         return ArmVocabulary.label(rewrite.replacement().fork().kind(), rewrite.arm());
@@ -60,6 +78,10 @@ public final class RewriteVocabulary {
                     rewritten(arm) + " answering as " + answeredAs(arm);
             case ReplacementAsWritten.ByOneAnswer one ->
                     "the body answering what " + answeredBy(one, rendering) + " answers";
+            case ReplacementAsWritten.OfAWalk walk -> switch (walk.replacement().how()) {
+                case STOPS_AFTER_ONE_STEP -> "the fold stopping after its first element";
+                case STEPS_FROM_THE_SEED -> "each step of the fold handed the seed";
+            };
         };
     }
 

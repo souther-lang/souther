@@ -132,6 +132,9 @@ final class Descriptors {
     /** {@code Intervention.replacementAt(int)}: the part to answer with at a site, or {@code -1}. */
     static final MethodTypeDesc MTD_Intervention_replacementAt =
             MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int);
+    /** {@code Intervention.walkAt(int)}: the rewrite to run a walk as, or {@code -1}. The same
+     *  shape as {@link #MTD_Intervention_replacementAt}. */
+    static final MethodTypeDesc MTD_Intervention_walkAt = MTD_Intervention_replacementAt;
     /**
      * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
      * ships. Reached the way {@link #CD_Probe} is, and for the same reason.

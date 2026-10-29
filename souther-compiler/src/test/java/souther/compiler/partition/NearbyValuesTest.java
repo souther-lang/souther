@@ -13,6 +13,9 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import com.sun.management.ThreadMXBean;
+
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -34,6 +37,8 @@ class NearbyValuesTest {
             module example.nearby
 
             data Point = { x: Int, y: Int }
+
+            data Basket = { items: List<Int> }
 
             data Code = Int
                 invariant value >= 0
@@ -284,6 +289,94 @@ class NearbyValuesTest {
                 type -> List.of(whole(7)).iterator()).forEachRemaining(none::add);
 
         assertEquals(List.of(), none);
+    }
+
+    private static ObservedValue basket(ObservedValue... items) {
+        return new ObservedValue.Constructed(declared("Basket"), Map.of("items", listOf(items)));
+    }
+
+    private static List<ObservedValue> grownAt(ObservedValue value, Type type,
+                                               NearbyValues.Put where) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.grown(value, type, READING, ranWithInts(1),
+                _ -> List.<ObservedValue>of().iterator(), where, NearbyValues.Lists.ANY)
+                .forEachRemaining(out::add);
+        return out;
+    }
+
+    /** The new element is put after the others, and before them where that is asked. */
+    @Test
+    void aListTakesItsNewElementWhereItIsToldTo() {
+        Type list = Type.list(Type.INT);
+
+        assertEquals(List.of(listOf(whole(1), whole(100))),
+                grownAt(listOf(whole(1)), list, NearbyValues.Put.AFTER));
+        assertEquals(List.of(listOf(whole(1), whole(100)), listOf(whole(100), whole(1))),
+                grownAt(listOf(whole(1)), list, NearbyValues.Put.BEFORE_AND_AFTER));
+        assertEquals(List.of(listOf(whole(100))),
+                grownAt(listOf(), list, NearbyValues.Put.BEFORE_AND_AFTER),
+                "a list of nothing has one place to put it");
+    }
+
+    /** The same wherever the list stands: in a field of a record, not only as the value itself. */
+    @Test
+    void aListInAFieldTakesItsNewElementWhereItIsToldTo() {
+        Type basket = Type.ref(declared("Basket"));
+
+        assertEquals(List.of(basket(whole(1), whole(100)), basket(whole(100), whole(1))),
+                grownAt(basket(whole(1)), basket, NearbyValues.Put.BEFORE_AND_AFTER));
+        assertEquals(List.of(basket(whole(1), whole(100))),
+                grownAt(basket(whole(1)), basket, NearbyValues.Put.AFTER));
+    }
+
+    /** And in a list of lists, and in the lists of a record in a list: any depth. */
+    @Test
+    void aListInAListTakesItsNewElementWhereItIsToldTo() {
+        Type nested = Type.list(Type.list(Type.INT));
+        ObservedValue held = listOf(listOf(whole(1)), listOf(whole(2)));
+
+        List<ObservedValue> grown = grownAt(held, nested, NearbyValues.Put.BEFORE_AND_AFTER);
+
+        assertTrue(grown.contains(listOf(listOf(whole(1), whole(100)), listOf(whole(2)))));
+        assertTrue(grown.contains(listOf(listOf(whole(100), whole(1)), listOf(whole(2)))));
+        assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(2), whole(100)))));
+        assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(100), whole(2)))));
+    }
+
+    private static InputsRowsRanWith ranWithManyInts(int count) {
+        List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            rows.add(List.of(new InputsRowsRanWith.Taken(Type.INT, whole(1000 + i))));
+        }
+        return InputsRowsRanWith.of(List.of(rows), List.of());
+    }
+
+    /**
+     * An element changed is made when asked for. A list of many elements changed to each of many
+     * values has as many candidates as the two come to multiplied, each a copy of the list, and a
+     * search that takes one leaves the rest unmade: what is allocated to hand over the first is the
+     * list and a little more, and not every list there could be.
+     */
+    @Test
+    void anElementChangedIsMadeOnlyWhenAsked() {
+        List<ObservedValue> elements = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            elements.add(whole(i));
+        }
+        InputsRowsRanWith ranWith = ranWithManyInts(400);
+        ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
+        long before = threads.getCurrentThreadAllocatedBytes();
+
+        Iterator<ObservedValue> near = NearbyValues.withAnElementChanged(
+                new ObservedValue.Sequence(elements), Type.list(Type.INT), READING, ranWith);
+        ObservedValue.Sequence first = (ObservedValue.Sequence) near.next();
+        long allocated = threads.getCurrentThreadAllocatedBytes() - before;
+
+        assertEquals(whole(1000), first.elements().get(0));
+        assertEquals(400, first.elements().size());
+        assertTrue(near.hasNext(), "the rest are still to come");
+        // The list is 400 references, a few KB; every candidate there could be is tens of MB.
+        assertTrue(allocated < 1_000_000, () -> "allocated " + allocated + " bytes for the first");
     }
 
     private static TypeSymbol declared(String name) {

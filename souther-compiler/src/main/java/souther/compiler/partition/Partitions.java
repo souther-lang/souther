@@ -836,7 +836,8 @@ public final class Partitions {
         for (Classing.LeftOpen each : answered.leftOpen()) {
             PredicateOrigin origin = each.statement().origin();
             found.regionUndetermined(origin.cited(), origin.readAt(),
-                    new FilingCoordinate.AtPosition(term.position()), each.open());
+                    new FilingCoordinate.AtPosition(term.position()), each.open(),
+                    each.statement().imagesNotShown());
         }
         // The answer's own population, and not what is left after taking the rest away. Subtracted
         // here, the same question is answered twice — and the day the two subtract differently the

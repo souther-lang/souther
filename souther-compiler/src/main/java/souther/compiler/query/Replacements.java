@@ -3,9 +3,11 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.PathReachability;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.observe.ArmObservation;
@@ -87,15 +89,18 @@ public final class Replacements {
             // where the rows went: those are the classes that carry any, and asking where none
             // were run would build them for nothing.
             ArmReplacements carried = ArmReplacements.NONE;
+            WalkRewrites walksCarried = WalkRewrites.NONE;
             if (byTarget.values().stream().anyMatch(Adequacy.RowReading::recordedArms)) {
                 EvaluationArtifact image = db.ask(
                         new Output.EvaluationLinked(name, ArmObservation.RECORD)).value();
-                if (image != null
-                        && image.probes() instanceof ProbeImage.Instrumented(var _, var held)) {
+                if (image != null && image.probes()
+                        instanceof ProbeImage.Instrumented(var _, var held, var walks)) {
                     carried = held;
+                    walksCarried = walks;
                 }
             }
             ArmReplacements inTheClasses = carried;
+            WalkRewrites walksInTheClasses = walksCarried;
             // Read off the rows only when a body answering one value is asked about, which most
             // modules never are.
             Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule = new HashMap<>();
@@ -125,7 +130,9 @@ public final class Replacements {
                 Predicate<ControlPlace.Arm> unreached =
                         Adequacy.unreachedIn(arrived, behavior.name(), checked);
                 return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
-                        row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
+                        walksInTheClasses, row -> Adequacy.armsSeenIn(row, numbering),
+                        row -> Adequacy.walksSeenIn(row, numbering), unreached,
+                        Adequacy.walkedNoFurtherIn(rows, numbering), rows,
                         row -> stoppedAt.getOrDefault(RowRef.of(row),
                                 ReplacementDisposition.Met.AT_NO_FIGURE),
                         new ReplacementReading.Comparing() {
@@ -178,7 +185,8 @@ public final class Replacements {
                     db.ask(new Adequacy.RowReadings(module)).value();
             Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
             Sig sig = sigs == null ? null : sigs.get(behavior);
-            if (byTarget == null || sig == null) {
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            if (byTarget == null || sig == null || !reading.present()) {
                 return List.of();
             }
             List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
@@ -188,8 +196,8 @@ public final class Replacements {
                 }
                 List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
                 for (int p = 0; p < row.inputs().size(); p++) {
-                    inputs.add(new InputsRowsRanWith.Taken(sig.inputTypes().get(p),
-                            row.inputs().get(p)));
+                    InputsRowsRanWith.takenAt(sig.inputTypes().get(p), row.inputs().get(p),
+                            reading.value(), inputs);
                 }
                 rows.add(inputs);
             }

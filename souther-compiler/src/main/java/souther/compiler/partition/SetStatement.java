@@ -49,20 +49,24 @@ import java.util.List;
  *                  as it is left open at: shown on neither side, because the relation is not
  *                  worked out for a string of that length; none where a run gets to it at every
  *                  length
+ * @param imagesNotShown the operations of the library whose image over the strings of a side is
+ *                  shown only where it is exact, which are why {@code notShown} holds the strings
+ *                  it holds
  */
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                           ValueSet whenFalse, PredicateStatement statement,
                           PredicateOrigin origin, ValueSet notShown,
-                          List<ValuesWithin> notReached) {
+                          List<ValuesWithin> notReached, List<String> imagesNotShown) {
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
                 || statement == null || origin == null || notShown == null
-                || notReached == null) {
+                || notReached == null || imagesNotShown == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
         notReached = List.copyOf(notReached);
+        imagesNotShown = List.copyOf(imagesNotShown);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
         // it — so a side inhabited among the strings can be empty at the position, and one empty
@@ -70,11 +74,21 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
         // position's values, and it is asked where they are known ({@link Classing}).
     }
 
-    /** A rule that shows its values at every length a run gets to it at. */
+    /** A rule that shows its values at every length a run gets to it at, and whose open values are
+     *  open for no operation's image. */
     public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                         ValueSet whenFalse, PredicateStatement statement,
                         PredicateOrigin origin, ValueSet notShown) {
-        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of());
+        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of(), List.of());
+    }
+
+    /** The same, with the lengths no run gets to the relation at, and open for no operation's
+     *  image. */
+    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
+                        ValueSet whenFalse, PredicateStatement statement,
+                        PredicateOrigin origin, ValueSet notShown,
+                        List<ValuesWithin> notReached) {
+        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached, List.of());
     }
 
     /** Whether every value is shown on one side or the other. */

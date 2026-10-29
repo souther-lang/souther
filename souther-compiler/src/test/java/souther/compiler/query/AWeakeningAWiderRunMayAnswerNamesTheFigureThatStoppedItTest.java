@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
+import souther.compiler.coverage.NotCarriedReason;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
@@ -288,6 +289,11 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAForkCarries(
                 WorkFigure.NODES_A_FORK_CARRIES.at(4000))));
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAMethodHolds()));
+        // And what a walk the classes carry no switch at leaves, which no run widens either.
+        for (NotCarriedReason why : List.of(new NotCarriedReason.MethodTooLarge(),
+                new NotCarriedReason.StepNotExpanded())) {
+            out.add(ReplacementReading.wayOf(why));
+        }
         out.add(ReplacementEvidence.Undecided.Way.atNoAllowance(
                 ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         return out;
