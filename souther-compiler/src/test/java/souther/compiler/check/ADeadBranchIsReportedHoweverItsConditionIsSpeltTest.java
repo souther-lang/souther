@@ -58,6 +58,18 @@ class ADeadBranchIsReportedHoweverItsConditionIsSpeltTest {
         return out;
     }
 
+    /**
+     * The length of a list written out is the number of elements written, so a condition on it is
+     * settled before any run: the arm it does not take is dead, with the rule and without it.
+     */
+    @Test
+    void theLengthOfAListWrittenOutIsTheNumberOfElementsWritten() {
+        String[] spellings = {"List.length([ 1 ]) > 0", "List.length([ 1, 2 ]) == 2",
+            "List.length([ 1 ]) > 1"};
+        assertEquals(all(List.of(true, true), spellings), asked(spellings),
+                "a count nothing about the input changes leaves an arm no run can take");
+    }
+
     @Test
     void anEmptinessCheckIsTheSizeComparisonItMeans() {
         String[] spellings = {"List.isEmpty(x.xs)", "List.length(x.xs) == 0"};

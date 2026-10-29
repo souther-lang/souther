@@ -47,7 +47,7 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
 
             let inner = List.length([1, 2, 3]) > 2
 
-            let outer = if List.length([1]) > 0 then inner else false
+            let outer (n: Int) : Bool = if n > 0 then inner else false
 
             """;
 
@@ -146,7 +146,7 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
     void oneValueNamedInAnArmOfEachOfTwoForks() {
         accepted("""
                 behavior f : (n: Int) -> Bool
-                let f (n) = (if n > 0 then inner else false) || (if n > 1 then inner else false)
+                let f (n) = (if n > 0 then inner else false) || (if n < 0 then inner else false)
                 """);
     }
 
@@ -183,7 +183,7 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
         accepted("""
                 behavior f : (n: Int) -> Bool
                 let f (n) =
-                  List.length([n | inner, n > 0]) > 0 || (if n > 1 then inner else false)
+                  List.length([n | n > 0 && inner]) > 0 || (if n < 0 then inner else false)
                 """);
     }
 
@@ -191,7 +191,7 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
     void aValueWhoseOwnForkNamesAnotherBuiltForTwoRegions() {
         accepted("""
                 behavior f : (n: Int) -> Bool
-                let f (n) = (if n > 0 then outer else false) || (if n > 1 then outer else false)
+                let f (n) = (if n > 0 then outer(n) else false) || (if n < 0 then outer(n) else false)
                 """);
     }
 
