@@ -304,6 +304,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     earlier.onEveryRun && onEveryRun, bothDecimals);
         }
 
+        /**
+         * The same operations, where something the comparison works out was read and its
+         * operations were not told: a row past every one told is not shown computed, and the
+         * program is not taken to add the form up either.
+         */
+        Working notEveryOneTold() {
+            return new Working(operations, WhatARelationLeavesUndivided.Told.SOME, onEveryRun,
+                    decimals);
+        }
+
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
             return new Working(operations, told, false, decimals);

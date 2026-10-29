@@ -864,10 +864,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
      * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross. Nor is the doubled total shown left either way:
-     * the value of a total each element of which is made into another is read from the elements
-     * and asks the operations of the comparison for a row beside an end of the total, which it
-     * has no end to ask.
+     * takes, and nothing is shown of the gross. The doubled total is left either way: every
+     * element is at least nought, so each doubling lies between nought and the total, and a run
+     * gets through wherever the total is an {@code Int}.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
@@ -877,7 +876,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", NOT_SHOWN,
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));

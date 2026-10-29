@@ -51,8 +51,8 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
      * {@code report} without where every run is shown to stop. A sum written out tells each
      * addition it works out, and is shown to stop where two of the pays together pass the type; a
      * total over a list written out is one operation, and is shown to stop where the whole total
-     * passes it; a total over what a closure answers or a fold does not tell which operations it
-     * works out, and says nothing of where it stops. What else is read of them is the same.
+     * passes it, as is a total over what a closure makes of each element of one, once each
+     * application is worked out. What else is read of them is the same.
      */
     private static String besideWhereEveryRunStops(String report) {
         return report.replaceAll("(?m)^.*may stop a run:.*every run stops.*\\R", "");
@@ -78,7 +78,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     void theTotalOfWhatAMapAnswersIsTheSumOfTheElementsNumbers() {
         String report = measured("List.sum(List.map(m -> m.pay, [a, b, c]))");
         assertFalse(report.contains("states no law"), report);
-        assertEquals(besideWhereEveryRunStops(measured(SUM)), report);
+        assertEquals(measured("List.sum([a.pay, b.pay, c.pay])"), report);
     }
 
     @Test
@@ -157,16 +157,22 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         assertEquals(measured(SMALL_PAYS, "a.pay + a.pay + b.pay"), report);
     }
 
+    /**
+     * A fold over a list written out adds the elements one step at a time, so it works out the
+     * same additions the sum written out does, in the same order, and stops where they stop.
+     */
     @Test
     void aTotalBehindAnAdditionOfTheFoldIsTheSum() {
         String report = measured("List.fold((acc, m) -> acc + m.pay, 0, [a, b, c])");
-        assertEquals(besideWhereEveryRunStops(measured(SUM)), report);
+        assertEquals(measured(SUM), report);
     }
 
     @Test
     void aTotalThatIsDividedByAWrittenNumberIsTheSumDividedByIt() {
         String report = measured("List.sum(List.map(m -> m.pay, [a, b, c])) / 3");
-        assertEquals(besideWhereEveryRunStops(measured("(a.pay + b.pay + c.pay) / 3")), report);
+        assertEquals(measured("List.sum([a.pay, b.pay, c.pay]) / 3"), report);
+        assertEquals(besideWhereEveryRunStops(measured("(a.pay + b.pay + c.pay) / 3")),
+                besideWhereEveryRunStops(report));
     }
 
     @Test

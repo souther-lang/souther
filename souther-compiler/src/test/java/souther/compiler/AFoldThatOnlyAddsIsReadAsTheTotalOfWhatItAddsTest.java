@@ -168,16 +168,15 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
     }
 
     /**
-     * A total that is a number among others in a comparison is read as one of them. A list of one
-     * note totals that note, so the total takes every {@code Int} a gross does; held at nought it
-     * leaves the ask and the limit held against each other, each at every value the other takes,
-     * and both are left either way. The total itself is what an operation answers and not the
-     * value at a place, so the limit is not taken past the greatest {@code Int} for it. The totals
-     * past the greatest {@code Int} are none a row stands at, so the total is left either way
-     * as the others are.
+     * A total that is a number among others in a comparison is read as one of them, and the walk
+     * is not the sum for where a run gets through it. The walk adds one gross at a time and holds
+     * every answer so far to {@code Int}, so grosses of either sign can pass the type on the way
+     * to a total that is in it, as {@code [max, 1, -1]} does at its second step. Nothing shows
+     * which totals every list coming to them gets through, so no row is shown computed and no
+     * place is shown left either way.
      */
     @Test
-    void aTotalBesideAnotherNumberIsRead() {
+    void aTotalBesideAnotherNumberIsReadAndNotShownComputed() {
         String report = report("""
                 module example.folded
 
@@ -189,10 +188,10 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
         assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertEquals(Set.of("asked", "limit", "List.sum(ns[*].gross)"), placesSaying(report,
-                "rather than dividing the values here"), report);
-        assertEquals(Set.of(), placesSaying(report, "not shown to reach every value here"),
+        assertEquals(Set.of(), placesSaying(report, "rather than dividing the values here"),
                 report);
+        assertEquals(Set.of("asked", "limit", "List.sum(ns[*].gross)"), placesSaying(report,
+                "not shown to reach every value here"), report);
     }
 
     /** The places the lines of {@code report} saying {@code words} of a rule's line are about. */

@@ -1459,6 +1459,10 @@ final class Pullback {
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
         private Map<Relation, UndividedByARelation.Working> relations;
+        /** Whether the rule read an expression as a number taken over a run without showing that
+         *  working it out completes wherever the number has a place: a walk whose step, or a
+         *  closure applied to each element, may stop on its own. */
+        private boolean readAnEvaluationItDoesNotTell;
 
         void tell(Relation relation, UndividedByARelation.Working told) {
             if (relations == null) {
@@ -1487,6 +1491,18 @@ final class Pullback {
     /** The candidate being tried; one to say into nothing where none is. */
     private Trial trial() {
         return underTrial.isEmpty() ? new Trial() : underTrial.peek();
+    }
+
+    /**
+     * That the candidate read {@code node} as a number taken over a run: a total, a walk, an
+     * operation's answer. The number is the value working it out comes to, which says nothing of
+     * whether it completes ({@link WhatARunMayEndFor#endsOnlyWhereItsAnswerHasNoPlace}); where
+     * that is not shown the candidate leaves what the comparison works out untold.
+     */
+    private void evaluationRead(Core node) {
+        if (!WhatARunMayEndFor.endsOnlyWhereItsAnswerHasNoPlace(node)) {
+            trial().readAnEvaluationItDoesNotTell = true;
+        }
     }
 
     /**
@@ -1541,13 +1557,20 @@ final class Pullback {
     private static UndividedByARelation.Working workingOf(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         if (theRule != null && theRule.working != null) {
-            return theRule.working;
+            return theRule.readAnEvaluationItDoesNotTell ? theRule.working.notEveryOneTold()
+                    : theRule.working;
         }
         AffineReading.OfAComparison read = arithmetic.get();
-        return theRule != null && theRule.answersFor != null
-                && read instanceof AffineReading.OfAComparison.Stopped stopped
+        if (!(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
+            return AffineReading.OfAComparison.workingOf(read);
+        }
+        UndividedByARelation.Working apart = theRule != null && theRule.answersFor != null
                 ? stopped.apart(theRule.answersFor)
                 : AffineReading.OfAComparison.workingOf(read);
+        // The expression the arithmetic stopped at is the rule's to answer for, and a number the
+        // rule read without showing where working it out completes leaves that unanswered.
+        return theRule != null && theRule.readAnEvaluationItDoesNotTell
+                ? apart.notEveryOneTold() : apart;
     }
 
     /**
@@ -8618,11 +8641,16 @@ final class Pullback {
                 }
                 LinearForm<Quantity> added = seedPlusWhatEachElementAdds(node, at);
                 if (added != null) {
+                    evaluationRead(node);
                     return added;
                 }
                 LinearForm<NumericTerm> numbers = InputNumber.formOf(node, read.domain(), at,
                         read.rules(), elementsMet);
                 if (numbers != null) {
+                    if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
+                            read)) {
+                        trial().readAnEvaluationItDoesNotTell = true;
+                    }
                     return numbers.over(term ->
                             LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(term)));
                 }
@@ -8643,6 +8671,7 @@ final class Pullback {
                 // What a container the body wrote out adds up to, element by element.
                 LinearForm<Quantity> total = totalOfWrittenOut(node, at);
                 if (total != null) {
+                    evaluationRead(node);
                     return total;
                 }
                 // What a division by a written number leaves of a form of the input's numbers,

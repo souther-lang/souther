@@ -216,6 +216,19 @@ public final class ElementsMet {
         return copy;
     }
 
+    /**
+     * Puts back what {@code earlier}, a copy of this taken before a reading that was not taken,
+     * had met: for a reader that shares this with others and cannot hand them the copy instead.
+     */
+    public void backTo(ElementsMet earlier) {
+        if (!holding) {
+            return;
+        }
+        standingFor.clear();
+        standingFor.putAll(earlier.standingFor);
+        crowded = earlier.crowded;
+    }
+
     /** Whether a number was refused because it named another element of a container this
      *  comparison was already read of. */
     public boolean crowded() {
