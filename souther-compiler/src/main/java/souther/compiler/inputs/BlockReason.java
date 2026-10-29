@@ -7,6 +7,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -326,7 +327,8 @@ public sealed interface BlockReason {
                                 ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
                 case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
                                               Long shorterThan,
-                                              List<String> imagesNotShown) -> {
+                                              List<String> imagesNotShown,
+                                              List<CodePointsLeftOpen> byCodePoints) -> {
                     RelationShownOverARegion them = (RelationShownOverARegion) other;
                     int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
                     if (byLength != 0) {
@@ -349,7 +351,17 @@ public sealed interface BlockReason {
                             yield byName;
                         }
                     }
-                    yield Integer.compare(imagesNotShown.size(), theirs.size());
+                    if (imagesNotShown.size() != theirs.size()) {
+                        yield Integer.compare(imagesNotShown.size(), theirs.size());
+                    }
+                    List<CodePointsLeftOpen> theirCounts = them.byCodePoints();
+                    for (int i = 0; i < Math.min(byCodePoints.size(), theirCounts.size()); i++) {
+                        int byCount = byCodePoints.get(i).compareTo(theirCounts.get(i));
+                        if (byCount != 0) {
+                            yield byCount;
+                        }
+                    }
+                    yield Integer.compare(byCodePoints.size(), theirCounts.size());
                 }
                 case RelationRowsNotShownComputed(var over) -> RelationRowsNotShownComputed
                         .compare(over, ((RelationRowsNotShownComputed) other).over());
@@ -1407,15 +1419,24 @@ public sealed interface BlockReason {
      *                    length. None where the values left open are left for another reason
      */
     record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
-                                    List<String> imagesNotShown)
+                                    List<String> imagesNotShown,
+                                    List<CodePointsLeftOpen> byCodePoints)
             implements RuleReadingStopped {
 
         public RelationShownOverARegion {
-            if (!atAnyLength && longerThan == null && shorterThan == null) {
+            if (!atAnyLength && longerThan == null && shorterThan == null
+                    && byCodePoints.isEmpty()) {
                 throw new IllegalArgumentException("a relation shown over a region leaves some"
                         + " values open");
             }
             imagesNotShown = imagesNotShown.stream().distinct().sorted().toList();
+            byCodePoints = byCodePoints.stream().distinct().sorted().toList();
+        }
+
+        /** The same, with no values left open for how many code points of a class they hold. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
+                                        List<String> imagesNotShown) {
+            this(atAnyLength, longerThan, shorterThan, imagesNotShown, List.of());
         }
 
         /** Values open for being long, or open at any length. */
@@ -1449,6 +1470,14 @@ public sealed interface BlockReason {
          *  open for ({@code imagesNotShown}). */
         public static RelationShownOverARegion of(List<ValuesWithin> open,
                                                   List<String> imagesNotShown) {
+            return of(open, imagesNotShown, List.of());
+        }
+
+        /** The same, with the values left open for how many code points of a class they hold
+         *  ({@code byCodePoints}), which no length bounds. */
+        public static RelationShownOverARegion of(List<ValuesWithin> open,
+                                                  List<String> imagesNotShown,
+                                                  List<CodePointsLeftOpen> byCodePoints) {
             boolean atAnyLength = open.stream()
                     .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
             Long longerThan = open.stream().filter(each -> each.shortest() > 0)
@@ -1457,7 +1486,41 @@ public sealed interface BlockReason {
                     .filter(each -> each.shortest() == 0 && each.longest() != null)
                     .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
             return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
-                    atAnyLength ? imagesNotShown : List.of());
+                    atAnyLength ? imagesNotShown : List.of(), byCodePoints);
+        }
+    }
+
+    /**
+     * Values left open for how many code points of a class they hold: those holding fewer than
+     * {@code fewerThan} of them, or more than {@code moreThan}. A bound on how many and not on
+     * the values, as {@link RelationShownOverARegion} says of lengths.
+     *
+     * @param counted  the code points counted
+     * @param fewerThan the values holding fewer than this many are open; null where none are
+     *                 for holding few
+     * @param moreThan the values holding more than this many are open; null where none are for
+     *                 holding many
+     */
+    record CodePointsLeftOpen(CodePointClass counted, Long fewerThan, Long moreThan)
+            implements Comparable<CodePointsLeftOpen> {
+
+        public CodePointsLeftOpen {
+            Objects.requireNonNull(counted, "the code points counted");
+            if ((fewerThan == null) == (moreThan == null)) {
+                throw new IllegalArgumentException(
+                        "values are open for holding fewer than so many, or more than so many");
+            }
+        }
+
+        @Override
+        public int compareTo(CodePointsLeftOpen other) {
+            int byClass = counted.toString().compareTo(other.counted.toString());
+            if (byClass != 0) {
+                return byClass;
+            }
+            int byFewer = Comparator.nullsFirst(Long::compare).compare(fewerThan, other.fewerThan);
+            return byFewer != 0 ? byFewer
+                    : Comparator.nullsFirst(Long::compare).compare(moreThan, other.moreThan);
         }
     }
 

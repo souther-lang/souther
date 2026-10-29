@@ -207,10 +207,7 @@ public final class LinesWhereTheyFall {
             // and nothing else. What each side holds was worked out where the rule was read, and a
             // filing that worked them out again would be a second answer about one rule.
             case RuleEvidence.BySet(SetStatement division) ->
-                    new RuleEvidence.BySet(new SetStatement(here, division.whenTrue(),
-                            division.whenFalse(), division.statement(), division.origin(),
-                            division.notShown(), division.notReached(),
-                            division.imagesNotShown()));
+                    new RuleEvidence.BySet(division.measuredAt(here));
         };
     }
 
