@@ -614,7 +614,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         told.exact = false;
                     }
                 }
-                if (!restEndsNoRun(value, at, reached)) {
+                if (!restEndsNoRun(value, at, reached, closures)) {
                     told.exact = false;
                 }
                 return true;
@@ -1514,22 +1514,30 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return told.working();
     }
 
-    /** Whether what {@code expression} works out ends no run, apart from the closures written at
-     *  it and the calls that make an option of what they are applied to. */
+    /** Whether what {@code expression} works out ends no run, apart from the closures
+     *  {@code told}, whose bodies are read of their own. A closure written anywhere else in it is
+     *  applied by the call it is written at, and where that stops is no one's but that closure's. */
     private static boolean restEndsNoRun(Core expression, InputReads at,
-                                         WorkedOutToReachIt reached) {
+                                         WorkedOutToReachIt reached, List<Denotation> told) {
         Core here = Core.withoutStanding(expression);
         if (!(here instanceof Core.PreservedCall call)
                 || !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(call).endsNone()) {
             return reached.endsNoRun(new Denotation(expression, at));
         }
         for (Core argument : call.args()) {
-            if (!(Core.withoutStanding(argument) instanceof Core.Block)
-                    && !restEndsNoRun(argument, at, reached)) {
+            boolean ends = Core.withoutStanding(argument) instanceof Core.Block closure
+                    ? isTold(closure, told)
+                    : restEndsNoRun(argument, at, reached, told);
+            if (!ends) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean isTold(Core.Block closure, List<Denotation> told) {
+        Core body = Core.withoutStanding(closure.body());
+        return told.stream().anyMatch(each -> Core.withoutStanding(each.value()) == body);
     }
 
     /** What {@code side} comes to once the bindings written around it are taken off. */

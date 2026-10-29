@@ -4780,8 +4780,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             Carrier carrier = read.quantities().ordersOf(value).answered();
             BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
-            if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
-                    carrier) && theWorkingGetsPastAtTheWitness(value, window)
+            if (holdsFromNoughtTo(carrier, window) && (held == null
+                    || holdsDownFromNoughtTo(carrier, window))
+                    && theFormIsComputedAtEachOf(weight, window, carrier)
+                    && theWorkingGetsPastAtTheWitness(value, window)
                     && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
                 return true;
             }
@@ -4823,6 +4825,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  of. */
     private boolean overTheFormOfTheRemainder(IntOperation operation) {
         return remainder.dividend().coefs().keySet().containsAll(operation.form().coefs().keySet());
+    }
+
+    /** Whether the values of {@code carrier} include every whole number from nought down to
+     *  minus {@code top}, an end it has none of being no end. The working is asked of a witness
+     *  with the others at nought, but a held number stands wherever its rows put it: the sum of
+     *  the others then leaves room for the window above the witness or below it, and the
+     *  carrier has it either way only if it holds both. */
+    private static boolean holdsDownFromNoughtTo(Carrier carrier, BigInteger top) {
+        BigInteger least = leastOf(carrier);
+        BigInteger greatest = greatestOf(carrier);
+        return (greatest == null || greatest.signum() >= 0)
+                && (least == null || least.compareTo(top.negate()) <= 0);
     }
 
     /** Whether the values of {@code carrier} include every whole number from nought to

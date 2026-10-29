@@ -499,6 +499,20 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
 
+    @Test
+    void aNumberHeldWhereTheFormOverflowsLeavesNoRowToDrawTheLinesAt() {
+        // The number the form is moved by overflows with the other number held at a value, and
+        // that value is no row: with it free the lines are drawn, and with it held at the end of
+        // its type there is no row to draw them at.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)"));
+        List<String> held = bordersOf(linesOf(compiled(
+                "data Top = Int\n    invariant value == 9223372036854775807\n",
+                "a: Top, x: Int, c: Int", "c == Int.floorMod(a.value + 5 + x, 11)")));
+        assertFalse(held.contains("11"), held::toString);
+        assertFalse(held.contains("-1"), held::toString);
+    }
+
     /**
      * A number beside the remainder that is read off a place the form is read at is not apart from
      * it, and the relation is not read as a remainder beside a number.
