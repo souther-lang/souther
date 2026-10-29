@@ -71,6 +71,16 @@ class ARunGetsPastTheOperationsAtTheWitnessOfARemainderTest {
     }
 
     @Test
+    void anOperationThatComesToTheSameNumberWhateverIsReadStopsTheRunOrNone() {
+        UndividedByARelation.IntOperation within = over(LinearForm.constant(ExactRatio.of(5)));
+        UndividedByARelation.IntOperation past = new UndividedByARelation.IntOperation(
+                LinearForm.constant(ExactRatio.of(BigInteger.ONE.shiftLeft(70))), LEAST, GREATEST,
+                List.of());
+        assertTrue(getsPast(within, over(weighing(X, 3, 5))));
+        assertFalse(getsPast(true, past, over(weighing(X, 3, 5))));
+    }
+
+    @Test
     void anOperationOverANumberOfTheFormAndOneItDoesNotHaveIsGivenUp() {
         LinearForm<NumericTerm> mixed = weighing(X, 1, 0)
                 .plus(LinearForm.weighing(Y, ExactRatio.of(1))).orNull();

@@ -4766,12 +4766,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * others: it stands at whatever value is asked of it, and which of its values have a row is
      * asked of the row.
      *
-     * <p>With no {@code held}, the witness is also one at which the run gets past every
-     * operation it works out ({@link #theWorkingGetsPastAtTheWitness}): the remainders are a
-     * row's, and a row gets there. With one, the others are not put anywhere, so there is no
-     * assignment to ask the operations at, and what is shown is the form's alone; the operations
-     * over the numbers of the relation are judged where they are told
-     * ({@link #operationsOverTheSides}).
+     * <p>The witness is also one at which the run gets past every operation it works out
+     * ({@link #theWorkingGetsPastAtTheWitness}): the remainders are a row's, and a row gets
+     * there. With a {@code held} number the others are not put at nought for every value of it,
+     * so this is a necessary condition of the claim and not a proof of it: which values of the
+     * held number have a row is asked of the row, and the operations over the numbers of the
+     * relation are judged where they are told ({@link #operationsOverTheSides}).
      */
     private boolean reachesEveryRemainder(NumericTerm held, InputReading read,
                                           List<OnAWay> conditions, boolean heldWhole) {
@@ -4810,8 +4810,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Carrier carrier = read.quantities().ordersOf(value).answered();
             BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
             if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
-                    carrier) && (held != null
-                    || theWorkingGetsPastAtTheWitness(value, window, read))
+                    carrier) && theWorkingGetsPastAtTheWitness(value, window, read)
                     && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
                 return value;
             }
@@ -4862,6 +4861,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                         Predicate<IntOperation> apart) {
         for (IntOperation each : operations) {
             Set<NumericTerm> reads = each.form().coefs().keySet();
+            if (reads.isEmpty()) {
+                // An operation that comes to the same number whatever is read: no row's choice
+                // can move it, and the run stops at it or at none.
+                ExactRatio comes = each.form().constant();
+                if (comes.compareTo(ExactRatio.of(each.least())) < 0
+                        || comes.compareTo(ExactRatio.of(each.greatest())) > 0) {
+                    return false;
+                }
+                continue;
+            }
             if (reads.stream().noneMatch(ofTheForm::contains)) {
                 if (!apart.test(each)) {
                     return false;
