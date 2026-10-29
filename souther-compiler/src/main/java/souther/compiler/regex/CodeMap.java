@@ -2,6 +2,7 @@ package souther.compiler.regex;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
@@ -44,11 +45,21 @@ public final class CodeMap {
     }
 
     private final List<Run> runs;
+    /** The same runs by where they are sent, with how far the images of the runs up to each reach. */
+    private final List<Run> byImage;
+    private final int[] imageReach;
     private final CodePoints domain;
     private final CodePoints leftAlone;
 
     private CodeMap(List<Run> runs, CodePoints leftAlone) {
         this.runs = List.copyOf(runs);
+        this.byImage = runs.stream().sorted(Comparator.comparingInt(Run::imageFrom)).toList();
+        this.imageReach = new int[byImage.size()];
+        int reach = -1;
+        for (int i = 0; i < imageReach.length; i++) {
+            reach = Math.max(reach, byImage.get(i).imageTo());
+            imageReach[i] = reach;
+        }
         List<CodePoints.Range> covered = new ArrayList<>();
         for (Run each : runs) {
             covered.add(new CodePoints.Range(each.from(), each.to()));
@@ -156,12 +167,23 @@ public final class CodeMap {
     public CodePoints image(CodePoints over) {
         List<CodePoints.Range> out = new ArrayList<>();
         for (CodePoints.Range range : over.ranges()) {
-            for (Run run : runs) {
+            // The runs are in order and apart, so those ending before the range are skipped by
+            // search and those starting after it end the walk.
+            int low = 0;
+            int high = runs.size();
+            while (low < high) {
+                int middle = (low + high) >>> 1;
+                if (runs.get(middle).to() < range.from()) {
+                    low = middle + 1;
+                } else {
+                    high = middle;
+                }
+            }
+            for (int i = low; i < runs.size() && runs.get(i).from() <= range.to(); i++) {
+                Run run = runs.get(i);
                 int from = Math.max(range.from(), run.from());
                 int to = Math.min(range.to(), run.to());
-                if (from <= to) {
-                    out.add(new CodePoints.Range(from + run.shift(), to + run.shift()));
-                }
+                out.add(new CodePoints.Range(from + run.shift(), to + run.shift()));
             }
         }
         return new CodePoints(out);
@@ -171,7 +193,20 @@ public final class CodeMap {
     public CodePoints preimage(CodePoints over) {
         List<CodePoints.Range> out = new ArrayList<>();
         for (CodePoints.Range range : over.ranges()) {
-            for (Run run : runs) {
+            // By where they are sent, the images of the runs up to one reach no further than
+            // imageReach says, so those reaching short of the range are skipped by search.
+            int low = 0;
+            int high = imageReach.length;
+            while (low < high) {
+                int middle = (low + high) >>> 1;
+                if (imageReach[middle] < range.from()) {
+                    low = middle + 1;
+                } else {
+                    high = middle;
+                }
+            }
+            for (int i = low; i < byImage.size() && byImage.get(i).imageFrom() <= range.to(); i++) {
+                Run run = byImage.get(i);
                 int from = Math.max(range.from(), run.imageFrom());
                 int to = Math.min(range.to(), run.imageTo());
                 if (from <= to) {
