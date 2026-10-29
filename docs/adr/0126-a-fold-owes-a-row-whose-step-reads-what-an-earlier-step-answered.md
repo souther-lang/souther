@@ -1,4 +1,4 @@
-# ADR-0125: A fold owes a row whose step reads what an earlier step answered
+# ADR-0126: A fold owes a row whose step reads what an earlier step answered
 
 Status: Accepted. Extends ADR-0121 with a third family of rewrites; the two it lists keep their
 meaning.

@@ -462,6 +462,23 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AffineReading.1.composed",
                     "asks the operator's own account where an operation a comparison works out"
                             + " answers, so that a row is asked to get past it"),
+            new Held("souther.compiler.partition.AffineReading.WhatWasTold.addsDecimal",
+                    "asks whether an operation a comparison works out is a decimal sum, difference"
+                            + " or product, which a row is asked to get past by working it out"),
+            new Held("souther.compiler.inputs.DecimalOperation#op",
+                    "which decimal operation a row is asked to get past"),
+            new Held("souther.compiler.inputs.DecimalOperation.<init>",
+                    "holds which decimal operation a row is asked to get past"),
+            new Held("souther.compiler.inputs.DecimalOperation.op",
+                    "which decimal operation a row is asked to get past"),
+            new Held("souther.compiler.inputs.DecimalOperation.shifted",
+                    "carries the operator over when the operations it is told beside are moved"),
+            new Held("souther.compiler.inputs.DecimalOperation.allowAClaimOver",
+                    "reads how far the scale of what an operator leaves can reach from the scales"
+                            + " of its operands: a product's is their sum, a sum's the greater"),
+            new Held("souther.compiler.inputs.DecimalOperation.workedOut",
+                    "works the operator out on the numbers a row has, by the rule the run time"
+                            + " works it out by"),
             new Held("souther.compiler.partition.AffineReading.1.totalled",
                     "asks the addition's own account where a total over a list written out"
                             + " answers, since the library holds only that total to the type"),

@@ -957,7 +957,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // others already hold is a question about where the values part, and the arrangement is
         // what answers it — asked here as well, this reading would keep whichever of two lines at
         // one place it met first and the other would go unsaid.
-        ExactAnswer<Arranged> arranged = parted.flatMap(others ->
+        ExactAnswer<Arranged> arranged = onTheOrderOf(space, parted).flatMap(others ->
                 partedBy(target, origin).map(mine -> {
                     List<Parting> all = new ArrayList<>(others);
                     all.addAll(mine);
@@ -1392,6 +1392,31 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     .ifPresent(out::add);
         }
         return out;
+    }
+
+    /**
+     * {@code parted} as places of {@code space}, or the way one of them was not worked out there.
+     * A quantity parted at a decimal and at a number no decimal writes has the second on an order
+     * that counts, and the places of the first are said as counts to stand among them
+     * ({@link LevelSpace#countsLevels}).
+     */
+    private static ExactAnswer<List<Parting>> onTheOrderOf(LevelSpace space,
+                                                          ExactAnswer<List<Parting>> parted) {
+        if (!space.countsLevels()) {
+            return parted;
+        }
+        return parted.flatMap(places -> {
+            List<Parting> counted = new ArrayList<>();
+            for (Parting each : places) {
+                switch (each.counted()) {
+                    case ExactAnswer.Held<Parting> held -> counted.add(held.value());
+                    case ExactAnswer.Unheld<Parting> unheld -> {
+                        return ExactAnswer.unheld(unheld.why());
+                    }
+                }
+            }
+            return ExactAnswer.held(List.copyOf(counted));
+        });
     }
 
     /**

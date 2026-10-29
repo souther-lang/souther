@@ -115,43 +115,35 @@ public final class DecimalMath {
 
     /** {@code Decimal.add(a, b)}, and the {@code +} operator. */
     public static BigDecimal add(BigDecimal a, BigDecimal b) {
-        try {
-            return a.add(b);
-        } catch (ArithmeticException _) {
+        BigDecimal sum = ExactDecimals.sumWhereThereIsRoom(a, b);
+        if (sum == null) {
             throw outOfRange("the sum of " + describe(a) + " and " + describe(b));
         }
+        return sum;
     }
 
     /** {@code Decimal.subtract(a, b)}, and the {@code -} operator. */
     public static BigDecimal subtract(BigDecimal a, BigDecimal b) {
-        try {
-            return a.subtract(b);
-        } catch (ArithmeticException _) {
+        BigDecimal difference = ExactDecimals.differenceWhereThereIsRoom(a, b);
+        if (difference == null) {
             throw outOfRange("the difference of " + describe(a) + " and " + describe(b));
         }
+        return difference;
     }
 
     /**
      * {@code Decimal.multiply(a, b)}, and the {@code *} operator. A product's scale is the sum of
      * its factors' scales, so this is the operation that reaches the end of the range first.
      *
-     * <p>That sum is worked out here, and a product whose scale no {@code Decimal} holds aborts
-     * before {@code BigDecimal} is asked for it, whatever the product's value is. Asked first,
-     * {@code BigDecimal} answers some such products instead of refusing them — a nought factor on the
-     * left is multiplied at a scale moved back into range, and the same factor on the right is
-     * refused — so {@code a * b} and {@code b * a} would differ. A refusal that still comes back is
-     * the representation having no room for the product's digits.
+     * <p>Whether there is room is {@link ExactDecimals#timesWhereThereIsRoom}'s, which the compiler
+     * asks too; a product it has no room for aborts, whatever the product's value is.
      */
     public static BigDecimal multiply(BigDecimal a, BigDecimal b) {
-        long scale = (long) a.scale() + b.scale();
-        if (scale != (int) scale) {
+        BigDecimal product = ExactDecimals.timesWhereThereIsRoom(a, b);
+        if (product == null) {
             throw outOfRange("the product of " + describe(a) + " and " + describe(b));
         }
-        try {
-            return a.multiply(b);
-        } catch (ArithmeticException _) {
-            throw outOfRange("the product of " + describe(a) + " and " + describe(b));
-        }
+        return product;
     }
 
     /**

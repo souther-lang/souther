@@ -156,6 +156,19 @@ public interface LevelSpace {
     }
 
     /**
+     * Whether every level of this order is a number the quantity counts to
+     * ({@link Level.OfTheQuantity}), so that a place another order parts the quantity at must be
+     * said as a count before it is put among this order's.
+     *
+     * <p>One quantity can be parted at a decimal, which is a place of its carrier, and at a number
+     * no decimal writes, which is no place of anything. The second is on an order that counts, and
+     * the first is brought onto it ({@link Seam#counted}) and not compared across.
+     */
+    default boolean countsLevels() {
+        return false;
+    }
+
+    /**
      * The nearest level the quantity can take at or past {@code from}, the way {@code towards} says,
      * or empty where the order names none there — or which way the exact arithmetic could not tell.
      *
@@ -906,6 +919,11 @@ public interface LevelSpace {
         @Override
         public int compare(Level l, Level r) {
             return numberOf(l).compareTo(numberOf(r));
+        }
+
+        @Override
+        public boolean countsLevels() {
+            return true;
         }
 
         static ExactRatio numberOf(Level level) {
