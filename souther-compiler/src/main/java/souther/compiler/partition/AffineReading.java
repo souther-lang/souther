@@ -1760,14 +1760,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * Whether one side of the comparison folds to a count that a list, and the counts beside
-         * it, can be: the rows on a line drawn there hold lists a run can make.
+         * Whether one side of the comparison folds to a count and the count above it that lists
+         * have, the counts of a list being the whole numbers up to {@code Integer.MAX_VALUE}: the
+         * rows on a line drawn there hold lists a run can make. A line below nought has no list on
+         * it.
          */
         private boolean theLineIsAtACountAListHolds() {
             for (Core side : List.of(comparison.left(), comparison.right())) {
                 if (reads.folded(side, ofTheInput.rules().symbols(),
                         ofTheInput.rules().newtypes()).orElse(null) instanceof Long count
-                        && count >= -1 && count <= Integer.MAX_VALUE - 2) {
+                        && count >= 0 && count < Integer.MAX_VALUE) {
                     return true;
                 }
             }
