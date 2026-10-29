@@ -4,6 +4,7 @@ import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.JsonBoundary;
 import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Hir;
@@ -665,6 +666,7 @@ public final class Runner {
             return GeneratedBehavior.apply(loader, pkg, behavior, args);
         } catch (java.lang.reflect.InvocationTargetException e) {
             Throwable cause = e.getCause();
+            GeneratedLinkage.rejectDefect(cause);
             throw fail("run.behavior.failed", "`" + behavior + "` failed: " + cause,
                     behavior, String.valueOf(cause));
         } catch (ReflectiveOperationException e) {

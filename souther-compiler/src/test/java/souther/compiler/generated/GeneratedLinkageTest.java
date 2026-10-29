@@ -1,6 +1,7 @@
 package souther.compiler.generated;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.examples.InvocationFailure;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.ExecutionException;
@@ -85,6 +86,22 @@ class GeneratedLinkageTest {
                 () -> GeneratedLinkage.rejectDefect(new VerifyError("x")));
         assertSame(first, assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
                 () -> GeneratedLinkage.rejectDefect(new IllegalStateException("a layer's own", first))));
+    }
+
+    /** Every reader of what a generated method ended with receives it through this carrier, so the
+     * carrier is where a link failure stops being something a row ended with. */
+    @Test
+    void whatAGeneratedMethodEndedWithIsNeverALinkFailureOfTheClass() {
+        VerifyError wrong = new VerifyError("Bad type on operand stack");
+        GeneratedLinkage.GeneratedClassDefect defect = assertThrows(
+                GeneratedLinkage.GeneratedClassDefect.class, () -> new InvocationFailure(wrong));
+        assertSame(wrong, defect.getCause());
+        assertThrows(GeneratedLinkage.GeneratedClassDefect.class, () -> new InvocationFailure(
+                new ExceptionInInitializerError(wrong)));
+        InvocationFailure ended = new InvocationFailure(new StackOverflowError());
+        assertInstanceOf(StackOverflowError.class, ended.getCause());
+        assertInstanceOf(InvocationFailure.class, new InvocationFailure(
+                new NoClassDefFoundError("Could not initialize class repro.Values")));
     }
 
     @Test

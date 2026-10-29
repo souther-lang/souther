@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.GeneratedLinkage;
+
 /**
  * What a generated method ended with, carried out of the invocation that made it.
  *
@@ -26,7 +28,13 @@ public final class InvocationFailure extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Carries {@code cause} out. Where it is, or holds, a generated class that did not link, there
+     * is nothing a row ended with to carry: that is this compiler's output failing, and it is raised
+     * as such here, where every producer of this passes, and not read off by each reader.
+     */
     public InvocationFailure(Throwable cause) {
+        GeneratedLinkage.rejectDefect(cause);
         super(cause == null ? "the invocation ended with no cause" : cause.toString(), cause);
     }
 }

@@ -1,7 +1,6 @@
 package souther.compiler.examples;
 
 import souther.compiler.evaluate.EvaluationContext;
-import souther.compiler.generated.GeneratedLinkage;
 
 /**
  * What a row makes of a failure the code it ran came back with.
@@ -25,8 +24,6 @@ final class RowFailures {
     /** What {@code failure} means for a row that was running {@code what}. */
     static RuntimeException of(InvocationFailure failure, String what) {
         Throwable cause = failure.getCause();
-        // A class that was generated wrongly is not a value the fixture failed to produce.
-        GeneratedLinkage.rejectDefect(failure);
         // A budget spent and an evaluation given up on are both the evaluation stopping, and neither
         // is a value the fixture failed to produce.
         RuntimeException stop = EvaluationContext.overspent(cause);
