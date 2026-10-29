@@ -39,6 +39,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -490,7 +491,7 @@ final class DemandReading {
                     Optional<ModelOccurrence> copy = copyOf(leaf);
                     if (copy.isPresent()) {
                         for (String key : List.of(leaf.part().key(),
-                                leaf.part().denied().key())) {
+                                leaf.part().deniedKey())) {
                             found.computeIfAbsent(key, _ -> new ModelOccurrences.Gathering())
                                     .add(copy.get());
                         }
@@ -765,7 +766,7 @@ final class DemandReading {
      */
     static Answered regionAnswered(Proposition answers, InputReading read) {
         List<TakenConstraint> narrowing = new ArrayList<>();
-        List<Set<TermPath>> tied = new ArrayList<>();
+        List<Tie> tied = new ArrayList<>();
         for (Read each : projected(answers, read)) {
             if (!(each instanceof Read.Demands(RowDemand.Relational(
                     TakenConstraint constraint)))) {
@@ -782,9 +783,7 @@ final class DemandReading {
                             && !value.position().insideAContainer())) {
                 narrowing.add(constraint);
             } else if (!heldByTheRunsOfTheDeclarations(constraint, read)) {
-                Set<TermPath> places = new LinkedHashSet<>();
-                constraint.terms().forEach(term -> places.add(term.subjectPath()));
-                tied.add(places);
+                tied.add(Tie.by(constraint));
             }
         }
         return new Answered(narrowing, tied, false);
@@ -803,13 +802,44 @@ final class DemandReading {
     }
 
     /**
+     * What ties places on the way to a comparison: the places, and what the way states of the
+     * numbers read off them where that is known.
+     *
+     * <p>A tie is a statement over places and is equal to every tie of the same statement over the
+     * same places, wherever it is worked out. It is not the site that works it out, and no reader
+     * may take two equal ties to be one run: what is asked of a tie is what it states.
+     *
+     * @param places the places the tie names, in the order they were met
+     * @param by     what is stated of their numbers, or null where only the places are known — the
+     *               numbers an operator not said may stop the run on
+     */
+    record Tie(Set<TermPath> places, TakenConstraint by) {
+
+        Tie {
+            places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+        }
+
+        /** The tie a statement of numbers makes, between the places it names. */
+        static Tie by(TakenConstraint constraint) {
+            Set<TermPath> places = new LinkedHashSet<>();
+            constraint.terms().forEach(term -> places.add(term.subjectPath()));
+            return new Tie(places, constraint);
+        }
+
+        /** The tie of places an operator not said of may stop the run on. */
+        static Tie between(Set<TermPath> places) {
+            return new Tie(places, null);
+        }
+    }
+
+    /**
      * What a run's working out the operators of a part asks of a row.
      *
      * @param narrowing what the numbers of places outside a container say, which a region carries
-     * @param tied      the places each condition of more than one place names, or one a region
-     *                  cannot carry, and the places of the numbers an operator not said may stop
-     *                  the run on: places the run no longer leaves free of one another, which a
-     *                  reader that takes two places to take any pair of values asks
+     * @param tied      the conditions of more than one place, or one a region cannot carry, and the
+     *                  places of the numbers an operator not said may stop the run on: places the
+     *                  run no longer leaves free of one another, which a reader that takes two
+     *                  places to take any pair of values asks
      * @param unsaid    whether an operator not said may stop the run on something that is no
      *                  number of a place: no two places are then known free of one another
      * @param owed      the operators the run may stop at whose owner says where they answer, each
@@ -819,7 +849,7 @@ final class DemandReading {
      *                  in work out, for each closure it is read in ({@link PriorApplications}):
      *                  until a reader shows a run with none, as much the run's as the above
      */
-    record Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
+    record Answered(List<TakenConstraint> narrowing, List<Tie> tied, boolean unsaid,
                     List<Pullback.StopObligation> owed, List<PriorApplications> before) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
@@ -832,20 +862,20 @@ final class DemandReading {
         }
 
         /** What a run asks of a row with no application before it. */
-        Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid,
+        Answered(List<TakenConstraint> narrowing, List<Tie> tied, boolean unsaid,
                  List<Pullback.StopObligation> owed) {
             this(narrowing, tied, unsaid, owed, List.of());
         }
 
         /** What a run asks of a row with nothing owed beside it. */
-        Answered(List<TakenConstraint> narrowing, List<Set<TermPath>> tied, boolean unsaid) {
+        Answered(List<TakenConstraint> narrowing, List<Tie> tied, boolean unsaid) {
             this(narrowing, tied, unsaid, List.of());
         }
 
         /** The places each of {@code tied} names, and each owed operator reads — those the
          *  applications before work out among them. */
         List<Set<TermPath>> tiedOrOwed() {
-            List<Set<TermPath>> out = new ArrayList<>(tied);
+            List<Set<TermPath>> out = new ArrayList<>(tied.stream().map(Tie::places).toList());
             owed.forEach(each -> out.add(each.places()));
             before.forEach(each -> out.addAll(each.workedOut().tiedOrOwed()));
             return out;
@@ -935,7 +965,9 @@ final class DemandReading {
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
             return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere()
                     && operators.obligations().isEmpty() ? NOTHING
-                    : new Answered(List.of(), operators.unsaidAt(), operators.unsaidElsewhere(),
+                    : new Answered(List.of(),
+                            operators.unsaidAt().stream().map(Tie::between).toList(),
+                            operators.unsaidElsewhere(),
                             operators.obligations().stream().map(each -> each.readIn(body))
                                     .toList());
         }
@@ -944,7 +976,7 @@ final class DemandReading {
         Answered and(Answered other) {
             List<TakenConstraint> narrows = new ArrayList<>(narrowing);
             narrows.addAll(other.narrowing);
-            List<Set<TermPath>> places = new ArrayList<>(tied);
+            List<Tie> places = new ArrayList<>(tied);
             places.addAll(other.tied);
             List<Pullback.StopObligation> both = new ArrayList<>(owed);
             both.addAll(other.owed);
@@ -1238,7 +1270,8 @@ final class DemandReading {
             // and asked by the kind it would be read as a count a row composes.
             case Proposition.Compared compared when Proposition.aboutAnAnswer(compared) ->
                     List.of(anAnswerARowStandsIn(compared));
-            case Proposition.Compared compared -> List.of(ofARelation(compared, read));
+            case Proposition.Compared compared -> List.of(RelationsAsked.of(read)
+                    .of(compared, () -> ofARelation(compared, read)));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),

@@ -100,11 +100,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * acts on — that the region a search runs over admits every row that meets what was taken in.
      */
     public SearchRegion narrowing(SearchRegion base) {
-        SearchRegion region = base;
-        for (TakenConstraint each : takenIntoTheRegion()) {
-            region = each.narrowing(region);
-        }
-        return region;
+        return base.narrowingsKept().through(base, takenIntoTheRegion(), TakenConstraint::narrowing);
     }
 
     /**

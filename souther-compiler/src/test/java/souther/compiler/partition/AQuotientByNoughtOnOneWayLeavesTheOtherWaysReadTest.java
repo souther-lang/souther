@@ -169,12 +169,16 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aStopOnSomeWaysIsSaidWhereverItStandsInTheComparison() {
         for (String guard : List.of("(if a > 0 then a / 0 else b / 1) >= k",
-                "(if a > 0 then a / 1 else b / 0) >= k",
-                "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k")) {
+                "(if a > 0 then a / 1 else b / 0) >= k")) {
             String report = human(MODEL.formatted("", guard));
             assertTrue(report.contains(MAY_STOP_A_RUN), guard + "\n" + report);
             assertFalse(report.contains("not read"), guard + "\n" + report);
         }
+        // The way that answers adds two quotients, a sum of two Rationals that the operation's
+        // account says may stop where a Rational has no room for it: the stop is said, and the
+        // rows of that way are not shown computed.
+        String sum = "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k";
+        assertTrue(human(MODEL.formatted("", sum)).contains(MAY_STOP_A_RUN), sum);
     }
 
     private static final String MATCHED =

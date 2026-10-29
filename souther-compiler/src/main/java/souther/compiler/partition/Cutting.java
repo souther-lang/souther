@@ -55,6 +55,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
@@ -1129,10 +1130,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return new Read.Several(parts);
     }
 
-    /** What the reading of the comparison on {@code onTheInput} told of its operations: nothing
-     *  said where it was not read as a sum the walk composed. */
+    /** What the comparison on {@code onTheInput} is told to work out: what the rule that read it
+     *  tells where it tells more, and otherwise what the reading of it told. */
     private static UndividedByARelation.Working workingOf(Pullback.OnTheInput onTheInput) {
-        return AffineReading.OfAComparison.workingOf(onTheInput.arithmetic().get());
+        return onTheInput.working().get();
     }
 
     /**
@@ -1209,7 +1210,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.WhereItAnswers _
                     when !Proposition.leavesSomethingUnread(stated.proposition()) ->
                     asLines(behavior, comparison, stated.proposition(), onTheInput.arithmetic(),
-                            read, reads, answering, lines.get());
+                            onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
+                            answering, lines.get());
             // Some element meeting several parts, which is the parts read of that element: a
             // lookup's answer compared as a whole is its entry under the key meeting the
             // comparison, and the line is the comparison's on the entry. Inside an either-or it is
@@ -1217,7 +1219,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // turning what is said of an element either way round: the greatest of some values at
             // or below a number is no value above it, and its line is the line on a value.
             case Proposition.Some some when !Proposition.leavesSomethingUnread(some) ->
-                    asLines(behavior, comparison, some, onTheInput.arithmetic(), read, reads,
+                    asLines(behavior, comparison, some, onTheInput.arithmetic(),
+                            onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
                             answering, lines.get());
             default -> noLine(comparison, stated.proposition(),
                     Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
@@ -1593,9 +1596,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * @param arithmetic what the comparison's own arithmetic came to, which words a stop each place
      *                   words for itself
+     * @param working    what the rule that read the comparison tells of the operations its rows get
+     *                   past
+     * @param workingOfRelation what a relation read under an arm of a choice works out, or null
+     *                   for one that was not
      */
     private static Read asLines(String behavior, StatedComparison comparison, Proposition stated,
                                 Supplier<AffineReading.OfAComparison> arithmetic,
+                                Supplier<UndividedByARelation.Working> working,
+                                Function<Relation, UndividedByARelation.Working> workingOfRelation,
                                 InputReading read, InputReads reads, Arrivals answering,
                                 Optional<AuthorsLines> authors) {
         return switch (CountsWrittenOut.outsideElementsOf(stated)) {
@@ -1605,7 +1614,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
             case CountsWrittenOut.Written(Proposition written) ->
                     switch (several(behavior, comparison.left(), written, read, reads, authors,
-                            AffineReading.OfAComparison.workingOf(arithmetic.get()))) {
+                            relation -> {
+                                UndividedByARelation.Working own = relation == null ? null
+                                        : workingOfRelation.apply(relation);
+                                return own != null ? own : working.get();
+                            })) {
                         case TheParts.Drawn(Read.Several lines) -> lines;
                         case TheParts.NotDrawn none when none.readToTheEnd() ->
                                 severalNotDrawn(comparison, read, reads, answering);
@@ -1691,7 +1704,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (CountsWrittenOut.outsideElementsOf(stated)
                 instanceof CountsWrittenOut.Written(Proposition written)
                 && several(behavior, application, written, read, reads, Optional.of(authors),
-                        UndividedByARelation.Working.UNREAD)
+                        _ -> UndividedByARelation.Working.UNREAD)
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }
@@ -1946,13 +1959,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * @param authors which of the author's lines each relation is a place of, how it stands to
      *                each and where a row takes each one's arms ({@link WrittenLines}); nothing
      *                for a clause, which no body wrote and whose lines are its own relations
-     * @param working what the reading of the comparison the statement is of told of the
-     *                operations a row gets past, which each of its lines carries
+     * @param working what a line works out, which its rows get past: what the reading of the
+     *                comparison the statement is of told, or what was read of the line itself
+     *                where it was read under an arm of a choice
      */
     private static TheParts several(String behavior, Core written,
                                     Proposition stated, InputReading read, InputReads reads,
                                     Optional<AuthorsLines> authors,
-                                    UndividedByARelation.Working working) {
+                                    Function<Relation, UndividedByARelation.Working> working) {
         if (!onlyRelations(stated)
                 && !(holdsARelation(stated)
                         && AStatementAtARow.askableBesideItsRelations(stated))) {
@@ -2006,7 +2020,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 continue;
             }
             if (authors.isEmpty()) {
-                parts.add(new Read.Several.Part(alone, line, each.cases(), working));
+                parts.add(new Read.Several.Part(alone, line, each.cases(),
+                        workingOf(working, each.line())));
                 continue;
             }
             authorsLines(authors.get(), each.scales(), WrittenLines.claimOf(each.line()))
@@ -2015,7 +2030,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             authored(line, mapping, each.line()),
                             WhereEachLineDecides.takenWhere(each.cases(),
                                     authors.get().takenWhere(mapping.line())),
-                            working)));
+                            workingOf(working, each.line()))));
         }
         // Read as its parts where each is a line on the input, drawn or refused, or where some line
         // is drawn beside what is no line. With no line drawn and some part no line, nothing of it
@@ -2028,6 +2043,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         boolean allLines = parts.stream().allMatch(part -> Read.Several.Part.isALine(part.line()));
         return drawn || allLines ? new TheParts.Drawn(new Read.Several(parts))
                 : TheParts.READ_TO_THE_END;
+    }
+
+    /** What the rows of {@code line} work out, as {@code working} says of its relation. */
+    private static UndividedByARelation.Working workingOf(
+            Function<Relation, UndividedByARelation.Working> working, Proposition line) {
+        return working.apply(line instanceof Proposition.Compared compared ? compared.relation()
+                : null);
     }
 
     /**

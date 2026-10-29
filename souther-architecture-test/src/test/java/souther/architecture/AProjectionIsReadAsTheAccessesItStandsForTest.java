@@ -654,6 +654,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + ")Z", Reading.STRUCTURE,
                 "asks a node what it ends a run for, and each part under it: a projection ends"
                         + " none beyond what its base does");
+        row(out, c + "partition/AffineReading$WhatLiesBesideTheStop", "collectUnder",
+                "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
+                "records each node and goes down to its parts: a projection is held where its"
+                        + " base is");
+        row(out, c + "partition/Pullback", "divisionBy", "(" + core + core + ")" + core,
+                Reading.STRUCTURE,
+                "asks each node whether it is the quotient by a divisor, and goes down to its"
+                        + " parts: a projection holds it where its base does");
         row(out, c + "check/WhatARunMayEndFor", "forEachWorkedOut", "(L" + c
                         + "core/Core$IfConstructed;Ljava/util/function/Consumer;)V",
                 Reading.STRUCTURE,

@@ -45,6 +45,10 @@ import java.util.List;
  * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
  * @param notShown  the values shown on neither side, whatever their length; none where every value
  *                  is shown on one
+ * @param notReached the values of the lengths at which no run gets to the relation, each as long
+ *                  as it is left open at: shown on neither side, because the relation is not
+ *                  worked out for a string of that length; none where a run gets to it at every
+ *                  length
  * @param imagesNotShown the operations of the library whose image over the strings of a side is
  *                  shown only where it is exact, which are why {@code notShown} holds the strings
  *                  it holds
@@ -52,15 +56,16 @@ import java.util.List;
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                           ValueSet whenFalse, PredicateStatement statement,
                           PredicateOrigin origin, ValueSet notShown,
-                          List<String> imagesNotShown) {
+                          List<ValuesWithin> notReached, List<String> imagesNotShown) {
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
                 || statement == null || origin == null || notShown == null
-                || imagesNotShown == null) {
+                || notReached == null || imagesNotShown == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
+        notReached = List.copyOf(notReached);
         imagesNotShown = List.copyOf(imagesNotShown);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
@@ -69,11 +74,21 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
         // position's values, and it is asked where they are known ({@link Classing}).
     }
 
-    /** The same, whose open values are open for no operation's image. */
+    /** A rule that shows its values at every length a run gets to it at, and whose open values are
+     *  open for no operation's image. */
     public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                         ValueSet whenFalse, PredicateStatement statement,
                         PredicateOrigin origin, ValueSet notShown) {
-        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of());
+        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of(), List.of());
+    }
+
+    /** The same, with the lengths no run gets to the relation at, and open for no operation's
+     *  image. */
+    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
+                        ValueSet whenFalse, PredicateStatement statement,
+                        PredicateOrigin origin, ValueSet notShown,
+                        List<ValuesWithin> notReached) {
+        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached, List.of());
     }
 
     /** Whether every value is shown on one side or the other. */
@@ -82,14 +97,16 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
     }
 
     /**
-     * The values shown on neither side: those of {@code notShown}, and those of the set the true
-     * side is of past the length it is shown at. A string shorter than that is on one side.
+     * The values shown on neither side: those of {@code notShown}, those of the lengths no run
+     * gets to the relation at, and those of the set the true side is of past the length it is
+     * shown at. A string shorter than that is on one side.
      */
     public List<ValuesWithin> leftOpen() {
         List<ValuesWithin> out = new ArrayList<>();
         if (!notShown.isEmpty()) {
             out.add(ValuesWithin.all(notShown));
         }
+        out.addAll(notReached);
         if (whenTrue.longest() != null) {
             out.add(ValuesWithin.longerThan(whenTrue.values(), whenTrue.longest()));
         }

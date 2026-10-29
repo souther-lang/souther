@@ -7263,9 +7263,10 @@ public final class Adequacy {
     private static Generator.CandidateCheck.Admissibility admissibility(
             BoundaryValues.OnItsOwn what) {
         return switch (what) {
-            case BUILT -> Generator.CandidateCheck.Admissibility.ADMITTED;
-            case REFUSED -> Generator.CandidateCheck.Admissibility.REFUSED;
-            case NO_DECODER_OF_ITS_OWN -> Generator.CandidateCheck.Admissibility.UNKNOWN;
+            case BoundaryValues.OnItsOwn.Built _ -> Generator.CandidateCheck.Admissibility.ADMITTED;
+            case BoundaryValues.OnItsOwn.Refused _ -> Generator.CandidateCheck.Admissibility.REFUSED;
+            case BoundaryValues.OnItsOwn.NoDecoderOfItsOwn _ ->
+                    Generator.CandidateCheck.Admissibility.UNKNOWN;
         };
     }
 
@@ -7285,6 +7286,13 @@ public final class Adequacy {
             public Generator.CandidateCheck.Admissibility admissibility(Type type,
                                                                         FixtureTemplate candidate) {
                 return Adequacy.admissibility(building.buildAlone(type, candidate));
+            }
+
+            @Override
+            public Optional<ObservedValue> builtAlone(Type type, FixtureTemplate candidate) {
+                return building.buildAlone(type, candidate)
+                        instanceof BoundaryValues.OnItsOwn.Built(var observed)
+                        ? Optional.of(observed) : Optional.empty();
             }
         };
     }

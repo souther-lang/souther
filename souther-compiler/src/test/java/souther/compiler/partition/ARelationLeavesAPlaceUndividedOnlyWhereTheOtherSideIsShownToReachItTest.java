@@ -3119,10 +3119,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * and each {@code a} has an {@code s} at one above it and two above it. Where nothing shows the
      * allowance takes a value above its cap, nothing is shown of {@code a} along that arm.
      *
-     * <p>The arm is expanded into a relation of its own, which carries none of the operations the
-     * comparison works out, so a row at an end of the type is not shown computed and nothing is
-     * shown of {@code a}, {@code c} or {@code s} along either arm. That is a reading short of
-     * what the comparison states and says nothing of a row that exists.
+     * <p>The arm is expanded into a relation of its own, which carries the operations its arm works
+     * out and none of the other's: {@code a + c}, and the cap or {@code c} added to {@code s}.
+     * Those sums weigh {@code s} against {@code a} and {@code c} otherwise than the form does, so
+     * a row at an end of the type is not shown computed and nothing is shown of {@code a} or
+     * {@code s} along either arm; {@code c} is read.
      */
     @Test
     void aTermHeldAboveItsCapAlongAnArmIsHeldWhereItStarts() {
@@ -3138,7 +3139,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         String written = capped.formatted("data Unused = Int", "Yen");
         String at = "7:" + (written.lines().toList().get(6).indexOf(">=") + 1);
-        assertEquals(Set.of("a", "c", "s"), notReadIn(written, at));
+        assertEquals(Set.of("a", "s"), notReadIn(written, at));
         String unshown = capped.formatted(
                 "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
         assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());

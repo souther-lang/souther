@@ -6097,14 +6097,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /**
      * Where the values a relation shown over some of them was not shown over lie, as an entry of a
-     * question's {@code stopped} writes it: past which length some are, and whether some are open
-     * whatever their length. A bound on them, as {@link BlockReason.RelationShownOverARegion}
-     * says, and not which they are.
+     * question's {@code stopped} writes it: past which length some are, short of which some are,
+     * and whether some are open whatever their length. A bound on them, as
+     * {@link BlockReason.RelationShownOverARegion} says, and not which they are.
      */
     private static void leftOpen(ObjectNode into, BlockReason.RelationShownOverARegion open) {
         ObjectNode left = into.putObject("leftOpen");
         if (open.longerThan() != null) {
             left.put("longerThan", open.longerThan());
+        }
+        if (open.shorterThan() != null) {
+            left.put("shorterThan", open.shorterThan());
         }
         left.put("atAnyLength", open.atAnyLength());
         if (!open.imagesNotShown().isEmpty()) {

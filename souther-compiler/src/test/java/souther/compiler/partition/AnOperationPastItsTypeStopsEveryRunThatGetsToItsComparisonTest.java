@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where an operation a comparison works out comes to past its type, and every operation a run may
@@ -172,6 +173,29 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                         "x + z + 2 where x .." + plus(GREATEST, -1) + " and x + z .."
                                 + plus(LEAST, -3) + " and z .." + plus(GREATEST, -1)),
                 everyRunStops("Int", "x", "", "(x + 1) + (z + 1) == y"));
+    }
+
+    /**
+     * The sum is worked out on the arm taken where {@code y} is above nought and on no other, so a
+     * run that takes the other arm at the greatest {@code x} gets past: no run stops there.
+     */
+    @Test
+    void anOperationOfOneArmStopsNoRunThatTakesAnotherArm() {
+        assertEquals(List.of(),
+                everyRunStops("Int", "x", "", "(if y > 0 then x + 1 else x) == z"));
+        assertTrue(everyRunStops("Int", "x", "",
+                        "(if y > 0 then x + 1 else x) + (z + 1) == 0").stream()
+                .noneMatch(stop -> stop.startsWith("x + 1 ")),
+                "the arm taken where y is above nought is not the only way to the comparison");
+    }
+
+    /**
+     * The product is worked out too, and a run may stop in it before it works the sum out: the
+     * sum is not told to be where every run stops.
+     */
+    @Test
+    void anOperationBesideAnExpressionAnotherAnalysisAnswersForIsNotWhereEveryRunStops() {
+        assertEquals(List.of(), everyRunStops("Int", "x", "", "x * z + (y + 1) == 0"));
     }
 
     private static String plus(String number, int by) {

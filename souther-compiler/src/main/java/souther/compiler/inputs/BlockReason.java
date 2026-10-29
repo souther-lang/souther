@@ -324,13 +324,22 @@ public sealed interface BlockReason {
                         Figure.compare(stoppedAt,
                                 ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
                 case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
+                                              Long shorterThan,
                                               List<String> imagesNotShown) -> {
                     RelationShownOverARegion them = (RelationShownOverARegion) other;
                     int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
-                    int byBound = byLength != 0 ? byLength : Comparator.nullsFirst(Long::compare)
+                    if (byLength != 0) {
+                        yield byLength;
+                    }
+                    int byLonger = Comparator.nullsFirst(Long::compare)
                             .compare(longerThan, them.longerThan());
-                    if (byBound != 0) {
-                        yield byBound;
+                    if (byLonger != 0) {
+                        yield byLonger;
+                    }
+                    int byShorter = Comparator.nullsFirst(Long::compare)
+                            .compare(shorterThan, them.shorterThan());
+                    if (byShorter != 0) {
+                        yield byShorter;
                     }
                     List<String> theirs = them.imagesNotShown();
                     for (int i = 0; i < Math.min(imagesNotShown.size(), theirs.size()); i++) {
@@ -1346,28 +1355,49 @@ public sealed interface BlockReason {
      * @param atAnyLength whether some values here are shown on neither side whatever their length
      * @param longerThan  the fewest code points less one of a value left open for its length: some
      *                    longer may be in no class, and none shorter is for that; null where no
-     *                    value is left open for its length
+     *                    value is left open for being long
+     * @param shorterThan the most code points plus one of a value left open for its length: some
+     *                    shorter may be in no class, and none longer is for that; null where no
+     *                    value is left open for being short
      * @param imagesNotShown the operations of the library whose image over the strings of a side
      *                    is shown only where it is exact, each as the library names it: the
      *                    strings they are not exact on are the ones left open whatever their
      *                    length. None where the values left open are left for another reason
      */
-    record RelationShownOverARegion(boolean atAnyLength, Long longerThan,
+    record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
                                     List<String> imagesNotShown)
             implements RuleReadingStopped {
 
         public RelationShownOverARegion {
-            if (!atAnyLength && longerThan == null) {
+            if (!atAnyLength && longerThan == null && shorterThan == null) {
                 throw new IllegalArgumentException("a relation shown over a region leaves some"
                         + " values open");
             }
             imagesNotShown = imagesNotShown.stream().distinct().sorted().toList();
         }
 
+        /** Values open for being long, or open at any length. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan) {
+            this(atAnyLength, longerThan, null, List.of());
+        }
+
+        /** The same, and values open for being short. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan) {
+            this(atAnyLength, longerThan, shorterThan, List.of());
+        }
+
+        /** Values open for being long, or open at any length, for the operations whose image is
+         *  not shown. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan,
+                                        List<String> imagesNotShown) {
+            this(atAnyLength, longerThan, null, imagesNotShown);
+        }
+
         /**
          * What a reader is shown of the values {@code open} holds, each as long as it is left
-         * open at: whether some are open whatever their length, and the fewest code points the
-         * rest are longer than.
+         * open at: whether some are open whatever their length, the fewest code points the
+         * values left open for being long are longer than, and the most the values left open for
+         * being short are shorter than.
          */
         public static RelationShownOverARegion of(List<ValuesWithin> open) {
             return of(open, List.of());
@@ -1377,10 +1407,14 @@ public sealed interface BlockReason {
          *  open for ({@code imagesNotShown}). */
         public static RelationShownOverARegion of(List<ValuesWithin> open,
                                                   List<String> imagesNotShown) {
-            boolean atAnyLength = open.stream().anyMatch(each -> each.shortest() == 0);
+            boolean atAnyLength = open.stream()
+                    .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
             Long longerThan = open.stream().filter(each -> each.shortest() > 0)
                     .map(each -> each.shortest() - 1).min(Long::compare).orElse(null);
-            return new RelationShownOverARegion(atAnyLength, longerThan,
+            Long shorterThan = open.stream()
+                    .filter(each -> each.shortest() == 0 && each.longest() != null)
+                    .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
+            return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
                     atAnyLength ? imagesNotShown : List.of());
         }
     }
