@@ -64,6 +64,12 @@ final class NearbyValues {
                                                Shape.Sequence unusedSequence, TermPath unusedAt) {
             return none();
         }
+
+        /** Whether anything is beside a value at {@code at} or below it; a value where nothing is
+         *  is not walked. */
+        default boolean reaches(TermPath unusedAt) {
+            return true;
+        }
     }
 
     private static final Leaves WHOLE_NUMBERS = (prim, leaf, _, _, _) ->
@@ -263,6 +269,12 @@ final class NearbyValues {
             public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
                                                   List<Narrowing> along, TypeView view) {
                 return none();
+            }
+
+            @Override
+            public boolean reaches(TermPath at) {
+                return within == null || (at.steps().size() <= within.steps().size()
+                        && within.steps().subList(0, at.steps().size()).equals(at.steps()));
             }
 
             @Override
@@ -584,7 +596,7 @@ final class NearbyValues {
     private static Iterator<ObservedValue> of(ObservedValue value, Type type,
                                               RuleReadingContext reading, TermPath at,
                                               List<Narrowing> along, Leaves leaves) {
-        if (value.unread() != null) {
+        if (value.unread() != null || (at != null && !leaves.reaches(at))) {
             return none();
         }
         var source = reading.source();

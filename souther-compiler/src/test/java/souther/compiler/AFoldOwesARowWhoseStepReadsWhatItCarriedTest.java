@@ -506,14 +506,47 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
      */
     @Test
     void aRowWhoseAnswerIsRightDoesNotLeaveTheFoldUndecidedForLackOfRuns() {
+        StringBuilder many = new StringBuilder();
+        for (int k = 1; k <= 14; k++) {
+            many.append("    | ([Throw([%d, %d])]) -> 2\n".formatted(k, k + 20));
+        }
         for (String more : List.of("", "    | ([Throw([5, 8])]) -> 2\n",
                 "    | ([Throw([5, 8])]) -> 2\n    | ([Throw([4, 6, 9, 7])]) -> 4\n"
-                        + "    | ([Throw([3, 3, 3, 3, 3])]) -> 5\n    | ([Throw([2, 1, 0])]) -> 3\n")) {
+                        + "    | ([Throw([3, 3, 3, 3, 3])]) -> 5\n    | ([Throw([2, 1, 0])]) -> 3\n",
+                many.toString())) {
             Compilation compilation = measured(THROWS.formatted(more));
 
             assertEquals(List.of("fold_after_one_step: unnoticed", "fold_from_the_seed: unnoticed"),
                     foldVerdicts(compilation), more);
         }
+    }
+
+    /** The list a walk goes over is found through the newtype wearing it as it is without. */
+    @Test
+    void aListWornByANewtypeIsGrownAsOneNotWornIs() {
+        StringBuilder many = new StringBuilder();
+        for (int k = 1; k <= 14; k++) {
+            many.append("    | (Throws([Throw([%d, %d])])) -> 2\n".formatted(k, k + 20));
+        }
+        Compilation compilation = measured("""
+                module repro.worn
+
+                data Throw = List<Int>
+                data Throws = List<Throw>
+
+                behavior score : (throws: Throws) -> Int
+
+                let score (throws) =
+                    List.fold((acc, t) -> acc + List.length(t.value), 0, throws.value)
+
+                example score
+                    | (Throws([])) -> 0
+                    | (Throws([Throw([])])) -> 0
+                    | (Throws([Throw([12])])) -> 1
+                %s""".formatted(many));
+
+        assertEquals(List.of("fold_after_one_step: unnoticed", "fold_from_the_seed: unnoticed"),
+                foldVerdicts(compilation));
     }
 
     /**

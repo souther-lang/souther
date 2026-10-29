@@ -90,6 +90,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 import java.util.stream.Stream;
 
 /**
@@ -2242,29 +2243,33 @@ public final class Generator {
                 // And last a row with one position moved.
                 case ReplacementOwed.OfAWalk walk -> {
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
-                    // A candidate grown from each row in turn, the rows holding the most elements
-                    // first: one already of one element is a step from a row of two, where both
-                    // rewrites can part from the walk, and a row grown from nothing reaches two only
-                    // with both elements chosen here. In turn and not one row after another, since
-                    // what a row holds may be what keeps every list grown from it answering alike.
+                    // A candidate grown from each of the first rows in turn, the rows holding the
+                    // most elements first, and the rows after them once those are asked: the
+                    // first candidates of a row are the new element a rows' lists were grown with,
+                    // and what one row's list is does not change whether that element is told by
+                    // the rewrite, so turns among every row would spend the runs on the same
+                    // elements once for each row written. A row already of one element is a step
+                    // from a row of two, where both rewrites can part from the walk, and a row
+                    // grown from nothing reaches two only with both elements chosen here. In turn
+                    // and not one row after another, since what a row holds may be what keeps
+                    // every list grown from it answering alike.
                     // Counted in the list the walk goes over where that is known: the elements of
                     // a list inside one of them are no step of the walk.
-                    List<List<ObservedValue>> from = walk.seenThrough().stream()
-                            .sorted(Comparator.comparingInt((List<ObservedValue> row) ->
-                                    walk.over().isEmpty() ? elementsHeld(row)
-                                            : elementsWalked(row, walk.over(), axes.subject()))
-                                    .reversed())
-                            .toList();
+                    List<List<ObservedValue>> from = mostElementsFirst(walk.seenThrough(),
+                            row -> walk.over().isEmpty() ? elementsHeld(row)
+                                    : elementsWalked(row, walk.over(), axes.subject()));
                     int through = from.size();
                     Examining lists = new Examining(looking);
-                    Beside growing = grownTwice(walk.ranWith(), axes.subject(), check, looking,
-                            walk.over());
+                    // One growth for the search: what stands for a type is made once, as far as the
+                    // search asks.
+                    Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
+                            NearbyValues.Put.BEFORE_AND_AFTER);
+                    Beside growing = grownTwice(growth, walk.over());
                     // The lists the walk is not known to go over are grown last, since a step may
                     // read what another list holds, and no list grown there is one the walk is
                     // known to take a second step in.
                     Examining everyList = new Examining(looking);
-                    Beside growingAny = walk.over().isEmpty() ? null
-                            : grownTwice(walk.ranWith(), axes.subject(), check, looking, List.of());
+                    Beside growingAny = walk.over().isEmpty() ? null : grownTwice(growth, List.of());
                     // And beside each, a string the body parts with a piece more, and one put as
                     // pieces the body demands: a walk over the pieces is a walk over a list no
                     // input holds, and a string of more pieces is how it is handed more elements.
@@ -2281,16 +2286,20 @@ public final class Generator {
                             NearbyValues.withAnElementChanged(value, type, reading,
                                     walk.ranWith());
                     List<Iterator<GeneratedRow>> grownFromEach = new ArrayList<>();
-                    for (List<ObservedValue> each : from) {
-                        grownFromEach.add(candidatesBeside(each, axes, purposes, check, answers,
+                    List<Iterator<GeneratedRow>> grownFromTheRest = new ArrayList<>();
+                    for (int at = 0; at < from.size(); at++) {
+                        List<ObservedValue> each = from.get(at);
+                        List<Iterator<GeneratedRow>> into =
+                                at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
+                        into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 growing, lists));
-                        grownFromEach.add(candidatesBeside(each, axes, purposes, check, answers,
+                        into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 anElementChanged, changed));
                         if (!walk.separators().isEmpty()) {
-                            grownFromEach.add(candidatesBeside(each, axes, purposes, check,
+                            into.add(candidatesBeside(each, axes, purposes, check,
                                     answers, aPieceMore, parted));
                         }
-                        grownFromEach.add(piecesDemanded(each, axes, purposes, looking, check,
+                        into.add(piecesDemanded(each, axes, purposes, looking, check,
                                 answers, read.piecesAttempted(), pieces));
                     }
                     GeneratedRow seen = taking(looking, grownFromEach);
@@ -2306,7 +2315,7 @@ public final class Generator {
                             }
                         }
                     }
-                    List<Iterator<GeneratedRow>> last = new ArrayList<>();
+                    List<Iterator<GeneratedRow>> last = new ArrayList<>(grownFromTheRest);
                     last.add(inOrder(through, at -> movedFrom(from.get(at), axes, purposes,
                             looking, check, answers)));
                     if (growingAny != null) {
@@ -2540,6 +2549,16 @@ public final class Generator {
         return n;
     }
 
+    /** {@code rows} with the one {@code held} counts the most elements in first, the order of the
+     *  rest kept; each row is counted once. */
+    private static List<List<ObservedValue>> mostElementsFirst(
+            List<List<ObservedValue>> rows, ToIntFunction<List<ObservedValue>> held) {
+        record Counted(List<ObservedValue> inputs, int elements) {}
+        return rows.stream().map(inputs -> new Counted(inputs, held.applyAsInt(inputs)))
+                .sorted(Comparator.comparingInt(Counted::elements).reversed())
+                .map(Counted::inputs).toList();
+    }
+
     /** How many elements the lists {@code over} names hold in {@code row}, between them. */
     private static int elementsWalked(List<ObservedValue> row, List<TermPath> over,
                                       MeasuredInput subject) {
@@ -2582,15 +2601,10 @@ public final class Generator {
      * only where what the elements after the first do differs from what the first does.
      *
      * <p>In the lists {@code over} names where the walk is known to go over them, and in none of
-     * the others: a step of the walk reads an element of the list it is handed and no length of
-     * another, so a list that is not walked is not where a second step is made. Every list, where
+     * the others: a list that is not walked is not where a second step is made. Every list, where
      * the walk is not known to go over one list the input holds.
      */
-    private static Beside grownTwice(InputsRowsRanWith ranWith, MeasuredInput subject,
-                                     CandidateCheck check, ReplacementWitness looking,
-                                     List<TermPath> over) {
-        Growth growth = aListGrownAmong(ranWith, subject, check, looking,
-                NearbyValues.Put.BEFORE_AND_AFTER);
+    private static Beside grownTwice(Growth growth, List<TermPath> over) {
         if (over.isEmpty()) {
             return (value, type, reading, _) -> GrownTwice.of(value,
                     (each, which) -> growth.of(each, type, reading, which, null));
@@ -3197,6 +3211,13 @@ public final class Generator {
      * its own, not a constant inside a loop.
      */
     private static final int MOST_REPAIRS = 64;
+
+    /**
+     * How many rows a search for a walk's rewrite grows lists from in turn before it goes on to the
+     * others. Every row is grown from; this is only which are asked first, so that the share of
+     * the runs the first candidates get does not shrink with the rows a model writes.
+     */
+    private static final int ROWS_GROWN_IN_TURN = 3;
 
     /**
      * The classes a row is composed for, in the order a search settles them.

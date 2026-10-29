@@ -1,5 +1,7 @@
 package souther.compiler.coverage;
 
+import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.Location;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
@@ -1020,8 +1022,8 @@ public final class CoverageSites {
      * objects are held is an index into a graph its holder is not the owner of.
      */
     public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied,
-                          TheWalk theWalk) {
-        Walked walked = walked(of, decisions, supplied, theWalk);
+                          DeclarationNewtypes newtypes, TheWalk theWalk) {
+        Walked walked = walked(of, decisions, supplied, newtypes, theWalk);
         return asPlan(walked,
                 walked.walk().numbering.finish(of.module(), walked.executable()));
     }
@@ -1040,12 +1042,13 @@ public final class CoverageSites {
                           Methods methods) { }
 
     private static Walked walked(ModuleBodies of, DecisionSources decisions,
-                                 SuppliedRules supplied, TheWalk theWalk) {
+                                 SuppliedRules supplied, DeclarationNewtypes newtypes,
+                                 TheWalk theWalk) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
         ComparisonCatalog comparisons = ComparisonCatalog.of(of);
-        Walk walk = new Walk(of.module(), comparisons, decisions, supplied, theWalk);
+        Walk walk = new Walk(of.module(), comparisons, decisions, supplied, newtypes, theWalk);
         Map<String, ExecutableIdentity> executable = new LinkedHashMap<>();
         for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
@@ -1405,9 +1408,14 @@ public final class CoverageSites {
          *  nothing without the module it was counted in. */
         private final String module;
 
+        /** Which declarations are one value wearing a name, which is what says whether reading a
+         *  field is a step into the input or the value itself. */
+        private final DeclarationNewtypes newtypes;
+
         Walk(String module, ComparisonCatalog comparisons, DecisionSources decisions,
-             SuppliedRules supplied, TheWalk theWalk) {
+             SuppliedRules supplied, DeclarationNewtypes newtypes, TheWalk theWalk) {
             this.module = module;
+            this.newtypes = newtypes;
             this.comparisons = comparisons;
             this.decisions = decisions;
             this.supplied = supplied;
@@ -1496,6 +1504,11 @@ public final class CoverageSites {
                         : Optional.of(List.of(read.name()));
             }
             if (plain instanceof Core.FieldAccess access) {
+                // A newtype's own value is the value under it and no step, as every other reader of
+                // a location takes it ({@link Location#isStep}).
+                if (!Location.isStep(access.target().type(), access.field(), newtypes)) {
+                    return listHeldAs(access.target());
+                }
                 return listHeldAs(access.target()).map(path -> {
                     List<String> longer = new ArrayList<>(path);
                     longer.add(access.field());

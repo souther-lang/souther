@@ -112,7 +112,10 @@ recorded not taking one is the rewrite's answer already. The search for an input
 that entered the walk, the ones holding the most elements first and a candidate of each in turn. Where
 the walk goes over a list the input holds as it is, a parameter, a name bound to one or a field of one,
 the rows are ordered by the length of that list and only that list is grown: a list inside its
-elements is no step of the walk. The lists of the input are grown last in any case, since a step may
+elements is no step of the walk. The location is the one every other reader of a location takes: a
+newtype's own value is the value under it and no step, and a field called `value` of a record is one.
+The first few rows are grown from in turn and the others after them, so that the runs the first
+candidates get do not shrink with the rows a model writes. The lists of the input are grown last in any case, since a step may
 read what another list holds. Where the walk goes over a list the behavior made, every list is grown
 as before. A list one of them holds is grown by one element and
 then by two, each with the new element put first as well as last, since a walk stopping after one
