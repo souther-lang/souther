@@ -111,13 +111,14 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      * reads the term, so the room of one turns on the scales of the numbers a row is built from
      * and not on which number of the run is asked of.
      *
-     * <p>The claim a run makes is over the numbers rows are built at, which stop at the edge: at
-     * most as many places before and after the point as {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}.
-     * Past it is a row not built, which is not a row there is none of, and nothing is claimed of
-     * it. Within it two operands of a sum are at most twice that many places apart in scale
-     * whatever their digits, so the edge is asked as any end is and the numbers between are
-     * the straight function of the term the ends are. That a term put beside it reaches the line
-     * at every number is {@code reaches}' own question, asked before the rows are.
+     * <p>The numbers a row is built from are written at most as many places before and after the
+     * point as {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}, and the partner is stood beside
+     * the line at such numbers however far out the line is, so two operands of a sum are at most
+     * twice that many places apart in scale whatever the digits. The room of the operations is
+     * then the same at every number of the run, and the point far out is asked as any end is,
+     * to see that the term takes a value there and the rows stand. That a term put beside it
+     * reaches the line at every number is {@code reaches}' own question, asked before the rows
+     * are.
      */
     boolean aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(Object asked) {
         return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()

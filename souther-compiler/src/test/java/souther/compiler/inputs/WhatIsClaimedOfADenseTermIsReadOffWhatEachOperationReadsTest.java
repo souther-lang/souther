@@ -11,6 +11,7 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided.Term;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Told;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -367,6 +368,32 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                     assertTrue(DecimalOperation.allCompleteAt(List.of(operation),
                                     Map.of("s", at)),
                             op + " over " + digits.bitLength() + " bits at scale " + scale);
+                }
+            }
+        }
+    }
+
+    /**
+     * What the numbers between and past the point far out stand on: the numbers the partner is
+     * stood at beside a line are written at few places however far out the line is, whether it
+     * lies at a number of a few digits or of a hundred thousand, at a whole number or at a third
+     * of one. So the sum lines up the scales it lined up at the end of a run, and the room it has
+     * there is the room it has anywhere.
+     */
+    @Test
+    void theNumbersStoodBesideALineAreWrittenAtFewPlacesHoweverFarOutTheLineIs() {
+        List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
+        ExactRatio third = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
+        for (int digits : new int[] {3, 300, DecimalOperation.PLACES_A_ROW_IS_BUILT_AT, 100_000}) {
+            ExactRatio far = ExactRatio.of(BigInteger.TEN.pow(digits));
+            for (ExactRatio line : new ExactRatio[] {far, far.plus(third).orNull()}) {
+                List<ExactRatio> beside = DecimalPoints.besideTheLine(line,
+                        ExactCut.inclusive(ExactRatio.ZERO), null);
+                assertEquals(2, beside.size(), digits + " digits");
+                for (ExactRatio each : beside) {
+                    assertTrue(DecimalPoints.isBuiltAt(each), digits + " digits");
+                    assertTrue(DecimalOperation.allCompleteAt(plusFive, Map.of("s", each)),
+                            digits + " digits");
                 }
             }
         }

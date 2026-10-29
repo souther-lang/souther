@@ -62,10 +62,10 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * numbers written at most this many places before or after the point, so two operands of a
      * sum differ in scale by at most twice it, whatever their digits are, and the sum lines them
      * up. {@code 1E+2147483647 + 5.0} has no room because the scales are the whole range apart,
-     * and the number is no row: a row is not built at it. A run with no end claims what it does
-     * up to the edge of what is built ({@link DecimalPoints#edgeOfWhatIsBuilt}), where the rows are
-     * asked as at any end, and nothing past it: such a number has a true side with a row and
-     * none on the other, and the claim is not made of it.
+     * and the number is no row: a row is not built at it. A number far out is stood beside by
+     * numbers written at few places however large it is, so the sum lines up scales no further
+     * apart than at the end of a run, and a run with no end is asked at a point far out
+     * ({@link DecimalPoints#edgeOfWhatIsBuilt}) as at any end.
      */
     public static final int PLACES_A_ROW_IS_BUILT_AT = 1 << 12;
 

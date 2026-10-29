@@ -3946,9 +3946,11 @@ public final class WhatARelationLeavesUndivided {
      * type; {@code x - y > M}, {@code M} the greatest {@code Int}, has a true row at no {@code x}.
      * A run open on a side is asked at the edge of what is built on that side, where no operation
      * of decimals reads the term ({@link RowsComputed#aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt});
-     * otherwise nothing is shown. Past the edge no row is built, so nothing is claimed there. A
-     * dense term is asked at the edge when there is no operation to be worked out as well: nothing
-     * can stop a row, and what the run claims is still claimed of rows that are built.
+     * otherwise nothing is shown. The point is where the rows are built to see that the term takes
+     * a value there and they stand; the numbers between and past it are claimed by the room of the
+     * operations turning on scales, which the partner's numbers keep however far out the line is
+     * ({@link DecimalPoints#edgeOfWhatIsBuilt}). A dense term is asked there when there is no
+     * operation to be worked out as well.
      *
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
@@ -3964,8 +3966,8 @@ public final class WhatARelationLeavesUndivided {
         // `(a + 1) - 1 >= b` stops at the greatest `a`.
         Interval asked = within != null ? within : Interval.of(terms.get(of).holds());
         // Nothing can stop a row, and a run of a dense term with no end on a side is still asked
-        // at the edge of what is built: that a row stands there on each side of the line is what
-        // the run claims of the numbers between, and past it no row is built.
+        // at the point far out where its rows are built: that a row stands there on each side of
+        // the line is seen and not left to the run having no end.
         boolean noOperations = arithmetic.nothingStopsARow();
         boolean askedAtItsEdge = noOperations && constant != null && asked != null
                 && terms.get(of).spacing() == Granularity.DENSE
