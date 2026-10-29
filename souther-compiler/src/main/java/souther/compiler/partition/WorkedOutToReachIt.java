@@ -119,7 +119,7 @@ final class WorkedOutToReachIt {
                 || written instanceof Core.MaterialisedValue) {
             return endsNoRun(value);
         }
-        boolean answers = written instanceof Core.Binary || written instanceof Core.Neg
+        boolean answers = (written instanceof Core.Binary || written instanceof Core.Neg)
                 ? ownEndings(written).endsNone() || readsNoName(written)
                 : endsOnlyWhereItsOwnAnswerHasNoPlace(written);
         return answers && partsAndNamesAreOnTheWayToTheAnswer(value);
