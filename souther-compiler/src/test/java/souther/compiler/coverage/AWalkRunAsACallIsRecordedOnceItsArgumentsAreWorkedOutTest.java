@@ -25,13 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A fold run as a call of the library's method, because its step is chosen as the program runs, is
- * recorded as reached once the call is about to be made and not before.
+ * A fold whose step is chosen as the program runs is recorded as reached once its arguments have
+ * been worked out and not before.
  *
- * <p>Reached is all that is recorded of it. The method is one for every fold of the program, so
- * there is no loop here to note a second element in, and a run that took one has not recorded it.
- * And a run that stopped working out the arguments of the call never made it: recorded as reached,
- * it would be a row the fold was put to that the fold never saw.
+ * <p>The loop around it is the same loop as for any fold, so a second element taken is noted. A run
+ * that stopped working out the arguments of the fold never entered it: recorded as reached, it
+ * would be a row the fold was put to that the fold never saw.
  */
 class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
 
@@ -50,15 +49,16 @@ class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
             """;
 
     @Test
-    void aRunThatMakesTheCallRecordsReachingTheFoldAndNothingOfHowFarItWent() {
+    void aRunThatEntersTheFoldRecordsHowFarItWent() {
         Run run = new Run();
 
         AlignedObservation one = run.observing(true, List.of(1L));
         AlignedObservation two = run.observing(true, List.of(1L, 1L));
 
         assertTrue(one.entered(run.fold.index()), "the fold was reached");
+        assertFalse(one.wentOn(run.fold.index()), "and a list of one takes no second element");
         assertTrue(two.entered(run.fold.index()));
-        assertFalse(two.wentOn(run.fold.index()), "and no second element is noted of the call");
+        assertTrue(two.wentOn(run.fold.index()), "and a list of two does");
     }
 
     @Test

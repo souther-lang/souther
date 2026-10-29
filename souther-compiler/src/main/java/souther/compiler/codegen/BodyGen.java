@@ -1621,6 +1621,11 @@ final class BodyGen {
          * Answers whether it was emitted that way — a walk that starts past the head, or whose step
          * is one that never runs, is left to the {@code foldFrom} method (spec §fn-declaration).
          *
+         * <p>A step that is not written where the fold hands it over — chosen as the program runs,
+         * or reached as a value — is evaluated once before the walk and applied as a function in
+         * the loop. The loop is the same one, so what is recorded and what a run can switch at the
+         * walk does not depend on how the step is run.
+         *
          * <p>This is what makes a fold cost what a loop costs, and {@code fold} is the one loop the
          * language has, so it is the whole of what a program's loops cost. Handed to a method instead,
          * the step has to be a first-class {@code Fn}: a class of its own, an {@code Object[]} of
@@ -1631,7 +1636,7 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (call.stepRunWhereItStands(ctx.symbols.theWalk()) == null) {
+            if (!call.isWalk(ctx.symbols.theWalk()) || call.omitsFunctionBody(0)) {
                 return false;
             }
             Core seed = call.args().get(1);
@@ -1682,19 +1687,25 @@ final class BodyGen {
         private boolean walked(Core.Call call, Core stepValue, Core walked, Runnable seed,
                                Runnable answer, boolean freshSeed) {
             Core.Block step = Core.runsWhereItStands(stepValue);
-            if (step == null) {
+            // A build writes into its builder in the step's own body, so it has no step to hand over.
+            if (step == null && freshSeed) {
                 return false;
             }
-            Type accType = step.paramTypes().get(0);
-            Type elementType = step.paramTypes().get(1);
+            Type.FnOf stepType = (Type.FnOf) stepValue.type();
+            Type accType = step != null ? step.paramTypes().get(0) : stepType.params().get(0);
+            Type elementType = step != null ? step.paramTypes().get(1) : stepType.params().get(1);
+
+            // A step handed over as a value is worked out once, before the walk, and applied at
+            // each element: choosing it again at an element would be another fold.
+            int handedOver = -1;
+            if (step == null) {
+                handedOver = slot(Type.STRING);   // a reference slot; the type is not read back
+                emitValue(stepValue, null);
+                code.astore(handedOver);
+            }
 
             Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
                     ? ctx.walkSiteOf(call) : Optional.empty();
-            if (site.isPresent()) {
-                ctx.emitted(site.get().raw());
-                code.loadConstant(site.get().raw());
-                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
-            }
             // A copy carried in another arm's place carries nothing of its own, as at a fork.
             boolean switched = site.isPresent() && carrying == 0 && ctx.carriesTheWalk(call);
 
@@ -1706,6 +1717,13 @@ final class BodyGen {
             int acc = slot(accType);
             seed.run();
             store(code, acc, accType);
+            // Recorded once what the walk is handed has been worked out, as at a call of the
+            // library's method: a run that stopped working it out has not entered the walk.
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
             // How many elements the walk has taken, where entering it is recorded: so is its
             // taking a second, which is what tells a list of one element from a longer one.
             int taken = -1;
@@ -1733,9 +1751,11 @@ final class BodyGen {
             // binds ordinary names (`let (i, ys) = acc`), which are the caller's names as often as not.
             // The whole scope is put back, the slots it took staying taken.
             Map<BindingId, Var> enclosing = new HashMap<>(locals);
-            bind(step.params().get(0), acc, accType);
             int element = slot(elementType);
-            bind(step.params().get(1), element, elementType);
+            if (step != null) {
+                bind(step.params().get(0), acc, accType);
+                bind(step.params().get(1), element, elementType);
+            }
 
             Label next = code.newLabel();
             Label done = code.newLabel();
@@ -1769,8 +1789,26 @@ final class BodyGen {
                 store(code, acc, accType);
                 code.labelBinding(asCarried);
             }
-            Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
-            asAccumulator(stepped, accType);
+            if (step != null) {
+                Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
+                asAccumulator(stepped, accType);
+            } else {
+                code.aload(handedOver);
+                pushInt(code, 2);
+                code.anewarray(CD_Object);
+                code.dup();
+                pushInt(code, 0);
+                load(code, acc, accType);
+                box(code, accType);
+                code.aastore();
+                code.dup();
+                pushInt(code, 1);
+                load(code, element, elementType);
+                box(code, elementType);
+                code.aastore();
+                code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
+                castFromObject(code, accType);
+            }
             store(code, acc, accType);
             countOneStep();
             if (switched) {

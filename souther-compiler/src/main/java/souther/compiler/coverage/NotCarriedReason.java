@@ -27,18 +27,4 @@ public sealed interface NotCarriedReason {
             return true;
         }
     }
-
-    /**
-     * The step is not written where the fold hands it over: it is chosen as the program runs, or
-     * reaches the fold as a value. The fold is then run by the library's one method for every call
-     * of it, and a rewrite there would be the rewrite of every other fold. A run records only that
-     * it reached the fold, and nothing of how far it went.
-     */
-    record StepNotExpanded() implements NotCarriedReason {
-
-        @Override
-        public boolean recordsTheSecondElement() {
-            return false;
-        }
-    }
 }

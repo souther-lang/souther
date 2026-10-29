@@ -15,7 +15,6 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -382,17 +381,13 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         return out;
     }
 
-    private static final List<String> LEFT_OPEN = List.of(
-            "fold_after_one_step: undecided because step_not_expanded",
-            "fold_from_the_seed: undecided because step_not_expanded");
-
     /**
-     * A step chosen as the program runs is a fold the language owes rows of all the same. This
-     * build cannot run it rewritten, and says so: the adequacy is undetermined, and not satisfied
-     * by rows that were never put to the fold.
+     * A step chosen as the program runs is a fold the language owes rows of, and the loop around
+     * it is run rewritten like any other: rows of no more than one element do not tell either
+     * rewrite from the fold, and are asked for.
      */
     @Test
-    void aStepChosenAsTheProgramRunsLeavesTheFoldOpen() {
+    void aStepChosenAsTheProgramRunsIsAskedLikeOneWrittenWhereItIsHanded() {
         Compilation compilation = measured("""
                 module repro.chosen
 
@@ -413,17 +408,16 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | "f1" : (In { flag = false, xs = [1] }) -> -1
                 """.formatted(STEPS));
 
-        assertEquals(LEFT_OPEN, foldVerdicts(compilation));
-        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
+        assertEquals(BOTH_ASKED, rewritesAsked(compilation));
+        assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED,
                 AdequacyReport.of(compilation).adequacy());
-        assertEquals(List.of(), rewriteLines(compilation), "no gap is claimed of a fold not run");
     }
 
-    /** The fold that can be run rewritten is asked as ever, beside the one that cannot. */
+    /** A row of two elements tells either rewrite from a step chosen as the program runs. */
     @Test
-    void aFoldWhoseStepIsWrittenWhereItIsHandedIsAskedBesideOneThatIsNot() {
+    void aStepChosenAsTheProgramRunsIsToldApartByRowsOfTwoElements() {
         Compilation compilation = measured("""
-                module repro.mixed
+                module repro.chosen2
 
                 data In = { flag: Bool, xs: List<Int> }
 
@@ -432,24 +426,46 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 %s
                 let total (i) = {
                     let step = if i.flag then add else sub
-                    List.fold(step, 0, i.xs) + List.fold((acc, x) -> acc + x, 0, i.xs)
+                    List.fold(step, 0, i.xs)
                 }
 
                 example total
-                    | "t0" : (In { flag = true, xs = [] }) -> 0
-                    | "t1" : (In { flag = true, xs = [1] }) -> 2
-                    | "f0" : (In { flag = false, xs = [] }) -> 0
-                    | "f1" : (In { flag = false, xs = [1] }) -> 0
+                    | "t" : (In { flag = true, xs = [3, 4] }) -> 7
+                    | "f" : (In { flag = false, xs = [3, 4] }) -> -7
                 """.formatted(STEPS));
 
-        assertEquals(List.of(
-                        "fold_after_one_step: unnoticed", "fold_from_the_seed: unnoticed",
-                        "fold_after_one_step: undecided because step_not_expanded",
-                        "fold_from_the_seed: undecided because step_not_expanded"),
-                foldVerdicts(compilation).stream()
-                        .sorted(Comparator.comparing((String v) -> v.contains("undecided")))
-                        .toList());
-        assertEquals(2, rewriteLines(compilation).size(), "the written fold is asked");
+        assertEquals(List.of(), rewriteLines(compilation));
+        assertEquals(List.of(), foldVerdicts(compilation).stream()
+                .filter(verdict -> verdict.contains("undecided")).toList());
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AdequacyReport.of(compilation).adequacy());
+    }
+
+    /**
+     * Two folds that take the same step are two walks: the rows tell one apart from its rewrites
+     * and are asked of the other.
+     */
+    @Test
+    void aStepTwoFoldsShareIsRunRewrittenAtOneOfThemOnly() {
+        Compilation compilation = measured("""
+                module repro.shared
+
+                data In = { flag: Bool, xs: List<Int>, ys: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                %s
+                let total (i) = {
+                    let step = if i.flag then add else sub
+                    List.fold(step, 0, i.xs) + List.fold(step, 0, i.ys)
+                }
+
+                example total
+                    | "t" : (In { flag = true, xs = [3, 4], ys = [1] }) -> 8
+                    | "f" : (In { flag = false, xs = [3, 4], ys = [] }) -> -7
+                """.formatted(STEPS));
+
+        assertEquals(2, rewriteLines(compilation).size(), "the fold over ys is asked, xs is not");
     }
 
     /**
@@ -654,11 +670,11 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
     }
 
     /**
-     * A run through a fold it cannot see the end of records no second element, and that is not a
-     * list of one: a list fixed in the model that holds two is left open all the same.
+     * A list fixed in the model that holds two is not a list of one, and a step chosen as the
+     * program runs is run rewritten over it: the rows tell either rewrite from the fold.
      */
     @Test
-    void aFixedListIsNotShownToHoldOneElementByAFoldNoRunSawTheEndOf() {
+    void aFixedListOfTwoIsWalkedRewrittenWhateverStepIsChosen() {
         Compilation compilation = measured("""
                 module repro.fixed
 
@@ -675,16 +691,17 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | "f" : (false) -> -3
                 """.formatted(STEPS));
 
-        assertEquals(LEFT_OPEN, foldVerdicts(compilation));
+        assertEquals(List.of("fold_after_one_step: noticed", "fold_from_the_seed: noticed"),
+                foldVerdicts(compilation));
     }
 
     /**
      * A fold written once in a helper is one walk however many places the helper is called from,
-     * and one place that cannot run it rewritten leaves it open at all of them: a rewrite of it is
-     * an edit of the one source.
+     * and a rewrite of it is an edit of the one source: it is run rewritten at the call that hands
+     * it a step as a value as at the call that writes the step.
      */
     @Test
-    void aHelpersFoldIsOpenAtEveryCallWhenOneCallHandsItAStepItCannotRun() {
+    void aHelpersFoldIsRunRewrittenAtEveryCallWhateverStepIsHandedIt() {
         Compilation compilation = measured("""
                 module repro.shared
 
@@ -707,8 +724,9 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | "f1" : (In { flag = false, xs = [1] }) -> 0
                 """.formatted(STEPS));
 
-        assertEquals(LEFT_OPEN, foldVerdicts(compilation));
-        assertEquals(List.of(), rewriteLines(compilation));
+        assertEquals(List.of("fold_after_one_step: unnoticed", "fold_from_the_seed: unnoticed"),
+                foldVerdicts(compilation));
+        assertEquals(2, rewriteLines(compilation).size());
     }
 
     /** Each rewrite of each fold, by the definition that wrote the fold: how it stands. */

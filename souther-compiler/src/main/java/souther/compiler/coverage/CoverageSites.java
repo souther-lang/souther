@@ -1441,10 +1441,9 @@ public final class CoverageSites {
         /**
          * {@code call}, kept as a walk where it is one the tree that runs carries as a loop: a fold
          * from the head of its list, or a build. Whether its step runs where it stands decides only
-         * whether the walk can be run rewritten. A walk run as a call of the library's method is
-         * handed its step as a value, and the method is one for every such walk, so no switch there
-         * could tell one walk's rewrite from another's: it is kept all the same, with the reason
-         * its classes carry no switch ({@link NotCarriedReason.StepNotExpanded}).
+         * whether the walk can be run rewritten. A step handed over as a value is applied inside
+         * the loop around the call, so the walk's switch is its own whichever way the step is
+         * run.
          */
         private void walkIfOne(Core.Call call) {
             if (!call.isWalk(theWalk) || !walksAreRewritten) {
@@ -1486,13 +1485,9 @@ public final class CoverageSites {
                     && !reads(step.body(), step.params().get(theWalk.accumulator()).binding())) {
                 theSame.add(WalkRewrite.STEPS_FROM_THE_SEED);
             }
-            // A step not written where the fold hands it over is a fold the language owes rows of
-            // all the same; what is missing is a way to run it rewritten, and that is said.
-            Optional<NotCarriedReason> notCarried = step == null
-                    ? Optional.of(new NotCarriedReason.StepNotExpanded()) : Optional.empty();
             walks.add(new DraftWalk(call, behavior, call.origin(), places.of(call),
                     Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
-                    notCarried, listHeldAs(walked), -1));
+                    Optional.empty(), listHeldAs(walked), -1));
         }
 
         /** A condition the walk is inside the arm of, and which arm: the one where it held or the
