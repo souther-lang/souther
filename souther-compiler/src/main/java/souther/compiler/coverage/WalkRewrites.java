@@ -57,8 +57,7 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
      * @param notCarried     why the classes do not carry the switch here, where they do not
      */
     public record AtWalk(SourceConstructOrigin walk, WalkProbe at, Set<WalkRewrite> theSame,
-                         boolean overAFixedList,
-                         Optional<ArmReplacements.Sibling.Why> notCarried) {
+                         boolean overAFixedList, Optional<NotCarriedReason> notCarried) {
 
         public AtWalk {
             Objects.requireNonNull(walk, "a walk is some walk an author wrote");
@@ -73,7 +72,14 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
          * ({@code walkedNoFurther}).
          */
         boolean leaves(WalkRewrite how, WalkedNoFurther walkedNoFurther) {
-            return theSame.contains(how) || (overAFixedList && walkedNoFurther.at(at));
+            return theSame.contains(how)
+                    || (overAFixedList && recordsTheSecondElement() && walkedNoFurther.at(at));
+        }
+
+        /** Whether a run through this site would have recorded a second element, if it took
+         *  one: what a run not seen taking one shows depends on it. */
+        private boolean recordsTheSecondElement() {
+            return notCarried.map(NotCarriedReason::recordsTheSecondElement).orElse(true);
         }
     }
 
@@ -84,9 +90,9 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
      */
     public WalkRewrites carryingNothingAt(Set<Integer> sites) {
         SequencedMap<Integer, AtWalk> out = new TreeMap<>();
-        bySite.forEach((site, at) -> out.put(site, sites.contains(site)
+        bySite.forEach((site, at) -> out.put(site, sites.contains(site) && at.notCarried().isEmpty()
                 ? new AtWalk(at.walk(), at.at(), at.theSame(), at.overAFixedList(),
-                        Optional.of(new ArmReplacements.Sibling.Why.PastWhatAMethodHolds()))
+                        Optional.of(new NotCarriedReason.MethodTooLarge()))
                 : at));
         return new WalkRewrites(out);
     }
@@ -176,7 +182,7 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
 
         /** Some site of the walk does not carry the switch, so no run is the rewrite: a run at the
          *  sites that do is a program the author could not write. */
-        record NotRun(WalkRewrite how, ArmReplacements.Sibling.Why why) implements Asked {}
+        record NotRun(WalkRewrite how, NotCarriedReason why) implements Asked {}
     }
 
     /**
@@ -201,7 +207,7 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
             if (sites.stream().allMatch(at -> at.leaves(how, walkedNoFurther))) {
                 continue;
             }
-            Optional<ArmReplacements.Sibling.Why> left = sites.stream()
+            Optional<NotCarriedReason> left = sites.stream()
                     .map(AtWalk::notCarried).flatMap(Optional::stream).findFirst();
             out.add(left.isPresent() ? new Asked.NotRun(how, left.get())
                     : new Asked.Runs(new Rewrite(walk, how, replacing(walk, how))));

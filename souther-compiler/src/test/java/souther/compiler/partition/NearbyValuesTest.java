@@ -328,6 +328,20 @@ class NearbyValuesTest {
                 grownAt(basket(whole(1)), basket, NearbyValues.Put.AFTER));
     }
 
+    /** And in a list of lists, and in the lists of a record in a list: any depth. */
+    @Test
+    void aListInAListTakesItsNewElementWhereItIsToldTo() {
+        Type nested = Type.list(Type.list(Type.INT));
+        ObservedValue held = listOf(listOf(whole(1)), listOf(whole(2)));
+
+        List<ObservedValue> grown = grownAt(held, nested, NearbyValues.Put.BEFORE_AND_AFTER);
+
+        assertTrue(grown.contains(listOf(listOf(whole(1), whole(100)), listOf(whole(2)))));
+        assertTrue(grown.contains(listOf(listOf(whole(100), whole(1)), listOf(whole(2)))));
+        assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(2), whole(100)))));
+        assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(100), whole(2)))));
+    }
+
     private static InputsRowsRanWith ranWithManyInts(int count) {
         List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
         for (int i = 0; i < count; i++) {

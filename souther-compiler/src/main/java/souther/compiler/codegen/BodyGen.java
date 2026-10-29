@@ -1515,8 +1515,27 @@ final class BodyGen {
             for (int i = 0; i < call.args().size(); i++) {
                 box(code, emitArgument(call, i));
             }
+            reachedAsACall(call);
             invokeRecursiveHelper(call);
             castFromObject(code, call.type());
+        }
+
+        /**
+         * Records that a walk the language owes rows of was reached, where it is run as a call of
+         * the library's method and not as the loop it is. Called with the arguments worked out, so
+         * a run that stopped working them out has not reached the walk.
+         *
+         * <p>Only that it was reached: the method is one for every walk of the program, so there is
+         * no switch to carry here and no second element to take note of.
+         */
+        private void reachedAsACall(Core.Call call) {
+            Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
+                    ? ctx.walkSiteOf(call) : Optional.empty();
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
         }
 
         /**
@@ -1559,6 +1578,7 @@ final class BodyGen {
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
+            reachedAsACall(call);
             ctx.callRuntime(code, CD_Lists, "build", MTD_Lists_build, Work.CHECKPOINTED);
         }
 
@@ -1591,6 +1611,7 @@ final class BodyGen {
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
+            reachedAsACall(call);
             ctx.callRuntime(code, CD_Maps, "build", MTD_Maps_build, Work.CHECKPOINTED);
         }
 

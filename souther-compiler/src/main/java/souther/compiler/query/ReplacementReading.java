@@ -4,6 +4,7 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NotCarriedReason;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.coverage.WalkRewrites;
@@ -315,8 +316,8 @@ public final class ReplacementReading {
                                          Supplier<InputsRowsRanWith> ranWith) {
         SequencedMap<Integer, WalkRewrite> replacing;
         switch (asked) {
-            // Left unasked at what the JVM holds in one method, which no run of this compiler
-            // widens.
+            // Left unasked at what the JVM holds in one method, or at a step this compiler cannot
+            // run the walk rewritten with, which no run of it widens.
             case WalkRewrites.Asked.NotRun(var _, var why) -> {
                 return new Standing.CannotBeAsked(
                         ReplacementEvidence.Undecided.LeftOpen.of(List.of(wayOf(why))));
@@ -409,6 +410,19 @@ public final class ReplacementReading {
                     ReplacementEvidence.Undecided.Way.atNoAllowance(
                             ReplacementEvidence.Undecided.Why.TOO_LARGE);
         };
+    }
+
+    /**
+     * What a walk the classes carry no switch at leaves a rewrite as: open at what the JVM holds in
+     * one method, or at a step this compiler cannot run the walk rewritten with. Neither is
+     * widened by a wider run.
+     */
+    static ReplacementEvidence.Undecided.Way wayOf(NotCarriedReason why) {
+        return ReplacementEvidence.Undecided.Way.atNoAllowance(switch (why) {
+            case NotCarriedReason.MethodTooLarge _ -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
+            case NotCarriedReason.StepNotExpanded _ ->
+                    ReplacementEvidence.Undecided.Why.STEP_NOT_EXPANDED;
+        });
     }
 
     /**

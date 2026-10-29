@@ -3,6 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Located;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.SourceRendering;
@@ -12,6 +14,8 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -347,6 +351,187 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                         && row.values().contains("xs = [0, 1]")), () -> block);
         assertTrue(rows.stream().anyMatch(row -> row.isFor("each step of the fold handed the seed")
                         && row.values().contains("xs = [1, 0]")), () -> block);
+    }
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    private static final String STEPS = """
+            let add (acc: Int, x: Int): Int = acc + x
+            let sub (acc: Int, x: Int): Int = acc - x
+            """;
+
+    /** What each rewrite of a fold came to, as the document says: the rewrite, how it stands and
+     *  why it is open. */
+    private static List<String> foldVerdicts(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(compilation.texts())))
+                .get("modules").get(0).get("behaviors").get(0).get("replacement");
+        for (JsonNode each : replacement.get("obligations")) {
+            String rewrite = each.get("obligationId").get("rewrite").asString();
+            if (!rewrite.startsWith("fold_")) {
+                continue;
+            }
+            List<String> because = new ArrayList<>();
+            if (each.has("undecidedBecause")) {
+                each.get("undecidedBecause").forEach(word -> because.add(word.asString()));
+            }
+            out.add(rewrite + ": " + each.get("disposition").asString()
+                    + (because.isEmpty() ? "" : " because " + String.join(", ", because)));
+        }
+        return out;
+    }
+
+    private static final List<String> LEFT_OPEN = List.of(
+            "fold_after_one_step: undecided because step_not_expanded",
+            "fold_from_the_seed: undecided because step_not_expanded");
+
+    /**
+     * A step chosen as the program runs is a fold the language owes rows of all the same. This
+     * build cannot run it rewritten, and says so: the adequacy is undetermined, and not satisfied
+     * by rows that were never put to the fold.
+     */
+    @Test
+    void aStepChosenAsTheProgramRunsLeavesTheFoldOpen() {
+        Compilation compilation = measured("""
+                module repro.chosen
+
+                data In = { flag: Bool, xs: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                %s
+                let total (i) = {
+                    let step = if i.flag then add else sub
+                    List.fold(step, 0, i.xs)
+                }
+
+                example total
+                    | "t0" : (In { flag = true, xs = [] }) -> 0
+                    | "t1" : (In { flag = true, xs = [1] }) -> 1
+                    | "f0" : (In { flag = false, xs = [] }) -> 0
+                    | "f1" : (In { flag = false, xs = [1] }) -> -1
+                """.formatted(STEPS));
+
+        assertEquals(LEFT_OPEN, foldVerdicts(compilation));
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
+                AdequacyReport.of(compilation).adequacy());
+        assertEquals(List.of(), rewriteLines(compilation), "no gap is claimed of a fold not run");
+    }
+
+    /** The fold that can be run rewritten is asked as ever, beside the one that cannot. */
+    @Test
+    void aFoldWhoseStepIsWrittenWhereItIsHandedIsAskedBesideOneThatIsNot() {
+        Compilation compilation = measured("""
+                module repro.mixed
+
+                data In = { flag: Bool, xs: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                %s
+                let total (i) = {
+                    let step = if i.flag then add else sub
+                    List.fold(step, 0, i.xs) + List.fold((acc, x) -> acc + x, 0, i.xs)
+                }
+
+                example total
+                    | "t0" : (In { flag = true, xs = [] }) -> 0
+                    | "t1" : (In { flag = true, xs = [1] }) -> 2
+                    | "f0" : (In { flag = false, xs = [] }) -> 0
+                    | "f1" : (In { flag = false, xs = [1] }) -> 0
+                """.formatted(STEPS));
+
+        assertEquals(List.of(
+                        "fold_after_one_step: unnoticed", "fold_from_the_seed: unnoticed",
+                        "fold_after_one_step: undecided because step_not_expanded",
+                        "fold_from_the_seed: undecided because step_not_expanded"),
+                foldVerdicts(compilation).stream()
+                        .sorted(Comparator.comparing((String v) -> v.contains("undecided")))
+                        .toList());
+        assertEquals(2, rewriteLines(compilation).size(), "the written fold is asked");
+    }
+
+    /** A list written with one element is walked no further than its first, whatever the step. */
+    @Test
+    void aListOfOneElementIsNotAskedWhateverTheStepIs() {
+        Compilation compilation = measured("""
+                module repro.single
+
+                data In = { flag: Bool, n: Int }
+
+                behavior total : (i: In) -> Int
+
+                %s
+                let total (i) = {
+                    let step = if i.flag then add else sub
+                    List.fold(step, 0, [i.n])
+                }
+
+                example total
+                    | "t" : (In { flag = true, n = 1 }) -> 1
+                    | "f" : (In { flag = false, n = 1 }) -> -1
+                """.formatted(STEPS));
+
+        assertEquals(List.of(), foldVerdicts(compilation));
+    }
+
+    /**
+     * A run through a fold it cannot see the end of records no second element, and that is not a
+     * list of one: a list fixed in the model that holds two is left open all the same.
+     */
+    @Test
+    void aFixedListIsNotShownToHoldOneElementByAFoldNoRunSawTheEndOf() {
+        Compilation compilation = measured("""
+                module repro.fixed
+
+                behavior total : (flag: Bool) -> Int
+
+                %s
+                let total (flag) = {
+                    let step = if flag then add else sub
+                    List.fold(step, 0, [1, 2])
+                }
+
+                example total
+                    | "t" : (true) -> 3
+                    | "f" : (false) -> -3
+                """.formatted(STEPS));
+
+        assertEquals(LEFT_OPEN, foldVerdicts(compilation));
+    }
+
+    /**
+     * A fold written once in a helper is one walk however many places the helper is called from,
+     * and one place that cannot run it rewritten leaves it open at all of them: a rewrite of it is
+     * an edit of the one source.
+     */
+    @Test
+    void aHelpersFoldIsOpenAtEveryCallWhenOneCallHandsItAStepItCannotRun() {
+        Compilation compilation = measured("""
+                module repro.shared
+
+                data In = { flag: Bool, xs: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                %s
+                let summed (step: (Int, Int) -> Int, ys: List<Int>): Int = List.fold(step, 0, ys)
+
+                let total (i) = {
+                    let chosen = if i.flag then add else sub
+                    summed(chosen, i.xs) + summed(add, i.xs)
+                }
+
+                example total
+                    | "t0" : (In { flag = true, xs = [] }) -> 0
+                    | "t1" : (In { flag = true, xs = [1] }) -> 2
+                    | "f0" : (In { flag = false, xs = [] }) -> 0
+                    | "f1" : (In { flag = false, xs = [1] }) -> 0
+                """.formatted(STEPS));
+
+        assertEquals(LEFT_OPEN, foldVerdicts(compilation));
+        assertEquals(List.of(), rewriteLines(compilation));
     }
 
     private static String page(Compilation compilation) {

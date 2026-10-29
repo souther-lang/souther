@@ -3588,7 +3588,7 @@
             }
           },
           {
-            "description": "And the place is written for the kinds whose place is their own: an arm is shown at the fork it is one of, a row waiting for its answer at the row or at the arm it stands at, and an arm rewritten as its sibling at the fork the two are arms of. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice — which is where a body rewritten as one answer is shown.",
+            "description": "And the place is written for the kinds whose place is their own: an arm is shown at the fork it is one of, a row waiting for its answer at the row or at the arm it stands at, and an arm rewritten as its sibling at the fork the two are arms of. A fold rewritten is shown at the fold where the build holds the source it is written in, and at the declaration the entry already names where it does not, so its place may or may not be written. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice — which is where a body rewritten as one answer is shown.",
             "if": {
               "anyOf": [
                 {
@@ -3640,10 +3640,58 @@
               ]
             },
             "else": {
-              "not": {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "rewrite_unnoticed"
+                  }
+                },
                 "required": [
-                  "at"
+                  "kind"
+                ],
+                "anyOf": [
+                  {
+                    "properties": {
+                      "obligationId": {
+                        "properties": {
+                          "rewrite": {
+                            "const": "fold_after_one_step"
+                          }
+                        },
+                        "required": [
+                          "rewrite"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "obligationId"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "obligationId": {
+                        "properties": {
+                          "rewrite": {
+                            "const": "fold_from_the_seed"
+                          }
+                        },
+                        "required": [
+                          "rewrite"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "obligationId"
+                    ]
+                  }
                 ]
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "at"
+                  ]
+                }
               }
             }
           },
@@ -4715,7 +4763,7 @@
                 "type": "array",
                 "minItems": 1,
                 "uniqueItems": true,
-                "description": "Every way a rewrite was left open, in the order the words are listed here, each said as itself: a search stopped by two figures was stopped by both, and a reader raising one is owed the other. `too_large` is a fork that carrying the sibling would grow past what a class may hold, or a fold whose switch the method it is written in could not hold. `a_statement_was_not_read` is a row stating something this could not read, or one that neither held nor failed of the body as written. `no_row_answered_differently` is a search that composed rows and found the rewrite answering each as the body does — where it looked, and not everywhere. `runs_spent` is a search that made as many runs as the measure lets one rewrite take with rows left; `a_composing_figure_reached` one whose composing stopped at a figure of its own; `a_run_did_not_come_back` one where a run it asked for came back with no answer it could read. `nothing_was_composed` is a search that composed no row to look at, and `nothing_ran` is nothing able to run a row.",
+                "description": "Every way a rewrite was left open, in the order the words are listed here, each said as itself: a search stopped by two figures was stopped by both, and a reader raising one is owed the other. `too_large` is a fork that carrying the sibling would grow past what a class may hold, or a fold whose switch the method it is written in could not hold. `a_statement_was_not_read` is a row stating something this could not read, or one that neither held nor failed of the body as written. `no_row_answered_differently` is a search that composed rows and found the rewrite answering each as the body does — where it looked, and not everywhere. `runs_spent` is a search that made as many runs as the measure lets one rewrite take with rows left; `a_composing_figure_reached` one whose composing stopped at a figure of its own; `a_run_did_not_come_back` one where a run it asked for came back with no answer it could read. `nothing_was_composed` is a search that composed no row to look at, and `nothing_ran` is nothing able to run a row. `step_not_expanded` is a fold whose step is not written where the fold hands it over — it is chosen as the program runs, or reaches the fold as a value — so that the fold is run by the library's one method and this build cannot run it rewritten; no run and no row changes it.",
                 "items": {
                   "enum": [
                     "too_large",
@@ -4725,7 +4773,8 @@
                     "a_composing_figure_reached",
                     "a_run_did_not_come_back",
                     "nothing_was_composed",
-                    "nothing_ran"
+                    "nothing_ran",
+                    "step_not_expanded"
                   ]
                 }
               }

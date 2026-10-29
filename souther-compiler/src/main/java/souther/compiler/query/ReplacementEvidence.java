@@ -359,7 +359,11 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             /** No row the search could look at was composed. */
             NOTHING_WAS_COMPOSED,
             /** Nothing could run a row. */
-            NOTHING_RAN
+            NOTHING_RAN,
+            /** The walk is reached, and this compiler cannot run it rewritten: its step is chosen
+             *  as the program runs or reaches the fold as a value, and the library's one method
+             *  that runs it is the method of every other fold. Not a figure a wider run raises. */
+            STEP_NOT_EXPANDED
         }
     }
 

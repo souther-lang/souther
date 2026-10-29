@@ -41,8 +41,8 @@ elements as it was, and each tells a different fault: a step that never reads it
 `(acc, x) -> x`, is the walk under another spelling once it is handed the seed, and only stopping
 after one step tells it from a fold keeping the first element.
 
-A walk is a loop as the tree that runs carries one: a fold walked from the head of its list whose
-step runs where it stands, or the build a fold that only grows a collection became. Two builds the
+A walk is a fold walked from the head of its list, or the build a fold that only grows a collection
+became, and the tree that runs carries it as a loop where its step runs where it stands. Two builds the
 lowering joins into one loop are one walk, the outer one, whose seed and step the loop carries. A
 walk is written by the source that wrote the fold, in the copy of whatever wrote it, so a fold inside
 `List.map` is the language's fold, and a rewrite of it is one for every call that reaches it, as an
@@ -61,6 +61,21 @@ none has none, however it was bound or worked on (`List.reverse`, `List.map`, `L
 that returns it), and only `List.sort` gives it one again. A list-typed node has the order of the
 lists it is made of, and a node of another type, a function handed to `List.map` among them, is none
 of its order.
+
+A walk the language owes a row of is owed whether or not this compiler can run it rewritten. A step
+that is not written where the fold hands it over, as in `let step = if flag then add else sub`, is
+handed to the library's one method as a value, and a switch in a method every fold of the program
+runs would rewrite them all. Such a walk is kept all the same, a run records that it reached the
+call once the call's arguments are worked out, and both rewrites are left undecided because the step
+is not expanded (`step_not_expanded`): the adequacy is undetermined, never satisfied by rows that
+were never put to the fold and never not satisfied by a rewrite nothing could run. The reason is a
+limit of this compiler, so no run and no row changes it. It is not a figure and is not
+`too_large`, which a wider run or a smaller method answers. A walk one of whose places cannot be
+run rewritten is left open at all of them, since a rewrite of it is an edit of one source. The
+proofs that need no run still hold, a list written with one element or none among them, and the one
+proof read off a run does not: a run through such a walk records no second element, so that its
+absence shows nothing. Expanding the loop around a step handed as a value would remove the limit,
+and is a change to how folds are emitted that belongs to its own issue.
 
 A run records entering a walk at a place of its own, a third family of the one numbering beside arms
 and conditions. Nothing is owed for entering one, and no branch measure counts it. What it is for is

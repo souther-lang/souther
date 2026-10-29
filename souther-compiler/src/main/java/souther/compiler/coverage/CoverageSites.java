@@ -1149,7 +1149,7 @@ public final class CoverageSites {
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of()))));
             walksByNode.put(draft.call(), at);
             walkSites.put(draft.raw(), new WalkRewrites.AtWalk(draft.walk(), at, draft.theSame(),
-                    draft.overAFixedList(), Optional.empty()));
+                    draft.overAFixedList(), draft.notCarried()));
         }
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
                 byComparison, armsByNode, answered, walk.mayRepeat, Map.copyOf(walk.reachedAt),
@@ -1278,11 +1278,12 @@ public final class CoverageSites {
      */
     private record DraftWalk(Core.Call call, String body, SourceConstructOrigin walk,
                              NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
-                             boolean overAFixedList, int raw) {
+                             boolean overAFixedList, Optional<NotCarriedReason> notCarried,
+                             int raw) {
 
         DraftWalk numbered(int number) {
             return new DraftWalk(call, body, walk, at, writtenHere, theSame, overAFixedList,
-                    number);
+                    notCarried, number);
         }
     }
 
@@ -1380,10 +1381,6 @@ public final class CoverageSites {
         /** Whether a walk met in the body being walked is one a rewrite is asked of: in a
          *  behavior's body, and not in a value's. */
         private boolean walksAreRewritten = true;
-        /** The operations that list what a set or a map holds, in the order the host happens to
-         *  keep it, which the language does not specify. */
-        private static final Set<Kernel> LISTS_WITHOUT_AN_ORDER = EnumSet.of(Kernel.SET_TO_LIST,
-                Kernel.MAP_TO_LIST, Kernel.MAP_KEYS, Kernel.MAP_VALUES);
         /** What each body parts strings at, where it writes the separator out, in the order met. */
         private final Map<String, Set<String>> separators = new LinkedHashMap<>();
         /** What each name of the body being walked is bound to by a {@code let}, as the walk passes
@@ -1419,13 +1416,19 @@ public final class CoverageSites {
 
         /**
          * {@code call}, kept as a walk where it is one the tree that runs carries as a loop: a fold
-         * from the head of its list whose step runs where it stands, or a build. A walk run as a
-         * call of the library's method is handed its step as a value, and the method is one for
-         * every such walk, so no switch there could tell one walk's rewrite from another's.
+         * from the head of its list, or a build. Whether its step runs where it stands decides only
+         * whether the walk can be run rewritten. A walk run as a call of the library's method is
+         * handed its step as a value, and the method is one for every such walk, so no switch there
+         * could tell one walk's rewrite from another's: it is kept all the same, with the reason
+         * its classes carry no switch ({@link NotCarriedReason.StepNotExpanded}).
          */
         private void walkIfOne(Core.Call call) {
+            if (!call.isWalk(theWalk) || !walksAreRewritten) {
+                return;
+            }
+            // A step that is never applied is run by nothing, and there is nothing to rewrite.
             Core.Block step = call.stepRunWhereItStands(theWalk);
-            if (step == null || !walksAreRewritten) {
+            if (step == null && call.omitsFunctionBody(theWalk.step())) {
                 return;
             }
             // A walk that reads nothing a run is handed answers one value on every run, and either
@@ -1454,12 +1457,17 @@ public final class CoverageSites {
                 theSame.addAll(EnumSet.allOf(WalkRewrite.class));
             }
             // A step that never reads what it carries is handed the seed to no effect.
-            if (!reads(step.body(), step.params().get(theWalk.accumulator()).binding())) {
+            if (step != null
+                    && !reads(step.body(), step.params().get(theWalk.accumulator()).binding())) {
                 theSame.add(WalkRewrite.STEPS_FROM_THE_SEED);
             }
+            // A step not written where the fold hands it over is a fold the language owes rows of
+            // all the same; what is missing is a way to run it rewritten, and that is said.
+            Optional<NotCarriedReason> notCarried = step == null
+                    ? Optional.of(new NotCarriedReason.StepNotExpanded()) : Optional.empty();
             walks.add(new DraftWalk(call, behavior, call.origin(), places.of(call),
                     Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
-                    -1));
+                    notCarried, -1));
         }
 
         /**
@@ -1514,7 +1522,7 @@ public final class CoverageSites {
             }
             if (plain instanceof Core.Call call
                     && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)) {
-                if (LISTS_WITHOUT_AN_ORDER.contains(kernel)) {
+                if (kernel.listsInNoOrder()) {
                     return true;
                 }
                 if (kernel == Kernel.LIST_SORT) {
