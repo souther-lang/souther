@@ -479,9 +479,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.inputs.DecimalOperation.workedOut",
                     "works the operator out on the numbers a row has, by the rule the run time"
                             + " works it out by"),
-            new Held("souther.compiler.partition.AffineReading.1.totalled",
-                    "asks the addition's own account where a total over a list written out"
-                            + " answers, since the library holds only that total to the type"),
+            new Held("souther.compiler.partition.AffineReading.1.tellAnIntTotal",
+                    "asks the addition's own account where a total worked out exactly answers,"
+                            + " since the library holds only that total to the type"),
+            new Held("souther.compiler.partition.NumbersOnTheWayToATotal.noMoreThanItAnswers",
+                    "asks whether every operation a closure applied to each element works out is"
+                            + " an addition or a product by a written number, whose numbers then"
+                            + " lie between nought and what the closure answers"),
             new Held("souther.compiler.partition.AffineReading.1.operandsOfTheQuotient",
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"

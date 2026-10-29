@@ -483,6 +483,12 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 "c == Int.floorMod(9223372036854775807 * x, 11)"));
         // And where it is computed at them, the same form is: three times the number is.
         assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x, 11)"));
+        // Moved by a number, the form is computed at those values all the same, but the sum with
+        // the number is worked out on every row and nothing shows a row gets past it: the reading
+        // of the remainder holds the number taken by the divisor and leaves what the run adds to
+        // the row. So the number beside the remainder is not said to be left either way here.
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
                 "c == Int.floorMod(3 * x + 5, 11)"));
     }
 

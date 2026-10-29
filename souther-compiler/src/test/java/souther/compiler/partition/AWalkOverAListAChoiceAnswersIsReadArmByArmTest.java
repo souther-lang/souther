@@ -111,19 +111,35 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                 .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
     }
 
+    /**
+     * What a reading of a rule stopped short of, apart from a relation it read and did not show to
+     * reach every value — which is not a reading that stopped, and is what the guard on how many
+     * were found leaves where the list is a name: that the codes joined to the contacts make a
+     * list a list holds is what the join's own reading shows, and the guard counting them is not
+     * told it.
+     */
+    private static List<String> stoppedShortOfReading(PartitionEvidence evidence) {
+        return evidence.notRead().stream().filter(PartitionEvidence.NotRead::readingStopped)
+                .filter(each -> each.reason()
+                        != UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE)
+                .map(PartitionEvidence.NotRead::at).toList();
+    }
+
     /** The filter that keeps the one code where the lead is known, which is read already. */
     @Test
     void theSameListAFilterKeepsIsRead() {
         PartitionEvidence evidence = screened("List.filter(k -> lead.known, [ lead.code ])");
 
-        assertEquals(List.of(), stopped(evidence), () -> evidence.notRead().toString());
+        assertEquals(List.of(), stoppedShortOfReading(evidence),
+                () -> evidence.notRead().toString());
     }
 
     @Test
     void aListAnIfChoosesIsRead() {
         PartitionEvidence evidence = screened("if lead.known then [ lead.code ] else []");
 
-        assertEquals(List.of(), stopped(evidence), () -> evidence.notRead().toString());
+        assertEquals(List.of(), stoppedShortOfReading(evidence),
+                () -> evidence.notRead().toString());
     }
 
     /** A value an arm binds is read where the arm is entered. */

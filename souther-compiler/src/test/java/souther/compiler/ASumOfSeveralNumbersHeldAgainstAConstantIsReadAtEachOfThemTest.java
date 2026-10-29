@@ -91,10 +91,16 @@ class ASumOfSeveralNumbersHeldAgainstAConstantIsReadAtEachOfThemTest {
         }
     }
 
+    /**
+     * Divided by how many a list written out holds, the average is read the same, but that the
+     * divisor is not nought is not shown: how many the list holds is no number the arithmetic
+     * reads. So no row is shown to get past the quotient, and each number is left unread for
+     * that, which is not that a run stops there.
+     */
     @Test
-    void anAverageDividedByTheLengthOfAListIsReadAlike() {
-        assertEquals(List.of(), unread("Rational.toInt(DOWN, (" + sum(3, "+")
-                + ") / List.length([ w.a, w.b, w.c ])) >= 100"));
+    void anAverageDividedByTheLengthOfAListIsNotShownToGetPastTheQuotient() {
+        assertEquals(List.of("w.a.pay", "w.b.pay", "w.c.pay"), unread("Rational.toInt(DOWN, ("
+                + sum(3, "+") + ") / List.length([ w.a, w.b, w.c ])) >= 100"));
     }
 
     @Test
