@@ -669,10 +669,24 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, and goes down to its parts: a name read"
                         + " off a value ends none, so what a projection may end one for is what"
                         + " its base may");
-        row(out, c + "partition/AffineReading", "stopsOnlyWhereItsAnswerHasNoPlace",
-                "(" + core + ")Z", Reading.STRUCTURE,
-                "asks a node what it ends a run for, and each part under it: a projection ends"
-                        + " none beyond what its base does");
+        row(out, c + "partition/NumbersOnTheWayToATotal", "readOffWhatItIsHanded",
+                "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "asks whether a value is a name a closure is handed or a run of fields read off"
+                        + " one, with nothing between, which the base answers");
+        row(out, c + "partition/NumbersOnTheWayToATotal", "theShiftsItIsReadThrough",
+                "(" + core + "L" + c + "numeric/LinearForm;L" + c + "inputs/InputReading;L" + c
+                        + "inputs/InputReads;)Ljava/util/List;", Reading.STRUCTURE,
+                "asks each operand of a node for the shifts of a date a taking of it stands for,"
+                        + " which the reading of the input answers: a projection is one operand,"
+                        + " its base");
+        row(out, c + "partition/AffineReading$WhatWasTold", "readByATerm", "(" + core + ")V",
+                Reading.STRUCTURE,
+                "records each name under a node read as numbers of the input: a projection reads"
+                        + " no name beyond what its base does");
+        row(out, c + "partition/AffineReading$1", "addsUpTheFormItIsReadAs",
+                "(" + core + "L" + c + "inputs/InputReads;)Z", Reading.STRUCTURE,
+                "asks each part of the stopped expression whether it is the operand read by its"
+                        + " form or ends no run: a projection's one part is its base");
         row(out, c + "partition/AffineReading$WhatLiesBesideTheStop", "collectUnder",
                 "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node and goes down to its parts: a projection is held where its"

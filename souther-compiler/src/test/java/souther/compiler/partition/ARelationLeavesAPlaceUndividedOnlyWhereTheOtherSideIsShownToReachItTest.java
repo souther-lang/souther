@@ -867,10 +867,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
      * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross. Nor is the doubled total shown left either way:
-     * the value of a total each element of which is made into another is read from the elements
-     * and asks the operations of the comparison for a row beside an end of the total, which it
-     * has no end to ask.
+     * takes, and nothing is shown of the gross. The doubled total is left either way: every
+     * element is at least nought, so each doubling lies between nought and the total, and a run
+     * gets through wherever the total is an {@code Int}.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
@@ -880,7 +879,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", NOT_SHOWN,
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
@@ -1421,14 +1420,19 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * nought in one row, and each of them is apart from the others and takes nought, a list of
      * none totalling nought. Held above nought, none of them takes nought, and nothing is shown of
      * the gross: that a value as near nought as asked of is taken shows no row at nought.
+     *
+     * <p>Neither is any of them shown taken apart at nought, held at nought or more: what the gross
+     * less the total is worked out at is not known, since the total of the notes is a call's
+     * answer at a scale nothing here knows, so no row is shown to get past taking it off. That
+     * is not that a run stops there.
      */
     @Test
     void aTotalHeldStillBesideOtherTermsAtNoughtLeavesTheRestEitherWay() {
         String inputs = "gross: Amount, ns: List<Amount>, net: Amount, tax: Amount";
         String closed = "data Amount = Decimal invariant value >= 0.0m";
         String at = atThe("<=", closed, inputs, CREDITED);
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", RELATES, "net", RELATES,
-                        "tax", RELATES), left(inputs, closed, CREDITED, at));
+        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "gross", NOT_SHOWN, "net", NOT_SHOWN,
+                        "tax", NOT_SHOWN), left(inputs, closed, CREDITED, at));
         assertEquals(NOT_SHOWN,
                 left(inputs, "data Amount = Decimal invariant value > 0.0m", CREDITED, at)
                         .get("gross"));
