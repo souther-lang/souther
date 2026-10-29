@@ -20,7 +20,6 @@ import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
-import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
@@ -253,8 +252,9 @@ public final class RowTrial {
             return Optional.empty();
         } catch (LinkageError e) {
             // Nothing was applied, because there is no runtime to apply it with. A class that was
-            // generated wrongly is not that, and is this compiler failing.
-            GeneratedLinkage.rejectDefect(e);
+            // generated wrongly is not that, and is this compiler failing, and nor is a class that
+            // failed to initialize.
+            EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
             return Optional.empty();
         }
         return Optional.of(new Ready(applying, over,

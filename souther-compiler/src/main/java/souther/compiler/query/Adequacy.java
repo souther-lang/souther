@@ -6,7 +6,7 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
-import souther.compiler.generated.GeneratedLinkage;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
@@ -3991,8 +3991,9 @@ public final class Adequacy {
                 // There is no runtime to link the generated classes against, so nothing can be built
                 // to find out what a model admits. Nothing was tried, which is not the same as
                 // everything tried being refused, and neither of them says the row cannot be
-                // written. Classes that were generated wrongly are not this, and end the run.
-                GeneratedLinkage.rejectDefect(e);
+                // written. Classes that were generated wrongly are not this, and end the run, and
+                // nor is a class that failed to initialize.
+                EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                 return List.of();
             }
         }
@@ -4009,7 +4010,7 @@ public final class Adequacy {
             } catch (LinkageError e) {
                 // The same, asked by reading a row through them — answered as a row nothing built,
                 // which is not a row seen to stand somewhere else.
-                GeneratedLinkage.rejectDefect(e);
+                EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                 return RowAsRead.nothingRead();
             }
         }
@@ -6235,8 +6236,9 @@ public final class Adequacy {
                     // There is no runtime to link the generated classes against, so nothing can be
                     // built to find out what a model admits. Saying so is not the same as saying
                     // the combinations are impossible, so none of them is reported as one.
-                    // Classes that were generated wrongly are not this, and end the run.
-                    GeneratedLinkage.rejectDefect(e);
+                    // Classes that were generated wrongly are not this, and end the run, and nor is
+                    // a class that failed to initialize.
+                    EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                     //
                     // Caught around the search and not around the answer. A finding's answer is
                     // owed whatever the search did, and a failure that skipped the walk over the

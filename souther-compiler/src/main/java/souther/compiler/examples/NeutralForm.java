@@ -176,7 +176,7 @@ final class NeutralForm {
             accessor.setAccessible(true);
             return accessor.invoke(live);
         } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowIfOverspent(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             throw new FixtureException(what + " cannot be read back as a fixture: `"
                     + simpleName(live) + "` has no `" + name + "` to read");
         }
@@ -481,7 +481,7 @@ final class NeutralForm {
             accessor.setAccessible(true);
             return accessor.invoke(live);
         } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowIfOverspent(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             throw new FixtureException("an optional's value cannot be read back: `"
                     + simpleName(live) + "` has no `value` to read");
         }

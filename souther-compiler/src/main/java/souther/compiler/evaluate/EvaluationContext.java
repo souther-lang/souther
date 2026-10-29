@@ -1,5 +1,6 @@
 package souther.compiler.evaluate;
 
+import souther.compiler.generated.GeneratedLinkage;
 import souther.runtime.WorkCheckpoint;
 
 import java.util.Collections;
@@ -199,12 +200,40 @@ public final class EvaluationContext {
         return null;
     }
 
-    /** Rethrows what stopped the evaluation, where {@code thrown} is it or carries it
-     *  ({@link #overspent}), and returns where it does not. */
-    public static void rethrowIfOverspent(Throwable thrown) {
+    /**
+     * Rethrows a failure that says nothing about the value being evaluated, and returns where
+     * {@code thrown} is not one.
+     *
+     * <p>There are two. The evaluation was stopped ({@link #overspent}), where the value was fine
+     * and the evaluation ran out. Or the generated class the value was reached through does not
+     * link ({@link GeneratedLinkage#rejectDefect}), where the compiler's output is wrong and the
+     * value was never read. A catch that turns a failure into "this value cannot be built" asks this
+     * first, and so reads neither of them as the value.
+     */
+    public static void rethrowUnlessAboutTheValue(Throwable thrown) {
         RuntimeException stop = overspent(thrown);
         if (stop != null) {
             throw stop;
+        }
+        GeneratedLinkage.rejectDefect(thrown);
+    }
+
+    /**
+     * Returns only where {@code thrown} is the runtime not being on the class path, which is the one
+     * link failure a catch may go on from by recording that nothing could be observed.
+     *
+     * <p>A stop or a generated class that does not link is rethrown as
+     * {@link #rethrowUnlessAboutTheValue} does. What is left that is not the runtime being absent is
+     * a class whose initializer failed on its own account, or the class that failed before it. That
+     * is not the runtime being absent and is not the compiler's output not linking, and a record
+     * that said either would be wrong. It is raised with the failure as its cause, so whoever reads
+     * it sees what the initializer threw.
+     */
+    public static void rethrowUnlessTheRuntimeIsAbsent(Throwable thrown) {
+        rethrowUnlessAboutTheValue(thrown);
+        if (!GeneratedLinkage.runtimeAbsent(thrown)) {
+            throw new IllegalStateException("a class failed to initialize while its values were"
+                    + " being evaluated: " + thrown, thrown);
         }
     }
 

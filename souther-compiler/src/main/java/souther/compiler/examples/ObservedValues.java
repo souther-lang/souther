@@ -172,7 +172,7 @@ final class ObservedValues {
             accessor.setAccessible(true);
             return accessor.invoke(live);
         } catch (ReflectiveOperationException | RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             return FAILED;
         }
     }

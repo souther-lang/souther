@@ -70,7 +70,7 @@ final class PaidForBeforeItIsWalked {
             accessor.setAccessible(true);
             return accessor.invoke(r);
         } catch (ReflectiveOperationException | RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             return NOTHING;
         }
     }

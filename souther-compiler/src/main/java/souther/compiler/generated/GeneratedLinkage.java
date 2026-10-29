@@ -35,14 +35,26 @@ public final class GeneratedLinkage {
     private GeneratedLinkage() {}
 
     /**
-     * Whether {@code cause} is a class of the runtime not being found.
+     * Whether {@code thrown}, or a cause under it, is a class of the runtime not being found.
      *
-     * <p>That is all it says. It does not say the runtime is not on the class path: a runtime of
-     * another version that lacks a class the generated code names fails the same way, and so is read
-     * as absent here.
+     * <p>Read through the causes for the reason {@link #rejectDefect} is: a reflective call wraps
+     * what the callee threw. That is all it says. It does not say the runtime is not on the class
+     * path: a runtime of another version that lacks a class the generated code names fails the same
+     * way, and so is read as absent here. Nor is a return from {@link #rejectDefect} evidence of
+     * it, since an initializer that failed returns from that as well.
      */
-    public static boolean runtimeAbsent(Throwable cause) {
-        return cause instanceof NoClassDefFoundError missing
+    public static boolean runtimeAbsent(Throwable thrown) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
+            if (isRuntimeClassMissing(each)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isRuntimeClassMissing(Throwable one) {
+        return one instanceof NoClassDefFoundError missing
                 && missing.getMessage() != null
                 && missing.getMessage().replace('/', '.').startsWith(RUNTIME_PACKAGE);
     }
@@ -65,7 +77,7 @@ public final class GeneratedLinkage {
     }
 
     private static boolean isDefect(LinkageError failure) {
-        if (runtimeAbsent(failure) || failure instanceof ExceptionInInitializerError) {
+        if (isRuntimeClassMissing(failure) || failure instanceof ExceptionInInitializerError) {
             return false;
         }
         return !(failure instanceof NoClassDefFoundError

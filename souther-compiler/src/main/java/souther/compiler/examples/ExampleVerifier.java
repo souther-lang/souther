@@ -6,7 +6,6 @@ import souther.compiler.observe.Observations;
 import souther.compiler.observe.WaitShown;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.generated.EvaluationArtifact;
-import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.core.Contract;
@@ -206,10 +205,11 @@ public final class ExampleVerifier {
             } catch (LinkageError e) {
                 // The runtime is off the classpath (it is `provided`, like CTFE), so nothing could
                 // be evaluated here, and the build-time pass still checks this example. Any other
-                // link failure is a class this compiler generated wrongly, which is not a fact
-                // about the example. Nothing was observed, and a measure that read the empty result
-                // as "no row covers this" would report a gap nobody left.
-                GeneratedLinkage.rejectDefect(e);
+                // link failure is not that: a class this compiler generated wrongly, or one that
+                // failed to initialize, is not a fact about the example. Nothing was observed, and
+                // a measure that read the empty result as "no row covers this" would report a gap
+                // nobody left.
+                EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
                         Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
             }
@@ -2134,7 +2134,7 @@ public final class ExampleVerifier {
                     TypeView.asWritten(position, symbols, kinds, sums).wrappers(), fixture);
         } catch (RuntimeException e) {
             // the row's budget is gone, or the row was given up on; it is not a form that could not be read
-            EvaluationContext.rethrowIfOverspent(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             return null;
         }
     }
@@ -2687,7 +2687,7 @@ public final class ExampleVerifier {
      */
     private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
                                    Throwable cause, List<Diagnostic> out, RowState state) {
-        EvaluationContext.rethrowIfOverspent(cause);
+        EvaluationContext.rethrowUnlessAboutTheValue(cause);
         if (cause instanceof FakeMissException fm) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.AFakeHadNoOutputForAnInput(fm.getMessage()))

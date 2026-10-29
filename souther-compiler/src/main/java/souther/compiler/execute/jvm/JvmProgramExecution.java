@@ -259,7 +259,6 @@ public final class JvmProgramExecution implements ProgramExecution {
                 yield new ConstantOutcome.NotEvaluatedHere();
             }
             case Deadline.Outcome.Threw<Object>(Throwable cause) -> {
-                GeneratedLinkage.rejectDefect(cause);
                 Throwable ended = cause instanceof InvocationTargetException call
                         && call.getCause() != null ? call.getCause() : cause;
                 yield ended instanceof ConstraintViolation violation

@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.GeneratedLinkage;
+
 /**
  * The answerer could not reach the implementation it applies.
  *
@@ -17,7 +19,13 @@ public final class ImplementationNotReached extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * A class missing or a method not there is what this says. A generated class that will not
+     * link, held in {@code cause} or under it, is not a way of not being reached: it is this
+     * compiler's output failing, and is raised as such.
+     */
     public ImplementationNotReached(String why, Throwable cause) {
+        GeneratedLinkage.rejectDefect(cause);
         super(why, cause);
     }
 }

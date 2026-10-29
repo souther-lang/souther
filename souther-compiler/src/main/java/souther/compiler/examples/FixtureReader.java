@@ -1,7 +1,6 @@
 package souther.compiler.examples;
 
 import souther.compiler.execute.BoundaryValues;
-import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
@@ -795,7 +794,7 @@ public final class FixtureReader {
                     .invoke(encoder, result);
         } catch (ReflectiveOperationException | RuntimeException e) {
             // The encoder is reached reflectively, so a stop inside it arrives wrapped.
-            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this value
+            EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out, not this value
             return null;
         }
     }
@@ -1619,7 +1618,7 @@ public final class FixtureReader {
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
         } catch (RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this fixture failing to fit
+            EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out, not this fixture failing to fit
             // The decoder is generated for the declared type and casts on the way in, so a fixture of
             // another shape — a string where the parameter is a product, a number where it is a
             // string-backed newtype — fails inside it rather than returning an Err. That is the
@@ -1672,7 +1671,7 @@ public final class FixtureReader {
                     Class<?> c = loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName());
                     yield (Decoder<Object, ?>) staticCodec(c, "decoder");
                 } catch (ReflectiveOperationException e) {
-                    EvaluationContext.rethrowIfOverspent(e);
+                    EvaluationContext.rethrowUnlessAboutTheValue(e);
                     throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName()
                             + "` was admitted as a"
                             + " type a fixture builds through its derived decoder, and it has none", e);
@@ -1757,8 +1756,7 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
         } catch (RuntimeException | LinkageError e) {
-            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this value being unreadable
-            GeneratedLinkage.rejectDefect(e);          // a class generated wrongly is not this value being unreadable
+            EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out, or the class would not link; neither is this value being unreadable
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1777,8 +1775,7 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(value, symbols, neutral, WHOLE);
         } catch (RuntimeException | LinkageError e) {
-            EvaluationContext.rethrowIfOverspent(e);
-            GeneratedLinkage.rejectDefect(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1899,7 +1896,7 @@ public final class FixtureReader {
         } catch (FixtureException e) {
             return new BoundaryValues.Built.Refused(e.getMessage());
         } catch (RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out; whether the fixture is refused is still unread
+            EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out; whether the fixture is refused is still unread
             return new BoundaryValues.Built.Refused(String.valueOf(e.getMessage()));
         }
     }
@@ -1930,7 +1927,7 @@ public final class FixtureReader {
         } catch (FixtureException e) {
             return new BoundaryValues.OnItsOwn.Refused();
         } catch (RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out; whether the fixture is refused is still unread
+            EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out; whether the fixture is refused is still unread
             return new BoundaryValues.OnItsOwn.Refused();
         }
     }

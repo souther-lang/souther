@@ -1,7 +1,9 @@
 package souther.cli;
 
 import souther.cli.CliProcess.Ran;
-import souther.compiler.generated.GeneratedLinkage;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.examples.Deadline;
+import souther.compiler.execute.jvm.JvmDeadlines;
 
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +12,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,8 +74,13 @@ class AListWithAUniquenessBeforeASizeIsMeasuredWithoutAnInternalErrorTest {
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
         PrintStream err = new PrintStream(captured, true, StandardCharsets.UTF_8);
 
+        // Thrown by the worker a reading is given, which is where everything a fake table's
+        // evaluation ends with arrives.
         int code = Main.guarded(err, () -> {
-            GeneratedLinkage.rejectDefect(new VerifyError("Bad type on operand stack"));
+            JvmDeadlines.of(Duration.ofSeconds(30)).given(
+                    new Deadline.Work.Table("fake", new SourcePos(1, 1)), () -> {
+                        throw new VerifyError("Bad type on operand stack");
+                    });
             return 0;
         });
 
