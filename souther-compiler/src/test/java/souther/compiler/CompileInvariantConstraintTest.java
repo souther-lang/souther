@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.DecoderKind;
 import net.unit8.raoh.Issue;
@@ -18,6 +19,8 @@ import java.lang.classfile.constantpool.ConstantDynamicEntry;
 import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.constant.ClassDesc;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -279,6 +282,116 @@ class CompileInvariantConstraintTest {
                 """, List.of(1L, 2L));
         assertEquals("too_big", issue.code());
         assertEquals(1, issue.meta().get("max"));
+    }
+
+    private static Result<?> decoded(String data, Object input) throws Exception {
+        String module = """
+                module demo
+
+                %s
+                """.formatted(data);
+        ClassLoader loader = new BytesClassLoader(Compiler.compile(module), CompileInvariantConstraintTest.class.getClassLoader());
+        Decoder<Object, ?> dec = Codecs.decoder(loader, "demo.V");
+        return dec.decode(input, Path.ROOT);
+    }
+
+    private static Issue firstIssue(Result<?> r) {
+        assertTrue(r instanceof Err, "the value breaks the invariant, so decoding must fail");
+        return ((Err<?>) r).issues().asList().get(0);
+    }
+
+    /** A size declared after a uniqueness is chained on the decoder the uniqueness answers, which
+     * has to be one that has it. Each declares the uniqueness first, so a value that repeats is
+     * reported as a repeat and one that does not is held to the size. */
+    @Test
+    void aSizeDeclaredAfterAUniquenessIsStillChained() throws Exception {
+        String head = """
+                data V = List<Int>
+                    invariant List.allDistinctBy(x -> x, value)
+                """;
+        String atMost = head + "    invariant List.length(value) <= 2\n";
+        String atLeast = head + "    invariant List.length(value) >= 2\n";
+        String exactly = head + "    invariant List.length(value) == 2\n";
+        String nonEmpty = head + "    invariant List.length(value) >= 1\n";
+
+        assertTrue(decoded(atMost, List.of(1L, 2L)) instanceof Ok);
+        assertEquals("duplicate_element", firstIssue(decoded(atMost, List.of(1L, 1L, 1L))).code());
+        Issue tooBig = firstIssue(decoded(atMost, List.of(1L, 2L, 3L)));
+        assertEquals("too_big", tooBig.code());
+        assertEquals(2, tooBig.meta().get("max"));
+        assertEquals(3, tooBig.meta().get("actual"));
+
+        assertTrue(decoded(atLeast, List.of(1L, 2L)) instanceof Ok);
+        assertEquals("too_small", firstIssue(decoded(atLeast, List.of(1L))).code());
+
+        assertTrue(decoded(exactly, List.of(1L, 2L)) instanceof Ok);
+        assertEquals("invalid_size", firstIssue(decoded(exactly, List.of(1L, 2L, 3L))).code());
+
+        assertTrue(decoded(nonEmpty, List.of(1L)) instanceof Ok);
+        assertEquals("too_small", firstIssue(decoded(nonEmpty, List.of())).code());
+    }
+
+    /** Every constraint of a list is one a decoder can be asked for after a uniqueness. A constraint
+     * added to {@code OfList} has no clause here until one is written for it, so one that would
+     * need the decoder the uniqueness no longer answers is found by loading it, not by a user. */
+    @Test
+    void everyListConstraintLoadsAfterAUniqueness() throws Exception {
+        Map<Class<?>, String> clauses = Map.of(
+                BoundaryConstraint.NonEmpty.class, "List.length(value) >= 1",
+                BoundaryConstraint.MinSize.class, "List.length(value) >= 2",
+                BoundaryConstraint.MaxSize.class, "List.length(value) <= 2",
+                BoundaryConstraint.FixedSize.class, "List.length(value) == 2");
+        List<Class<?>> others = new ArrayList<>(
+                List.of(BoundaryConstraint.OfList.class.getPermittedSubclasses()));
+        others.remove(BoundaryConstraint.Unique.class);
+        assertEquals(new HashSet<>(others), clauses.keySet(),
+                "a list constraint with no clause written to follow a uniqueness");
+        for (String clause : clauses.values()) {
+            Result<?> r = decoded("""
+                    data V = List<Int>
+                        invariant List.allDistinctBy(x -> x, value)
+                        invariant %s
+                    """.formatted(clause), List.of(1L, 2L));
+            assertTrue(r instanceof Ok, clause);
+        }
+    }
+
+    /** The two rules written as one clause are the same chain as two clauses. */
+    @Test
+    void aUniquenessAndASizeInOneClauseAreChainedInOrder() throws Exception {
+        String data = """
+                data V = List<Int>
+                    invariant List.allDistinctBy(x -> x, value) && List.length(value) <= 2
+                """;
+        assertTrue(decoded(data, List.of(1L, 2L)) instanceof Ok);
+        assertEquals("duplicate_element", firstIssue(decoded(data, List.of(1L, 1L, 1L))).code());
+        assertEquals("too_big", firstIssue(decoded(data, List.of(1L, 2L, 3L))).code());
+    }
+
+    /** A size declared before the uniqueness is reported before it. */
+    @Test
+    void aSizeDeclaredBeforeAUniquenessIsReportedFirst() throws Exception {
+        String data = """
+                data V = List<Int>
+                    invariant List.length(value) <= 2
+                    invariant List.allDistinctBy(x -> x, value)
+                """;
+        assertEquals("too_big", firstIssue(decoded(data, List.of(1L, 1L, 1L))).code());
+        assertEquals("duplicate_element", firstIssue(decoded(data, List.of(1L, 1L))).code());
+    }
+
+    /** Two sizes after a uniqueness are both chained, on the decoder the first one leaves. */
+    @Test
+    void constraintsAfterAUniquenessKeepTheirOrder() throws Exception {
+        String data = """
+                data V = List<Int>
+                    invariant List.allDistinctBy(x -> x, value)
+                    invariant List.length(value) <= 3
+                    invariant List.length(value) >= 2
+                """;
+        assertTrue(decoded(data, List.of(1L, 2L)) instanceof Ok);
+        assertEquals("too_big", firstIssue(decoded(data, List.of(1L, 2L, 3L, 4L))).code());
+        assertEquals("too_small", firstIssue(decoded(data, List.of(1L))).code());
     }
 
     /** {@code allDistinctBy} with the identity projection says of the elements what Raoh's

@@ -677,11 +677,12 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 data Tags = List<String>
                     invariant distinct = List.allDistinctBy(x -> x, value)
                         && List.length(value) >= 2
-                    invariant notTwo = List.length(value) /= 2
+                    invariant hasA = List.contains("a", value)
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
         souther.compiler.partition.FillResult filled = generated(source);
 
-        assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
+        assertEquals(List.of(), filled.rows(), "no candidate holds a rule nothing here reads");
+        assertFalse(filled.unresolved().isEmpty(), "the combination is reported, not dropped");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),

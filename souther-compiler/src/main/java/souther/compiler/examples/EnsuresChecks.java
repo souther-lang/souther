@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.core.Contract;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -191,6 +192,7 @@ final class EnsuresChecks {
             return null;
         } catch (InvocationTargetException ite) {
             Throwable cause = ite.getCause();
+            GeneratedLinkage.rejectDefect(ite);
             // Matched by name: the check runs under the loader the classes are in, and the runtime
             // it aborts with is whatever that loader reads it from. What is wanted here is only
             // which abort it was — the same reading a row's own application does.
