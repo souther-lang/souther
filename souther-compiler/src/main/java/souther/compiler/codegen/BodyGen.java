@@ -1572,7 +1572,8 @@ final class BodyGen {
         private void buildList(Core.Call call) {
             // A list's builder compares nothing it is given, so making one is the same call
             // everywhere.
-            if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
+            if (call.runsAsALoop(ctx.symbols.theWalk())
+                    && walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
                 return;
             }
             emitStep(call);
@@ -1605,7 +1606,8 @@ final class BodyGen {
         private void buildMap(Core.Call call) {
             // A map's builder compares the keys written into it, so an evaluated class makes one that
             // holds the checkpoint they are compared under.
-            if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
+            if (call.runsAsALoop(ctx.symbols.theWalk())
+                    && walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
                 return;
             }
             emitStep(call);
@@ -1687,10 +1689,6 @@ final class BodyGen {
         private boolean walked(Core.Call call, Core stepValue, Core walked, Runnable seed,
                                Runnable answer, boolean freshSeed) {
             Core.Block step = Core.runsWhereItStands(stepValue);
-            // A build writes into its builder in the step's own body, so it has no step to hand over.
-            if (step == null && freshSeed) {
-                return false;
-            }
             Type.FnOf stepType = (Type.FnOf) stepValue.type();
             Type accType = step != null ? step.paramTypes().get(0) : stepType.params().get(0);
             Type elementType = step != null ? step.paramTypes().get(1) : stepType.params().get(1);

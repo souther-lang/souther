@@ -1186,9 +1186,10 @@ public sealed interface Core {
         }
 
         /**
-         * The step this call runs where it stands, as the loop it is, or null where it does not: the
+         * The step this call runs where it stands, as the loop body, or null where it does not: the
          * step is handed over as a function, or replaced by {@code Fn.NEVER} because it is never
-         * applied ({@link #functionArgument} says which).
+         * applied ({@link #functionArgument} says which). A fold whose step is handed over as a
+         * function is still the loop ({@link #runsAsALoop}), applying the step to each element.
          *
          * <p>A walk that starts at the head of the list, and a build of a list or a map, run their
          * step as the loop body, reading what it closes over from the frame around it: no class is

@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that stopped working out the arguments of the fold never entered it: recorded as reached, it
  * would be a row the fold was put to that the fold never saw.
  */
-class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
+class AWalkIsRecordedOnceItsArgumentsAreWorkedOutTest {
 
     private static final String MODEL = """
             module example.walked
@@ -127,7 +127,7 @@ class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
             assertNotNull(artifact, "the model under test compiles");
             Map<String, ClassFileImage> classes = artifact.classes();
             ClassLoader loader = new MemoryClassLoader(classes,
-                    AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest.class
+                    AWalkIsRecordedOnceItsArgumentsAreWorkedOutTest.class
                             .getClassLoader());
             try {
                 Class<?> impl = Emitted.behavior(loader, "example.walked", "total");
