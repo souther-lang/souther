@@ -484,12 +484,18 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         // And where it is computed at them, the same form is: three times the number is.
         assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
                 "c == Int.floorMod(3 * x, 11)"));
-        // Moved by a number, the form is computed at those values all the same, but the sum with
-        // the number is worked out on every row and nothing shows a row gets past it: the reading
-        // of the remainder holds the number taken by the divisor and leaves what the run adds to
-        // the row. So the number beside the remainder is not said to be left either way here.
-        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+        // Moved by a number, the sum with the number is worked out on every row, and it is asked
+        // at the values the rows are built at as it was written: it comes to a number an Int
+        // holds there, so the form is computed at them all the same.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
                 "c == Int.floorMod(3 * x + 5, 11)"));
+        // And moved by a number that overflows at them, the sum is no row's: the quantity holds
+        // that number taken by the divisor, which is a small one, so only the sum as written
+        // says so.
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x + 9223372036854775807, 11)"));
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x - 9223372036854775807 - 10, 11)"));
     }
 
 

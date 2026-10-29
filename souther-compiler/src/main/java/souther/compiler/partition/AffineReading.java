@@ -695,9 +695,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /**
              * Whether working {@code node} out does no more than the analysis that drew the lines
              * reads it by: the form of one operand, which it builds its rows where adding up is
-             * worked out. Read apart, the operand composes, every operation on the way adds up
-             * addends of its form, and nothing is left untold; every other part of {@code node}
-             * ends no run.
+             * worked out. Read apart, the operand composes and nothing is left untold; every
+             * other part of {@code node} ends no run. Every operation on the way adds up addends
+             * of its form, or is told as an operation of its own.
              */
             private boolean addsUpTheFormItIsReadAs(Core node, InputReads at) {
                 Core operand = stoppedAt.readByTheFormOf(node);
@@ -710,9 +710,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 WhatWasTold apart = new WhatWasTold();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
                         reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
-                return form != null && apart.exact && apart.decimals.isEmpty()
-                        && apart.operations.stream().allMatch(
-                                each -> WhatLiesBesideTheStop.areAddendsOf(each.form(), form));
+                if (form == null || !apart.exact || !apart.decimals.isEmpty()) {
+                    return false;
+                }
+                // An operation that is no addend of the form, a sum with a number it is moved
+                // by, is one the analysis asks of its own rows, so it is told here.
+                if (!apart.operations.stream().allMatch(
+                        each -> WhatLiesBesideTheStop.areAddendsOf(each.form(), form))) {
+                    told.absorb(apart);
+                }
+                return true;
             }
 
             /** The form {@code e} composes to as {@code by} reads it, or null where it does not. */

@@ -1010,11 +1010,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * here, so the operations are then not every one, unless no row of the places it is over
      * could stop at it.
      */
-    private WhatARelationLeavesUndivided.Operations operationsOverTheSides(InputReading read) {
+    private WhatARelationLeavesUndivided.Operations operationsOverTheSides(
+            InputReading read, List<OnAWay> conditions, boolean heldWhole) {
         if (working.operations().isEmpty() && working.decimals().isEmpty()) {
             return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
         }
-        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
+        // The operations over the numbers of a remainder's form are a row's of the witness that
+        // takes the form through every remainder, which is asked to get past them
+        // ({@link #theWorkingGetsPastAtTheWitness}): none is one a row is not asked of here.
+        boolean pastAtTheWitness = remainder != null
+                && reachesEveryRemainder(null, read, conditions, heldWhole);        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
         for (Side each : sides) {
             if (each.number() != null) {
                 named.merge(each.number(), 1, Integer::sum);
@@ -1026,7 +1031,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean overTheSides = each.form().coefs().keySet().stream()
                     .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
             if (!overTheSides) {
-                leftOut |= !stopsNoRow(each, read);
+                leftOut |= !(pastAtTheWitness && overTheFormOfTheRemainder(each))
+                        && !stopsNoRow(each, read);
                 continue;
             }
             sums.add(new WhatARelationLeavesUndivided.IntSum(
@@ -2049,7 +2055,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
         List<WhatARelationLeavesUndivided.JointSupport> supports =
                 datePartsTogether(sources, stating, heldWhole, left.years());
-        WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read);
+        WhatARelationLeavesUndivided.Operations operations =
+                operationsOverTheSides(read, conditions, heldWhole);
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
@@ -4771,11 +4778,48 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Carrier carrier = read.quantities().ordersOf(value).answered();
             BigInteger window = remainder.divisor().subtract(BigInteger.ONE);
             if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
-                    carrier) && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
+                    carrier) && theWorkingGetsPastAtTheWitness(value, window)
+                    && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether every operation the comparison works out comes to a number its type holds with
+     * {@code witness} put at each value from nought to {@code top} and every other number of the
+     * form at nought. Of those over numbers of the form the remainder is of: an operation over
+     * any other number is not the witness's to say, and is asked as the operations over the sides
+     * are.
+     *
+     * <p>The operations are sums of the form with the number it is moved by, which the quantity
+     * holds taken by the divisor, so they are asked here with the number as it was written. Each
+     * is linear in the witness, so its two ends say every value between.
+     */
+    private boolean theWorkingGetsPastAtTheWitness(NumericTerm witness, BigInteger top) {
+        for (IntOperation each : working.operations()) {
+            if (!overTheFormOfTheRemainder(each)) {
+                continue;
+            }
+            ExactRatio weight = each.form().coefs().getOrDefault(witness, ExactRatio.ZERO);
+            for (BigInteger at : List.of(BigInteger.ZERO, top)) {
+                ExactRatio value = weight.times(ExactRatio.of(at)).orNull() instanceof ExactRatio
+                        product ? product.plus(each.form().constant()).orNull() : null;
+                if (value == null
+                        || value.compareTo(ExactRatio.of(each.least())) < 0
+                        || value.compareTo(ExactRatio.of(each.greatest())) > 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Whether every number {@code operation} is over is a number of the form the remainder is
+     *  of. */
+    private boolean overTheFormOfTheRemainder(IntOperation operation) {
+        return remainder.dividend().coefs().keySet().containsAll(operation.form().coefs().keySet());
     }
 
     /** Whether the values of {@code carrier} include every whole number from nought to
