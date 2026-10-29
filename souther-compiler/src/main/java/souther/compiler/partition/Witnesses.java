@@ -7,6 +7,7 @@ import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
@@ -1747,6 +1748,11 @@ final class Witnesses {
      * <p><b>Every value where the rules name finitely many.</b> A finite set the rules leave is an
      * upper bound however much of them was read ({@link AdmissibleSet}), so a value outside it is
      * one the rules refuse — stepped, composed or proposed, it only takes what holds it with it.
+     *
+     * <p><b>A string the place admits, before the classes.</b> A class stands for the values of the
+     * type that fall in it, and a string has one class whatever the rules of the place say of its
+     * strings: so where those rules are a record's and not the type's, what stood for the class was
+     * a string of the type the record refuses, and no value of the record was built at all.
      */
     static Placed placed(Type type, AdmissibleSet atThePlace, RuleReadingContext reading,
                          Set<TypeSymbol> expanding, Partitions.RulesAround around) {
@@ -1754,6 +1760,15 @@ final class Witnesses {
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         Proposals.Gathering out = Proposals.Gathering.inOrder();
+        if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
+            for (String each : stringsIn(atThePlace)) {
+                FixtureTemplate written =
+                        WornNames.under(view.wrappers(), FixtureTemplate.string(each), source);
+                if (written != null) {
+                    out.add(written);
+                }
+            }
+        }
         for (PartitionClass each : PartitionClasses.of(
                 PartitionClasses.casesAt(view, atThePlace, reading), view, reading, expanding)) {
             out.addAll(Partitions.standingFor(each.representatives(), reading, expanding, around));
@@ -1829,6 +1844,21 @@ final class Witnesses {
         }
         return placed(type, limits.admits(), reading, expanding, around).within(limits)
                 .before(otherwise);
+    }
+
+    /** Strings {@code admitted} holds that it names: the least of a language, or each string a
+     *  finite set lists — none where it names none. */
+    private static List<String> stringsIn(AdmissibleSet admitted) {
+        return switch (admitted.approximation()) {
+            case ValueSet.Matching matching -> {
+                String some = matching.language().some();
+                yield some == null ? List.of() : List.of(some);
+            }
+            case ValueSet.Finite finite -> finite.values().stream()
+                    .filter(Value.Text.class::isInstance)
+                    .map(each -> ((Value.Text) each).value()).toList();
+            case ValueSet.Cofinite _, ValueSet.WholeRuns _ -> List.of();
+        };
     }
 
     /** Whether {@code admitted} names the values it leaves, and some of them. */

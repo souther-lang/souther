@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Core;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -173,6 +174,27 @@ final class ConstructionRules {
         return TypeOps.outermost(type, source.inners()) instanceof TypeOps.Unwrapped worn
                 && worn.layer().named() instanceof TypeSymbol.AtModule name
                 ? FieldDomains.of(name, reading) : FieldDomains.NONE;
+    }
+
+    /**
+     * The value written for the field at {@code path} where a rule of the value it is a field of
+     * ties it to other fields ({@link FieldDomains#writtenTogether}) — or null where none is.
+     *
+     * <p>A value of the fields such a rule ties together is one value of all of them, which the
+     * limits each field is chosen in cannot say: a rule relating two strings leaves no one of them
+     * a set. So each of those fields offers its part of it, and the parts make the one value.
+     */
+    Core writtenTogetherAt(TermPath path) {
+        for (RuleRoots.Naming each : namingOf(path)) {
+            List<String> steps = each.address().key().steps();
+            if (steps.size() == 1) {
+                Core written = bare(each).writtenTogether().get(steps.getFirst());
+                if (written != null) {
+                    return written;
+                }
+            }
+        }
+        return null;
     }
 
     /**

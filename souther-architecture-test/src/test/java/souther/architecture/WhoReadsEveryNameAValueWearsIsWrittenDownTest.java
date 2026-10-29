@@ -276,6 +276,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
+            row(PARTITION + "Partitions", "writtenAs",
+                    "(Lsouther/compiler/core/Core;" + TYPE + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
+                    THE_POSITION),
             row(PARTITION + "Partitions", "writtenNumberAt",
                     "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")L" + PARTITION
                             + "FixtureTemplate;",

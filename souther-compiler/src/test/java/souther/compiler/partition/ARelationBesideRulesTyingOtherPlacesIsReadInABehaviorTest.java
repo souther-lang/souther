@@ -2,12 +2,22 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.ReadAs;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +96,71 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
         assertEquals(aboutTheRelation(apart), aboutTheRelation(joined),
                 "one clause of two parts says what two clauses do");
         assertEquals(classes(apart), classes(joined));
+    }
+
+    /**
+     * And a row is written on each side of the line, under rules on the record's strings however
+     * they are written.
+     *
+     * <p>A row is chosen a position at a time, and a string position took the strings of its type:
+     * under a pattern the record states on it, or a rule relating it to another string, every row
+     * was refused and the line had none. A position offers the strings its rules admit, and the
+     * strings a rule ties together are offered as the one value of them the rules were shown to
+     * hold of.
+     */
+    @Test
+    void aRowIsWrittenOnEachSideOfTheLine() {
+        for (String rules : List.of(
+                "    invariant String.matches(\"[A-Z]+\", a)",
+                "    invariant String.contains(a, b)\n    invariant String.contains(\"q\", c)",
+                "    invariant String.contains(a, b) && String.contains(\"q\", c)",
+                "    invariant String.contains(\"q\", a) && String.contains(a, b)")) {
+            Compilation measured = measured(rules);
+            List<int[]> rows = rowsOffered(measured);
+
+            assertTrue(rows.stream().anyMatch(row -> row[0] <= row[1]),
+                    () -> rules + ": a row where the total is within the cap " + offered(measured));
+            assertTrue(rows.stream().anyMatch(row -> row[0] > row[1]),
+                    () -> rules + ": a row where it is past it " + offered(measured));
+        }
+    }
+
+    /** And a value of the record alone is the one value of the strings tied together. */
+    @Test
+    void aValueOfTheRecordHoldsTheStringsTiedTogether() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Priced = { total: Int, a: String, b: String }
+                    invariant String.contains("q", a) && String.contains(a, b)
+                """, "Main");
+        String module = compilation.modules().get(0);
+        RuleReadingContext reading = RuleReadingContext.unshared(
+                RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
+
+        assertEquals(List.of("Priced { total = 0, a = \"q\", b = \"q\" }"),
+                Partitions.representativesOf(
+                                Type.ref(TypeSymbols.declared(new TypeKey(module, "Priced"))),
+                                reading)
+                        .values().stream().map(FixtureTemplate::text).toList());
+    }
+
+    private static String offered(Compilation compilation) {
+        return GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
+                .text();
+    }
+
+    /** The total and the cap of each row offered. */
+    private static List<int[]> rowsOffered(Compilation compilation) {
+        List<int[]> out = new ArrayList<>();
+        Matcher row = Pattern.compile("total = Yen\\((-?\\d+)\\)[^}]*}, (-?\\d+)\\)")
+                .matcher(offered(compilation));
+        while (row.find()) {
+            out.add(new int[] {Integer.parseInt(row.group(1)), Integer.parseInt(row.group(2))});
+        }
+        return out;
     }
 
     @Test

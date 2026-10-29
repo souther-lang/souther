@@ -303,11 +303,15 @@ public final class FieldDomains {
      * {@link #classes} is: asked at every place a projection is asked of, and the answer turns on
      * the rules of this value alone.
      */
-    private final Map<Set<RuleKey>, Boolean> heldTogether = new ConcurrentHashMap<>();
+    private final Map<Set<RuleKey>, Optional<Map<String, Core>>> heldTogether =
+            new ConcurrentHashMap<>();
 
     /** Which places the parts of this value's rules tie together, made the first time it is
      *  asked ({@link #tied}). */
     private volatile TiedPlaces tied;
+
+    /** What {@link #writtenTogether} answers, worked out the first time it is asked. */
+    private volatile Map<String, Core> writtenTogether;
 
     /** What {@link #projection} answers, worked out the first time it is asked. */
     private volatile ProjectionEvidence projected;
@@ -2897,12 +2901,70 @@ public final class FieldDomains {
         if (together.size() == 1) {
             return holdsAValueAt(together.iterator().next(), placesOf, asked);
         }
-        return heldTogether.computeIfAbsent(Set.copyOf(together), this::writtenTogether);
+        return writtenAt(together).isPresent();
+    }
+
+    /** {@link #writtenOver} of {@code together}, worked out once for each set of places. */
+    private Optional<Map<String, Core>> writtenAt(Set<RuleKey> together) {
+        return heldTogether.computeIfAbsent(Set.copyOf(together), this::writtenOver);
     }
 
     /**
-     * Whether a value of this declaration at the fields the places {@code together} are in is
-     * written down that every part naming one of them holds of — see {@link #holdTogether}.
+     * A value at the fields of each set of places a rule the bounds do not hold ties together,
+     * written down that every part naming one of them holds of, by field — the value that shows
+     * those places hold one together ({@link #holdTogether}).
+     *
+     * <p>What a builder of a value of this declaration writes at those fields. Chosen a field at a
+     * time against what the rules leave each, the second of {@code String.contains("q", a)} and
+     * {@code String.contains(a, b)} was chosen against nothing, since what a rule relating two
+     * strings leaves one is not a set of strings, and the value was refused. A field two such sets
+     * are in, which the two values may write differently, is not among them.
+     */
+    public Map<String, Core> writtenTogether() {
+        Map<String, Core> known = writtenTogether;
+        if (known == null) {
+            known = Collections.unmodifiableMap(writtenTogetherReadOff());
+            writtenTogether = known;
+        }
+        return known;
+    }
+
+    /** {@link #writtenTogether}, read off the places the rules tie together. */
+    private Map<String, Core> writtenTogetherReadOff() {
+        if (!(projection() instanceof ProjectionEvidence.NotCertified(
+                List<ProjectionEvidence.Cause> causes))) {
+            return Map.of();
+        }
+        Set<RuleRef> unheld = new LinkedHashSet<>();
+        causes.forEach(each -> {
+            if (each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _)) {
+                unheld.add(rule);
+            }
+        });
+        Map<String, Core> out = new LinkedHashMap<>();
+        Set<String> twice = new HashSet<>();
+        Set<Set<RuleKey>> asked = new HashSet<>();
+        tied().placesOf().forEach((read, places) -> {
+            if (!unheld.contains(read.part().rule())) {
+                return;
+            }
+            Set<RuleKey> together = tied().tiedTo(places.iterator().next());
+            if (together.size() < 2 || !apartFrom(together, null) || !asked.add(together)) {
+                return;
+            }
+            writtenAt(together).ifPresent(values -> values.forEach((field, value) -> {
+                if (out.putIfAbsent(field, value) != null) {
+                    twice.add(field);
+                }
+            }));
+        });
+        twice.forEach(out::remove);
+        return out;
+    }
+
+    /**
+     * A value of this declaration at the fields the places {@code together} are in, written down
+     * that every part naming one of them holds of, by field — see {@link #holdTogether}.
      *
      * <p>Asked of each clause such a part is in, as it comes out where its other parts hold
      * ({@link InvariantChecker.Written#withPartsSettled}). Those name places no part ties to these,
@@ -2912,7 +2974,7 @@ public final class FieldDomains {
      * were. A binding the clause is read under is still worked out, and one naming a field not
      * written here stops the fold as it did.
      */
-    private boolean writtenTogether(Set<RuleKey> together) {
+    private Optional<Map<String, Core>> writtenOver(Set<RuleKey> together) {
         Set<String> fields = new LinkedHashSet<>();
         together.forEach(at -> fields.add(at.steps().getFirst()));
         Map<InvariantChecker.ReadingId, Set<PartId<RuleRef.Invariant>>> kept =
@@ -2934,11 +2996,12 @@ public final class FieldDomains {
                     .forEach(id -> others.put(id, Boolean.TRUE));
             Core held = each.withPartsSettled(others);
             if (held == null) {
-                return false;
+                return Optional.empty();
             }
             rules.add(held);
         }
-        return ADeclarationsWitness.exists(source, named, fields, rules, this::stringsAdmittedAt);
+        return Optional.ofNullable(ADeclarationsWitness.written(source, named, fields, rules,
+                this::stringsAdmittedAt));
     }
 
     /**

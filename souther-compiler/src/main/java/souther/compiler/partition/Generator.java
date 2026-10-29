@@ -13719,7 +13719,18 @@ public final class Generator {
                                 ? cutBy : Set.of(), stands.met());
             }
             paths.add(slot.at());
-            values.add(stands.values());
+            // Its part of a value of the fields a rule ties it to, first, where no search holds
+            // its number: chosen a field at a time, no field of such a value would be.
+            FixtureTemplate tied = here == null ? Partitions.writtenAs(
+                    left.writtenTogetherAt(slot.at()), slot.type(), reading) : null;
+            List<FixtureTemplate> offered = new ArrayList<>();
+            if (tied != null) {
+                offered.add(tied);
+            }
+            stands.values().stream()
+                    .filter(each -> tied == null || !each.text().equals(tied.text()))
+                    .forEach(offered::add);
+            values.add(List.copyOf(offered));
             reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
             displacing.add(new Displacing(slot.type(), limits));
         }

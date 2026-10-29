@@ -126,7 +126,9 @@ class APairIsChosenOnePositionAtATimeTest {
      *
      * <p>Eight positions of two values each is exactly what the search is allowed to compose. Every
      * one of them is refused, and every one of them was tried — so what the reader is owed is that
-     * nothing here builds, and not that the search gave up one assignment early.
+     * nothing here builds, and not that the search gave up one assignment early. The rule holds of
+     * no value, since no whole number squared is two, so no value of the two numbers it ties
+     * together is written down beside the search to be offered first.
      */
     @Test
     void aSearchThatSpentItsLastAssignmentSaysEverythingWasRefused() throws Exception {
@@ -139,7 +141,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
                 data R =
                 FIELDS    }
-                    invariant rule = a1 * a2 >= 5
+                    invariant rule = a1 * a2 == 2 && a1 == a2
 
                 data Ok
 

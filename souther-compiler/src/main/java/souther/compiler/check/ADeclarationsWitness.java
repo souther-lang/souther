@@ -99,12 +99,21 @@ final class ADeclarationsWitness {
      */
     static boolean exists(RuleReadingSource source, TypeSymbol.AtModule declared,
                           Set<String> writing, List<Core> rules, Hints hints) {
+        return written(source, declared, writing, rules, hints) != null;
+    }
+
+    /**
+     * The value {@link #exists} found, by field, each written as the constant it was tried at — or
+     * null where none was found.
+     */
+    static Map<String, Core> written(RuleReadingSource source, TypeSymbol.AtModule declared,
+                                     Set<String> writing, List<Core> rules, Hints hints) {
         Map<String, BindingId> bindings = source.bindings().of(declared);
         List<String> names = source.layout().of(declared).stream()
                 .filter(writing::contains).toList();
         Map<String, Type> types = source.fieldTypes().of(declared);
         if (rules.isEmpty() || names.isEmpty() || !bindings.keySet().containsAll(names)) {
-            return false;
+            return null;
         }
         List<Shape> fields = new ArrayList<>();
         Set<TypeSymbol.AtModule> within = new LinkedHashSet<>();
@@ -112,7 +121,7 @@ final class ADeclarationsWitness {
         for (String name : names) {
             Shape shape = shapeOf(source, types.get(name), within, 1, List.of(name));
             if (shape == null) {
-                return false;
+                return null;
             }
             fields.add(shape);
         }
@@ -203,8 +212,8 @@ final class ADeclarationsWitness {
         return List.copyOf(out);
     }
 
-    /** Whether some value tried is one every rule holds of. */
-    private boolean found() {
+    /** The first value tried that every rule holds of, by field, or null where none was. */
+    private Map<String, Core> found() {
         List<Shape> numbered = new ArrayList<>();
         for (Shape each : fields) {
             numbered.add(numbered(each));
@@ -229,13 +238,17 @@ final class ADeclarationsWitness {
         for (int rank = 0; rank <= most && tried[0] < MOST_TRIED; rank++) {
             int[] chosen = new int[slots.size()];
             if (tryAll(numbered, candidates, chosen, 0, rank, unfolded, tried)) {
-                return true;
+                Map<String, Core> out = new LinkedHashMap<>();
+                for (int i = 0; i < names.size(); i++) {
+                    out.put(names.get(i), valueOf(numbered.get(i), candidates, chosen));
+                }
+                return out;
             }
             if (someRuleGivenUp(unfolded)) {
-                return false;
+                return null;
             }
         }
-        return false;
+        return null;
     }
 
     /** The shape with its slots numbered in the order they are met, each remembered. */
