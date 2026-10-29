@@ -230,20 +230,24 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     /** The same, with {@code s} held to {@code mostOfS} at the most, or to no most where null. */
     private static Leaves leftOfAmounts(int asked, Formed operand, Long mostOfS) {
-        return leftOfAmounts(asked, operand, mostOfS,
-                sum(operand, new Written(new BigDecimal("5.0"))));
+        return leftOfAmounts(asked, mostOfS, sum(operand, new Written(new BigDecimal("5.0"))));
     }
 
     /** The same, with {@code worked} the operation told. */
-    private static Leaves leftOfAmounts(int asked, Formed operand, Long mostOfS,
-                                        DecimalOperation worked) {
+    private static Leaves leftOfAmounts(int asked, Long mostOfS, DecimalOperation worked) {
+        return leftOfAmounts(asked, mostOfS, worked, NumericDomain.Bounds.OPEN);
+    }
+
+    /** The same, with the order {@code a} is counted on stopping at {@code aRunsTo}. */
+    private static Leaves leftOfAmounts(int asked, Long mostOfS, DecimalOperation worked,
+                                        NumericDomain.Bounds aRunsTo) {
         NumericDomain.Bounds amounts = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), null);
         NumericDomain.Bounds partners = mostOfS == null ? amounts : new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(mostOfS)));
         List<Term<String>> terms = List.of(
                 new Term<>(List.of("a"), ExactRatio.ONE, amounts, amounts, null, true,
-                        Granularity.DENSE, NumericDomain.Bounds.OPEN, "a"),
+                        Granularity.DENSE, aRunsTo, "a"),
                 new Term<>(List.of("s"), ExactRatio.of(-1), partners, partners, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
         return WhatARelationLeavesUndivided.leavesOf(terms, asked, ExactRatio.of(-5), Rel.GE,
@@ -254,10 +258,10 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     /**
      * The sum reads {@code s} and nothing of {@code a}, so it has room at a number of {@code s}
      * chosen at few places whichever number of {@code a} that is chosen for. A run of {@code a}
-     * with no end is asked at the end it has.
+     * with no end is asked at the edge of what is built.
      */
     @Test
-    void aRunWithNoEndIsAskedAtTheEndItHasWhenNoOperationReadsTheTermAskedOf() {
+    void aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuiltWhenNoOperationReadsTheTermAskedOf() {
         assertInstanceOf(Leaves.Settled.class, leftOfAmountsAgainstASumOfTheOther(0));
     }
 
@@ -291,7 +295,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     @Test
     void theSumIsWorkedOutOnTheRowsBesideTheLineHoweverFarOutTheTermAskedOfStands() {
         List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
-        for (int digits : new int[] {3, 30, 100_000}) {
+        for (int digits : new int[] {3, 30, DecimalOperation.PLACES_A_ROW_IS_BUILT_AT, 100_000}) {
             ExactRatio far = ExactRatio.of(BigInteger.TEN.pow(digits));
             for (String beside : new String[] {"-5.1", "-4.9", "-5.0"}) {
                 ExactRatio at = far.plus(ExactRatio.of(new BigDecimal(beside))).orNull();
@@ -299,6 +303,24 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                         digits + " digits, " + beside);
             }
         }
+    }
+
+    /**
+     * The edge of what is built is asked as an end is: a term whose order stops short of it takes
+     * no value there, so no row is built at the edge and nothing is shown of the run, though the
+     * end it has is asked and computes. Past the edge nothing is claimed, and a term that stops
+     * before it is claimed of no further.
+     */
+    @Test
+    void aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuiltAndNotShownWhereTheTermStopsShortOfIt() {
+        DecimalOperation plusFive = sum(S, new Written(new BigDecimal("5.0")));
+        NumericDomain.Bounds stopsShort = new NumericDomain.Bounds(null,
+                Endpoint.inclusive(Count.of(BigDecimal.TEN.pow(100))));
+        assertNull(leftOfAmounts(0, null, plusFive, stopsShort));
+        NumericDomain.Bounds reachesIt = new NumericDomain.Bounds(null, Endpoint.inclusive(
+                Count.of(new BigDecimal(BigInteger.TEN.pow(
+                        DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)))));
+        assertInstanceOf(Leaves.Settled.class, leftOfAmounts(0, null, plusFive, reachesIt));
     }
 
     /**
@@ -346,7 +368,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         DecimalOperation plusTheFar = sum(S, new Written(new BigDecimal(BigInteger.ONE,
                 -Integer.MAX_VALUE)));
         assertFalse(DecimalOperation.allowAClaimOver(List.of(plusTheFar), "a", "s"));
-        assertNull(leftOfAmounts(0, S, null, plusTheFar));
+        assertNull(leftOfAmounts(0, null, plusTheFar));
     }
 
     /** An operation reading {@code a} has room by the scale {@code a} is written at, which a run

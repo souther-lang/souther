@@ -31,7 +31,27 @@ final class DecimalPoints {
     /** The digits one binary digit is worth, to start the count of places below the answer. */
     private static final double DIGITS_PER_BIT = 0.30102999566398;
 
+    /**
+     * The greatest number a row is built at, and its opposite the least: ten to the places a row
+     * is built at ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}), a number of that many
+     * digits before the point as a row's numbers have that many places after it.
+     *
+     * <p>A budget like the places, and no fact about a decimal: a number past it is a row not
+     * built, which is not a row there is none of. What a run with no end claims is claimed up to
+     * this edge, where the rows are asked as at an end the run has, and nothing is claimed of the
+     * numbers past it — in the sums of {@code 1E+2147483647 + 5.0}, the scales are the whole range
+     * apart and there is no room, at a number that is no row.
+     */
+    private static final ExactRatio EDGE_OF_WHAT_IS_BUILT = ExactRatio.of(
+            BigInteger.TEN.pow(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT));
+
     private DecimalPoints() {
+    }
+
+    /** The number a row is built at to ask the side of a run that has no end: the greatest
+     *  number built for the upper side, and the least for the lower. */
+    static ExactRatio edgeOfWhatIsBuilt(boolean upper) {
+        return upper ? EDGE_OF_WHAT_IS_BUILT : EDGE_OF_WHAT_IS_BUILT.negated();
     }
 
     /**

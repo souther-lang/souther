@@ -105,23 +105,21 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     }
 
     /**
-     * Whether the room the operations of a row have is the same at every number of a run of the
-     * term {@code asked} with no end on a side, so that asking the end it has asks the far side
-     * too: every operation that can stop a row is an operation of decimals, and none of them
-     * reads the term.
+     * Whether a run of the term {@code asked} with no end on a side is asked at the edge of what
+     * is built ({@link DecimalPoints#edgeOfWhatIsBuilt}) and the rows there stand for the numbers
+     * between: every operation that can stop a row is an operation of decimals, and none of them
+     * reads the term, so the room of one turns on the scales of the numbers a row is built from
+     * and not on which number of the run is asked of.
      *
-     * <p>That is the third of three things a row on each side of a line at every number of the run
-     * takes, and the only one of them this answers. That a term put beside it reaches the line at
-     * every number is {@code reaches}' own question, asked before the rows are, of the run the
-     * term has to stand in. That the row built there is computed is asked of the rows built at
-     * the end the run has, at the places the partner is chosen at whatever number is asked of
-     * ({@link DecimalOperation#allowAClaimOver}); the room of an operation turns on the scales of
-     * its operands, and the number asked of is read by none. That the scales of rows built far out
-     * are no further apart than those of rows built at the end is
-     * {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}'s, and it is held by the tests of
-     * {@code DecimalOperation} over magnitudes and over the edge of what is built.
+     * <p>The claim a run makes is over the numbers rows are built at, which stop at the edge: at
+     * most as many places before and after the point as {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}.
+     * Past it is a row not built, which is not a row there is none of, and nothing is claimed of
+     * it. Within it two operands of a sum are at most twice that many places apart in scale
+     * whatever their digits, so the edge is asked as any end is and the numbers between are
+     * the straight function of the term the ends are. That a term put beside it reaches the line
+     * at every number is {@code reaches}' own question, asked before the rows are.
      */
-    boolean aRunWithNoEndIsAskedAtTheEndItHas(Object asked) {
+    boolean aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(Object asked) {
         return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()
                 && worksOutDecimals()
                 && DecimalOperation.readsOf(operations.decimals()).stream()

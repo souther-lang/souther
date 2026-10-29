@@ -3944,9 +3944,9 @@ public final class WhatARelationLeavesUndivided {
      * {@code 2^62 x - 2^62 y < 0}, {@code x} from nought to one, has both
      * rows at nought and none on the true side at one, where a {@code y} of two weighed passes the
      * type; {@code x - y > M}, {@code M} the greatest {@code Int}, has a true row at no {@code x}.
-     * A run open on a side has no end to ask there, and is asked at the end it has only where no
-     * operation of decimals reads the term ({@link RowsComputed#aRunWithNoEndIsAskedAtTheEndItHas});
-     * otherwise nothing is shown.
+     * A run open on a side is asked at the edge of what is built on that side, where no operation
+     * of decimals reads the term ({@link RowsComputed#aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt});
+     * otherwise nothing is shown. Past the edge no row is built, so nothing is claimed there.
      *
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
@@ -3974,7 +3974,8 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         boolean endless = asked.lower() == null || asked.upper() == null;
-        if (endless && !arithmetic.aRunWithNoEndIsAskedAtTheEndItHas(terms.get(of).key())) {
+        if (endless
+                && !arithmetic.aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(terms.get(of).key())) {
             return false;
         }
         // The rows built at the ends of the run are asked of every value between them. For a sum of
@@ -4049,23 +4050,20 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> List<ExactRatio> rowValuesAtTheEnds(Term<P> term, Interval asked) {
         List<ExactRatio> at = new ArrayList<>();
-        if (asked.lower() != null) {
-            ExactRatio lowest = term.spacing() == Granularity.DISCRETE ? asked.low()
-                    : DecimalPoints.within(asked.lower(), asked.upper(), true);
-            if (lowest == null) {
-                return null;
-            }
-            at.add(lowest);
+        // A side with no end is asked at the edge of what is built, which is where the numbers
+        // rows are built at stop, and the rows there are asked as at any end.
+        ExactRatio lowest = asked.lower() == null ? DecimalPoints.edgeOfWhatIsBuilt(false)
+                : term.spacing() == Granularity.DISCRETE ? asked.low()
+                : DecimalPoints.within(asked.lower(), asked.upper(), true);
+        ExactRatio highest = asked.upper() == null ? DecimalPoints.edgeOfWhatIsBuilt(true)
+                : term.spacing() == Granularity.DISCRETE ? asked.high()
+                : DecimalPoints.within(asked.upper(), asked.lower(), false);
+        if (lowest == null || highest == null) {
+            return null;
         }
-        if (asked.upper() != null) {
-            ExactRatio highest = term.spacing() == Granularity.DISCRETE ? asked.high()
-                    : DecimalPoints.within(asked.upper(), asked.lower(), false);
-            if (highest == null) {
-                return null;
-            }
-            at.add(highest);
-        }
-        return at.isEmpty() ? null : at;
+        at.add(lowest);
+        at.add(highest);
+        return at;
     }
 
     /**
