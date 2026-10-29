@@ -9,6 +9,7 @@ import souther.compiler.check.ClauseRead;
 import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementsApart;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
@@ -3031,15 +3032,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Witness witness = new Witness(reads, read, region, conditions, declined, Set.of());
         Optional<Set<TermPath>> walked = walkedByTheApplicationsBefore(past, read);
-        if (walked.isPresent() && !walked.get().isEmpty()) {
+        if (walked.isPresent()) {
             Witness ofOne = new Witness(reads, read, region, conditions, declined, walked.get());
             if (walked.get().stream()
                     .allMatch(each -> ofOne.holds(each).equals(Optional.of(BigInteger.ONE)))) {
-                return stopsOn(past, reads, ofOne, false, read, collecting, accountedFor)
+                return stopsOn(past, reads, ofOne, false, read, collecting, false, accountedFor)
                         ? Optional.empty() : Optional.of(exact);
             }
         }
-        return stopsOn(past, reads, witness, true, read, collecting, accountedFor)
+        return stopsOn(past, reads, witness, true, read, collecting, false, accountedFor)
                 ? Optional.empty() : Optional.of(exact);
     }
 
@@ -3067,11 +3068,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * {@code witness} ({@link #mayStopOnWhatItReads}); what the applications before work out is
      * asked as well where {@code applicationsBefore}, and is not where the witness makes none.
      * Where {@code exactOn} is given, a conversion of a string a side reads is not a stop but is
-     * added to it.
+     * added to it; {@code earlier} where {@code past} is what the applications before work out.
      */
     private boolean stopsOn(DemandReading.Answered past, List<TermPath> reads, Witness witness,
                             boolean applicationsBefore, InputReading read,
-                            List<ConvertedOn> exactOn, Set<TermPath> accountedFor) {
+                            List<ConvertedOn> exactOn, boolean earlier,
+                            Set<TermPath> accountedFor) {
         if (past.unsaid()) {
             return true;
         }
@@ -3084,12 +3086,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // An owed operator is asked of the witness whatever it reads: one reading no place the
         // relation reads still stops a run on the witness where what it builds there does not
         // fit, and a run stopped there reaches the relation at no value.
+        WhereARunReachingARelationStands standing = new WhereARunReachingARelationStands(reads);
         for (Pullback.StopObligation owed : past.owed()) {
             if (owed.completion() instanceof GetsPast.WhereTheTextFits(int operand)) {
                 // What a conversion ends a run for turns on the text it is handed. It is let go of
                 // only where that text is the string a side reads, whose strings it ends no run
-                // for are said; a conversion of any other text ends a run at values nothing here
-                // says, whether or not the relation reads a place of it.
+                // for are said, or stands where no run that reaches the relation does. A
+                // conversion of any other text ends a run at values nothing here says, whether or
+                // not the relation reads a place of it.
                 if (owed.onWhatNoPlaceHolds()) {
                     return true;
                 }
@@ -3099,12 +3103,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
                 for (TermPath place : text.places()) {
                     if (reads.contains(place)) {
-                        if (exactOn == null) {
+                        // The string a side reads is exactly the string every application
+                        // converts only where the place is one value of the row. Under an element
+                        // an earlier application converts another element's string, which no
+                        // class is drawn over.
+                        if (exactOn == null || (earlier
+                                && !WhereARunReachingARelationStands.isOneValueOfARow(place))) {
                             return true;
                         }
                         exactOn.add(new ConvertedOn(place, text.conversion()));
-                    } else if (!inAnotherCaseThanOneRead(place, reads)
-                            && !witness.convertsAnotherString(place, text.conversion())) {
+                    } else if (standing.mayStandAt(place)) {
                         return true;
                     }
                 }
@@ -3118,8 +3126,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (DemandReading.PriorApplications prior : past.before()) {
                 // What accounts for a place is a claim about the application the relation is
                 // reached in. An earlier application works out the same statements over values of
-                // its own, which that claim does not reach.
-                if (stopsOn(prior.workedOut(), reads, witness, true, read, exactOn, Set.of())) {
+                // its own, which that claim does not reach. Nor does the exactness of a
+                // conversion: the string an earlier application converts is another element's,
+                // at a place that reads alike, and it is no string the classes are drawn over.
+                if (stopsOn(prior.workedOut(), reads, witness, true, read, exactOn, true,
+                        Set.of())) {
                     return true;
                 }
             }
@@ -3176,7 +3187,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // PathResolution.MadeOf}), so a place the text came from is no place of it until the
         // text is followed to the string there.
         InputReads at = owed.readsAt(innermost);
-        List<TermPath> shown = at == null ? null : stringsStoodAt(call, at,
+        List<TermPath> shown = at == null ? null : placesStoodAt(call, at,
                 read.rules().symbols(), read.rules().newtypes(), Set.of());
         if (shown == null || !new HashSet<>(shown).containsAll(places)) {
             return null;
@@ -3189,17 +3200,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The places the string {@code text} is stands at, read in {@code at}, followed through the
-     * names it is handed through; or null where it is not shown to be the string at a place — a
-     * text an operation makes, or a name nothing says what it stands for.
+     * The places the value {@code text} is stands at, read in {@code at}, followed through the
+     * names it is handed through; or null where it is not shown to be the value at a place — a
+     * value an operation makes, or a name nothing says what it stands for.
      *
-     * <p>A field read off a name is the field of what the name stands as, so the name is followed
-     * and the field read off what it comes to, in the names in force there. What stops the walk is
-     * a name met twice on the way, {@code met}, and not a number of names.
+     * <p>A field read off a name is the field of what the name stands as: the name is followed to
+     * the places it stands for and the fields {@link ElementsApart#readOff} says are read off it
+     * are put after each. What stops the walk is a name met twice on the way, {@code met}, and
+     * not a number of names.
      */
-    private static List<TermPath> stringsStoodAt(Core text, InputReads at, Symbols symbols,
-                                                 DeclarationNewtypes newtypes,
-                                                 Set<BindingId> met) {
+    private static List<TermPath> placesStoodAt(Core text, InputReads at, Symbols symbols,
+                                                DeclarationNewtypes newtypes,
+                                                Set<BindingId> met) {
         Denotation stands = at.standing(text, symbols, newtypes);
         Core e = Core.withoutStanding(stands.value());
         if (AnOperationApplied.of(e) != null) {
@@ -3209,87 +3221,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (held != null) {
             return held;
         }
-        List<Core.FieldProjection.Step> fields = new ArrayList<>();
-        Core.Read name = nameFieldsAreReadOffFrom(e, fields);
-        return name == null ? null
-                : stringsOfWhatANameStandsFor(name, stands.at(), symbols, newtypes, met, fields);
-    }
-
-    /**
-     * The name {@code e} is, or reads fields off and nothing else — a field access, or a
-     * projection of several names — with the fields it reads, the first read first in
-     * {@code fields}; or null where it is anything else.
-     */
-    private static Core.Read nameFieldsAreReadOffFrom(Core e,
-                                                      List<Core.FieldProjection.Step> fields) {
-        Core cursor = Core.withoutStanding(e);
-        while (true) {
-            switch (cursor) {
-                case Core.FieldAccess access -> {
-                    fields.addFirst(new Core.FieldProjection.Step(access.field(), access.type()));
-                    cursor = Core.withoutStanding(access.target());
-                }
-                case Core.FieldProjection projection -> {
-                    fields.addAll(0, projection.steps().inOrder());
-                    cursor = Core.withoutStanding(projection.base());
-                }
-                case Core.Read name -> {
-                    return name;
-                }
-                default -> {
-                    return null;
-                }
-            }
-        }
-    }
-
-    /** {@code value} with {@code fields} read off it, one after another. */
-    private static Core withFieldsReadOff(Core value, List<Core.FieldProjection.Step> fields) {
-        Core out = value;
-        for (Core.FieldProjection.Step each : fields) {
-            out = Core.FieldProjection.then(out, each.field(), each.type());
-        }
-        return out;
-    }
-
-    /**
-     * The places the string is at that {@code name} stands for with {@code fields} read off it;
-     * or null where it is not shown to be the string at a place.
-     *
-     * <p>A name that stands for one of several values is the string at each of their places, and
-     * is shown to be so only where every one of them is.
-     */
-    private static List<TermPath> stringsOfWhatANameStandsFor(
-            Core.Read name, InputReads at, Symbols symbols, DeclarationNewtypes newtypes,
-            Set<BindingId> met, List<Core.FieldProjection.Step> fields) {
+        ElementsApart.ReadOff off = ElementsApart.readOff(e, newtypes);
         Set<BindingId> now = new HashSet<>(met);
-        if (!now.add(name.binding())) {
+        if (!(Core.withoutStanding(off.holder()) instanceof Core.Read name)
+                || !now.add(name.binding())) {
             return null;
         }
-        switch (at.meaningOf(name, symbols, newtypes)) {
-            case ReadMeaning.Position position -> {
-                return fields.isEmpty() ? List.of(position.path()) : null;
-            }
-            case ReadMeaning.Through through -> {
-                return stringsStoodAt(withFieldsReadOff(through.denotes().value(), fields),
-                        through.denotes().at(), symbols, newtypes, now);
-            }
-            case ReadMeaning.OneOf oneOf -> {
-                Set<TermPath> every = new LinkedHashSet<>();
-                for (Denotation each : oneOf.valuesWhere(ReadMeaning.WhereKept.NOTHING_DECIDED)) {
-                    List<TermPath> there = stringsStoodAt(withFieldsReadOff(each.value(), fields),
-                            each.at(), symbols, newtypes, now);
-                    if (there == null) {
-                        return null;
-                    }
-                    every.addAll(there);
-                }
-                return List.copyOf(every);
-            }
-            default -> {
+        List<TermPath> holders = switch (stands.at().meaningOf(name, symbols, newtypes)) {
+            case ReadMeaning.Position position -> List.of(position.path());
+            case ReadMeaning.Through through -> placesStoodAt(through.denotes().value(),
+                    through.denotes().at(), symbols, newtypes, now);
+            case ReadMeaning.OneOf oneOf -> placesOfEach(
+                    oneOf.valuesWhere(ReadMeaning.WhereKept.NOTHING_DECIDED), symbols, newtypes,
+                    now);
+            default -> null;
+        };
+        return holders == null || off.path().steps().isEmpty() ? holders
+                : holders.stream().map(place -> place.then(off.path().steps())).toList();
+    }
+
+    /** The places each of {@code values} stands at, or null where one is not shown to stand at
+     *  a place: a name that stands for one of several values stands at the places of each. */
+    private static List<TermPath> placesOfEach(List<Denotation> values, Symbols symbols,
+                                               DeclarationNewtypes newtypes, Set<BindingId> met) {
+        Set<TermPath> every = new LinkedHashSet<>();
+        for (Denotation each : values) {
+            List<TermPath> there = placesStoodAt(each.value(), each.at(), symbols, newtypes, met);
+            if (there == null) {
                 return null;
             }
+            every.addAll(there);
         }
+        return List.copyOf(every);
     }
 
     /**
@@ -3316,37 +3279,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record ConversionOfAString(List<TermPath> places, CaseMapping conversion) {}
 
     /**
-     * Whether {@code place} is in a case of a sum other than the one a place of {@code reads} is
-     * in, so that the relation is read on a run where nothing stands at {@code place}.
-     */
-    private static boolean inAnotherCaseThanOneRead(TermPath place, List<TermPath> reads) {
-        for (TermPath read : reads) {
-            if (!read.head().equals(place.head())) {
-                continue;
-            }
-            int shared = Math.min(read.steps().size(), place.steps().size());
-            for (int at = 0; at < shared; at++) {
-                TermPath.Step mine = read.steps().get(at);
-                TermPath.Step there = place.steps().get(at);
-                if (mine.equals(there)) {
-                    continue;
-                }
-                if (mine instanceof TermPath.Step.Refine(var cases)
-                        && there instanceof TermPath.Step.Refine(var others)
-                        && cases.meet(others) == null) {
-                    return true;
-                }
-                break;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Every container walked by a call applying a closure the relation is reached in, where each
-     * such call applies its closure from the first element one after another, so that a witness
-     * holding one element in each makes no application before — or empty where one does not, or
-     * walks what is at no position of the input.
+     * Every container of the input walked by a call applying a closure the relation is reached in,
+     * where each such call applies its closure from the first element one after another, so that
+     * a witness holding one element in each makes no application before — or empty where one
+     * does not, or walks what is at no position of the input and is not shown to hold no more
+     * than one element.
+     *
+     * <p>A container built of what is written alone, such as the one case of a sum a helper
+     * picks a list out of, holds one element at most on every run, and no witness need hold it to
+     * one: the application the relation is reached in is the only one.
      */
     private static Optional<Set<TermPath>> walkedByTheApplicationsBefore(
             DemandReading.Answered past, InputReading read) {
@@ -3356,11 +3297,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return Optional.empty();
             }
             for (DemandReading.PriorApplications.WalkedOver each : prior.walked().get()) {
-                if (!(each.reads().pathOf(each.container(), read.rules().newtypes())
-                        instanceof PathResolution.At(TermPath collection))) {
+                if (each.reads().pathOf(each.container(), read.rules().newtypes())
+                        instanceof PathResolution.At(TermPath collection)) {
+                    out.add(collection);
+                } else if (!ContainerSizesUnderAWitness
+                        .mostHeldWhateverTheInputHolds(each.container())
+                        .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false)) {
                     return Optional.empty();
                 }
-                out.add(collection);
             }
         }
         return Optional.of(out);
@@ -3440,41 +3384,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 instanceof PathResolution.At(TermPath path)
                                 ? holds(path) : Optional.empty();
                     });
-        }
-
-        /**
-         * Whether a run gets past {@code conversion}, done to the string at {@code place}, a place
-         * no side reads, on this witness: the place holds a string short enough that the
-         * conversion's answer fits in a {@code String} whatever the string is, and nothing ties
-         * the place to what the relation reads or states anything of it.
-         *
-         * <p>The conversion ends a run only for a string whose answer is longer than a
-         * {@code String} holds, which a short string never has. So a run stopping there at a long
-         * string is no run that does not stop at a short one, and a short one is a value of the
-         * place wherever the declarations admit one and nothing the way states, or declined to
-         * read, turns on it. Held to the same conditions as the size of a collection
-         * ({@link #fewest}), since the witness is one row and a place the way names is asked of
-         * what it states.
-         */
-        boolean convertsAnotherString(TermPath place, CaseMapping conversion) {
-            if (declined.isEmpty() || declined.get().contains(place.head())) {
-                return false;
-            }
-            for (TermPath each : reads) {
-                if (overlap(each, place) || tiedByARule(place, each, read)) {
-                    return false;
-                }
-            }
-            for (OnAWay each : conditions) {
-                if (each.positions().isEmpty()
-                        || each.positions().stream().anyMatch(at -> overlap(at, place))) {
-                    return false;
-                }
-            }
-            long fewest = TextExtents.fewestCodePointsHeldAsWritten(
-                    region.admittedAt(new NumericTerm.ValueOf(place)));
-            return fewest >= 0
-                    && fewest <= conversion.longestTextWithin(TextExtents.LONGEST_STRING);
         }
 
         /** How many elements {@code collection} holds here, or nothing where no such run is

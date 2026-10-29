@@ -68,6 +68,17 @@ public final class ContainerSizesUnderAWitness {
     }
 
     /**
+     * The most the collection {@code collection} holds on any run, read off how it is built
+     * alone: a collection written out, one an arm of a match or a branch of a fork chooses,
+     * one assembled of what is written. Nothing where it is built of a collection of the input,
+     * whose size nothing here bounds.
+     */
+    public static Optional<BigInteger> mostHeldWhateverTheInputHolds(Core collection) {
+        return new ContainerSizesUnderAWitness(collection, node -> Optional.empty())
+                .most(collection);
+    }
+
+    /**
      * Whether {@code operator}, standing in {@code within} and answering where {@code fits} says,
      * answers on every run whose input collections hold no more than {@code ofTheInput} says.
      *

@@ -39,25 +39,6 @@ public sealed interface CaseMapping {
     record Uppercase(CaseMapping of) implements CaseMapping {
     }
 
-    /**
-     * The most code points a conversion of one code point answers: the full mapping of a code
-     * point is no more than three, and the form that follows composes and never lengthens.
-     */
-    int MOST_CODE_POINTS_OF_ONE = 3;
-
-    /**
-     * The longest text that this makes a text of no more than {@code limit} code points of,
-     * whatever the text is: each conversion done answers at most {@link #MOST_CODE_POINTS_OF_ONE}
-     * code points for each it was handed.
-     */
-    default long longestTextWithin(long limit) {
-        long longest = limit;
-        for (int done = operations().size(); done > 0; done--) {
-            longest /= MOST_CODE_POINTS_OF_ONE;
-        }
-        return longest;
-    }
-
     /** Whether {@code operation} is a case conversion. */
     static boolean isAConversion(ValueName operation) {
         return applying(operation, NONE) != null;

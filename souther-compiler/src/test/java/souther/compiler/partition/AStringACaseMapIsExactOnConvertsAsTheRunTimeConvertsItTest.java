@@ -219,14 +219,13 @@ class AStringACaseMapIsExactOnConvertsAsTheRunTimeConvertsItTest {
     }
 
     /**
-     * What a conversion makes of a text is no more than three code points of each one it was
-     * handed: the full mapping of a code point is that long at most, and the form that follows
-     * composes and never lengthens. What a text a conversion of it fits in a {@code String} is
-     * bounded by.
+     * What a conversion answers it answers again as it stands: every code point of what it makes
+     * of any one code point is one it leaves be, which is what is said of the strings it is not
+     * exactly a map on.
      */
     @Test
-    void aConversionMakesNoMoreThanThreeCodePointsOfOne() {
-        int most = 0;
+    void whatAConversionAnswersOfACodePointIsLeftBeByIt() {
+        List<String> notLeftBe = new ArrayList<>();
         for (int codePoint = 0; codePoint <= Character.MAX_CODE_POINT; codePoint++) {
             if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
                 continue;
@@ -234,28 +233,16 @@ class AStringACaseMapIsExactOnConvertsAsTheRunTimeConvertsItTest {
             String text = Character.toString(codePoint);
             for (CaseMapping conversion : List.of(CaseMapping.LOWERCASE, CaseMapping.UPPERCASE)) {
                 String out = converted(conversion, text);
-                most = Math.max(most, out.codePointCount(0, out.length()));
+                CodeMap map = mapOf(conversion);
+                for (int answered : out.codePoints().toArray()) {
+                    if (!map.leftAlone().has(answered) && notLeftBe.size() < 8) {
+                        notLeftBe.add(conversion + " of U+" + Integer.toHexString(codePoint)
+                                + " answers U+" + Integer.toHexString(answered));
+                    }
+                }
             }
         }
-        int longest = most;
-        assertTrue(longest <= CaseMapping.MOST_CODE_POINTS_OF_ONE, () -> "at most " + longest);
-        assertTrue(longest > 1, "some code point becomes several");
-        // And of a text, whatever stands beside what: more than one together does not lengthen.
-        for (String text : new String[] {"ßßß", "ΐΐ", "ﬃﬃ", "i̇́", "ǰ̌"}) {
-            for (CaseMapping conversion : CONVERSIONS) {
-                String out = converted(conversion, text);
-                long bound = (long) Math.pow(CaseMapping.MOST_CODE_POINTS_OF_ONE,
-                        conversion.operations().size()) * text.codePointCount(0, text.length());
-                assertTrue(out.codePointCount(0, out.length()) <= bound, () -> escaped(text));
-            }
-        }
-    }
-
-    @Test
-    void theLongestTextAConversionFitsIsDividedByThreeForEachConversionDone() {
-        assertEquals(900, CaseMapping.NONE.longestTextWithin(900));
-        assertEquals(300, CaseMapping.LOWERCASE.longestTextWithin(900));
-        assertEquals(100, LOWER_OF_UPPER.longestTextWithin(900));
+        assertEquals(List.of(), notLeftBe);
     }
 
     private static String escaped(String text) {
