@@ -45,7 +45,7 @@ class ALineOnANumberIsALineOnAPlaceOnlyWhereItPartsTheValuesOfOneTest {
         return new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.inclusive(NOUGHT), true),
                 new SettledRun(ExactCut.exclusive(NOUGHT), null, false)), null, null, false,
-                ofTheTypeAlone);
+                ofTheTypeAlone, List.of());
     }
 
     @Test
@@ -86,7 +86,7 @@ class ALineOnANumberIsALineOnAPlaceOnlyWhereItPartsTheValuesOfOneTest {
     @Test
     void aNumberSettledAtEveryValueDrawsNoLineAndLeavesNoPlaceToSayUndividedOf() {
         Leaves.Settled everywhere = new Leaves.Settled(List.of(
-                new SettledRun(null, null, true)), null, null, false, List.of());
+                new SettledRun(null, null, true)), null, null, false, List.of(), List.of());
         assertEquals(List.of(), everywhere.lines());
         assertFalse(everywhere.leavesItsPlacesUndivided(ONE_PLACE));
         for (NumericTerm number : OF_NEIGHBOURS) {

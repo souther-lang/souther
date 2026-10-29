@@ -33,6 +33,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -193,6 +195,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // allowed more leaves the same values open.
         table.put("RelationShownOverARegion",
                 "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
+        // Numbers of a run the relation settles in which no row is shown to get past an operation
+        // of decimals: fixed by the operations the rows work out, which a run allowed more meets
+        // again, and said in the word for values not shown to get to the rule.
+        table.put("RelationRowsNotShownComputed",
+                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
         // many parts a step states, or at how far a container is written out, is one a run
@@ -393,6 +400,32 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
+     * Two reasons about one rule at one place are two findings, and neither merges into the
+     * other: a figure a search stopped at is one a run allowed more may get past, and numbers in
+     * which no row is shown computed are not.
+     */
+    @Test
+    void aRuleLeftForTwoReasonsAtOnePlaceKeepsBoth() {
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        RuleCitation cited = new RuleCitation.Written(
+                new RuleRef.Comparison("b",
+                        new SourceConstructOrigin(new WrittenOwner.Body("m", "b"),
+                                1, 1, SourceConstruct.IF)),
+                new RuleReportAnchor.ByTheModuleThatWroteIt());
+        FilingCoordinate at = new FilingCoordinate.AtPosition(TermPath.of("x"));
+        BlockReason.RuleWithoutLineReason numbers = new BlockReason.RelationRowsNotShownComputed();
+        BlockReason.RuleWithoutLineReason figure =
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE));
+        gathered.add(cited, at, numbers);
+        gathered.add(cited, at, figure);
+        gathered.add(cited, at, numbers);
+
+        assertEquals(Set.of(numbers, figure), gathered.found().reported().stream()
+                .map(RuleWithoutALine::why).collect(Collectors.toSet()));
+        assertEquals(2, gathered.found().reported().size());
+    }
+
+    /**
      * A finding is a finding whichever half its reason is in, and nothing here decides a measure.
      *
      * <p>What a reason says is what became of the reading, and a reader is owed that either way. It
@@ -550,6 +583,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
                 new BlockReason.RelationShownOverARegion(false, 1L, List.of()),
+                new BlockReason.RelationRowsNotShownComputed(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

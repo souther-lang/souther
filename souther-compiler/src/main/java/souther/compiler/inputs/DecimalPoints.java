@@ -31,7 +31,31 @@ final class DecimalPoints {
     /** The digits one binary digit is worth, to start the count of places below the answer. */
     private static final double DIGITS_PER_BIT = 0.30102999566398;
 
+    /**
+     * Where a side of a run with no end is asked: ten to the places a row is built at
+     * ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}) and its opposite. A number of that many
+     * digits before the point, as a row's numbers have that many places after it.
+     *
+     * <p>A point to build the rows at and see that they stand, and no limit of the numbers a
+     * decimal holds nor of the rows that can be built: a row at ten to the hundred thousand
+     * computes as well. What the run claims of the numbers past it is not that rows are built
+     * there but what claims it of the numbers between: the room of an operation turns on the
+     * scales of its operands, and the numbers a row stands the partner at are written at few
+     * places however far out the line is ({@link #besideTheLine}), so the scales stay as they
+     * are. The digits a host can hold of a number are its resource and no statement about the
+     * arithmetic, and {@code 1E+2147483647 + 5.0}, whose scales are the whole range apart, is a
+     * sum of a number written at the edge of the scale range, which no row is built at.
+     */
+    private static final ExactRatio EDGE_OF_WHAT_IS_BUILT = ExactRatio.of(
+            BigInteger.TEN.pow(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT));
+
     private DecimalPoints() {
+    }
+
+    /** The number a row is built at to ask the side of a run that has no end: the greatest
+     *  number built for the upper side, and the least for the lower. */
+    static ExactRatio edgeOfWhatIsBuilt(boolean upper) {
+        return upper ? EDGE_OF_WHAT_IS_BUILT : EDGE_OF_WHAT_IS_BUILT.negated();
     }
 
     /**

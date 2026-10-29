@@ -168,7 +168,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         return new ComparisonAssessment.AgainstAnotherValue(line().cutting().over(), List.of(),
                 Set.of(), List.of(), Optional.of(new ComparisonAssessment.DrawnBeside("f",
                         Citation.of(new SourcePos(1, 1)), WrittenLine.THE_COMPARISON,
-                        Optional.empty())), Map.of(), Set.of(), Map.of());
+                        Optional.empty())), Map.of(), Set.of(), Set.of(), Map.of());
     }
 
     private static final Reachability NOT_TAKEN = new Reachability.NothingReaches(

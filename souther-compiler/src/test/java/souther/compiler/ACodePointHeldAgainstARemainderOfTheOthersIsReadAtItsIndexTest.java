@@ -86,10 +86,20 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
         return text.charAt(11) - '0' == (r <= 1 ? 0 : 11 - r) ? 1 : 0;
     }
 
+    /**
+     * The check digit is read as the code point at its index against the remainder, and its
+     * lines are drawn. That a run gets through the weighed sum is not shown: the closure is
+     * applied once per code point, and its operations are not listed one by one, so the code
+     * points are left as related to a value not shown to reach every value of theirs. That is
+     * not that the run stops, which with code points of digits it never does.
+     */
     @Test
     void theCheckIsReadAsTheCodePointAtItsIndexAgainstTheRemainder() {
         String report = report(measured(MODEL));
-        assertFalse(report.contains("not read:"), report);
+        assertTrue(report.lines().filter(line -> line.contains("not read:")).allMatch(line ->
+                        line.contains("not shown to reach every value")
+                                && line.contains("String.codePoints(number))`")),
+                report);
         assertTrue(report.contains("List.get(11, String.codePoints(number)): = 48"), report);
         assertTrue(report.contains(") + List.get(11, String.codePoints(number)): = 59"), report);
     }
@@ -171,7 +181,9 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
      * Where the format ties the code point held against the remainder to the one the remainder
      * turns on — the last two digits are one digit twice, and the first is weighed by the divisor
      * — the remainder is not every remainder at each value of the code point, and the rule is not
-     * read as relating two values apart. With the digits free it is.
+     * read as relating two values apart. With the digits free it is not either, for another
+     * reason: that a run gets through the weighed sum is not shown, since the closure applied to
+     * each code point is not read one application at a time.
      */
     @Test
     void aCodePointTheFormatTiesToTheTotalIsNotTakenApartFromIt() {
@@ -181,7 +193,9 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
         assertFalse(report(measured(tied)).contains(apart), () -> report(measured(tied)));
         assertTrue(report(measured(tied)).contains("not shown to reach every value"),
                 () -> report(measured(tied)));
-        assertTrue(report(measured(free)).contains(apart), () -> report(measured(free)));
+        assertFalse(report(measured(free)).contains(apart), () -> report(measured(free)));
+        assertTrue(report(measured(free)).contains("not shown to reach every value"),
+                () -> report(measured(free)));
     }
 
     /**
@@ -197,8 +211,12 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
         String nfc = report(measured(pair("[0-9][0-5][0-9]bb|[0-9]6[0-9]a\\\\x{301}")));
         assertFalse(nfc.contains(apart), nfc);
         assertTrue(nfc.contains("not shown to reach every value"), nfc);
+        // Read as written, no value is refused, but that a run gets through the weighed sum is not
+        // shown, the closure applied to each code point not being read one application at a time:
+        // the code point is not taken apart here either.
         String written = report(measured(pair("[0-9][0-5][0-9]bb|[0-9]6[0-9]ab")));
-        assertTrue(written.contains(apart), written);
+        assertFalse(written.contains(apart), written);
+        assertTrue(written.contains("not shown to reach every value"), written);
         // A dot above after a digit joins nothing, so the string is a value whose third code point
         // is the dot, and the remainder beside it five alone: whatever the code point is is asked
         // of every value, the ones read as written or not.

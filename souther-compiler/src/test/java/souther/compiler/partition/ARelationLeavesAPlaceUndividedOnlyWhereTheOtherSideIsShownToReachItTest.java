@@ -867,10 +867,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
      * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross. Nor is the doubled total shown left either way:
-     * the value of a total each element of which is made into another is read from the elements
-     * and asks the operations of the comparison for a row beside an end of the total, which it
-     * has no end to ask.
+     * takes, and nothing is shown of the gross. The doubled total is left either way: every
+     * element is at least nought, so each doubling lies between nought and the total, and a run
+     * gets through wherever the total is an {@code Int}.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
@@ -880,7 +879,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", NOT_SHOWN,
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
                         "gross", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
@@ -1257,7 +1256,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
                         List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
-                        Set.of(), Map.of())
+                        Set.of(), Set.of(), Map.of())
                         .whereRowsArrive(read, List.of(), stoppedShort);
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
@@ -1421,14 +1420,19 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * nought in one row, and each of them is apart from the others and takes nought, a list of
      * none totalling nought. Held above nought, none of them takes nought, and nothing is shown of
      * the gross: that a value as near nought as asked of is taken shows no row at nought.
+     *
+     * <p>Neither is any of them shown taken apart at nought, held at nought or more: what the gross
+     * less the total is worked out at is not known, since the total of the notes is a call's
+     * answer at a scale nothing here knows, so no row is shown to get past taking it off. That
+     * is not that a run stops there.
      */
     @Test
     void aTotalHeldStillBesideOtherTermsAtNoughtLeavesTheRestEitherWay() {
         String inputs = "gross: Amount, ns: List<Amount>, net: Amount, tax: Amount";
         String closed = "data Amount = Decimal invariant value >= 0.0m";
         String at = atThe("<=", closed, inputs, CREDITED);
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", RELATES, "net", RELATES,
-                        "tax", RELATES), left(inputs, closed, CREDITED, at));
+        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "gross", NOT_SHOWN, "net", NOT_SHOWN,
+                        "tax", NOT_SHOWN), left(inputs, closed, CREDITED, at));
         assertEquals(NOT_SHOWN,
                 left(inputs, "data Amount = Decimal invariant value > 0.0m", CREDITED, at)
                         .get("gross"));
@@ -3497,14 +3501,52 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(List.of(), classesAt(inputs, HOURS, unknown, "h"));
     }
 
+    /**
+     * A place some of whose settling numbers have no row shown computed is left with those
+     * numbers, and not with the word for a relation nothing is shown of; a place shown
+     * undivided keeps what it was shown, whatever is said of the numbers.
+     */
+    @Test
+    void aPlaceWithNumbersNoRowIsShownComputedInIsLeftWithThoseNumbers() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(), Set.of(hours));
+        assertEquals(new BlockReason.RelationRowsNotShownComputed(), left.get(0).why());
+        assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
+    }
+
+    /**
+     * A place a search stopped at a figure for and some of whose numbers have no row shown
+     * computed is told both, and neither hides the other: the figure is one a run allowed more may
+     * get past, and the numbers are not.
+     */
+    @Test
+    void aFigureASearchStoppedAtIsNotHiddenByNumbersNoRowIsShownComputedIn() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Set.of(),
+                Set.of(hours));
+        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(),
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
+                left.stream().map(ComparisonAssessment.LeftAt::why).toList());
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                left.stream().map(each -> ReportedReason.of(each.why())).toList());
+    }
+
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
         String body = "a.value >= s.value + 5.0m";
-        assertEquals(Map.of("a", NOT_SHOWN, "s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
+        assertEquals(Map.of("s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
                 atThe(">=", amount, "a: Amount, s: Amount", body)));
-        // The boundary at five is the arithmetic's, and no row past it is built.
-        assertEquals(List.of(), classesAt("a: Amount, s: Amount", amount, body, "a"));
+        // The sum reads only the amount put beside the one asked of, so rows past five are
+        // computed whichever amount they stand at, and the row built at the end the run has shows
+        // both sides of the boundary at five.
+        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
+                classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 
     private static final String KEYED = """

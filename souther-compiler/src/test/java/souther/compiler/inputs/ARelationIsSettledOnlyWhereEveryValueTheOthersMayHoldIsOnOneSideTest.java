@@ -1234,12 +1234,12 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         Leaves.Settled apart = new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.exclusive(five), true),
                 new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false,
-                List.of());
+                List.of(), List.of());
         assertEquals(List.of(new Line(Rel.LT, five), new Line(Rel.GT, five)), apart.lines());
         Leaves.Settled touching = new Leaves.Settled(List.of(
                 new SettledRun(null, ExactCut.inclusive(five), true),
                 new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false,
-                List.of());
+                List.of(), List.of());
         assertEquals(List.of(new Line(Rel.LE, five)), touching.lines());
     }
 }

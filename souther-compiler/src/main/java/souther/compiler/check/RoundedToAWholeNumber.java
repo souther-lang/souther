@@ -42,13 +42,16 @@ public final class RoundedToAWholeNumber {
      * What a comparison of a rounded number states of the number before rounding.
      *
      * @param <E> the environment the number is read in
+     * @param rounding the call that rounds it, as a value
      * @param rounded the number before rounding
      * @param at where the rounding was applied, which is where {@code rounded} is read
-     * @param statement what holds of {@code rounded} exactly where the comparison holds
+     * @param statement what holds of {@code rounded} exactly where the comparison holds, the
+     *                  ends past which the rounding aborts included
      */
-    public record Read<E>(Core rounded, E at, ConstantComparison statement) {
+    public record Read<E>(Core rounding, Core rounded, E at, ConstantComparison statement) {
 
         public Read {
+            Objects.requireNonNull(rounding, "a number is rounded by a call");
             Objects.requireNonNull(rounded, "a number is rounded");
             Objects.requireNonNull(at, "read somewhere");
             Objects.requireNonNull(statement, "and the comparison states something of it");
@@ -88,7 +91,8 @@ public final class RoundedToAWholeNumber {
         OrderedInterval ends = answered == null ? null : answered.extent();
         BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
         BigInteger most = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
-        return least == null || most == null ? null : new Read<>(value, rounding.at(),
+        return least == null || most == null ? null : new Read<>(rounding.answered(), value,
+                rounding.at(),
                 statementOf(way, rounding.written(), whole, least, most));
     }
 
@@ -114,7 +118,8 @@ public final class RoundedToAWholeNumber {
         BigInteger places = scale == null || !scale.isWhole() ? null : scale.floor().orNull();
         ConstantComparison statement = places == null ? null
                 : statementAtAScale(way, rounding.written(), rounding.against(), places);
-        return statement == null ? null : new Read<>(value, rounding.at(), statement);
+        return statement == null ? null
+                : new Read<>(rounding.answered(), value, rounding.at(), statement);
     }
 
     /**

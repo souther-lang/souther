@@ -216,6 +216,19 @@ public final class ElementsMet {
         return copy;
     }
 
+    /**
+     * Leaves the elements as {@code tried}, a copy of this a reading was tried on, left them:
+     * the reading was taken, and this is shared by readers it cannot hand the copy to.
+     */
+    public void takes(ElementsMet tried) {
+        if (!holding) {
+            return;
+        }
+        standingFor.clear();
+        standingFor.putAll(tried.standingFor);
+        crowded = tried.crowded;
+    }
+
     /** Whether a number was refused because it named another element of a container this
      *  comparison was already read of. */
     public boolean crowded() {

@@ -4527,6 +4527,29 @@ public final class InputReads {
         return FoldedValue.of(e, this, new Followed(symbols, newtypes, new HashSet<>()), symbols);
     }
 
+    /**
+     * This, where each field of a declaration stands for what a construction handed it, by its
+     * binding in {@code given}. A value is read where the construction is, {@code reads}, and the
+     * clause that names the field where the declaration is written: the two are not one tree, and
+     * a value that is substituted into the clause is read as if they were.
+     */
+    public InputReads handingTheFields(Map<BindingId, Core> given, InputReads reads,
+                                       DeclarationNewtypes newtypes) {
+        InputReads out = this;
+        for (Map.Entry<BindingId, Core> field : given.entrySet()) {
+            out = out.handing(field.getKey(), new Denotation(field.getValue(), reads), newtypes);
+        }
+        return out;
+    }
+
+    /** The same, with what each name came to held in {@code kept} from one fold to the next, for
+     *  a reader that folds many expressions over the same names ({@link FoldedValue.Kept}). */
+    public Optional<Object> folded(Core e, Symbols symbols, DeclarationNewtypes newtypes,
+                                   FoldedValue.Kept kept) {
+        return FoldedValue.of(e, this, new Followed(symbols, newtypes, new HashSet<>()), symbols,
+                kept);
+    }
+
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a
      *  position and never at a narrowing of one to several cases ({@link PathResolution#heldAt}). */
     public PathResolution elementAt(BindingId binding, DeclarationNewtypes newtypes) {

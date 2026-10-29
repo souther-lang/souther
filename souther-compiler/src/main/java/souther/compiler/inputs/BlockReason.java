@@ -301,6 +301,7 @@ public sealed interface BlockReason {
                 case RelationNotShownReachedAtEveryValue _ -> 26;
                 case OrderedExtentEndIsNoValue _ -> 27;
                 case RelationShownOverARegion _ -> 29;
+                case RelationRowsNotShownComputed _ -> 30;
             };
         }
 
@@ -371,7 +372,8 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
+                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _,
+                     RelationRowsNotShownComputed _ -> 0;
             };
         }
 
@@ -427,7 +429,8 @@ public sealed interface BlockReason {
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
                      RelationNotShownToReachEveryValue _,
                      RelationNotShownWhereTheSearchStopped _,
-                     RelationNotShownReachedAtEveryValue _ -> true;
+                     RelationNotShownReachedAtEveryValue _,
+                     RelationRowsNotShownComputed _ -> true;
             };
         }
 
@@ -469,7 +472,7 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _, RelationNotShownReachedAtEveryValue _,
-                     RelationShownOverARegion _ ->
+                     RelationShownOverARegion _, RelationRowsNotShownComputed _ ->
                         RunSensitivity.UNAFFECTED;
             };
         }
@@ -502,7 +505,8 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _ -> List.of();
+                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _,
+                     RelationRowsNotShownComputed _ -> List.of();
             };
         }
     }
@@ -1342,6 +1346,18 @@ public sealed interface BlockReason {
      * way wherever a row gets to it is not this, since that is said whichever values get there.
      */
     record RelationNotShownReachedAtEveryValue() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value, and
+     * some numbers here settle it by the terms' ends; but the operations the rows work out were
+     * not all worked out on a row built in them, so no row is shown computed there.
+     *
+     * <p>A fact about what was shown and not about the numbers, and one no reader is told which
+     * numbers it is about: the document says the word and not the region, so nothing here holds
+     * the region either. Apart from {@link RelationNotShownToReachEveryValue}, which says
+     * nothing of rows being computed.
+     */
+    record RelationRowsNotShownComputed() implements RuleReadingStopped {}
 
     /**
      * What the rule states was read in full, and it relates the value here to another value; the

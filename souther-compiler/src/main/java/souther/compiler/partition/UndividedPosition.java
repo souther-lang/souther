@@ -276,6 +276,11 @@ public record UndividedPosition(TermPath at, Why why) {
          * here may not get to the rule at all, and a reader looks at what the run works out before
          * it. Told the rule relates two values, a reader would take every value here as one the
          * rule leaves open.
+         *
+         * <p>It is also the word for numbers the relation settles in which no row is shown to
+         * get past an operation of decimals told: the run stops there on what the operation has
+         * no room for, no class is drawn for the term, and the numbers are in the reason and not
+         * in the document.
          */
         RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
         /**

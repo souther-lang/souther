@@ -233,8 +233,13 @@ public final class WhatARunMayEndFor {
      *  ({@link LibraryEndings}). */
     private static Endings ofTheLibrary(Core.PreservedCall kept) {
         AnOperationApplied applied = AnOperationApplied.of(kept);
-        return applied != null
-                && applied.operation() instanceof ValueName.Stdlib.Operation operation
-                ? LibraryEndings.shipped().of(operation) : new Endings.NotKnown();
+        return applied == null ? new Endings.NotKnown() : ofAnOperation(applied.operation());
+    }
+
+    /** What applying {@code operation} itself, and none of what it is handed, may end a run for:
+     *  an operation of the library's as {@link LibraryEndings} says, and not known of any other. */
+    public static Endings ofAnOperation(ValueName operation) {
+        return operation instanceof ValueName.Stdlib.Operation ofTheLibrary
+                ? LibraryEndings.shipped().of(ofTheLibrary) : new Endings.NotKnown();
     }
 }
