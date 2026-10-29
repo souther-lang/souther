@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
@@ -144,6 +145,30 @@ public final class AffineForms {
          * says only that the walk does not know.
          */
         default void unobserved(Core node) {
+        }
+
+        /**
+         * Whether a call that adds up the numbers of a list written out is read as the sum of
+         * those numbers, and told as the one operation it is ({@link #totalled}). A reading that
+         * does not tell where each operation of a form is worked out has no use for it, and
+         * leaves such a call to be read as no form.
+         */
+        default boolean readsATotalOfWhatIsWrittenOut() {
+            return false;
+        }
+
+        /**
+         * That the walk read {@code call}, which adds up the numbers of a list written out, as
+         * {@code total}, those numbers added, whose {@code elements} are worked out before it.
+         *
+         * <p>A run stops at such a call only where the total is no {@code Int}
+         * ({@link GetsPast.WhereTheTotalFits}): the library adds the numbers up exactly and holds
+         * only the last to the type, so no partial sum is an operation a run stops at, as it is
+         * of the sum written out. Told as that one operation, a reader that asks where each
+         * operation is worked out is told no more and no fewer than the call works out.
+         */
+        default void totalled(Core call, LinearForm<A> total, List<Core> elements) {
+            unobserved(call);
         }
 
         /**
@@ -333,6 +358,16 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form) {
             of.composed(operation, form);
+        }
+
+        @Override
+        public boolean readsATotalOfWhatIsWrittenOut() {
+            return of.readsATotalOfWhatIsWrittenOut();
+        }
+
+        @Override
+        public void totalled(Core call, LinearForm<A> total, List<Core> elements) {
+            of.totalled(call, total, elements);
         }
 
         @Override
@@ -910,6 +945,48 @@ public final class AffineForms {
     }
 
     /**
+     * The list {@code call} adds up, where it is a call that ends a run only where the total of
+     * the numbers it adds up is no {@code Int} ({@link GetsPast.WhereTheTotalFits}) and the list
+     * is written out; null otherwise.
+     */
+    private static Core.ListLit listAddedUpWrittenOut(Core.PreservedCall call) {
+        if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                instanceof GetsPast.WhereTheTotalFits(int operand))
+                || operand >= call.args().size()) {
+            return null;
+        }
+        return Core.withoutStanding(call.args().get(operand)) instanceof Core.ListLit list
+                ? list : null;
+    }
+
+    /**
+     * {@code call}, which adds up the numbers of {@code list}, read as the sum of the forms of its
+     * elements and told as the one operation it is ({@link Reading#totalled}); null where an
+     * element does not compose.
+     */
+    private static <A, E> LinearForm<A> totalOfWhatIsWrittenOut(Core call, Core.ListLit list, E at,
+                                                                Reading<A, E> reading,
+                                                                Walk<A, E> following,
+                                                                Stop<A, E> stopped) {
+        Stop<A, E> inside = new Stop<>();
+        LinearForm<A> total = LinearForm.constant(ExactRatio.ZERO);
+        for (Core element : list.elements()) {
+            LinearForm<A> value = formOf(element, at, reading, following, inside);
+            if (value == null) {
+                return halted(call, at, new Halt.AnArgumentStopped<>(inside.at), stopped);
+            }
+            switch (total.plus(value)) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> held) -> total = held;
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> {
+                    return halted(call, at, new Halt.NotHeld<>(why), stopped);
+                }
+            }
+        }
+        reading.totalled(call, total, list.elements());
+        return total;
+    }
+
+    /**
      * {@code form}, the quotient {@code division} came to, with the reading told when a run may
      * still stop at it: the quotient is by a number that is not nought, which the form being one
      * says, and stops for no other reason only where it is not of a {@code Rational}
@@ -944,6 +1021,12 @@ public final class AffineForms {
         if (written != null) {
             following.written(e, at);
             return written;
+        }
+        if (e instanceof Core.PreservedCall call && reading.readsATotalOfWhatIsWrittenOut()) {
+            Core.ListLit list = listAddedUpWrittenOut(call);
+            if (list != null) {
+                return totalOfWhatIsWrittenOut(call, list, at, reading, following, stopped);
+            }
         }
         return switch (e) {
             // No number: the smallest Int negated is the run time's abort, and reading it as the

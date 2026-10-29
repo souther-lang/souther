@@ -184,15 +184,17 @@ public final class BehaviorSetStatements {
      *                 is shown on one
      * @param trueUpTo the most code points a value of {@code whenTrue} is shown to hold the rule
      *                 at, or null where every one of them is
+     * @param notReached the strings of the lengths no run gets to the relation at, which are on
+     *                 neither side
      */
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
-                         AdmittedPlan notShown, Long trueUpTo) {
+                         AdmittedPlan notShown, Long trueUpTo, List<ValuesWithin> notReached) {
 
         Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
               AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
-            this(by, states, term, whenTrue, whenFalse, null, null);
+            this(by, states, term, whenTrue, whenFalse, null, null, List.of());
         }
     }
 
@@ -294,13 +296,41 @@ public final class BehaviorSetStatements {
             // it may be told neither way.
             AdmittedPlan shown = strings.canBe().isEmpty() ? AdmittedPlan.NONE
                     : AdmittedPlan.of(strings.canBe());
+            AdmittedPlan notShown = strings.canBe().equals(strings.mayBe()) ? AdmittedPlan.NONE
+                    : AdmittedPlan.meeting(List.of(AdmittedPlan.of(strings.mayBe()),
+                            strings.canBe().isEmpty() ? AdmittedPlan.ANY
+                                    : AdmittedPlan.without(strings.canBe())));
+            AdmittedPlan whenFalse = AdmittedPlan.without(strings.mayBe());
+            // A string of a length the run does not get to the equality at is on neither side,
+            // whichever it would be on.
+            List<ValuesWithin> notReached = List.of();
+            if (strings.reached() != null) {
+                PatternPlan reached = strings.reached().strings();
+                if (reached == null) {
+                    continue;
+                }
+                shown = AdmittedPlan.meeting(List.of(shown, new AdmittedPlan.Pattern(reached)));
+                whenFalse = AdmittedPlan.meeting(List.of(whenFalse,
+                        new AdmittedPlan.Pattern(reached)));
+                notReached = strings.reached().outside();
+            }
+            // The partner is the other side's only at the lengths a run gets to the equality with
+            // it, so a string of this side is its value only if it is of one of those, and is shown
+            // to be none of its values at any other.
+            if (strings.partnerHeldTo() != null) {
+                PatternPlan held = strings.partnerHeldTo().strings();
+                PatternPlan outside = strings.partnerHeldTo().stringsOutside();
+                if (held == null || outside == null) {
+                    continue;
+                }
+                shown = AdmittedPlan.meeting(List.of(shown, new AdmittedPlan.Pattern(held)));
+                notShown = AdmittedPlan.meeting(List.of(notShown, new AdmittedPlan.Pattern(held)));
+                whenFalse = AdmittedPlan.joining(List.of(whenFalse,
+                        new AdmittedPlan.Pattern(outside)));
+            }
             asked.add(new Asked(each.by(), each.states(), each.term(),
-                    shown, AdmittedPlan.without(strings.mayBe()),
-                    strings.leavesNoneOpen() ? null
-                            : AdmittedPlan.meeting(List.of(AdmittedPlan.of(strings.mayBe()),
-                                    strings.canBe().isEmpty() ? AdmittedPlan.ANY
-                                            : AdmittedPlan.without(strings.canBe()))),
-                    strings.upTo()));
+                    shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
+                    strings.upTo(), notReached));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -582,7 +612,8 @@ public final class BehaviorSetStatements {
                             ValuesWithin.upTo(built.of(each.whenTrue()), each.trueUpTo()),
                             built.of(each.whenFalse()), each.states(), each.by(),
                             each.notShown() == null ? ValueSet.NONE
-                                    : built.of(each.notShown()))));
+                                    : built.of(each.notShown()),
+                            each.notReached())));
         }
     }
 

@@ -462,6 +462,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AffineReading.1.composed",
                     "asks the operator's own account where an operation a comparison works out"
                             + " answers, so that a row is asked to get past it"),
+            new Held("souther.compiler.partition.AffineReading.1.totalled",
+                    "asks the addition's own account where a total over a list written out"
+                            + " answers, since the library holds only that total to the type"),
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",

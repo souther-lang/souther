@@ -323,11 +323,17 @@ public sealed interface BlockReason {
                 case RelationNotShownWhereTheSearchStopped(List<Figure> stoppedAt) ->
                         Figure.compare(stoppedAt,
                                 ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
-                case RelationShownOverARegion(boolean atAnyLength, Long longerThan) -> {
+                case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
+                                              Long shorterThan) -> {
                     RelationShownOverARegion them = (RelationShownOverARegion) other;
                     int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
-                    yield byLength != 0 ? byLength : Comparator.nullsFirst(Long::compare)
+                    if (byLength != 0) {
+                        yield byLength;
+                    }
+                    int byLonger = Comparator.nullsFirst(Long::compare)
                             .compare(longerThan, them.longerThan());
+                    yield byLonger != 0 ? byLonger : Comparator.nullsFirst(Long::compare)
+                            .compare(shorterThan, them.shorterThan());
                 }
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
@@ -1334,28 +1340,41 @@ public sealed interface BlockReason {
      * @param atAnyLength whether some values here are shown on neither side whatever their length
      * @param longerThan  the fewest code points less one of a value left open for its length: some
      *                    longer may be in no class, and none shorter is for that; null where no
-     *                    value is left open for its length
+     *                    value is left open for being long
+     * @param shorterThan the most code points plus one of a value left open for its length: some
+     *                    shorter may be in no class, and none longer is for that; null where no
+     *                    value is left open for being short
      */
-    record RelationShownOverARegion(boolean atAnyLength, Long longerThan)
+    record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan)
             implements RuleReadingStopped {
 
         public RelationShownOverARegion {
-            if (!atAnyLength && longerThan == null) {
+            if (!atAnyLength && longerThan == null && shorterThan == null) {
                 throw new IllegalArgumentException("a relation shown over a region leaves some"
                         + " values open");
             }
         }
 
+        /** Values open for being long, or open at any length. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan) {
+            this(atAnyLength, longerThan, null);
+        }
+
         /**
          * What a reader is shown of the values {@code open} holds, each as long as it is left
-         * open at: whether some are open whatever their length, and the fewest code points the
-         * rest are longer than.
+         * open at: whether some are open whatever their length, the fewest code points the
+         * values left open for being long are longer than, and the most the values left open for
+         * being short are shorter than.
          */
         public static RelationShownOverARegion of(List<ValuesWithin> open) {
-            boolean atAnyLength = open.stream().anyMatch(each -> each.shortest() == 0);
+            boolean atAnyLength = open.stream()
+                    .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
             Long longerThan = open.stream().filter(each -> each.shortest() > 0)
                     .map(each -> each.shortest() - 1).min(Long::compare).orElse(null);
-            return new RelationShownOverARegion(atAnyLength, longerThan);
+            Long shorterThan = open.stream()
+                    .filter(each -> each.shortest() == 0 && each.longest() != null)
+                    .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
+            return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan);
         }
     }
 

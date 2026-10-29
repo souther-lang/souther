@@ -50,8 +50,9 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     /**
      * {@code report} without where every run is shown to stop. A sum written out tells each
      * addition it works out, and is shown to stop where two of the pays together pass the type; a
-     * total the library works out does not tell which additions it makes, and says nothing of
-     * where it stops. What else is read of the two is the same.
+     * total over a list written out is one operation, and is shown to stop where the whole total
+     * passes it; a total over what a closure answers or a fold does not tell which operations it
+     * works out, and says nothing of where it stops. What else is read of them is the same.
      */
     private static String besideWhereEveryRunStops(String report) {
         return report.replaceAll("(?m)^.*may stop a run:.*every run stops.*\\R", "");
@@ -83,7 +84,27 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void theTotalOfElementsWrittenOutIsTheirSum() {
         String report = measured("List.sum([a.pay, b.pay, c.pay])");
-        assertEquals(besideWhereEveryRunStops(measured(SUM)), report);
+        assertEquals(besideWhereEveryRunStops(measured(SUM)), besideWhereEveryRunStops(report));
+    }
+
+    /**
+     * The library adds the elements up exactly and holds only the total to the type, so the total
+     * of {@code [max, 1, -1]} is {@code max}: a total over a list written out stops where the whole
+     * total passes the type and not where the first two of its elements added written out do.
+     */
+    @Test
+    void theTotalOfElementsWrittenOutStopsWhereTheWholeTotalPassesTheType() {
+        String report = measured("List.sum([a.pay, b.pay, c.pay])");
+        assertTrue(report.contains("every run stops in a.pay + b.pay + c.pay where a.pay + b.pay"
+                + " + c.pay is at least 9223372036854775808"), report);
+        assertFalse(report.contains("in a.pay + b.pay where"), report);
+        assertTrue(measured(SUM).contains("in a.pay + b.pay where"), measured(SUM));
+    }
+
+    /** Two elements are one addition, which the total is as well. */
+    @Test
+    void theTotalOfTwoElementsWrittenOutStopsWhereTheirSumDoes() {
+        assertEquals(measured("a.pay + b.pay"), measured("List.sum([a.pay, b.pay])"));
     }
 
     /** The sum written out is shown to stop where its first addition passes the type, which is
