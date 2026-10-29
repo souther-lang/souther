@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 
 /**
@@ -20,8 +21,9 @@ import java.util.function.BiFunction;
  * kept step, and what is held does not grow with the number of ways asked.
  *
  * <p>A list is looked up at its own length and at each multiple of {@link #EVERY} below it, and not
- * at every length: a key is the whole leading run, so asking at every length hashes the run once
- * per length, which costs more than the steps it saves.
+ * at every length: a key is the whole leading run, which is compared step by step on a hit. The
+ * hash of each leading run is worked out in one pass over the list ({@link #hashesOf}) and not
+ * once per run, since a step is a record whose hash reads everything it holds.
  *
  * <p>A step is part of the key by its equality, which is everything a step says of the region it
  * narrows, so a region lent is the region the fold would have made.
@@ -39,7 +41,7 @@ public final class NarrowingsKept {
     private static final int EVERY = 4;
     private static final int HELD = 64;
 
-    private final Map<List<?>, SearchRegion> kept;
+    private final Map<Leading, SearchRegion> kept;
 
     NarrowingsKept() {
         this(HELD);
@@ -48,10 +50,51 @@ public final class NarrowingsKept {
     private NarrowingsKept(int held) {
         this.kept = held == 0 ? null : new LinkedHashMap<>(16, 0.75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<List<?>, SearchRegion> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<Leading, SearchRegion> eldest) {
                 return size() > held;
             }
         };
+    }
+
+    /**
+     * The first {@code length} steps of a list, by the hash a list of them has: a key whose hash
+     * was worked out once for the whole list it is the start of.
+     */
+    private static final class Leading {
+
+        private final List<?> steps;
+        private final int length;
+        private final int hash;
+
+        Leading(List<?> steps, int length, int hash) {
+            this.steps = steps;
+            this.length = length;
+            this.hash = hash;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Leading that && that.length == length && that.hash == hash
+                    && steps.subList(0, length).equals(that.steps.subList(0, length));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    /** The hash of the first {@code at} steps of {@code steps}, for each {@code at} from nought,
+     *  as a list of those steps hashes. */
+    private static int[] hashesOf(List<?> steps) {
+        int[] hashes = new int[steps.size() + 1];
+        hashes[0] = 1;
+        int at = 0;
+        for (Object each : steps) {
+            hashes[at + 1] = 31 * hashes[at] + Objects.hashCode(each);
+            at++;
+        }
+        return hashes;
     }
 
     /**
@@ -63,10 +106,11 @@ public final class NarrowingsKept {
         SearchRegion region = base;
         int from = 0;
         boolean ownBase = kept != null && base.narrowingsKept() == this;
+        int[] hashes = ownBase ? hashesOf(steps) : null;
         if (ownBase) {
             synchronized (kept) {
                 for (int at = n; at > 0; at = (at - 1) / EVERY * EVERY) {
-                    SearchRegion had = kept.get(steps.subList(0, at));
+                    SearchRegion had = kept.get(new Leading(steps, at, hashes[at]));
                     if (had != null) {
                         region = had;
                         from = at;
@@ -79,9 +123,11 @@ public final class NarrowingsKept {
             region = narrowing.apply(steps.get(at), region);
             int done = at + 1;
             if (ownBase && (done == n || done % EVERY == 0)) {
-                List<S> key = List.copyOf(steps.subList(0, done));
+                Leading key = new Leading(List.copyOf(steps.subList(0, done)), done,
+                        hashes[done]);
                 synchronized (kept) {
-                    kept.put(key, region);                }
+                    kept.put(key, region);
+                }
             }
         }
         return region;

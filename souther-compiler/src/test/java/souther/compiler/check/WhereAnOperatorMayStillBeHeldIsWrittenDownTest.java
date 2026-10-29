@@ -462,6 +462,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AffineReading.1.composed",
                     "asks the operator's own account where an operation a comparison works out"
                             + " answers, so that a row is asked to get past it"),
+            new Held("souther.compiler.partition.AffineReading.1.totalled",
+                    "asks the addition's own account where a total over a list written out"
+                            + " answers, since the library holds only that total to the type"),
             new Held("souther.compiler.partition.AffineReading.1.operandsOfTheQuotient",
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
