@@ -443,14 +443,11 @@ public final class ReplacementReading {
 
     /**
      * What a walk the classes carry no switch at leaves a rewrite as: open at what the JVM holds in
-     * one method, or at a step this compiler cannot run the walk rewritten with. Neither is
-     * widened by a wider run.
+     * one method, which a wider run does not widen.
      */
     static ReplacementEvidence.Undecided.Way wayOf(NotCarriedReason why) {
         return ReplacementEvidence.Undecided.Way.atNoAllowance(switch (why) {
             case NotCarriedReason.MethodTooLarge _ -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
-            case NotCarriedReason.StepNotExpanded _ ->
-                    ReplacementEvidence.Undecided.Why.STEP_NOT_EXPANDED;
         });
     }
 
