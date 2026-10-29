@@ -582,9 +582,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // The analysis that owns the stopped value answers for where a sum of the addends
                 // of the comparison passes the ends of an Int, and for no other end: a run that
                 // stops where a construction's rules refuse the number is not one it answers for.
-                // The analysis that owns the stopped value answers for where a sum of the addends
-                // of the comparison passes the ends of an Int, and for no other end: a run that
-                // stops where a construction's rules refuse the number is not one it answers for.
                 if (held.equals(WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS)
                         && over.size() == 1 && stoppedAt.isAPlainStop(over.get(0))) {
                     told.sumsOverTheStop.add(form);
