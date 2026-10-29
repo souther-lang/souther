@@ -72,6 +72,33 @@ class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
         assertFalse(stopped.entered(run.fold.index()), "the fold was never called");
     }
 
+    /**
+     * A fold works out its arguments in the order they are written, whatever its step is: the seed
+     * before the list. What the analyses say of which abort a run reaches first reads that order
+     * off the call, so the bytecode keeps it.
+     */
+    @Test
+    void theSeedIsWorkedOutBeforeTheListWhateverTheStepIs() {
+        for (String step : List.of("(acc, x) -> acc + x", "if a then add else sub")) {
+            Run run = new Run("""
+                    module example.walked
+
+                    behavior total : (a: Bool, b: Bool) -> Int
+
+                    let add (acc: Int, x: Int): Int = acc + x
+                    let sub (acc: Int, x: Int): Int = acc - x
+
+                    let total (a, b) =
+                        List.fold(%s, if a then unreachable "the seed" else 0,
+                                  if b then unreachable "the list" else [1])
+                    """.formatted(step));
+
+            String message = run.abortMessage(true, true);
+
+            assertTrue(message.contains("the seed"), step + ": " + message);
+        }
+    }
+
     /** The classes of the model, loaded, and the fold the author wrote in it. */
     private static final class Run {
 
@@ -81,7 +108,11 @@ class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
         private final Method apply;
 
         Run() {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            this(MODEL);
+        }
+
+        Run(String model) {
+            Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.answerEverything();
             Bodies.Elaborated checked = compilation.db()
                     .ask(new Bodies.Checked(compilation.modules().get(0))).value();
@@ -132,6 +163,19 @@ class AWalkRunAsACallIsRecordedOnceItsArgumentsAreWorkedOutTest {
                         assertThrowsReflective(given), "the run was stopped");
                 assertNotNull(refused.getCause());
                 return plan.numbering().align(Probe.snapshot());
+            } finally {
+                Probe.end();
+            }
+        }
+
+        /** What the run that was stopped said. */
+        String abortMessage(Object... given) {
+            Probe.begin(plan.identity());
+            try {
+                InvocationTargetException refused = assertInstanceOf(
+                        InvocationTargetException.class,
+                        assertThrowsReflective(given), "the run was stopped");
+                return String.valueOf(refused.getCause().getMessage());
             } finally {
                 Probe.end();
             }

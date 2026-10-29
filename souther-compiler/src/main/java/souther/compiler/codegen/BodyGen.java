@@ -1636,7 +1636,7 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (!call.isWalk(ctx.symbols.theWalk()) || call.omitsFunctionBody(0)) {
+            if (!call.runsAsALoop(ctx.symbols.theWalk())) {
                 return false;
             }
             Core seed = call.args().get(1);
@@ -1709,14 +1709,15 @@ final class BodyGen {
             // A copy carried in another arm's place carries nothing of its own, as at a fork.
             boolean switched = site.isPresent() && carrying == 0 && ctx.carriesTheWalk(call);
 
+            // In the order the call writes them: the step, the seed, then the list.
+            int acc = slot(accType);
+            seed.run();
+            store(code, acc, accType);
+
             int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
             genExpr(walked);
             code.invokeinterface(CD_List, "iterator", MTD_iterator);
             code.astore(iterator);
-
-            int acc = slot(accType);
-            seed.run();
-            store(code, acc, accType);
             // Recorded once what the walk is handed has been worked out, as at a call of the
             // library's method: a run that stopped working it out has not entered the walk.
             if (site.isPresent()) {

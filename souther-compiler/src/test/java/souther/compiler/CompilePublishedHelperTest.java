@@ -712,7 +712,19 @@ class CompilePublishedHelperTest {
 
                         partial let walk (n: Int) : Int = if n == 0 then Step(1).value else walk(n - 1)
                         partial let f (n: Int) = walk(n)
-                        """, "f", "n: Int", "f(i.n)"));
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a fold whose step is chosen as the program runs, over a kept type", """
+                        module pricing exposing ( f )
+
+                        data Box = { n: Int }
+
+                        partial let boxes (n: Int): List<Box> = boxes(n + 1)
+
+                        partial let pick (flag: Bool): (Int, Box) -> Int = pick(flag)
+
+                        partial let f (flag: Bool, n: Int): Int =
+                            List.fold(pick(flag), 0, boxes(n))
+                        """, "f", "flag: Bool, n: Int", "f(i.flag, i.n)"));
 
         for (Shape shape : shapes) {
             CompileException e = assertThrows(CompileException.class,

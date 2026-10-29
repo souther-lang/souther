@@ -447,7 +447,7 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
      */
     @Test
     void aStepTwoFoldsShareIsRunRewrittenAtOneOfThemOnly() {
-        Compilation compilation = measured("""
+        String source = """
                 module repro.shared
 
                 data In = { flag: Bool, xs: List<Int>, ys: List<Int> }
@@ -457,15 +457,23 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 %s
                 let total (i) = {
                     let step = if i.flag then add else sub
-                    List.fold(step, 0, i.xs) + List.fold(step, 0, i.ys)
+                    let over = List.fold(step, 0, i.xs)
+                    let beside = List.fold(step, 0, i.ys)
+                    over + beside
                 }
 
                 example total
                     | "t" : (In { flag = true, xs = [3, 4], ys = [1] }) -> 8
                     | "f" : (In { flag = false, xs = [3, 4], ys = [] }) -> -7
-                """.formatted(STEPS));
+                """.formatted(STEPS);
+        int besideAt = source.lines().toList().indexOf(
+                "    let beside = List.fold(step, 0, i.ys)") + 1;
 
-        assertEquals(2, rewriteLines(compilation).size(), "the fold over ys is asked, xs is not");
+        List<String> asked = rewriteLines(measured(source));
+
+        assertEquals(2, asked.size(), "one fold is asked, both rewrites of it");
+        assertTrue(asked.stream().allMatch(line -> line.contains("(" + besideAt + ":")),
+                () -> "the fold over ys is asked and xs is not: " + asked);
     }
 
     /**

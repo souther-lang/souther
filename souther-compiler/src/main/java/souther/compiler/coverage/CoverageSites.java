@@ -1450,10 +1450,10 @@ public final class CoverageSites {
                 return;
             }
             // A step that is never applied is run by nothing, and there is nothing to rewrite.
-            Core.Block step = call.stepRunWhereItStands(theWalk);
-            if (step == null && call.omitsFunctionBody(theWalk.step())) {
+            if (!call.runsAsALoop(theWalk)) {
                 return;
             }
+            Core.Block step = call.stepRunWhereItStands(theWalk);
             // A walk that reads nothing a run is handed answers one value on every run, and either
             // rewrite of it answers one value too: changing it is changing a constant, which no
             // input can tell apart from the walk unless every row already does.

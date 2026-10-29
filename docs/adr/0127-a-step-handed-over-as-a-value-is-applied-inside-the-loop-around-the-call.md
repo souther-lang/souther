@@ -18,11 +18,17 @@ not depend on whether its step can be written into the loop.
 
 Whether a call is emitted as a loop is decided by what the call is (`Core.Call.isWalk`) and by the
 step being applied at all (`omitsFunctionBody`), and no longer by whether the step is a block. One
-loop is emitted for both. A step written where the fold hands it over is its body, as before. A
-step that is not is worked out once, before the walk, into a local, and applied at each element with
-`Fn.apply`, the way any function value is applied. Choosing it again at an element would be another
-fold. The seed and the list are worked out once as well, so handing the seed again does not work
-its expression out again.
+loop is emitted for both, and `Core.Call.runsAsALoop` is the one answer the emitter, the coverage
+plan and the analysis of the classes an emitted body names read. A step written where the fold hands
+it over is its body, as before. A step that is not is worked out once, before the walk, into a
+local, and applied at each element with `Fn.apply`, the way any function value is applied. Choosing
+it again at an element would be another fold. The element is cast to its type and the answer to the
+accumulator's, in the loop around the call, so those two types are classes the call names.
+
+The arguments are worked out in the order the call writes them: the step, the seed, then the list.
+`Evaluated.inOrder` reads that order off the call to say which abort a run reaches first, and the
+bytecode keeps it for a step written in the loop as for one handed over. The seed handed again is
+not worked out again.
 
 The walk is recorded after the arguments it is handed have been worked out, as a call of the
 library's method records it: a run that stopped working them out has not entered the walk.
