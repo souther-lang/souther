@@ -7378,12 +7378,25 @@ public final class Adequacy {
     static WalkRewrites walksOwedIn(WalkRewrites carried,
                                     Map<String, PathReachability.Answers.AsRun> arrived,
                                     String behavior, Bodies.Elaborated checked) {
+        WalkRewrites here = carried.within(checked.plan().walks(behavior));
         PathReachability.Answers.AsRun arrives = arrived == null ? null : arrived.get(behavior);
         if (arrives == null) {
-            return carried;
+            return here;
         }
         arrives.answers().requireNumbering(checked.numberingIdentity());
-        return carried.provingTheSameAt(arrives.answers().arrivals().walksHeldToOneAtMost());
+        return here.provingTheSameAt(arrives.answers().arrivals().walksHeldToOneAtMost());
+    }
+
+    /**
+     * The sibling rewrites of the arms of {@code behavior} that the classes carry, at the arms the
+     * behavior has and at no other.
+     *
+     * <p>The arms' counterpart of {@link #walksOwedIn}: what is shown of a sibling, the ways
+     * nothing arrives at, is shown of the places of one behavior.
+     */
+    static ArmReplacements armsOwedIn(ArmReplacements carried, String behavior,
+                                      Bodies.Elaborated checked) {
+        return checked.plan().keepingTheArmsOf(behavior, carried);
     }
 
     /**
@@ -7418,7 +7431,7 @@ public final class Adequacy {
         List<CoverageSites.WalkSite> walks = checked.plan().walks(behavior);
         Map<String, PathReachability.Answers.AsRun> arrived = db.ask(new Arrived(module)).value();
         Predicate<ControlPlace.Arm> unreached = unreachedIn(arrived, behavior, checked);
-        ArmReplacements carried = trials.carried();
+        ArmReplacements carried = armsOwedIn(trials.carried(), behavior, checked);
         WalkRewrites walksCarried =
                 walksOwedIn(trials.walksCarried(), arrived, behavior, checked);
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);

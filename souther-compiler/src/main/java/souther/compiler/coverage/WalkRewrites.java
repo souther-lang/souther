@@ -98,6 +98,26 @@ public record WalkRewrites(SequencedMap<Integer, AtWalk> bySite) {
     }
 
     /**
+     * These rewrites at the places {@code walks} enter, and at no other.
+     *
+     * <p>A walk written once stands at as many places as the behaviors that reach it have, and
+     * what is shown of a rewrite — by the paths, by the rows, by the source — is shown of the
+     * places of one behavior. A behavior is asked about the places it has, so what it owes is the
+     * same with another behavior calling the same walk or not ({@link #askedOf}).
+     */
+    public WalkRewrites within(List<CoverageSites.WalkSite> walks) {
+        Set<WalkProbe> places = new HashSet<>();
+        walks.forEach(walk -> places.add(walk.index()));
+        SequencedMap<Integer, AtWalk> out = new TreeMap<>();
+        bySite.forEach((site, at) -> {
+            if (places.contains(at.at())) {
+                out.put(site, at);
+            }
+        });
+        return new WalkRewrites(out);
+    }
+
+    /**
      * These rewrites with each walk entered at one of {@code places} shown to be the walk under
      * either spelling there, because what holds on the way to it limits its list to one element at
      * most.

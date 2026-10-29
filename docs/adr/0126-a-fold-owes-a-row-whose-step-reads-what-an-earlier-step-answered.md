@@ -105,8 +105,11 @@ input and what the conditions on the way state. A length compared with a number 
 element at most, the arm of a `match` on `List.get(1, xs)` that found nothing, a list dropped past its
 first element that is empty, and an invariant of the type the list is a value of all say it, by the
 laws the operations carry. No row can tell either rewrite of such a walk apart, so none is searched
-for and none is owed. It is shown at every place the walk is entered, since a fold written once and
+for and none is owed. It is shown at every place the walk is entered in the behavior asked, since a fold written once and
 entered from two places is one walk with one rewrite: a place the reading did not get to shows nothing.
+The places are the behavior's own. A helper's fold stands in every behavior that calls it, and what the
+paths, the rows and the source show is shown of one behavior's places, so a behavior owes the same
+whether or not another calls the helper; the sibling rewrites of an arm are scoped the same way.
 A condition that leaves room for two, or is of another list, says nothing and the walk is asked as
 before. A step whose body never reads the accumulator it
 is handed is the walk under another spelling when handed the seed. And a list that reads nothing a

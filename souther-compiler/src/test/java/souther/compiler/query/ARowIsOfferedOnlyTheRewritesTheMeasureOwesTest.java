@@ -2,15 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.partition.FixtureTemplate;
-import souther.compiler.partition.Generator;
-import souther.compiler.partition.RowToRun;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
@@ -51,33 +44,14 @@ class ARowIsOfferedOnlyTheRewritesTheMeasureOwesTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), "the model under test compiles");
-        Db db = compilation.db();
-        String module = compilation.modules().getFirst();
-        Sig sig = db.ask(new Bodies.Signatures(module)).value().get("total");
-        Generator.Trial trial = Adequacy.runningRowsOf(db, module, Adequacy.trialling(db, module),
-                "total", sig, RequiredDependencies.of(db, module, "total"));
 
-        Generator.ObservedRun ran = trial.run(rowNamed(compilation, "nothing"));
-        AlignedObservation seen = assertInstanceOf(Generator.Watched.Ran.class, ran.watched())
-                .seen();
-        List<SourceConstructOrigin> folds = trial.rewritesThrough(seen).stream()
+        List<SourceConstructOrigin> folds = ComposedRows.rewritesThrough(
+                        compilation, "total", "nothing").stream()
                 .map(each -> assertInstanceOf(WalkRewrites.Rewrite.class, each).walk())
                 .toList();
 
         assertEquals(2, folds.size(), () -> "both rewrites of one fold: " + folds);
         assertEquals(1, folds.stream().distinct().count(),
                 () -> "of one fold and not of two: " + folds);
-    }
-
-    private static RowToRun rowNamed(Compilation compilation, String name) {
-        Prepared prepared = compilation.db()
-                .ask(new Shapes.Prepared(compilation.modules().getFirst())).value();
-        Hir.ExampleRow row = prepared.examples().stream()
-                .map(Prepared.Example::read)
-                .flatMap(block -> block.rows().stream())
-                .filter(each -> each.identity().shown().equals(name))
-                .findFirst().orElseThrow();
-        return RowToRun.of(row.inputs().stream()
-                .map(input -> new FixtureTemplate(name, input)).toList());
     }
 }

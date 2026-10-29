@@ -194,6 +194,11 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method walkRewrites() : souther.compiler.coverage.WalkRewrites",
             "method walkSiteOf(souther.compiler.core.Core) :"
                     + " java.util.Optional<souther.compiler.coverage.WalkProbe>",
+            // A table of sibling rewrites kept to the arm sites of one behavior: a value, made by the
+            // plan that holds the numbering the table's site numbers are places under.
+            "method keepingTheArmsOf(java.lang.String,"
+                    + "souther.compiler.coverage.ArmReplacements) :"
+                    + " souther.compiler.coverage.ArmReplacements",
             // Which argument of a walk's call is the list it goes over: a position, and nothing of
             // the tree the call stands in.
             "method walkedArgumentOf(souther.compiler.core.Core) : java.util.OptionalInt",

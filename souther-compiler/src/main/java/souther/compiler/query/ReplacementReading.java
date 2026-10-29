@@ -210,11 +210,13 @@ public final class ReplacementReading {
         // below, and is no fork of the body's. Settled by the body and the rules, and never by
         // which arms the rows stating an answer reached.
         boolean forked = false;
-        for (CoverageSites.ArmSite site : plan.arms(behavior)) {
+        List<CoverageSites.ArmSite> arms = plan.arms(behavior);
+        ArmReplacements planned = plan.keepingTheArmsOf(behavior, plan.replacements());
+        for (CoverageSites.ArmSite site : arms) {
             if (site.place().probe().isEmpty()) {
                 continue;
             }
-            forked = forked || (site.owesARow() && !plan.replacements()
+            forked = forked || (site.owesARow() && !planned
                     .askedOf(site.obligation().origin(), site.obligation().part(), unreached)
                     .isEmpty());
             List<ArmReplacements.Asked> asked = carried.askedOf(site.obligation().origin(),

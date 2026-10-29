@@ -621,6 +621,20 @@ public final class CoverageSites {
         }
 
         /**
+         * {@code table}, with only the arm sites of {@code behavior} in it.
+         *
+         * <p>A table of sibling rewrites is keyed by the number a site was issued, in the one
+         * numbering this plan holds, and so is scoped here and not by a caller holding numbers. An
+         * arm written once stands at a site in each behavior that reaches it, and a behavior is
+         * asked about its own.
+         */
+        public ArmReplacements keepingTheArmsOf(String behavior, ArmReplacements table) {
+            Set<ArmProbe> mine = new HashSet<>();
+            arms(behavior).forEach(arm -> arm.place().probe().ifPresent(mine::add));
+            return table.keeping(site -> mine.contains(numbering.arm(site)));
+        }
+
+        /**
          * Which argument of the call {@code node} is the list the walk goes over, or empty where
          * this plan numbered no walk there ({@link #walkSiteOf}).
          */
