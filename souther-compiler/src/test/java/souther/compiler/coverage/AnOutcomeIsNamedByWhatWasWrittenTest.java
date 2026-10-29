@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Bodies;
@@ -304,7 +305,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> CoverageSites.of(
                         HandBuiltBodies.ofBehaviors("demo", Map.of("b", fork)),
-                        DecisionSources.NONE, SuppliedRules.NONE, DefaultStdlib.get().walk()));
+                        DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk()));
 
         assertTrue(refused.getMessage().contains("no source wrote it"),
                 () -> "the walk says what is wrong with the tree: " + refused.getMessage());
@@ -380,6 +381,6 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     private static CoverageSites.Plan planOf(String source) {
         return CoverageSites.of(
                 HandBuiltBodies.ofBehaviors("demo", bodiesOf(source)),
-                DecisionSources.NONE, SuppliedRules.NONE, DefaultStdlib.get().walk());
+                DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk());
     }
 }

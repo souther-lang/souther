@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -341,6 +342,51 @@ class NearbyValuesTest {
         assertTrue(grown.contains(listOf(listOf(whole(100), whole(1)), listOf(whole(2)))));
         assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(2), whole(100)))));
         assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(100), whole(2)))));
+    }
+
+    /** A list is counted where the location names it, in a field and in an element of a list. */
+    @Test
+    void theElementsOfTheListALocationNamesAreCountedWhereverItStands() {
+        Type basket = Type.ref(declared("Basket"));
+        TermPath items = new TermPath("b", List.of()).then("items");
+
+        assertEquals(3, NearbyValues.heldAt(basket(whole(1), whole(2), whole(3)), basket,
+                READING, items));
+        assertEquals(0, NearbyValues.heldAt(basket(whole(1)), basket, READING,
+                new TermPath("b", List.of()).then("other")), "a location the value has none at");
+        assertEquals(3, NearbyValues.heldAt(listOf(basket(whole(1)), basket(whole(2), whole(3))),
+                Type.list(basket), READING, new TermPath("b", List.of()).element().then("items")),
+                "between the lists of the elements");
+    }
+
+    /** Only the list the location names grows: another list of the value is no step of a walk. */
+    @Test
+    void onlyTheListALocationNamesGrows() {
+        Type baskets = Type.list(Type.ref(declared("Basket")));
+        ObservedValue held = listOf(basket(whole(1)), basket(whole(2)));
+        TermPath outer = new TermPath("xs", List.of());
+
+        assertEquals(List.of(listOf(basket(whole(1)), basket(whole(2)), basket(whole(7)))),
+                grownWithin(held, baskets, outer),
+                "the list named gets an element and the lists inside its elements do not");
+        assertEquals(List.of(listOf(basket(whole(1), whole(100)), basket(whole(2))),
+                        listOf(basket(whole(1)), basket(whole(2), whole(100)))),
+                grownWithin(held, baskets, outer.element().then("items")),
+                "and the lists a location names inside the elements, an element at a time");
+        assertEquals(List.of(), grownWithin(held, baskets, outer.then("other")),
+                "a location the value has no list at grows nothing");
+    }
+
+    private static List<ObservedValue> grownWithin(ObservedValue value, Type type,
+                                                   TermPath within) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.grownWithin(value, type, READING, ranWithInts(1),
+                        elementType -> elementType.equals(Type.ref(declared("Basket")))
+                                ? List.<ObservedValue>of(basket(whole(7))).iterator()
+                                : List.<ObservedValue>of().iterator(),
+                        NearbyValues.Put.AFTER, NearbyValues.Lists.ANY, within)
+                .forEachRemaining(out::add);
+        return out;
     }
 
     private static InputsRowsRanWith ranWithManyInts(int count) {

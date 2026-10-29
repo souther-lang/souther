@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -79,7 +80,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     private static CoverageSites.Plan planOf(Checked checked) {
         return CoverageSites.of(bodiesOfAModule(checked.module(),
                         new LinkedHashMap<>(checked.bodies())),
-                DecisionSources.NONE, SuppliedRules.NONE, DefaultStdlib.get().walk());
+                DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk());
     }
 
     private static void collect(Core e, ComparisonCatalog catalog, List<Core.Binary> out) {
@@ -318,7 +319,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 """;
         CoverageSites.Plan here = CoverageSites.of(
                 bodiesOfAModule("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())),
-                DecisionSources.NONE, SuppliedRules.NONE, DefaultStdlib.get().walk());
+                DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk());
         ConstructOccurrence there = ComparisonCatalog.of(bodiesOfAModule(
                 "two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies()))).all().get(0).which();
 

@@ -9,6 +9,7 @@ import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.coverage.WalkedNoFurther;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Disposition;
@@ -34,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
@@ -119,7 +121,17 @@ public final class ReplacementReading {
 
     /** The same for one rewrite of a walk, and what the bodies it stands in part strings at. */
     private record WalkOccurrences(ReplacementReportAnchor reportAt, WalkRewrites.Asked asked,
-                                   List<WalkProbe> probes, Set<String> separators) {}
+                                   List<WalkProbe> probes, Set<String> separators,
+                                   List<Optional<TermPath>> over) {}
+
+    /** The lists of the input the walk goes over at every place it is entered, or none where any
+     *  place goes over a list the input does not hold as it is. */
+    private static List<TermPath> listsWalked(List<Optional<TermPath>> over) {
+        if (over.stream().anyMatch(Optional::isEmpty)) {
+            return List.of();
+        }
+        return over.stream().flatMap(Optional::stream).distinct().toList();
+    }
 
     /**
      * What being the same answer means for the behavior: two values read in full, and a statement
@@ -248,7 +260,7 @@ public final class ReplacementReading {
                 Replacement.OfAWalk replaced = new Replacement.OfAWalk(site.walk(), each.how());
                 WalkOccurrences at = walkOccurrences.computeIfAbsent(replaced,
                         _ -> new WalkOccurrences(reportAt, each, new ArrayList<>(),
-                                new LinkedHashSet<>()));
+                                new LinkedHashSet<>(), new ArrayList<>()));
                 if (!at.reportAt().equals(reportAt)) {
                     throw new IllegalStateException(replaced + " is shown at " + at.reportAt()
                             + " where one call reaches it and at " + reportAt + " where another"
@@ -256,12 +268,18 @@ public final class ReplacementReading {
                 }
                 at.probes().add(site.index());
                 at.separators().addAll(site.separators());
+                // A list read in a helper is a parameter of the helper, which is no location of
+                // this behavior's input.
+                at.over().add(site.body().equals(behavior)
+                        ? site.over().map(names -> new TermPath(names.getFirst(), List.of())
+                                .then(names.subList(1, names.size())))
+                        : Optional.empty());
             }
         }
         walkOccurrences.forEach((replaced, at) -> out.add(new Account(
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
-                        stated, entered, stoppedAt, ranWith))));
+                        listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
         // One answer only where no arm the body owes a row through has a rewrite that is another
         // program; the arms of a library operation's copy are asked about above and do not count.
         // Which family a body invites is the body's: one with a fork is asked about the fork, arm
@@ -310,7 +328,7 @@ public final class ReplacementReading {
      */
     private static Standing walkStanding(Replacement.OfAWalk replaced, WalkRewrites.Asked asked,
                                          List<WalkProbe> where, List<String> separators,
-                                         List<RowOutcome> rows,
+                                         List<TermPath> over, List<RowOutcome> rows,
                                          Function<RowOutcome, Set<WalkProbe>> entered,
                                          Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                          Supplier<InputsRowsRanWith> ranWith) {
@@ -327,7 +345,7 @@ public final class ReplacementReading {
         return ranStanding(replaced, rows,
                 row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
                 seenThrough -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
-                        replacing, seenThrough, ranWith.get(), separators));
+                        replacing, seenThrough, ranWith.get(), separators, over));
     }
 
     /**

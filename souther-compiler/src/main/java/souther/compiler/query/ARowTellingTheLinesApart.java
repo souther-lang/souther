@@ -4,6 +4,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.BorderObligationId;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.GenerationOutcome;
@@ -235,6 +236,33 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
         List<AtOneReading> both = new ArrayList<>(each);
         both.addAll(other.each);
         return new ARowTellingTheLinesApart(both);
+    }
+
+    /**
+     * Every search made for the lines of one obligation, whichever line of {@code edges} it was
+     * made at, or empty where no edge reads that obligation.
+     *
+     * <p>An obligation is coarser than a line. A line is the authored line and where it was read,
+     * and an obligation is the authored line and the value it is at, so one obligation can be
+     * read at several lines — one for each way the terms are held — and only some of them carry
+     * a search. What a finding about the obligation can say is what all of them came to, and the
+     * order the lines were read in decides nothing of it.
+     *
+     * <p>Present and empty is not absent: the obligation was read and no search was made at it,
+     * which a finding answers as nothing offered, where an obligation no edge reads is a finding
+     * and a measurement that have come apart.
+     */
+    static Optional<ARowTellingTheLinesApart> ofObligation(List<BorderAssessment> edges,
+                                                           BorderObligationId obligation) {
+        boolean read = false;
+        List<AtOneReading> searched = new ArrayList<>();
+        for (BorderAssessment each : edges) {
+            if (each.border().obligation().equals(obligation)) {
+                read = true;
+                searched.addAll(each.toldApart().each());
+            }
+        }
+        return read ? Optional.of(new ARowTellingTheLinesApart(searched)) : Optional.empty();
     }
 
     /**

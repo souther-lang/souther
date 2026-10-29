@@ -63,6 +63,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String NOT_REACHED = "not reached";
 
+    private static final String TELLS_NOTHING_APART = "tells nothing apart";
+
     /** Each model measured once for the class: a test asks the words and the classes of one
      *  model, and only reads it. */
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
@@ -167,6 +169,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     : line.contains("not shown to reach every value here") ? NOT_SHOWN
                     : line.contains("not every value here is shown to get to it") ? NOT_REACHED
                     : line.contains("come to rather than about any one of them") ? OVER_A_RUN
+                    : line.contains("comes out one side of it") ? TELLS_NOTHING_APART
                     : line);
         }
         return out;
@@ -2752,13 +2755,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  another field or bounds it alone. */
     @Test
     void aRuleOfTheRecordNamingTheFieldComparedIsNotShownToLeaveItReachingEveryValue() {
-        for (String rule : List.of("invariant boss == me",
-                "invariant String.length(boss.value) >= 2")) {
-            assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", NOT_SHOWN),
-                    left("p: Pending, approver: EmpId", EMPLOYEE
-                            + "\ndata Pending = { me: EmpId, boss: EmpId } " + rule,
-                            "approver == p.boss", "5:32"), rule);
-        }
+        // Tied to another field, the boss is still every string the partner can come to, so it
+        // is the approver that is not shown.
+        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
+                left("p: Pending, approver: EmpId", EMPLOYEE
+                        + "\ndata Pending = { me: EmpId, boss: EmpId } invariant boss == me",
+                        "approver == p.boss", "5:32"));
+        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
+                left("p: Pending, approver: EmpId", EMPLOYEE
+                        + "\ndata Pending = { me: EmpId, boss: EmpId }"
+                        + " invariant String.length(boss.value) >= 2",
+                        "approver == p.boss", "5:32"));
     }
 
     private static final String QUOTE = "data Quote = { issuedOn: Int, expiresOn: Int } invariant ";
@@ -2962,7 +2969,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("e: Envelope, approver: EmpId", pending
                         + "\ndata Envelope = { pending: Pending } invariant pending.low <= pending.high",
                         "approver == e.pending.boss", "6:32"));
-        assertEquals(Map.of("approver", NOT_SHOWN, "e.pending.boss", NOT_SHOWN),
+        assertEquals(Map.of("approver", NOT_SHOWN, "e.pending.boss", TELLS_NOTHING_APART),
                 left("e: Envelope, approver: EmpId", pending
                         + "\ndata Envelope = { pending: Pending } invariant pending.boss == pending.me",
                         "approver == e.pending.boss", "6:32"));
@@ -2970,7 +2977,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("p: WrappedPending, approver: EmpId", pending
                         + "\ndata WrappedPending = Pending invariant value.low <= value.high",
                         "approver == p.value.boss", "6:32"));
-        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", NOT_SHOWN),
+        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
                 left("p: WrappedPending, approver: EmpId", pending
                         + "\ndata WrappedPending = Pending invariant value.boss == value.me",
                         "approver == p.value.boss", "6:32"));
@@ -2979,7 +2986,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /** How many a set holds, read down a chain of fields from a newtype wrapping a record. */
     @Test
     void aRuleOverHowManyASetFurtherDownHoldsBackNoElement() {
-        assertEquals(Map.of("champ", RELATES, "w.members[*]", RELATES), left("champ: EmpId, w: Wrapped",
+        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "w.members[*]", TELLS_NOTHING_APART), left("champ: EmpId, w: Wrapped",
                 EMPLOYEE + "\ndata Inner = { members: Set<EmpId> }"
                         + "\ndata Wrapped = Inner invariant Set.size(value.members) >= 1",
                 "Set.contains(champ, w.value.members)", "6:20"));
@@ -2990,7 +2997,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  states, says nothing of the count. */
     @Test
     void aSetsCountIsShownOfItselfBesideAFieldWhoseRuleNoRangeStates() {
-        assertEquals(Map.of("champ", RELATES, "o.makers[*]", RELATES), left("champ: EmpId, o: Opp",
+        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "o.makers[*]", TELLS_NOTHING_APART), left("champ: EmpId, o: Opp",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1"
                         + "\ndata Code = String invariant String.matches(\"[A-Z]{2}\", value)"
                         + "\ndata Opp = { code: Code, makers: Ds }",
@@ -3011,10 +3018,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  hold one; held to none, its elements are values it never holds. */
     @Test
     void aRuleOverHowManyASetHoldsHoldsBackNoElementUnlessItHoldsNone() {
-        assertEquals(Map.of("champ", RELATES, "ds[*]", RELATES), left("champ: EmpId, ds: Ds",
+        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "ds[*]", TELLS_NOTHING_APART), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1",
                 "Set.contains(champ, ds.value)", "5:21"));
-        assertEquals(Map.of("champ", RELATES, "ds.members[*]", RELATES), left("champ: EmpId, ds: Ds",
+        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "ds.members[*]", TELLS_NOTHING_APART), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = { members: Set<EmpId> } invariant Set.size(members) >= 1",
                 "Set.contains(champ, ds.members)", "5:21"));
         assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
@@ -3532,7 +3539,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aRuleLookingUpOneKeyLeavesTheOtherKeysOfTheMapEveryValue() {
         for (String rule : List.of("Map.containsKey(base, rates)", "baseIsOne(base, rates)")) {
             String model = KEYED.formatted(rule);
-            assertEquals(Map.of("t.rates[key]", RELATES, "codes[*]", RELATES),
+            assertEquals(Map.of("t.rates[key]", TELLS_NOTHING_APART, "codes[*]", TELLS_NOTHING_APART),
                     leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
         }
     }
