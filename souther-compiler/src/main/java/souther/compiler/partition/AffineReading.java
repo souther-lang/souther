@@ -652,8 +652,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return so;
                 }
                 // Beside a stop, an expression nothing reads is held aside and answered for by
-                // its owner or not at all; a walk read here would hold aside what it met.
-                if (stoppedAt == null) {
+                // its owner or not at all; a walk read here would hold aside what it met. Each
+                // reading below is of a call the library's operations keep, and asked of nothing
+                // else, since what it puts back where it reads nothing is copied first.
+                if (stoppedAt == null
+                        && Core.withoutStanding(node) instanceof Core.PreservedCall) {
                     LinearForm<NumericTerm> walked =
                             unlessItComesToNothing(() -> walkOfWhatIsWrittenOut(node, at));
                     if (walked != null) {

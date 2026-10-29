@@ -147,6 +147,24 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * The head's hash and the steps', folded as a record folds its components, so a table keyed
+     * by paths holds them in the order it always has. Written out because a path is hashed far
+     * more often than it is made, and a record's own hash goes through a method handle that the
+     * steps' cached hash does not spare.
+     */
+    @Override
+    public int hashCode() {
+        return 31 * head.hashCode() + steps.hashCode();
+    }
+
+    /** The same head and the same steps; the steps are asked first, since they know their hash. */
+    @Override
+    public boolean equals(Object other) {
+        return other == this || (other instanceof TermPath path && steps.equals(path.steps)
+                && head.equals(path.head));
+    }
+
+    /**
      * The steps of a path, which know their own hash.
      *
      * <p>A path is a key of the tables a search keeps, so it is hashed far more often than it is
