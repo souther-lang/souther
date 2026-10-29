@@ -3992,7 +3992,7 @@ public final class Adequacy {
                 // to find out what a model admits. Nothing was tried, which is not the same as
                 // everything tried being refused, and neither of them says the row cannot be
                 // written. Classes that were generated wrongly are not this, and end the run.
-                GeneratedLinkage.requireRuntimeAbsent(e);
+                GeneratedLinkage.rejectDefect(e);
                 return List.of();
             }
         }
@@ -4009,7 +4009,7 @@ public final class Adequacy {
             } catch (LinkageError e) {
                 // The same, asked by reading a row through them — answered as a row nothing built,
                 // which is not a row seen to stand somewhere else.
-                GeneratedLinkage.requireRuntimeAbsent(e);
+                GeneratedLinkage.rejectDefect(e);
                 return RowAsRead.nothingRead();
             }
         }
@@ -6236,7 +6236,7 @@ public final class Adequacy {
                     // built to find out what a model admits. Saying so is not the same as saying
                     // the combinations are impossible, so none of them is reported as one.
                     // Classes that were generated wrongly are not this, and end the run.
-                    GeneratedLinkage.requireRuntimeAbsent(e);
+                    GeneratedLinkage.rejectDefect(e);
                     //
                     // Caught around the search and not around the answer. A finding's answer is
                     // owed whatever the search did, and a failure that skipped the walk over the

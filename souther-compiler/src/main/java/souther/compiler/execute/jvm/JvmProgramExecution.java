@@ -189,15 +189,13 @@ public final class JvmProgramExecution implements ProgramExecution {
                     .invoke(null, argumentOf(written.value()))) {
                 return new ConstantOutcome.Holds();
             }
-        } catch (ReflectiveOperationException _) {
+        } catch (ReflectiveOperationException | LinkageError e) {
             // Not this compiler failing to say something. Where the check cannot be run here the
             // language leaves the construction to the check that runs when the program does, which
-            // is ADR-0032's own degradation and one of the three answers.
-            return new ConstantOutcome.NotEvaluatedHere();
-        } catch (LinkageError e) {
-            // The same where there is no runtime to load the check against. A check that was
-            // generated wrongly is this compiler failing, and is not left to the program.
-            GeneratedLinkage.requireRuntimeAbsent(e);
+            // is ADR-0032's own degradation and one of the three answers. A check that was
+            // generated wrongly is this compiler failing and is not left to the program, and it
+            // arrives wrapped where the call reached it.
+            GeneratedLinkage.rejectDefect(e);
             return new ConstantOutcome.NotEvaluatedHere();
         }
         return new ConstantOutcome.Violates(failingClause(ctfe, written));
@@ -261,6 +259,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                 yield new ConstantOutcome.NotEvaluatedHere();
             }
             case Deadline.Outcome.Threw<Object>(Throwable cause) -> {
+                GeneratedLinkage.rejectDefect(cause);
                 Throwable ended = cause instanceof InvocationTargetException call
                         && call.getCause() != null ? call.getCause() : cause;
                 yield ended instanceof ConstraintViolation violation
@@ -299,10 +298,8 @@ public final class JvmProgramExecution implements ProgramExecution {
                         .invoke(null, argumentOf(written.value()))) {
                     return clauses.get(i).name();
                 }
-            } catch (ReflectiveOperationException _) {
-                return Optional.empty();
-            } catch (LinkageError e) {
-                GeneratedLinkage.requireRuntimeAbsent(e);
+            } catch (ReflectiveOperationException | LinkageError e) {
+                GeneratedLinkage.rejectDefect(e);
                 return Optional.empty();
             }
         }

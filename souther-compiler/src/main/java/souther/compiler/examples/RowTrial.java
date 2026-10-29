@@ -254,7 +254,7 @@ public final class RowTrial {
         } catch (LinkageError e) {
             // Nothing was applied, because there is no runtime to apply it with. A class that was
             // generated wrongly is not that, and is this compiler failing.
-            GeneratedLinkage.requireRuntimeAbsent(e);
+            GeneratedLinkage.rejectDefect(e);
             return Optional.empty();
         }
         return Optional.of(new Ready(applying, over,

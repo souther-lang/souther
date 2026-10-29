@@ -209,7 +209,7 @@ public final class ExampleVerifier {
                 // link failure is a class this compiler generated wrongly, which is not a fact
                 // about the example. Nothing was observed, and a measure that read the empty result
                 // as "no row covers this" would report a gap nobody left.
-                GeneratedLinkage.requireRuntimeAbsent(e);
+                GeneratedLinkage.rejectDefect(e);
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
                         Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
             }

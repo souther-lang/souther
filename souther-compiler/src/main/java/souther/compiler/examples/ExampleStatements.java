@@ -328,7 +328,7 @@ public final class ExampleStatements {
             // without it, so the reading gets as far as the comparison. What ends it is not about any
             // fake — every one in every module would say the same thing — and it is recorded once,
             // where the rows are evaluated, as `within` answers for a build that could not start.
-            GeneratedLinkage.requireRuntimeAbsent(e);
+            GeneratedLinkage.rejectDefect(e);
             return Readings.NONE;
         }
     }

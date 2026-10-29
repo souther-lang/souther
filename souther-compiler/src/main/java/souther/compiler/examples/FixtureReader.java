@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.execute.BoundaryValues;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
@@ -1757,6 +1758,7 @@ public final class FixtureReader {
             return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
         } catch (RuntimeException | LinkageError e) {
             EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this value being unreadable
+            GeneratedLinkage.rejectDefect(e);          // a class generated wrongly is not this value being unreadable
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1776,6 +1778,7 @@ public final class FixtureReader {
             return ObservedValues.of(value, symbols, neutral, WHOLE);
         } catch (RuntimeException | LinkageError e) {
             EvaluationContext.rethrowIfOverspent(e);
+            GeneratedLinkage.rejectDefect(e);
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }

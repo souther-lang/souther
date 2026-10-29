@@ -681,7 +681,8 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
         souther.compiler.partition.FillResult filled = generated(source);
 
-        assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
+        assertEquals(List.of(), filled.rows(), "no candidate holds a rule nothing here reads");
+        assertFalse(filled.unresolved().isEmpty(), "the combination is reported, not dropped");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),
