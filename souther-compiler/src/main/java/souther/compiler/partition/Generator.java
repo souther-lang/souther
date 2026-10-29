@@ -1346,7 +1346,7 @@ public final class Generator {
      *
      * <p>What a search may spend is counted in the runs it makes, and a row run already costs
      * nothing. So a search with a figure of its own runs through {@link #run(RowToRun, Spend)}
-     * and {@link #runReplacing(RowToRun, Map, Spend)}, which ask it to spend only for a run not
+     * and {@link #runReplacing(RowToRun, Rewriting, Spend)}, which ask it to spend only for a run not
      * made before: the figure stays the search's, and what is free is decided here, once, for the
      * row and for the row under a rewrite alike.
      */
