@@ -1018,8 +1018,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // The operations over the numbers of a remainder's form are a row's of the witness that
         // takes the form through every remainder, which is asked to get past them
         // ({@link #theWorkingGetsPastAtTheWitness}): none is one a row is not asked of here.
-        boolean pastAtTheWitness = remainder != null
-                && reachesEveryRemainder(null, read, conditions, heldWhole);        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
+        Boolean pastAtTheWitness = null;
+        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
         for (Side each : sides) {
             if (each.number() != null) {
                 named.merge(each.number(), 1, Integer::sum);
@@ -1031,8 +1031,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean overTheSides = each.form().coefs().keySet().stream()
                     .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
             if (!overTheSides) {
-                leftOut |= !(pastAtTheWitness && overTheFormOfTheRemainder(each))
-                        && !stopsNoRow(each, read);
+                boolean overTheRemainder = remainder != null && overTheFormOfTheRemainder(each);
+                if (overTheRemainder && pastAtTheWitness == null) {
+                    pastAtTheWitness = reachesEveryRemainder(null, read, conditions, heldWhole);
+                }
+                leftOut |= !(overTheRemainder && pastAtTheWitness) && !stopsNoRow(each, read);
                 continue;
             }
             sums.add(new WhatARelationLeavesUndivided.IntSum(
