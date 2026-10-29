@@ -110,6 +110,10 @@ entered from two places is one walk with one rewrite: a place the reading did no
 The places are the behavior's own. A helper's fold stands in every behavior that calls it, and what the
 paths, the rows and the source show is shown of one behavior's places, so a behavior owes the same
 whether or not another calls the helper; the sibling rewrites of an arm are scoped the same way.
+A row that takes a second element of a list a walk was shown to hold one element at most of goes
+against the proof: it is taken back, so the rewrites are asked as before, and the document lists the
+walk under `walkProofsContradicted`, beside `reachProofsContradicted` and not among its entries, since
+that list is of proofs that nothing arrives somewhere.
 A condition that leaves room for two, or is of another list, says nothing and the walk is asked as
 before. A step whose body never reads the accumulator it
 is handed is the walk under another spelling when handed the seed. And a list that reads nothing a

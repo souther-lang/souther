@@ -48,6 +48,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -112,26 +113,28 @@ public final class PathReachability {
      *                   arrives there is what has to hold for a run to get there, and a construct
      *                   here is one where that is not all that getting there takes
      * @param walksHeldToOneAtMost the walks entered where what holds on the way there, with what
-     *                   the declarations leave, shows the list walked to hold one element at most.
-     *                   A walk absent here is one nothing was shown of, which includes one the
-     *                   walk over the body did not get to
+     *                   the declarations leave, shows the list walked to hold one element at most,
+     *                   each with the walk the author wrote that it is a copy of. A walk absent
+     *                   here is one nothing was shown of, which includes one the walk over the body
+     *                   did not get to
      */
     public record Arrivals(Optional<NumberingIdentity> numbering,
                            Map<ConstructOccurrence, ComparisonArrival> arriving,
                            Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt,
                            Map<ConstructOccurrence, List<WhatMayStopARun>> stopsBefore,
-                           Set<WalkProbe> walksHeldToOneAtMost) {
+                           Map<WalkProbe, SourceConstructOrigin> walksHeldToOneAtMost) {
 
         /** No reading, which goes with any plan because it says nothing about one. */
         public static final Arrivals NONE =
-                new Arrivals(Optional.empty(), Map.of(), Map.of(), Map.of(), Set.of());
+                new Arrivals(Optional.empty(), Map.of(), Map.of(), Map.of(), Map.of());
 
         public Arrivals {
             if (numbering == null) {
                 throw new IllegalArgumentException(
                         "a reading either was made under some numbering or was not made");
             }
-            walksHeldToOneAtMost = Set.copyOf(walksHeldToOneAtMost);
+            walksHeldToOneAtMost = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(walksHeldToOneAtMost));
             if (numbering.isEmpty() && !(arriving.isEmpty() && recordedAt.isEmpty()
                     && stopsBefore.isEmpty() && walksHeldToOneAtMost.isEmpty())) {
                 throw new IllegalArgumentException("a reading that answered about "
@@ -207,14 +210,29 @@ public final class PathReachability {
             return new Arrivals(numbering, out, recordedAt, stopsBefore, walksHeldToOneAtMost);
         }
 
+        /**
+         * The walks shown to go over one element at most that a run took a second element of, each
+         * as the walk the author wrote: the proofs a run went against. A walk nothing was shown of
+         * is none of them, however far a run went in it.
+         */
+        Set<SourceConstructOrigin> walksShownWrongBy(Set<WalkProbe> wentOn) {
+            Set<SourceConstructOrigin> out = new LinkedHashSet<>();
+            walksHeldToOneAtMost.forEach((walk, origin) -> {
+                if (wentOn.contains(walk)) {
+                    out.add(origin);
+                }
+            });
+            return out;
+        }
+
         /** These, with the walks in {@code takenBack} no longer shown to go over one element at
          *  most: a run took a second element of the list there. */
         Arrivals takingBackWalks(Set<WalkProbe> takenBack) {
-            if (takenBack.isEmpty() || Collections.disjoint(walksHeldToOneAtMost, takenBack)) {
+            if (takenBack.isEmpty() || Collections.disjoint(walksHeldToOneAtMost.keySet(), takenBack)) {
                 return this;
             }
-            Set<WalkProbe> held = new LinkedHashSet<>(walksHeldToOneAtMost);
-            held.removeAll(takenBack);
+            Map<WalkProbe, SourceConstructOrigin> held = new LinkedHashMap<>(walksHeldToOneAtMost);
+            held.keySet().removeAll(takenBack);
             return new Arrivals(numbering, arriving, recordedAt, stopsBefore, held);
         }
     }
@@ -362,6 +380,7 @@ public final class PathReachability {
             lit.forEach(probe -> requireNumbering(probe.numbering()));
             seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
             wentOn.forEach(walk -> requireNumbering(walk.numbering()));
+            Set<SourceConstructOrigin> walks = this.arrivals.walksShownWrongBy(wentOn);
             Arrivals arrivals = this.arrivals.takingBackWalks(wentOn);
             Map<ControlPlace, Reachability> out = new LinkedHashMap<>(found);
             Set<ControlPlace> places = new LinkedHashSet<>();
@@ -383,11 +402,11 @@ public final class PathReachability {
                 out.put(where, new Reachability.Reachable(ran.get()));
             });
             Set<ConstructOccurrence> emptyArrivals = arrivals.shownWrongBy(seen);
-            if (places.isEmpty() && emptyArrivals.isEmpty()) {
+            if (places.isEmpty() && emptyArrivals.isEmpty() && walks.isEmpty()) {
                 return new AsRun(new Answers(numbering, out, arrivals), Contradictions.NONE);
             }
             return new AsRun(new Answers(numbering, out, arrivals.takingBack(emptyArrivals)),
-                    new Contradictions(places, emptyArrivals));
+                    new Contradictions(places, emptyArrivals, walks));
         }
 
         /**
@@ -424,21 +443,32 @@ public final class PathReachability {
          *                      through
          * @param emptyArrivals comparisons and applications proven to be arrived at by nothing
          *                      that a row came to
+         * @param walks         walks proven to go over one element at most that a row took a
+         *                      second element of, each as the walk the author wrote. Not a proof of
+         *                      reach: it is about how long a list is, and is written beside those
          */
         public record Contradictions(Set<ControlPlace> places,
-                                     Set<ConstructOccurrence> emptyArrivals) {
+                                     Set<ConstructOccurrence> emptyArrivals,
+                                     Set<SourceConstructOrigin> walks) {
 
             /** No proof gone against. */
-            public static final Contradictions NONE = new Contradictions(Set.of(), Set.of());
+            public static final Contradictions NONE =
+                    new Contradictions(Set.of(), Set.of(), Set.of());
 
             public Contradictions {
                 // The order the reading found them in, which is the order a report says them in.
                 places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
                 emptyArrivals = Collections.unmodifiableSet(new LinkedHashSet<>(emptyArrivals));
+                walks = Collections.unmodifiableSet(new LinkedHashSet<>(walks));
             }
 
             /** Whether a row went against no proof at all. */
             public boolean isEmpty() {
+                return reachIsEmpty() && walks.isEmpty();
+            }
+
+            /** Whether a row went against no proof of where anything arrives. */
+            public boolean reachIsEmpty() {
                 return places.isEmpty() && emptyArrivals.isEmpty();
             }
         }
@@ -669,7 +699,8 @@ public final class PathReachability {
             new LinkedHashMap<>();
     /** The walks entered where the list walked is shown to hold one element at most
      *  ({@link #walkHeldToOneAtMost}). */
-    private final Set<WalkProbe> walksHeldToOneAtMost = new LinkedHashSet<>();
+    private final Map<WalkProbe, SourceConstructOrigin> walksHeldToOneAtMost =
+            new LinkedHashMap<>();
     /** The steps the walk is inside, the innermost last. */
     private final List<StepEntered> steps = new ArrayList<>();
     /**
@@ -980,8 +1011,9 @@ public final class PathReachability {
      */
     private void walkHeldToOneAtMost(Core.Call call, Known k, Denotations at) {
         Optional<WalkProbe> probe = plan.walkSiteOf(call);
+        Optional<SourceConstructOrigin> origin = plan.walkOriginOf(call);
         OptionalInt argument = plan.walkedArgumentOf(call);
-        if (probe.isEmpty() || argument.isEmpty()) {
+        if (probe.isEmpty() || origin.isEmpty() || argument.isEmpty()) {
             return;
         }
         Core walked = call.args().get(argument.getAsInt());
@@ -993,7 +1025,7 @@ public final class PathReachability {
                 && LinearForm.atom(size).minus(LinearForm.constant(ExactRatio.of(BigInteger.ONE)))
                         instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var overOne)
                 && k.numbers().entails(overOne, Rel.LE)) {
-            walksHeldToOneAtMost.add(probe.get());
+            walksHeldToOneAtMost.put(probe.get(), origin.get());
         }
     }
 

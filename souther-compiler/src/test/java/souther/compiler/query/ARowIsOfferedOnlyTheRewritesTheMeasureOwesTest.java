@@ -54,4 +54,32 @@ class ARowIsOfferedOnlyTheRewritesTheMeasureOwesTest {
         assertEquals(1, folds.stream().distinct().count(),
                 () -> "of one fold and not of two: " + folds);
     }
+
+    private static final String A_SUM = """
+            module repro.sum
+
+            behavior total : (xs: List<Int>) -> Int
+
+            let total (xs) = List.fold((acc, x) -> acc + x, 0, xs)
+
+            example total
+                | "one" : ([5]) -> 5
+                | "two" : ([1, 2]) -> 3
+            """;
+
+    /**
+     * What a run took a second element of is read off the run, since that is what goes against a
+     * walk shown to go over one element at most.
+     */
+    @Test
+    void aWalkIsTakenOnOnlyByTheRunThatTookASecondElementOfIt() {
+        Compilation compilation = Compilation.ofSources(List.of(A_SUM), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+
+        assertEquals(0, Adequacy.walksTakenOnIn(
+                ComposedRows.watched(compilation, "total", "one")).size());
+        assertEquals(1, Adequacy.walksTakenOnIn(
+                ComposedRows.watched(compilation, "total", "two")).size());
+    }
 }

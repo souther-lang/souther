@@ -40,6 +40,17 @@ public final class ComposedRows {
                 assertInstanceOf(Generator.Watched.Ran.class, ran.watched()).seen());
     }
 
+    /** What running the written row {@code name} of {@code behavior} was seen to do. */
+    public static Generator.Watched watched(Compilation compilation, String behavior,
+                                            String name) {
+        Db db = compilation.db();
+        String module = compilation.modules().getFirst();
+        Sig sig = db.ask(new Bodies.Signatures(module)).value().get(behavior);
+        Generator.Trial trial = Adequacy.runningRowsOf(db, module, Adequacy.trialling(db, module),
+                behavior, sig, RequiredDependencies.of(db, module, behavior));
+        return trial.run(rowNamed(compilation, behavior, name)).watched();
+    }
+
     /** The written row {@code name} of {@code behavior}, as a composed row is handed to a run. */
     public static RowToRun rowNamed(Compilation compilation, String behavior, String name) {
         Prepared prepared = compilation.db()

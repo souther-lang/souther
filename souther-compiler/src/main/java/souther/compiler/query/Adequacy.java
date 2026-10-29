@@ -7384,7 +7384,8 @@ public final class Adequacy {
             return here;
         }
         arrives.answers().requireNumbering(checked.numberingIdentity());
-        return here.provingTheSameAt(arrives.answers().arrivals().walksHeldToOneAtMost());
+        return here.provingTheSameAt(
+                arrives.answers().arrivals().walksHeldToOneAtMost().keySet());
     }
 
     /**

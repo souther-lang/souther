@@ -3362,6 +3362,35 @@
             "$ref": "#/$defs/reachProof"
           }
         },
+        "walkProofsContradicted": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The walks this compiler proved go over one element at most, that a row then took a second element of: a fold whose list the model's rules and the conditions on the way leave one element at most, and a run that went past its first. Nothing about the model is wrong then and the proof is, and the rewrites of the walk are asked as if it had not been made. Beside `reachProofsContradicted` and not among its entries, since that list is of proofs that nothing arrives somewhere and this is a proof about how long a list is. Each walk once, named the way a rewrite of it is in an obligation identity, however many places it is entered at. Absent where no row went against any.",
+          "items": {
+            "type": "object",
+            "required": [
+              "module",
+              "definition",
+              "construct",
+              "lowered"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "module": {
+                "type": "string"
+              },
+              "definition": {
+                "type": "string"
+              },
+              "construct": {
+                "type": "integer"
+              },
+              "lowered": {
+                "type": "integer"
+              }
+            }
+          }
+        },
         "findings": {
           "$ref": "#/$defs/findings"
         }

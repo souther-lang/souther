@@ -199,6 +199,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method keepingTheArmsOf(java.lang.String,"
                     + "souther.compiler.coverage.ArmReplacements) :"
                     + " souther.compiler.coverage.ArmReplacements",
+            // The walk the author wrote that a copy of it in the tree is: an origin, which is a
+            // name for a construct and no way into the tree.
+            "method walkOriginOf(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.types.SourceConstructOrigin>",
             // Which argument of a walk's call is the list it goes over: a position, and nothing of
             // the tree the call stands in.
             "method walkedArgumentOf(souther.compiler.core.Core) : java.util.OptionalInt",

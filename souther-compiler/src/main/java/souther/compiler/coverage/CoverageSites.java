@@ -635,6 +635,15 @@ public final class CoverageSites {
         }
 
         /**
+         * The walk the author wrote that {@code node} is a copy of, or empty where this plan
+         * numbered no walk there ({@link #walkSiteOf}).
+         */
+        public Optional<SourceConstructOrigin> walkOriginOf(Core node) {
+            WalkedAt walked = walksByNode.get(node);
+            return walked == null ? Optional.empty() : Optional.of(walked.walk());
+        }
+
+        /**
          * Which argument of the call {@code node} is the list the walk goes over, or empty where
          * this plan numbered no walk there ({@link #walkSiteOf}).
          */
@@ -652,8 +661,9 @@ public final class CoverageSites {
             return walksByNode;
         }
 
-        /** Where a walk is entered, and which argument of its call is the list it goes over. */
-        record WalkedAt(WalkProbe at, int argument) {}
+        /** Where a walk is entered, the walk the author wrote it is a copy of, and which argument of
+         *  its call is the list it goes over. */
+        record WalkedAt(WalkProbe at, SourceConstructOrigin walk, int argument) {}
 
         /**
          * The parts of the siblings the classes carry in arm {@code part} of {@code node}, in the
@@ -1185,7 +1195,8 @@ public final class CoverageSites {
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
                     draft.over()));
-            walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.listArgument()));
+            walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.walk(),
+                    draft.listArgument()));
             walkSites.put(draft.raw(), new WalkRewrites.AtWalk(draft.walk(), at, draft.theSame(),
                     draft.overAFixedList(), draft.notCarried()));
         }
