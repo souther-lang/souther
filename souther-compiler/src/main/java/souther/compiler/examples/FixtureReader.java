@@ -33,6 +33,7 @@ import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.evaluate.EvaluationContext;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
@@ -98,6 +99,8 @@ public final class FixtureReader {
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
     private final MemoryClassLoader loader;
+    /** Whose classes a value this reads is of: this compile's, or a supplied implementation's. */
+    private final ValueOwnership ownership;
     /** Runs a helper a fixture applies. One reading's, because what it is running is one reading's. */
     private final OperandRunner operands;
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
@@ -115,11 +118,12 @@ public final class FixtureReader {
         this.kinds = kinds;
         this.values = values;
         this.loader = loader;
+        this.ownership = new ValueOwnership(loader);
         this.operands = new OperandRunner(module.name(), loader);
         // What a declaration is laid out as reaches this reading through the two that read a value
         // by it, and is not held beside them: a reader here asks one of those, and one that asked
         // the declarations itself would be a third answer about what a value's parts are.
-        this.neutral = new NeutralForm(symbols, sums, kinds, fields);
+        this.neutral = new NeutralForm(symbols, sums, kinds, fields, ownership);
         this.types = ValueTypes.over(fields);
     }
 
@@ -310,7 +314,7 @@ public final class FixtureReader {
             // Absence is what an optional makes room for; a value under one is held to what it holds,
             // and a `?` position takes the value itself as well as a `Some` around it.
             case Type.OptionOf o -> value == null || NeutralForm.isAbsent(value)
-                    || holds(NeutralForm.heldBy(value), o.element());
+                    || holds(neutral.heldBy(value), o.element());
             case Type.Prim p -> represents(TypeSymbol.primitive(p), value);
             case Type.Ref r when r.name().isPrimitive() -> represents(r.name(), value);
             case Type.Ref _, Type.Union _ -> caseOfValue(value, position) != null;
@@ -579,7 +583,7 @@ public final class FixtureReader {
             return new Asserted.Value(new ObservedValue.Absent());
         }
         if (name.equals("Option$Some")) {
-            return assertedLive(ObservedValues.readOrNull(live, "value"));
+            return assertedLive(ObservedValues.readOrNull(live, "value", ownership));
         }
         if (live instanceof Map<?, ?> entries) {
             List<Asserted.Entry> out = new ArrayList<>();
@@ -604,7 +608,7 @@ public final class FixtureReader {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             // A newtype's `value` is among these, since that is the field it is written with.
             for (String each : neutral.fieldTypes(type).keySet()) {
-                fields.put(each, assertedLive(ObservedValues.readOrNull(live, each)));
+                fields.put(each, assertedLive(ObservedValues.readOrNull(live, each, ownership)));
             }
             return new Asserted.Built(type, fields);
         }
@@ -723,7 +727,7 @@ public final class FixtureReader {
     String describeActual(Object result) {
         // What is written below goes over the value through its encoder, and the boundary library
         // walks its collections passing no checkpoint, so every node is paid for before it is made.
-        PaidForBeforeItIsWalked.payFor(result);
+        PaidForBeforeItIsWalked.payFor(result, ownership);
         String name = NeutralForm.simpleName(result);
         if (name.isEmpty()) {
             return String.valueOf(result);
@@ -1756,13 +1760,22 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
         } catch (RuntimeException | LinkageError e) {
-            // The walk reflects on a live value and loads no class of this compile by name, and the
-            // value may be one a supplied implementation answered. A value that exists has had its
-            // class linked, so a link failure here is what that class's dependencies came to and is
-            // not this compile's output: it is a value that cannot be read. Only a stop is let by.
-            EvaluationContext.rethrowIfOverspent(e);
-            return new ObservedValue.Unknown(e.getClass().getSimpleName());
+            return unreadable(e);
         }
+    }
+
+    /**
+     * A value that could not be read, for a walk that reflects on a live value.
+     *
+     * <p>Whose class failed is decided where a member is read ({@link ValueOwnership}), which has
+     * the value in hand; what reaches here is a failure of the walk as a whole, which has no single
+     * class to ask. A stop, and a defect something below already found, still go on: the first says
+     * the evaluation ran out, and the second is not a value that cannot be read.
+     */
+    private ObservedValue unreadable(Throwable e) {
+        EvaluationContext.rethrowIfOverspent(e);
+        GeneratedLinkage.rethrowClassified(e);
+        return new ObservedValue.Unknown(e.getClass().getSimpleName());
     }
 
     /**
@@ -1779,8 +1792,7 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(value, symbols, neutral, WHOLE);
         } catch (RuntimeException | LinkageError e) {
-            EvaluationContext.rethrowIfOverspent(e);   // as in observed
-            return new ObservedValue.Unknown(e.getClass().getSimpleName());
+            return unreadable(e);
         }
     }
 

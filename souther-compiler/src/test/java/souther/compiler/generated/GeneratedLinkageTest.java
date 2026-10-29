@@ -39,7 +39,8 @@ class GeneratedLinkageTest {
                 GeneratedLinkage.GeneratedClassDefect.class,
                 () -> GeneratedLinkage.rejectDefect(wrong));
         assertSame(wrong, defect.getCause(), "what the JVM said is kept");
-        assertInstanceOf(RuntimeException.class, defect, "the command line reports it as a failure");
+        assertFalse(((Throwable) defect) instanceof Exception,
+                "an Error, so that no catch of an exception a row can throw takes it for an answer");
     }
 
     @Test
@@ -204,6 +205,32 @@ class GeneratedLinkageTest {
         assertSame(StepLimitExceeded.INSTANCE, assertThrows(StepLimitExceeded.class,
                 () -> EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(
                         new ExceptionInInitializerError(StepLimitExceeded.INSTANCE))));
+    }
+
+    /** For the catch that cannot say whose a failure is: it finds a defect something below judged,
+     * under whatever carried it, and judges nothing itself. */
+    @Test
+    void aDefectAlreadyFoundIsFoundUnderAnyWrapperAndNothingElseIsJudged() {
+        GeneratedLinkage.GeneratedClassDefect found = assertThrows(
+                GeneratedLinkage.GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rejectDefect(new VerifyError("x")));
+
+        assertSame(found, assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rethrowClassified(new InvocationTargetException(found))));
+        assertDoesNotThrow(() -> GeneratedLinkage.rethrowClassified(new VerifyError("not yet judged")));
+        assertDoesNotThrow(() -> GeneratedLinkage.rethrowClassified(null));
+    }
+
+    /** Generated code that calls back into the compiler can have a defect thrown through it, and
+     * what carries that out of a supplied implementation holds it as its cause. */
+    @Test
+    void aDefectUnderAnAttributedCarrierIsStillFound() {
+        GeneratedLinkage.GeneratedClassDefect found = assertThrows(
+                GeneratedLinkage.GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rejectDefect(new VerifyError("x")));
+
+        assertSame(found, assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rejectDefect(new InvocationFailure(found))));
     }
 
     @Test

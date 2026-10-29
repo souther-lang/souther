@@ -65,16 +65,36 @@ public final class GeneratedLinkage {
     }
 
     /**
-     * Returns where nothing in {@code thrown} or its causes is a generated class failing to link,
-     * and otherwise throws what a compiler failing at its own output is: an unchecked exception
-     * holding the error, which the command line reports as an internal compiler error.
+     * Rethrows a defect that was already found in {@code thrown} or under it, and returns where
+     * there is none. It decides nothing about a link failure that has not been judged: that is
+     * {@link #rejectDefect}'s, and it is asked only where the code that failed is known to be this
+     * compile's.
+     *
+     * <p>For a catch that cannot say whose a failure is and so lets it go as a value that cannot be
+     * read, which must still not take a defect that something below it found for one. A defect is an
+     * {@link Error}, so a catch of {@code RuntimeException} does not meet it bare; it arrives under
+     * whatever a reflective call or a worker wrapped it in, and this finds it there.
      */
-    public static void rejectDefect(Throwable thrown) {
+    public static void rethrowClassified(Throwable thrown) {
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
             if (each instanceof GeneratedClassDefect already) {
                 throw already;
             }
+        }
+    }
+
+    /**
+     * Returns where nothing in {@code thrown} or its causes is a generated class failing to link,
+     * and otherwise throws what a compiler failing at its own output is: a
+     * {@link GeneratedClassDefect}, which the command line reports as an internal compiler error.
+     */
+    public static void rejectDefect(Throwable thrown) {
+        // A defect found already is found under anything, an attributed carrier included: what that
+        // carrier's attribution settles is a link failure not yet judged, not one that was.
+        rethrowClassified(thrown);
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
             if (each instanceof Attributed) {
                 return;
             }
@@ -108,8 +128,15 @@ public final class GeneratedLinkage {
      */
     public interface Attributed {}
 
-    /** A class this compiler generated that the JVM refused to link. */
-    public static final class GeneratedClassDefect extends IllegalStateException {
+    /**
+     * A class this compiler generated that the JVM refused to link.
+     *
+     * <p>An {@link Error} and not a {@code RuntimeException}. A catch that turns a failure into an
+     * answer about a value, a row or a module is written for what evaluating them throws, and it is
+     * a {@code RuntimeException} that it takes; a defect of the compiler's own output is not such an
+     * answer and must not be one that any of those catches can hold. The command line reports it.
+     */
+    public static final class GeneratedClassDefect extends Error {
 
         private static final long serialVersionUID = 1L;
 
