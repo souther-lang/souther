@@ -241,6 +241,12 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     /** The same, with the order {@code a} is counted on stopping at {@code aRunsTo}. */
     private static Leaves leftOfAmounts(int asked, Long mostOfS, DecimalOperation worked,
                                         NumericDomain.Bounds aRunsTo) {
+        return leftOfAmounts(asked, mostOfS, List.of(worked), aRunsTo);
+    }
+
+    /** The same, with {@code worked} the operations told, none of them or more. */
+    private static Leaves leftOfAmounts(int asked, Long mostOfS, List<DecimalOperation> worked,
+                                        NumericDomain.Bounds aRunsTo) {
         NumericDomain.Bounds amounts = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), null);
         NumericDomain.Bounds partners = mostOfS == null ? amounts : new NumericDomain.Bounds(
@@ -252,7 +258,23 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
         return WhatARelationLeavesUndivided.leavesOf(terms, asked, ExactRatio.of(-5), Rel.GE,
                 String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
-                new Operations(List.of(), List.of(worked), Told.EVERY));
+                new Operations(List.of(), worked, Told.EVERY));
+    }
+
+    /**
+     * With no operation at all nothing can stop a row, and a run with no end is asked at the edge
+     * of what is built all the same: the rows there are the claim of the numbers between, and a
+     * term whose order stops short of the edge has none. Reached, the run is shown as it was.
+     */
+    @Test
+    void aRunWithNoEndAndNoOperationIsAskedAtTheEdgeOfWhatIsBuilt() {
+        NumericDomain.Bounds stopsShort = new NumericDomain.Bounds(null,
+                Endpoint.inclusive(Count.of(BigDecimal.TEN.pow(100))));
+        assertNull(leftOfAmounts(0, null, List.of(), stopsShort));
+        Leaves.Settled open = assertInstanceOf(Leaves.Settled.class,
+                leftOfAmounts(0, null, List.of(), NumericDomain.Bounds.OPEN));
+        assertEquals(1, open.runs().size());
+        assertFalse(open.runs().getFirst().holds());
     }
 
     /**

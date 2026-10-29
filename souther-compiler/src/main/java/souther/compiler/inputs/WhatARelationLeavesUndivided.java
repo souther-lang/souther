@@ -3946,7 +3946,9 @@ public final class WhatARelationLeavesUndivided {
      * type; {@code x - y > M}, {@code M} the greatest {@code Int}, has a true row at no {@code x}.
      * A run open on a side is asked at the edge of what is built on that side, where no operation
      * of decimals reads the term ({@link RowsComputed#aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt});
-     * otherwise nothing is shown. Past the edge no row is built, so nothing is claimed there.
+     * otherwise nothing is shown. Past the edge no row is built, so nothing is claimed there. A
+     * dense term is asked at the edge when there is no operation to be worked out as well: nothing
+     * can stop a row, and what the run claims is still claimed of rows that are built.
      *
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
@@ -3960,12 +3962,19 @@ public final class WhatARelationLeavesUndivided {
         // Compared with each other and nothing added is a fact of the form. Whether the program
         // computes the row is what it works out, which may be more than the form shows:
         // `(a + 1) - 1 >= b` stops at the greatest `a`.
-        if (arithmetic.nothingStopsARow() || (standsAtTheOthersValue(terms, constant)
+        Interval asked = within != null ? within : Interval.of(terms.get(of).holds());
+        // Nothing can stop a row, and a run of a dense term with no end on a side is still asked
+        // at the edge of what is built: that a row stands there on each side of the line is what
+        // the run claims of the numbers between, and past it no row is built.
+        boolean noOperations = arithmetic.nothingStopsARow();
+        boolean askedAtItsEdge = noOperations && constant != null && asked != null
+                && terms.get(of).spacing() == Granularity.DENSE
+                && (asked.lower() == null || asked.upper() == null);
+        if ((noOperations && !askedAtItsEdge) || (standsAtTheOthersValue(terms, constant)
                 && beside.stream().allMatch(each -> each.signum() == 0)
                 && !arithmetic.mayStopARow())) {
             return true;
         }
-        Interval asked = within != null ? within : Interval.of(terms.get(of).holds());
         if (arithmetic.worksOutDecimals()) {
             // A row evidence of an operation being worked out stands the term at a value it takes.
             asked = takenRun(terms.get(of), asked);
@@ -3974,7 +3983,7 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         boolean endless = asked.lower() == null || asked.upper() == null;
-        if (endless
+        if (endless && !noOperations
                 && !arithmetic.aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(terms.get(of).key())) {
             return false;
         }
@@ -3997,7 +4006,8 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         for (ExactRatio value : askedAt) {
-            if (arithmetic.worksOutDecimals() && !takesTheValue(terms.get(of), value)) {
+            if ((arithmetic.worksOutDecimals() || askedAtItsEdge)
+                    && !takesTheValue(terms.get(of), value)) {
                 return false;
             }
             List<ExactRatio> row = new ArrayList<>(fixed);
