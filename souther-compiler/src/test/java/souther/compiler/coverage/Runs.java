@@ -2,7 +2,10 @@ package souther.compiler.coverage;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * A run made up to be exactly what some claims name.
@@ -46,6 +49,32 @@ public final class Runs {
     public static AlignedObservation of(SiteNumbering numbering, Set<ArmProbe> arms,
                                         Set<SeenConditionOutcome> ways) {
         return new AlignedObservation(numbering.identity(), arms, ways, Set.of());
+    }
+
+    /**
+     * What a reading of reach is handed by one run that was at {@code arms}, saw {@code ways} come
+     * out and took a second element of {@code walksOn}, and did nothing else — made through the
+     * recording a run leaves and the numbering that reads it, as any run is. A run that did only
+     * some of these is a run, and not evidence short of a kind. Of no place at all, it is
+     * {@link ReachEvidence#NONE}.
+     */
+    public static ReachEvidence evidenceOf(Set<ArmProbe> arms, Set<SeenConditionOutcome> ways,
+                                           Set<WalkProbe> walksOn) {
+        Optional<NumberingIdentity> identity = Stream.of(
+                        arms.stream().map(ArmProbe::numbering),
+                        ways.stream().map(each -> each.at().numbering()),
+                        walksOn.stream().map(WalkProbe::numbering))
+                .flatMap(each -> each).findFirst();
+        if (identity.isEmpty()) {
+            return ReachEvidence.NONE;
+        }
+        Set<Integer> walks = walksOn.stream().map(WalkProbe::raw).collect(Collectors.toSet());
+        Observation seen = new Observation(identity.get(),
+                arms.stream().map(ArmProbe::raw).collect(Collectors.toSet()),
+                ways.stream().map(each -> new RecordedConditionOutcome(each.at().raw(),
+                        each.held())).collect(Collectors.toSet()),
+                Set.of(), walks, walks);
+        return ReachEvidence.ofRuns(List.of(SiteNumbering.of(identity.get()).align(seen)));
     }
 
     /** A run of {@code numbering} that was at those arms and nowhere else. */

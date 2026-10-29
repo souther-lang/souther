@@ -8,6 +8,7 @@ import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.ReachEvidence;
+import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.partition.GuardThresholds;
@@ -209,7 +210,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
                 () -> capped.arrives.asRunWith(
-                        ReachEvidence.of(Set.of(elsewhere), Set.of(), Set.of())));
+                        Runs.evidenceOf(Set.of(elsewhere), Set.of(), Set.of())));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());

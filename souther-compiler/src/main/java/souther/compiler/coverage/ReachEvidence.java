@@ -14,6 +14,9 @@ import java.util.Set;
  * gathered in the one place that reads a run, and a kind added to what a run shows wrong is added
  * to this and to nothing at the places that hand runs over.
  *
+ * <p>Made only from runs ({@link #ofRuns}), and from no places written down: a run that did only
+ * some of these is a run, and evidence short of a kind is not something that can be made.
+ *
  * <p>Runs are not kept apart: a place is shown wrong by any run at it, and which run it was is no
  * part of that.
  */
@@ -45,15 +48,6 @@ public final class ReachEvidence {
             outcomes.addAll(run.outcomes());
             run.walks().stream().filter(run::wentOn).forEach(walksOn::add);
         }
-        return new ReachEvidence(arms, outcomes, walksOn);
-    }
-
-    /**
-     * Places written down by hand, for a reading put a run it never had. Runs are handed over
-     * through {@link #ofRuns}.
-     */
-    public static ReachEvidence of(Set<ArmProbe> arms, Set<SeenConditionOutcome> outcomes,
-                                   Set<WalkProbe> walksOn) {
         return new ReachEvidence(arms, outcomes, walksOn);
     }
 

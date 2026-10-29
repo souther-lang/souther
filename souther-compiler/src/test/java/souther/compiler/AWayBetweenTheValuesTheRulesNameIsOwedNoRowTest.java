@@ -6,6 +6,7 @@ import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.ReachEvidence;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecisionReading;
@@ -350,14 +351,14 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
                 proven.asRunWith(ReachEvidence.NONE).answers().at(proof),
                 "no row saw it, so the proof stands");
         assertInstanceOf(Reachability.Unreachable.class,
-                proven.asRunWith(ReachEvidence.of(Set.of(), Set.of(new SeenConditionOutcome(
+                proven.asRunWith(Runs.evidenceOf(Set.of(), Set.of(new SeenConditionOutcome(
                         proof.at(), !proof.held())), Set.of())).answers().at(proof),
                 "a row seeing it come out the other way says nothing against it");
-        assertEquals(Set.of(), proven.asRunWith(ReachEvidence.of(Set.of(),
+        assertEquals(Set.of(), proven.asRunWith(Runs.evidenceOf(Set.of(),
                         Set.of(new SeenConditionOutcome(proof.at(), !proof.held())), Set.of()))
                         .contradicted().places(),
                 "and nothing it says is shown wrong");
-        PathReachability.Answers.AsRun ran = proven.asRunWith(ReachEvidence.of(Set.of(),
+        PathReachability.Answers.AsRun ran = proven.asRunWith(Runs.evidenceOf(Set.of(),
                 Set.of(new SeenConditionOutcome(proof.at(), proof.held())), Set.of()));
         assertInstanceOf(Reachability.Reachable.class, ran.answers().at(proof),
                 "a row seeing it come out that way takes the proof back");

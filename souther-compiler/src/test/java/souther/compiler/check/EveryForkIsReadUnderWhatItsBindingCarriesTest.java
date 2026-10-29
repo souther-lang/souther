@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
-import souther.compiler.coverage.ReachEvidence;
+import souther.compiler.coverage.Runs;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -192,7 +192,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 .findFirst().orElseThrow();
         ArmProbe probe = shut.probe().orElseThrow();
         PathReachability.Answers.AsRun ran = answers.asRunWith(
-                ReachEvidence.of(Set.of(probe), Set.of(), Set.of()));
+                Runs.evidenceOf(Set.of(probe), Set.of(), Set.of()));
         assertEquals(Set.of(shut), ran.contradicted().places(),
                 "a row through it is what takes the proof back");
         assertEquals(List.of(), ran.answers().found().entrySet().stream()

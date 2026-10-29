@@ -22,6 +22,7 @@ import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
+import souther.compiler.reach.Witness;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -189,19 +190,34 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
                 readWith(Optional.empty(), unnumbered).contradicted());
     }
 
-    /** The query is the reading of the rows put through the method above, and is recomputed when
-     *  that reading changes. */
+    /**
+     * The query is the reading of the module's own rows put through the method above: an arm a
+     * row of the compiled module went through is the one a run is the witness of, and one no row
+     * went through is not.
+     */
     @Test
-    void theQueryReadsTheReadingOfTheRows() {
+    void theQueryTakesInTheRowsOfTheModule() {
         Compilation compilation = Compilation.ofSources(List.of(A_ROW), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String module = compilation.modules().getFirst();
-        compilation.db().ask(new Adequacy.Arrived(module));
 
+        PathReachability.Answers answers = compilation.db().ask(new Adequacy.Arrived(module))
+                .value().get("submit").answers();
+        List<ControlPlace.Arm> witnessedByARun = answers.found().keySet().stream()
+                .filter(ControlPlace.Arm.class::isInstance).map(ControlPlace.Arm.class::cast)
+                .filter(arm -> arm.probe().isPresent()
+                        && answers.at(arm).equals(new Reachability.Reachable(
+                                Witness.aRunWentThrough(arm.probe().get()))))
+                .toList();
+
+        assertTrue(!witnessedByARun.isEmpty(), "the row went through an arm of the behavior");
+        assertTrue(witnessedByARun.size() < answers.found().keySet().stream()
+                        .filter(ControlPlace.Arm.class::isInstance).count(),
+                "and not through the arm answering the request over the limit");
         assertTrue(compilation.db().dependenciesOf(new Adequacy.Arrived(module))
                         .contains(new Adequacy.RowReadings(module)),
-                "arrived is what the rows' reading says, and nothing else says it");
+                "and it is asked of the reading of the rows, so it is read again when that changes");
     }
 
     @Test
