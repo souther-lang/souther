@@ -6339,24 +6339,23 @@ public final class Adequacy {
         /**
          * What the search for a row telling {@code untold}'s line from the one beside it came to.
          *
-         * <p>Found by the line the finding is about, in the readings this generation searched. A
-         * finding is made wherever the lines were read and a reading that composed nothing carries
-         * no search, so the answer is the searched reading's — asked of the finding's own, a run
+         * <p>Found by the obligation the finding is about, in every line that reads it
+         * ({@link ARowTellingTheLinesApart#ofObligation}). A finding is made wherever the lines
+         * were read, and a line that composed nothing carries no search, so the answer is the
+         * searched line's — asked of the finding's own, or of whichever line came first, a run
          * that composed a row would report that nothing was offered.
          *
-         * <p>Refused rather than answered where this generation searched no such line. The finding
-         * and the search would then be about different lines, which is two of this compiler's
-         * answers disagreeing rather than a line nothing offers a row for.
+         * <p>Refused rather than answered where this generation searched no such obligation. The
+         * finding and the search would then be about different lines, which is two of this
+         * compiler's answers disagreeing rather than a line nothing offers a row for.
          */
         private static GenerationOutcome tellingApart(About.ALineTheRowsDoNotTellFromAnother untold,
                                                       List<BorderAssessment> edges) {
-            for (BorderAssessment each : edges) {
-                if (each.border().obligation().equals(untold.line().border().obligation())) {
-                    return each.toldApart().outcome(untold.direction());
-                }
-            }
-            throw new IllegalStateException("a finding about a line this generation searched no"
-                    + " reading of: " + untold.line().border().obligation());
+            BorderObligationId obligation = untold.line().border().obligation();
+            return ARowTellingTheLinesApart.ofObligation(edges, obligation)
+                    .orElseThrow(() -> new IllegalStateException("a finding about a line this"
+                            + " generation searched no reading of: " + obligation))
+                    .outcome(untold.direction());
         }
 
         /**
