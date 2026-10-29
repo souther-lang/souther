@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.ReachEvidence;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.types.SourceConstruct;
@@ -44,7 +46,7 @@ class AWalkShownToGoOverOneElementAtMostIsTakenBackWhereARunWentPastItTest {
     @Test
     void aWalkNoRunWentPastIsStillShownAndNothingIsContradicted() {
         PathReachability.Answers.AsRun ran =
-                shownAtBoth().asRunWith(Set.of(), Set.of(), Set.of());
+                shownAtBoth().asRunWith(ReachEvidence.NONE);
 
         assertEquals(Set.of(HERE, THERE), ran.answers().arrivals().walksHeldToOneAtMost().keySet());
         assertEquals(PathReachability.Answers.Contradictions.NONE, ran.contradicted());
@@ -53,7 +55,8 @@ class AWalkShownToGoOverOneElementAtMostIsTakenBackWhereARunWentPastItTest {
     @Test
     void aWalkARunTookASecondElementOfIsNoLongerShownAndIsContradicted() {
         PathReachability.Answers.AsRun ran =
-                shownAtBoth().asRunWith(Set.of(), Set.of(), Set.of(HERE));
+                shownAtBoth().asRunWith(
+                        Runs.evidenceOf(Set.of(), Set.of(), Set.of(HERE)));
 
         assertEquals(Set.of(THERE), ran.answers().arrivals().walksHeldToOneAtMost().keySet());
         assertEquals(Set.of(FOLD), ran.contradicted().walks());
@@ -69,6 +72,7 @@ class AWalkShownToGoOverOneElementAtMostIsTakenBackWhereARunWentPastItTest {
                 new PathReachability.Arrivals(numbering, Map.of(), Map.of(), Map.of(), Map.of()));
 
         assertEquals(PathReachability.Answers.Contradictions.NONE,
-                shownAtNone.asRunWith(Set.of(), Set.of(), Set.of(HERE, THERE)).contradicted());
+                shownAtNone.asRunWith(
+                        Runs.evidenceOf(Set.of(), Set.of(), Set.of(HERE, THERE))).contradicted());
     }
 }

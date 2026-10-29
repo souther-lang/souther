@@ -38,6 +38,7 @@ import souther.compiler.inputs.TermPath;
 
 
 import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
@@ -49,7 +50,6 @@ import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.RunRewrite;
-import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.coverage.WalkedNoFurther;
@@ -182,6 +182,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -2234,27 +2235,36 @@ public final class Adequacy {
             // The numbering the recordings below are read under, which is this module's own — and
             // none where its bodies were not read, in which case there is nothing to read them as.
             Optional<SiteNumbering> numbering = numberingOf(db, name);
-            // Every row that went there, whether or not it states what the behavior answers. What a
-            // proof about reach is disproved by is a run arriving, and a row whose answer is owed
-            // arrives the same way any other does — so the two are one set here, where the arm
-            // account keeps them apart. The questions are different: whether anything can get here
-            // is about the machine, and whether anything says what it answers is about the rows.
-            Set<ArmProbe> lit = new LinkedHashSet<>();
-            Set<SeenConditionOutcome> seen = new LinkedHashSet<>();
-            Set<WalkProbe> wentOn = new LinkedHashSet<>();
-            for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
-                for (RowOutcome row : observed.rowsSeen()) {
-                    Generator.Watched watched = ObservedInputs.of(row, numbering).watched();
-                    lit.addAll(armsSeenIn(watched));
-                    seen.addAll(outcomesSeenIn(watched));
-                    wentOn.addAll(walksTakenOnIn(watched));
-                }
-            }
+            return Answer.of(Ordered.map(readAsRun(proven.value(),
+                    db.ask(new RowReadings(name)).value().values(), numbering)));
+        }
+
+        /**
+         * Every behavior's proofs, taken back where a row of {@code readings} went against them.
+         *
+         * <p>Every row that went there, whether or not it states what the behavior answers. What a
+         * proof about reach is disproved by is a run arriving, and a row whose answer is owed
+         * arrives the same way any other does — so the two are one set here, where the arm account
+         * keeps them apart. The questions are different: whether anything can get here is about
+         * the machine, and whether anything says what it answers is about the rows.
+         *
+         * <p>Handed the readings and not what the rows did, so that everything from a row to the
+         * proof it takes back is this method's: the run is read off the row here, and what it did
+         * is gathered once from the runs ({@link ReachEvidence#ofRuns}).
+         */
+        static Map<String, souther.compiler.check.PathReachability.Answers.AsRun> readAsRun(
+                Map<String, souther.compiler.check.PathReachability.Answers> proven,
+                Collection<RowReading> readings, Optional<SiteNumbering> numbering) {
+            Stream<AlignedObservation> runs = readings.stream()
+                    .flatMap(each -> each.rowsSeen().stream())
+                    .map(row -> ObservedInputs.of(row, numbering).watched())
+                    .flatMap(watched -> watched instanceof Generator.Watched.Ran(var account)
+                            ? Stream.of(account) : Stream.empty());
+            ReachEvidence evidence = ReachEvidence.ofRuns(runs);
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
                     new LinkedHashMap<>();
-            proven.value().forEach((behavior, answers) ->
-                    out.put(behavior, answers.asRunWith(lit, seen, wentOn)));
-            return Answer.of(Ordered.map(out));
+            proven.forEach((behavior, answers) -> out.put(behavior, answers.asRunWith(evidence)));
+            return out;
         }
     }
 
@@ -10676,16 +10686,6 @@ public final class Adequacy {
         };
     }
 
-    /** The walks a row's run took a second element of — and none where the run's account was not
-     *  read. */
-    static Set<WalkProbe> walksTakenOnIn(Generator.Watched watched) {
-        return switch (watched) {
-            case Generator.Watched.Ran(var account) -> account.walks().stream()
-                    .filter(account::wentOn).collect(Collectors.toSet());
-            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
-        };
-    }
-
     /** The walks a row's run entered, read the way its arms are — and none where the run's account
      *  was not read. */
     static Set<WalkProbe> walksSeenIn(RowOutcome row, Optional<SiteNumbering> numbering) {
@@ -10716,15 +10716,6 @@ public final class Adequacy {
             }
         }
         return WalkedNoFurther.ofRunsThatAnswered(answered);
-    }
-
-    /** The ways a run's conditions came out, read the same way — and none where the run's
-     *  account was not read. */
-    static Set<SeenConditionOutcome> outcomesSeenIn(Generator.Watched watched) {
-        return switch (watched) {
-            case Generator.Watched.Ran(var account) -> account.outcomes();
-            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
-        };
     }
 
     /**
