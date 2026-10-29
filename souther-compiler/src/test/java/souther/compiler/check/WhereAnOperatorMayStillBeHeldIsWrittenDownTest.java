@@ -323,9 +323,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks which operator a library operation is defined as"),
             new Held("souther.compiler.coverage.CoverageSites.Walk.number",
                     "records the operator an outcome was written with, which is what a report shows"),
-            new Held("souther.compiler.coverage.CoverageSites.Walk.entailsOneAtMost",
-                    "reads the comparison of a list's length that an arm of the body is inside, to"
-                            + " tell whether the list walked there holds one element at most"),
             new Held("souther.compiler.coverage.ExecutableIdentity.say",
                     "what a comparison does, written into what says whether two bodies do the same"
                             + " thing: two bodies alike but for which way they compare are two"

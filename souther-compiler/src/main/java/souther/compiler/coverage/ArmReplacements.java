@@ -227,6 +227,24 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
     }
 
     /**
+     * These rewrites at the sites {@code kept} says yes to, and at no other.
+     *
+     * <p>Asked by the plan, which holds the numbering a site number is a place under. An arm
+     * written once stands at as many sites as the behaviors that reach it have, and what is shown
+     * of a rewrite — the ways nothing arrives at, the rows that went through — is shown of the sites
+     * of one behavior ({@link CoverageSites.Plan#keepingTheArmsOf}).
+     */
+    ArmReplacements keeping(Predicate<Integer> kept) {
+        SequencedMap<Integer, AtSite> out = new TreeMap<>();
+        bySite.forEach((site, at) -> {
+            if (kept.test(site)) {
+                out.put(site, at);
+            }
+        });
+        return new ArmReplacements(out);
+    }
+
+    /**
      * Every rewrite a run that went through {@code sites} can be run under: each sibling the
      * classes carry at one of those sites, once per arm and sibling however many of its sites the
      * run passed, in the order of the sites and then of the siblings.
