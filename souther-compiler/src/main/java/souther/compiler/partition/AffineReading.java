@@ -37,6 +37,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -697,7 +698,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 WhatWasTold apart = new WhatWasTold();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
                         reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
-                return form != null && apart.exact && apart.decimals.isEmpty()
+                return form != null && apart.exact && apart.partials.isEmpty()
+                        && apart.decimals.isEmpty()
                         && apart.operations.stream().allMatch(
                                 each -> WhatLiesBesideTheStop.areAddendsOf(each.form(), form));
             }
@@ -1004,10 +1006,32 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
                 } else {
-                    told.exact = false;
+                    NumericTerm total = addedAsItIs(walk.added());
+                    if (total == null) {
+                        told.exact = false;
+                    } else {
+                        tellAnIntTotal(node, answer, List.of());
+                        told.partials.add(total);
+                    }
                 }
                 told.readByATerm(node);
                 return answer;
+            }
+
+            /**
+             * The total of a container's elements that {@code added} is, where a walk adds each
+             * element as it stands and nothing else — or null where it adds anything beside that.
+             * Nothing is then worked out of an element before it is added, so the one thing a
+             * run can stop at besides the answer is a running total.
+             */
+            private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
+                if (added.coefs().size() != 1 || !added.constant().isZero()) {
+                    return null;
+                }
+                Map.Entry<NumericTerm, ExactRatio> only = added.coefs().entrySet().iterator().next();
+                return only.getKey() instanceof NumericTerm.TakenOf taken
+                        && taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                        && ExactRatio.ONE.equals(only.getValue()) ? taken : null;
             }
 
             /**
@@ -1167,6 +1191,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  one, shared with every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
+        /** The totals of a container whose walk's running totals are the only thing left untold
+         *  ({@link UndividedByARelation.Working#partials}). */
+        private final List<NumericTerm> partials = new ArrayList<>();
 
         WhatWasTold() {
             this(new int[1]);
@@ -1244,6 +1271,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             sumsOverTheStop.addAll(apart.sumsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
             exact &= apart.exact;
+            partials.addAll(apart.partials);
         }
 
         /**
@@ -1378,10 +1406,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         UndividedByARelation.Working working() {
-            return new UndividedByARelation.Working(operations, exact
+            return new UndividedByARelation.Working(operations, exact && partials.isEmpty()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, decimals);
+                    true, decimals, exact ? partials : List.of());
         }
     }
 

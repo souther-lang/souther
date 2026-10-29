@@ -927,6 +927,45 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left(held, pairs, heldTotal, atThe(">=", pairs, held, heldTotal)));
     }
 
+    /**
+     * A walk adding each element as it stands runs a total on the way that a sum does not, and
+     * that total passes the end of an {@code Int} for elements whose final total does not. A row
+     * of one element runs none, so the total is reached where one element may stand at it; a
+     * walk that adds anything else of each element, or a container the relation asks about
+     * elsewhere, has rows of more than one element and is not claimed.
+     */
+    @Test
+    void aWalkAddingEachElementIsReachedAsAnElementWrittenAloneIs() {
+        String list = "limit: Int, xs: List<Int>";
+        String added = "limit >= List.fold((acc, x) -> acc + x, 0, xs)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", RELATES),
+                left(list, NAT, added, atThe(">=", NAT, list, added)));
+        String map = "limit: Int, ms: Map<String, Int>";
+        String entries = "limit >= Map.fold((acc, k, q) -> acc + q, 0, ms)";
+        assertEquals(Map.of(), left(map, NAT, entries, atThe(">=", NAT, map, entries)));
+        String doubled = "limit >= List.fold((acc, x) -> acc + x * 2, 0, xs)";
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | xs[*]})", NOT_SHOWN,
+                "limit", NOT_SHOWN), left(list, NAT, doubled, atThe(">=", NAT, list, doubled)));
+        String beside = "limit >= List.length(xs) + List.fold((acc, x) -> acc + x, 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN, "List.sum(xs)", NOT_SHOWN,
+                "limit", NOT_SHOWN), left(list, NAT, beside, atThe(">=", NAT, list, beside)));
+        String two = "limit: Int, xs: List<Int>, ys: List<Int>";
+        String untold = "limit >= List.fold((acc, x) -> acc + x, 0, xs)"
+                + " + List.fold((acc, y) -> acc + y * 2, 0, ys)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN,
+                "List.sum({2·the element itself + 0 | ys[*]})", NOT_SHOWN),
+                left(two, NAT, untold, atThe(">=", NAT, two, untold)));
+        String other = "limit: Int, xs: List<Int>, k: Int";
+        String quotient = "limit >= List.fold((acc, x) -> acc + x, 0, xs) + k / 3";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "k", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(other, NAT, quotient, atThe(">=", NAT, other, quotient)));
+        String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
+        String held = "limit: Int, p: Pair";
+        String heldAdded = "limit >= List.fold((acc, x) -> acc + x, 0, p.value)";
+        assertEquals(Map.of("List.sum(p)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(held, pairs, heldAdded, atThe(">=", pairs, held, heldAdded)));
+    }
+
     private static final String FORECAST = """
             module w1
 

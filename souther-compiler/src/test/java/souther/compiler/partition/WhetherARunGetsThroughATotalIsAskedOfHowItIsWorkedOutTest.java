@@ -594,9 +594,13 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         String belowNought = report(inputs, NAT,
                 "gross >= List.fold((acc, n) -> acc + n.value, -5, ns)");
         assertEquals(Set.of("List.sum(ns[*])", "gross"), notShown(belowNought), belowNought);
+        // Over Ints an answer on the way can pass the type where the total does not, so a walk
+        // over a list of any length is not told to get through. A list of one element has no
+        // answer on the way but the total, and the total is written by one element alone.
         String ofInts = report("gross: Int, ns: List<Int>", UNUSED,
                 "gross >= List.fold((acc, n) -> acc + n, 0, ns)");
-        assertEquals(Set.of("List.sum(ns)", "gross"), notShown(ofInts), ofInts);
+        assertEquals(Set.of(), notShown(ofInts), ofInts);
+        assertEquals(Set.of("List.sum(ns)", "gross"), related(ofInts), ofInts);
         assertFalse(ofInts.contains("every run stops"), ofInts);
     }
 }
