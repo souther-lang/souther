@@ -86,8 +86,13 @@ public final class WhatARelationLeavesUndivided {
      *
      * @param madeOf   the places its value is made of, in the order the relation names them
      * @param weight   what it is weighed by in the relation
-     * @param holds    a run every value it may take lies in, open on a side nothing bounds it
+     * @param holds    a run every value it may take lies in, open on a side nothing bounds it. A
+     *                 claim about every row, or that no row is, is made over this: a row with
+     *                 the term at a value of it that is not shown to be taken is a row all the
+     *                 same
      * @param realizes a run every value of which it is shown to take, or null where none is shown.
+     *                 A claim that a row exists (a value left either way, a class with a row in
+     *                 it) rests on rows with the term at these values, and on nothing wider.
      *                 An end the run holds is one it takes. One it leaves out is, where its values
      *                 are dense, one some value it takes is as near as any other value asked of:
      *                 so a value beyond an end is one it takes, and an end that is not taken
@@ -3204,34 +3209,33 @@ public final class WhatARelationLeavesUndivided {
         if (exact == null && bySizes == null) {
             return null;
         }
-        // Where the other term stands is read two ways, for two kinds of claim. A claim about
-        // every row (a value settled) is made over everywhere the other may hold, since a row
-        // with it at a value it is not shown to take is a row all the same. A claim that there
-        // is a row (a value left either way) is made over the values it is shown to take.
+        // Every claim about a value is made of the rows computed, and of two sets of them, nested.
+        // The rows with the other anywhere it may hold (and inside the order, since no row lies
+        // outside it) say what is true of every row, and whether there is a row at all: a row
+        // with it at a value it is not shown to take is a row all the same. The rows with it at
+        // a value it is shown to take are the ones known to be there, and are what a value left
+        // either way rests on. What the model draws, as against the type, is told by the first
+        // alone with no row asked for (free), where the other runs on past the order.
         WholeRun cut = takes.meet(order);
-        WholeRun everywhere = takes.hull(mayHold);
-        WholeRun anywhere = everywhere.meet(order);
-        // The claims about every row: as the relation reads it, open where the order stops; kept
-        // inside the order; and kept to where a row is computed (Computed).
-        Reached free = Reached.at(at, combination, holding, failing, everywhere);
-        Reached bounded = Reached.at(at, combination, holding, failing, anywhere);
+        WholeRun anywhere = takes.hull(mayHold).meet(order);
+        Reached free = Reached.at(at, combination, holding, failing, takes.hull(mayHold));
         Reached computedRows = reachedByRowsComputed(at, combination, holding, failing, anywhere,
                 exact, bySizes);
-        // The claim that there is a row each way, where the others say the rows are on both.
         Reached shownComputed = reachedByRowsComputed(at, combination, holding, failing, cut,
                 exact, bySizes);
-        // The values of the term some row is computed at, the partner anywhere in the order.
-        WholeRun rows = holds.meet(exact != null
-                ? wholeRunOf(exact.askedWhere(RowsOfTheTwo.Frame.THE_PARTNER,
-                        new RowsOfTheTwo.Span(order.low(), order.high()), null))
-                : bySizes.holder());
+        // The values of the term some row is computed at, with the other anywhere it may hold:
+        // a value of the term is a value of the type too.
+        WholeRun rows = exact != null
+                ? inTheOrder.meet(wholeRunOf(exact.askedWhere(RowsOfTheTwo.Frame.THE_PARTNER,
+                        new RowsOfTheTwo.Span(anywhere.low(), anywhere.high()), null)))
+                : holds.meet(bySizes.holder());
         if (!rows.holdsAWholeNumber()) {
             return null;
         }
         // Every value at which either reading changes what it reaches, and so the first value of
         // each run along which neither does.
         TreeSet<BigInteger> starts = new TreeSet<>();
-        for (Reached each : List.of(free, bounded, computedRows, shownComputed)) {
+        for (Reached each : List.of(free, computedRows, shownComputed)) {
             each.startsInto(starts);
         }
         starts.add(order.low());
@@ -3272,8 +3276,20 @@ public final class WhatARelationLeavesUndivided {
             if (freely == Reached.Outcome.NEITHER) {
                 return null;
             }
-            Reached.Outcome inside = bounded.outcomeAt(value);
+            // What is true of the rows computed. None at a value of the type means nothing is said
+            // of it: the value is settled by no row, and a class of the model has one. A value
+            // past the order has no row whatever is computed, and is read as the relation reads it.
+            Reached.Outcome computedly = computedRows.outcomeAt(value);
+            if (computedly == Reached.Outcome.NEITHER && order.holds(value)) {
+                return null;
+            }
             if (freely != Reached.Outcome.EITHER) {
+                // A class of the model has a row in it, shown by values the other is shown to
+                // take; where none is, the class is not claimed.
+                if (order.holds(value)
+                        && shownComputed.outcomeAt(value) == Reached.Outcome.NEITHER) {
+                    return null;
+                }
                 model.add(SettledRun.whole(piece.low(), piece.high(),
                         freely == Reached.Outcome.HOLDS));
                 // A run that ends where the rows do draws no line there: past them nothing is
@@ -3282,20 +3298,12 @@ public final class WhatARelationLeavesUndivided {
                         Objects.equals(piece.low(), rows.low()) ? holds.low() : piece.low(),
                         Objects.equals(piece.high(), rows.high()) ? holds.high() : piece.high(),
                         freely == Reached.Outcome.HOLDS));
-            } else if (order.holds(value) && inside != Reached.Outcome.EITHER) {
-                byTheEnds = true;
-                ofTheType.add(SettledRun.whole(piece.low(), piece.high(),
-                        inside == Reached.Outcome.HOLDS));
             } else if (order.holds(value)) {
                 // Either way inside the order, though perhaps only by a row no arithmetic
                 // computes: the least value of the type is a value of it and no computed addend.
                 // Where the rows computed are on one side, that is the type's and not a line the
                 // model draws. Where they are on both, that is shown by rows of values the other
                 // is shown to take, and nothing is said where they are not.
-                Reached.Outcome computedly = computedRows.outcomeAt(value);
-                if (computedly == Reached.Outcome.NEITHER) {
-                    return null;
-                }
                 if (computedly != Reached.Outcome.EITHER) {
                     byTheEnds = true;
                     ofTheType.add(SettledRun.whole(piece.low(), piece.high(),
