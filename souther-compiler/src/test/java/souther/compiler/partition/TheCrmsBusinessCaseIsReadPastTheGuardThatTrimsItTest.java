@@ -36,18 +36,31 @@ class TheCrmsBusinessCaseIsReadPastTheGuardThatTrimsItTest {
     private static final String NOT_SHOWN = "\"path\"\\s*:\\s*\"%s\"[^{}]*\\}\\s*,\\s*\"stopped\"\\s*:"
             + "\\s*\\[\\s*\\{\\s*\"reason\"\\s*:\\s*\"relation_not_shown_to_reach_every_value\"";
 
+    /** The model measured once for every test here, which only read what it came to. */
+    private static final class Measured {
+
+        static final Compilation CRM = measure();
+
+        /** The report, built once: it is the same document for every test. */
+        static final String JSON = AdequacyReport.of(CRM)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+
+        private static Compilation measure() {
+            Compilation crm = RepositoryModels.byCorpus().get("crm");
+            crm.measure(Adequacy.Asked.fullReport());
+            crm.answerEverything();
+            return crm;
+        }
+    }
+
     private static Compilation crm() {
-        Compilation crm = RepositoryModels.byCorpus().get("crm");
-        crm.measure(Adequacy.Asked.fullReport());
-        crm.answerEverything();
-        return crm;
+        return Measured.CRM;
     }
 
     /** The relation is shown over a region at the needs and at the business case. */
     @Test
     void theRelationIsShownOverARegionAtBothPlaces() {
-        String json = AdequacyReport.of(crm())
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String json = Measured.JSON;
         for (String path : new String[] {"opp.needs[*]", "businessCase"}) {
             assertTrue(Pattern.compile(SHOWN.formatted(Pattern.quote(path)), Pattern.DOTALL)
                     .matcher(json).find(), () -> path + " is shown over a region");
@@ -59,8 +72,7 @@ class TheCrmsBusinessCaseIsReadPastTheGuardThatTrimsItTest {
     /** The business cases left open are those holding no code point that is not whitespace. */
     @Test
     void theBusinessCasesHoldingNoneAreLeftOpen() {
-        String json = AdequacyReport.of(crm())
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String json = Measured.JSON;
         assertTrue(Pattern.compile("\"codePoints\"\\s*:\\s*\\[\\s*\\{\\s*\"class\"\\s*:"
                 + "\\s*\"not_whitespace\"\\s*,\\s*\"fewerThan\"\\s*:\\s*1\\s*\\}")
                 .matcher(json).find(), "the strings short of a code point that is not whitespace");
