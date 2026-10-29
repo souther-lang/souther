@@ -473,6 +473,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "which decimal operation a row is asked to get past"),
             new Held("souther.compiler.inputs.DecimalOperation.shifted",
                     "carries the operator over when the operations it is told beside are moved"),
+            new Held("souther.compiler.inputs.DecimalOperation.haveRoomWhateverTheNumbers",
+                    "reads how far the scale of what an operator leaves can reach from the scales"
+                            + " of its operands: a product's is their sum, a sum's the greater"),
             new Held("souther.compiler.inputs.DecimalOperation.workedOut",
                     "works the operator out on the numbers a row has, by the rule the run time"
                             + " works it out by"),

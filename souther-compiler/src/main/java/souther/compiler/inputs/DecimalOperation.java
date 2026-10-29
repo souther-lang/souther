@@ -46,6 +46,65 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
         }
     }
 
+    /**
+     * The most places before or after the point, as a scale, a number a claim over a run is made of
+     * is written at, and at which a row is built.
+     *
+     * <p>A decimal is the same number at the scales it is written at, and whether an operation has
+     * room for it is not: a product asks for the sum of its factors' scales, so a number as small
+     * as one at the floor of the range is a number no product has room for. A claim over a run is
+     * therefore made of the numbers written at no more places than this, which is far more than a
+     * row is written at, and says nothing of those past it. Held once, here, so that what a claim
+     * is about is one decision and not the sum of the choices of the code that builds its rows.
+     */
+    public static final int PLACES_A_CLAIM_IS_MADE_OF = 1 << 20;
+
+    /**
+     * The greatest scale an operation is shown to have room for, whatever the numbers it is worked
+     * out over. Two scales this great sum to a scale an {@code int} holds with room to spare, and
+     * the digits an addition lines up are fewer than a {@code BigInteger} holds.
+     */
+    private static final long SCALE_THE_ROOM_IS_SHOWN_FOR = 1L << 27;
+
+    /**
+     * Whether every operation of {@code all} has room whatever the numbers it is worked out over,
+     * so long as each number a row holds is written at no more than
+     * {@link #PLACES_A_CLAIM_IS_MADE_OF} places: the scale of what each leaves is at most the sum
+     * of its operands' for a product and the greater for a sum or a difference, and that sum is
+     * kept to {@link #SCALE_THE_ROOM_IS_SHOWN_FOR}.
+     *
+     * <p>This is what lets a claim about every number of a run rest on the operations and not on
+     * the rows built to ask them. Whether an operation has room is no straight function of the
+     * numbers it is over, so a row worked out at each end of a run says nothing of the numbers
+     * between; that it has room for all of those of at most so many places is a fact about the
+     * operations, and is read off them here. Where it is not shown, nothing is claimed of the run.
+     */
+    public static boolean haveRoomWhateverTheNumbers(List<DecimalOperation> all) {
+        long[] scaleOf = new long[all.size()];
+        for (int i = 0; i < all.size(); i++) {
+            DecimalOperation each = all.get(i);
+            long[] over = new long[2];
+            for (int o = 0; o < 2; o++) {
+                switch (each.operands.get(o)) {
+                    case Written written -> over[o] = Math.abs((long) written.value().scale());
+                    case Formed _ -> over[o] = PLACES_A_CLAIM_IS_MADE_OF;
+                    case Worked worked -> {
+                        if (worked.operation() >= i) {
+                            return false;
+                        }
+                        over[o] = scaleOf[worked.operation()];
+                    }
+                }
+            }
+            scaleOf[i] = each.op == BinOp.MUL ? over[0] + over[1] : Math.max(over[0], over[1]);
+            if (over[0] > SCALE_THE_ROOM_IS_SHOWN_FOR || over[1] > SCALE_THE_ROOM_IS_SHOWN_FOR
+                    || scaleOf[i] > SCALE_THE_ROOM_IS_SHOWN_FOR) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** What an operation is worked out of. */
     public sealed interface Operand {
     }
@@ -78,7 +137,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
         }
 
         /** The decimal this comes to at {@code values}, each term's value by its key; empty where
-         *  a term has no value there or the number is none a decimal writes. */
+         *  a term has no value there, the number is none a decimal writes, or it is written at
+         *  more places than a claim is made of ({@link #PLACES_A_CLAIM_IS_MADE_OF}), which is the
+         *  premise the room is shown under ({@link #haveRoomWhateverTheNumbers}). */
         Optional<BigDecimal> at(Map<Object, ExactRatio> values) {
             ExactRatio sum = constant;
             for (Map.Entry<Object, ExactRatio> each : coefs.entrySet()) {
@@ -92,7 +153,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                 return Optional.empty();
             }
             return switch (sum.writtenDecimal()) {
-                case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value();
+                case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value()
+                        .filter(number -> Math.abs((long) number.scale())
+                                <= PLACES_A_CLAIM_IS_MADE_OF);
                 case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> Optional.empty();
             };
         }

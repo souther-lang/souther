@@ -7,6 +7,7 @@ import souther.compiler.numeric.ExactRatio;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -52,21 +53,60 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
         }
     }
 
-    @Test
-    void aRunNarrowerThanTheFewestPlacesAsksIsNoRowAndNeitherIsAnEmptyOne() {
-        ExactRatio narrow = A_THIRD.plus(ExactRatio.ONE.dividedBy(
-                ExactRatio.of(BigInteger.TEN.pow(60))).orNull()).orNull();
-        assertNull(DecimalPoints.within(ExactCut.exclusive(A_THIRD),
-                ExactCut.exclusive(narrow), true));
-        assertNull(DecimalPoints.within(ExactCut.exclusive(ExactRatio.ONE),
-                ExactCut.inclusive(ExactRatio.ONE), true));
+    /** The run is inside both its ends, and the row is a decimal. */
+    private static void assertStandsInside(ExactRatio row, ExactCut lower, ExactCut upper) {
+        assertNotNull(row);
+        assertTrue(row.fitsWrittenDecimal(), "a decimal: " + row);
+        assertTrue(row.compareTo(lower.at()) > 0 || (lower.inclusive()
+                && row.compareTo(lower.at()) == 0), "above " + lower + ": " + row);
+        assertTrue(row.compareTo(upper.at()) < 0 || (upper.inclusive()
+                && row.compareTo(upper.at()) == 0), "below " + upper + ": " + row);
     }
 
     @Test
-    void theRowStandsInsideTheRunWhenTheOtherEndIsNear() {
+    void aRunNarrowerThanAnyFixedNumberOfPlacesStillHasARowBuiltInIt() {
+        for (int places : new int[] {61, 200, 5000}) {
+            ExactCut lower = ExactCut.exclusive(A_THIRD);
+            ExactCut upper = ExactCut.exclusive(A_THIRD.plus(ExactRatio.ONE.dividedBy(
+                    ExactRatio.of(BigInteger.TEN.pow(places))).orNull()).orNull());
+            assertStandsInside(DecimalPoints.within(lower, upper, true), lower, upper);
+            assertStandsInside(DecimalPoints.within(upper, lower, false), lower, upper);
+        }
+    }
+
+    @Test
+    void aRunWithNothingInsideIsNoRowAndNeitherIsOneNeededMorePlacesThanAClaimIsMadeOf() {
+        assertNull(DecimalPoints.within(ExactCut.exclusive(ExactRatio.ONE),
+                ExactCut.inclusive(ExactRatio.ONE), true));
+        ExactCut lower = ExactCut.exclusive(A_THIRD);
+        ExactCut tooNarrow = ExactCut.exclusive(A_THIRD.plus(ExactRatio.ONE.dividedBy(
+                ExactRatio.of(BigInteger.TEN.pow(DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF + 5)))
+                .orNull()).orNull());
+        assertNull(DecimalPoints.within(lower, tooNarrow, true));
+    }
+
+    @Test
+    void theRowStandsInsideTheRunWhateverTheWidthBetweenItsEnds() {
         ExactRatio half = ExactRatio.ONE.dividedBy(ExactRatio.of(2)).orNull();
-        ExactRatio inside = DecimalPoints.within(ExactCut.exclusive(A_THIRD),
-                ExactCut.exclusive(half), true);
-        assertEquals(0, inside.compareTo(ExactRatio.of(new BigDecimal("0.4"))), "" + inside);
+        ExactCut lower = ExactCut.exclusive(A_THIRD);
+        ExactCut upper = ExactCut.exclusive(half);
+        assertStandsInside(DecimalPoints.within(lower, upper, true), lower, upper);
+        assertStandsInside(DecimalPoints.within(upper, lower, false), lower, upper);
+    }
+
+    /** A term held to a tenth to two tenths has no row beside a third in the run it lies past: the
+     *  one below is the greatest it holds, and none lies above. */
+    @Test
+    void theRowsBesideALineAreInsideTheRunTheTermHolds() {
+        ExactCut tenth = ExactCut.inclusive(ExactRatio.of(new BigDecimal("0.1")));
+        ExactCut fifth = ExactCut.inclusive(ExactRatio.of(new BigDecimal("0.2")));
+        assertEquals(List.of(ExactRatio.of(new BigDecimal("0.2"))),
+                DecimalPoints.besideTheLine(A_THIRD, tenth, fifth));
+        ExactCut nought = ExactCut.inclusive(ExactRatio.ZERO);
+        ExactCut one = ExactCut.inclusive(ExactRatio.ONE);
+        List<ExactRatio> both = DecimalPoints.besideTheLine(A_THIRD, nought, one);
+        assertEquals(2, both.size());
+        assertStandsInside(both.get(0), nought, ExactCut.exclusive(A_THIRD));
+        assertStandsInside(both.get(1), ExactCut.exclusive(A_THIRD), one);
     }
 }

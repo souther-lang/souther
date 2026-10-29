@@ -415,6 +415,14 @@ public final class WhatARelationLeavesUndivided {
      * can hold is asked of the row, where the arithmetic is done in the type
      * ({@code OrderedAffineBoundary.productAt}); a reader wanting a row on each side for every
      * value asks that, and not this.
+     *
+     * <p><b>What is said of a decimal is said of the numbers written at no more than
+     * {@link DecimalOperation#PLACES_A_CLAIM_IS_MADE_OF} places.</b> A decimal is one number at
+     * every scale it is written at, and whether an operation on it has room is no function of the
+     * number, so a claim about every value of a run needs the room shown for every number it is
+     * made of ({@link DecimalOperation#haveRoomWhateverTheNumbers}) and not rows worked out at its
+     * ends. That one row is worked out in a run is the other claim, that the run has a row, and is
+     * made by building one.
      */
     public sealed interface Leaves {
 
@@ -3839,6 +3847,12 @@ public final class WhatARelationLeavesUndivided {
         if (constant == null || asked == null || asked.low() == null || asked.high() == null) {
             return false;
         }
+        // The rows built at the ends of the run are asked of every value between them. For a sum of
+        // whole numbers that holds, each being a straight function of the term. For decimals it
+        // holds only where the operations have room whatever the numbers are.
+        if (!arithmetic.decimalsHaveRoomWhateverTheRow()) {
+            return false;
+        }
         List<ExactRatio> fixed = new ArrayList<>(beside);
         for (int i = 0; i < terms.size(); i++) {
             if (i != by && i != of) {
@@ -3894,21 +3908,17 @@ public final class WhatARelationLeavesUndivided {
     /**
      * Where a dense {@code reaching} term stands to be as near {@code line} as asked: at it where
      * it is a decimal, and otherwise at a decimal on each side of it that the term holds. Null
-     * where the term holds none.
+     * where the term holds none. Every value is one the term holds, which is asked of the term
+     * and not left to how the values were chosen.
      */
     private static <P> List<ExactRatio> nearTheLine(ExactRatio line, Term<P> reaching) {
         if (line.fitsWrittenDecimal()) {
             return List.of(line);
         }
         Interval holds = Interval.of(reaching.holds());
-        List<ExactRatio> near = new ArrayList<>();
-        for (boolean above : List.of(false, true)) {
-            ExactCut far = holds == null ? null : above ? holds.upper() : holds.lower();
-            ExactRatio at = DecimalPoints.within(ExactCut.exclusive(line), far, above);
-            if (at != null) {
-                near.add(at);
-            }
-        }
+        List<ExactRatio> near = DecimalPoints.besideTheLine(line,
+                holds == null ? null : holds.lower(), holds == null ? null : holds.upper())
+                .stream().filter(reaching.holds()::admits).toList();
         return near.isEmpty() ? null : near;
     }
 

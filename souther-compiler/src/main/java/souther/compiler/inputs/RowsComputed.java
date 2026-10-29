@@ -90,6 +90,15 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     }
 
     /**
+     * Whether the operations of decimals told have room whatever the numbers of a row are, so that
+     * what is found of rows built at the ends of a run holds of every number between
+     * ({@link DecimalOperation#haveRoomWhateverTheNumbers}). True where there is none.
+     */
+    boolean decimalsHaveRoomWhateverTheRow() {
+        return DecimalOperation.haveRoomWhateverTheNumbers(operations.decimals());
+    }
+
+    /**
      * Whether one row is computed, the row being the {@code addends} of the form at it and the
      * {@code values} of the terms by key.
      */

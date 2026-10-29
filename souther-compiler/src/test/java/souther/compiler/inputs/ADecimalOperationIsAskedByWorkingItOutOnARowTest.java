@@ -52,6 +52,16 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     }
 
     @Test
+    void aNumberWrittenAtMorePlacesThanAClaimIsMadeOfIsNoRow() {
+        ExactRatio tiny = ExactRatio.of(new BigDecimal(BigInteger.ONE,
+                DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF + 1));
+        ExactRatio atTheLimit = ExactRatio.of(new BigDecimal(BigInteger.ONE,
+                DecimalOperation.PLACES_A_CLAIM_IS_MADE_OF));
+        assertFalse(completesAt(tiny, TIMES_FOUR));
+        assertTrue(completesAt(atTheLimit, TIMES_FOUR));
+    }
+
+    @Test
     void aTermTheRowDoesNotNameIsNoRow() {
         assertFalse(DecimalOperation.allCompleteAt(List.of(TIMES_FOUR), Map.of("s", ExactRatio.ONE)));
     }
