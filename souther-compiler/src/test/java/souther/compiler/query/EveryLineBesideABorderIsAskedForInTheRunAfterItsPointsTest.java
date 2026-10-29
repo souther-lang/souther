@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.BorderObligationId;
+import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.QuantityKey;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
@@ -15,9 +18,11 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -157,6 +162,59 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
         int counted = standing;
         assertEquals(EVERY_LINE_LEFT_STANDING.size(), counted,
                 () -> "every line the report names is one this looked at: " + counted);
+    }
+
+    /**
+     * What was searched for an obligation is what every line that reads it searched, whichever
+     * came first.
+     *
+     * <p>An obligation is the authored line and the value it is at, and a line is that and where
+     * it was read, so one obligation can be read at several lines and only some of them are
+     * searched. Here {@code y <= 2 * x} is read at a line with no search ahead of the one that
+     * composed the row telling {@code -2 * x + y = 0} from {@code -3 * x + y = 0}. A finding
+     * answered from the first line says nothing was offered for it.
+     */
+    @Test
+    void whatWasSearchedForAnObligationIsWhatEveryLineReadingItSearched() {
+        String points = answered(MODEL, rowsOffered(MODEL));
+        List<BorderAssessment> edges = measured(points).db()
+                .ask(new Adequacy.BoundarySearch("example.region", "inside")).value();
+        List<BorderAssessment> backwards = edges.reversed();
+
+        boolean searchedBeyondTheFirst = false;
+        for (BorderObligationId obligation : edges.stream()
+                .map(each -> each.border().obligation()).distinct().toList()) {
+            ARowTellingTheLinesApart together =
+                    ARowTellingTheLinesApart.ofObligation(edges, obligation).orElseThrow();
+            ARowTellingTheLinesApart reversed =
+                    ARowTellingTheLinesApart.ofObligation(backwards, obligation).orElseThrow();
+            BorderAssessment first = edges.stream()
+                    .filter(each -> each.border().obligation().equals(obligation)).findFirst()
+                    .orElseThrow();
+            searchedBeyondTheFirst |= first.toldApart().each().size() < together.each().size();
+            for (QuantityKey direction : together.each().stream()
+                    .map(ARowTellingTheLinesApart.AtOneReading::direction).distinct().toList()) {
+                assertEquals(rowsOf(together, direction), rowsOf(reversed, direction),
+                        () -> "the order the lines were read in decides nothing of " + direction);
+                assertTrue(together.composed(direction).stream()
+                                .allMatch(one -> one.direction().equals(direction)),
+                        () -> "and only the searches for " + direction + " answer for it");
+                if (!together.composed(direction).isEmpty()) {
+                    assertInstanceOf(GenerationOutcome.Generated.class,
+                            together.outcome(direction),
+                            () -> "a row composed for " + direction + " is what is offered");
+                }
+            }
+        }
+        assertTrue(searchedBeyondTheFirst,
+                "an obligation is read at a line that searched nothing ahead of one that did");
+    }
+
+    /** What the searches for {@code direction} composed. */
+    private static Set<String> rowsOf(ARowTellingTheLinesApart searched, QuantityKey direction) {
+        return searched.composed(direction).stream()
+                .map(one -> one.composed().orElseThrow().row().toString())
+                .collect(Collectors.toCollection(TreeSet::new));
     }
 
     /** The lines the report says no row tells apart. */
