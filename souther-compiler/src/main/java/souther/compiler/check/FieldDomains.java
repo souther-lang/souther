@@ -38,6 +38,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -303,6 +304,17 @@ public final class FieldDomains {
      * the rules of this value alone.
      */
     private final Map<Set<RuleKey>, Boolean> heldTogether = new ConcurrentHashMap<>();
+
+    /** Which places the parts of this value's rules tie together, made the first time it is
+     *  asked ({@link #tied}). */
+    private volatile TiedPlaces tied;
+
+    /** What {@link #projection} answers, worked out the first time it is asked. */
+    private volatile ProjectionEvidence projected;
+
+    /** What {@link #projectionAt} answers at each place, kept for the same reason as
+     *  {@link #classes}. */
+    private final Map<RuleKey, ProjectionEvidence> projectedAt = new ConcurrentHashMap<>();
 
     /** The place {@link #classLeavingNothing} found, worked out the first time it is asked. */
     private volatile Optional<RuleKey> leavingNothing;
@@ -2736,6 +2748,18 @@ public final class FieldDomains {
      * whose rules leave nothing has no place to be exact about.
      */
     public ProjectionEvidence projectionAt(RuleKey place) {
+        // Not computeIfAbsent: showing a rule apart asks the readings of other declarations,
+        // and an update of this map is not to be held open while they are read.
+        ProjectionEvidence known = projectedAt.get(place);
+        if (known == null) {
+            known = projectionWorkedOutAt(place);
+            projectedAt.putIfAbsent(place, known);
+        }
+        return known;
+    }
+
+    /** {@link #projectionAt}, worked out. */
+    private ProjectionEvidence projectionWorkedOutAt(RuleKey place) {
         ProjectionEvidence whole = projection();
         if (place.isTheValueItself()
                 || !(constraints.numbers().projectionCertification()
@@ -2776,11 +2800,11 @@ public final class FieldDomains {
             }
             unheld.add(rule);
         }
-        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
+        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = tied().placesOf();
         List<ProjectionEvidence.StandsApart> apart = new ArrayList<>();
         for (RuleRef rule : unheld) {
             List<ProjectionEvidence.StandsApart> shown =
-                    standsApart(rule, place, placesOf, unheld, asked);
+                    standsApart(rule, place, placesOf, asked);
             if (shown == null) {
                 return null;
             }
@@ -2806,12 +2830,15 @@ public final class FieldDomains {
                 && took.isOnlyDefining(rule);
     }
 
-    /** The places each reading of a part names. */
-    private Map<InvariantChecker.PartReading, Set<RuleKey>> placesEachReadingNames() {
-        Map<InvariantChecker.PartReading, Set<RuleKey>> out = new LinkedHashMap<>();
-        naming.forEach((named, reads) -> reads.forEach(read ->
-                out.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(named)));
-        return out;
+    /** Which places the parts of this value's rules tie together, made the first time it is
+     *  asked: the answer turns on the parts naming each place, which are this value's alone. */
+    private TiedPlaces tied() {
+        TiedPlaces known = tied;
+        if (known == null) {
+            known = TiedPlaces.of(naming);
+            tied = known;
+        }
+        return known;
     }
 
     /**
@@ -2819,7 +2846,7 @@ public final class FieldDomains {
      * null where that is not shown.
      *
      * <p>The places a reading names are tied to one another and to every place a part naming one
-     * of them names, and so on ({@link InvariantChecker#tiedTo}); a part naming a place above one
+     * of them names, and so on ({@link TiedPlaces}); a part naming a place above one
      * reads it as well. Shown where none of the places tied to a reading's is the value itself, or
      * at, under or above {@code place}, and the rules are shown to leave them some value together
      * ({@link #holdTogether}). No part ties them to anything else, so that value stands beside
@@ -2828,19 +2855,18 @@ public final class FieldDomains {
      * and a value of one has nothing to do with the other.
      *
      * @param placesOf the places each reading of a part names
-     * @param unheld   the rules the bounds do not hold
      */
     private List<ProjectionEvidence.StandsApart> standsApart(
             RuleRef rule, RuleKey place, Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
-            Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+            Set<TypeSymbol.AtModule> asked) {
         List<ProjectionEvidence.StandsApart> out = new ArrayList<>();
         for (Map.Entry<InvariantChecker.PartReading, Set<RuleKey>> read : placesOf.entrySet()) {
             if (!read.getKey().part().rule().equals(rule)) {
                 continue;
             }
-            Set<RuleKey> tied = InvariantChecker.tiedTo(read.getValue().iterator().next(), naming,
-                    null);
-            if (!apartFrom(tied, place) || !holdTogether(tied, placesOf, unheld, asked)) {
+            Set<RuleKey> together = tied().tiedTo(read.getValue().iterator().next());
+            if (!apartFrom(together, place)
+                    || !holdTogether(together, placesOf, asked)) {
                 return null;
             }
             read.getValue().stream().map(at -> new ProjectionEvidence.StandsApart(rule, at))
@@ -2861,34 +2887,56 @@ public final class FieldDomains {
      * part ties them to any other place.
      *
      * <p>One place is shown to hold a value as {@link #holdsAValueAt} shows it. Several are shown
-     * by a value of this declaration at the fields they are in that every clause naming one of
-     * them holds of ({@link ADeclarationsWitness}): each value at each place may be refused by a
-     * rule about another, so a value of each is not a value of all of them. A clause naming a
-     * place of another field as well is not shown to hold there, since that field is not written.
+     * by a value of this declaration at the fields they are in that every part naming one of them
+     * holds of ({@link ADeclarationsWitness}): each value at each place may be refused by a rule
+     * about another, so a value of each is not a value of all of them.
      */
-    private boolean holdTogether(Set<RuleKey> tied,
+    private boolean holdTogether(Set<RuleKey> together,
                                  Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
-                                 Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
-        if (tied.size() == 1) {
-            return holdsAValueAt(tied.iterator().next(), placesOf, unheld, asked);
+                                 Set<TypeSymbol.AtModule> asked) {
+        if (together.size() == 1) {
+            return holdsAValueAt(together.iterator().next(), placesOf, asked);
         }
-        return heldTogether.computeIfAbsent(Set.copyOf(tied), this::writtenTogether);
+        return heldTogether.computeIfAbsent(Set.copyOf(together), this::writtenTogether);
     }
 
-    /** Whether a value of this declaration at the fields the places {@code tied} are in is written
-     *  down that every clause naming one of them holds of — see {@link #holdTogether}. */
-    private boolean writtenTogether(Set<RuleKey> tied) {
+    /**
+     * Whether a value of this declaration at the fields the places {@code together} are in is
+     * written down that every part naming one of them holds of — see {@link #holdTogether}.
+     *
+     * <p>Asked of each clause such a part is in, as it comes out where its other parts hold
+     * ({@link InvariantChecker.Written#withPartsSettled}). Those name places no part ties to these,
+     * and are shown to hold of the places they name by what is shown of those. Asked of the whole
+     * clause, a part about a field not written here stopped the clause from folding, and a rule
+     * written as one clause of two parts was not shown where the same two written as two clauses
+     * were. A binding the clause is read under is still worked out, and one naming a field not
+     * written here stops the fold as it did.
+     */
+    private boolean writtenTogether(Set<RuleKey> together) {
         Set<String> fields = new LinkedHashSet<>();
-        tied.forEach(at -> fields.add(at.steps().getFirst()));
-        Set<InvariantChecker.ReadingId> opened = new LinkedHashSet<>();
-        tied.forEach(at -> naming.getOrDefault(at, Set.of())
-                .forEach(read -> opened.add(read.reading())));
-        Map<Core, Boolean> seen = new IdentityHashMap<>();
+        together.forEach(at -> fields.add(at.steps().getFirst()));
+        Map<InvariantChecker.ReadingId, Set<PartId<RuleRef.Invariant>>> kept =
+                new LinkedHashMap<>();
+        together.forEach(at -> naming.getOrDefault(at, Set.of()).forEach(read ->
+                kept.computeIfAbsent(read.reading(), _ -> new LinkedHashSet<>())
+                        .add(read.part())));
+        Map<Core, Set<Set<PartId<RuleRef.Invariant>>>> seen = new IdentityHashMap<>();
         List<Core> rules = new ArrayList<>();
         for (InvariantChecker.Written each : readings) {
-            if (opened.contains(each.opened()) && seen.put(each.clause(), Boolean.TRUE) == null) {
-                rules.add(each.clause());
+            Set<PartId<RuleRef.Invariant>> parts = kept.get(each.opened());
+            if (parts == null
+                    || !seen.computeIfAbsent(each.clause(), _ -> new HashSet<>()).add(parts)) {
+                continue;
             }
+            Map<PartId<RuleRef.Invariant>, Boolean> others = new LinkedHashMap<>();
+            each.parts().stream().map(Clauses.StatedPart::id)
+                    .filter(id -> !parts.contains(id))
+                    .forEach(id -> others.put(id, Boolean.TRUE));
+            Core held = each.withPartsSettled(others);
+            if (held == null) {
+                return false;
+            }
+            rules.add(held);
         }
         return ADeclarationsWitness.exists(source, named, fields, rules, this::stringsAdmittedAt);
     }
@@ -2908,11 +2956,15 @@ public final class FieldDomains {
      * that value whatever the line is. And a value no set read here holds whole is shown to be
      * there where the rules say only where one number taken of it falls ({@link #answeredOfIt}).
      *
-     * @param unheld the rules the bounds do not hold, which only a law can be taken in place of
+     * <p>Which of the two a part is is asked of the part. A bound on the size is one the bounds
+     * hold, as the rule it is a part of is held where every part of it is, and a part beside it in
+     * the same clause the bounds do not hold is a part of its own: asked of the rule, the bound was
+     * taken for a call, and a clause written as the two joined was not shown where the same two
+     * written as two clauses were.
      */
     private boolean holdsAValueAt(RuleKey at,
                                   Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
-                                  Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+                                  Set<TypeSymbol.AtModule> asked) {
         if (!handedOn.contains(at)) {
             AdmissibleSet left = admits(at);
             return (left.completeness() instanceof AdmissibleSet.Completeness.Complete
@@ -2931,15 +2983,14 @@ public final class FieldDomains {
             if (written == null || !placesOf.get(read).equals(Set.of(at))) {
                 return false;
             }
-            if (unheld.contains(read.part().rule())) {
-                IntFunction<Boolean> law = lawOfTheWholeClause(written, read.part());
-                if (law == null) {
-                    return false;
-                }
-                laws.add(law);
-            } else if (!boundsOnlyTheSize(written, read.part(), counted)) {
+            if (boundsOnlyTheSize(written, read.part(), counted)) {
+                continue;
+            }
+            IntFunction<Boolean> law = lawOfThePart(written, read.part());
+            if (law == null) {
                 return false;
             }
+            laws.add(law);
         }
         for (int size = 0; size <= 1; size++) {
             int held = size;
@@ -3054,18 +3105,28 @@ public final class FieldDomains {
     }
 
     /**
-     * What {@code written}'s clause comes to at a container of nought or one element, where the
-     * clause is {@code part} alone and is a call of an operation whose truth a law settles, the
-     * container being one of its arguments as written — or null where it is not.
+     * What {@code written}'s clause comes to at a container of nought or one element, where
+     * {@code part} is a call of an operation whose truth a law settles, the container being one of
+     * its arguments as written, and the clause's other parts hold — or null where it is not.
      *
      * <p>The container is the one argument that is a value read off as it stands: the others are a
      * closure or another value the law says nothing of at that size, and a law that turns on them
      * answers null for every size.
+     *
+     * <p>The clause is worked out with the part put in place by what the law says of the call and
+     * the other parts held to hold ({@link InvariantChecker.Written#withPartsSettled}), which they
+     * are shown to by what is asked of the places they name. A binding the clause is read under is
+     * worked out as written, and one naming a place stops the fold, so no size is answered.
      */
-    private static IntFunction<Boolean> lawOfTheWholeClause(InvariantChecker.Written written,
-                                                            PartId<RuleRef.Invariant> part) {
-        if (!written.constrained().keySet().equals(Set.of(part))
-                || !(Core.withoutStanding(written.clause()) instanceof Core.PreservedCall call)
+    private IntFunction<Boolean> lawOfThePart(InvariantChecker.Written written,
+                                              PartId<RuleRef.Invariant> part) {
+        ClauseExpr.Leaf stated = written.parts().stream()
+                .filter(each -> each.id().equals(part))
+                .map(Clauses.StatedPart::of)
+                .filter(ClauseExpr.Leaf.class::isInstance).map(ClauseExpr.Leaf.class::cast)
+                .findFirst().orElse(null);
+        if (stated == null
+                || !(Core.withoutStanding(stated.of()) instanceof Core.PreservedCall call)
                 || !(DefaultBoundOperationFacts.get().settled(call.declared().operation(),
                         OperationLaw.Observed.TRUTH)
                         instanceof BoundOperationFacts.Settled.ByALaw(
@@ -3084,8 +3145,25 @@ public final class FieldDomains {
                 container = i;
             }
         }
+        if (container < 0) {
+            return null;
+        }
         int at = container;
-        return at < 0 ? null : size -> WhatALawSaysOfAFewElements.holds(law, at, size);
+        Map<PartId<RuleRef.Invariant>, Boolean> others = new LinkedHashMap<>();
+        written.parts().stream().map(Clauses.StatedPart::id).filter(id -> !id.equals(part))
+                .forEach(id -> others.put(id, Boolean.TRUE));
+        CoreConstantEval fold = CoreConstantEval.against(source.symbols(), Denotations.none());
+        return size -> {
+            Boolean answers = WhatALawSaysOfAFewElements.holds(law, at, size);
+            if (answers == null) {
+                return null;
+            }
+            Map<PartId<RuleRef.Invariant>, Boolean> settled = new LinkedHashMap<>(others);
+            settled.put(part, answers == stated.positive());
+            Core clause = written.withPartsSettled(settled);
+            return clause != null && fold.eval(clause).orElse(null) instanceof Boolean holds
+                    ? holds : null;
+        };
     }
 
     /** Whether {@code value} is a value read off as it stands: a name, or a field of one, whatever
@@ -3173,23 +3251,19 @@ public final class FieldDomains {
             return false;
         }
         ProjectionEvidence whole = projection();
-        Set<RuleRef> unheld = new LinkedHashSet<>();
         Set<RuleKey> shown = new LinkedHashSet<>();
         if (!(whole instanceof ProjectionEvidence.CertifiedExact)) {
             List<ProjectionEvidence.StandsApart> apart = standingApart(whole, null, asked);
             if (apart == null) {
                 return handedOn.isEmpty() && holdsInAWitness();
             }
-            apart.forEach(each -> {
-                unheld.add(each.rule());
-                shown.add(each.at());
-            });
+            apart.forEach(each -> shown.add(each.at()));
         }
-        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
+        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = tied().placesOf();
         for (RuleKey container : handedOn) {
-            Set<RuleKey> tied = InvariantChecker.tiedTo(container, naming, null);
-            if (!shown.contains(container) && (!apartFrom(tied, null)
-                    || !holdTogether(tied, placesOf, unheld, asked))) {
+            Set<RuleKey> together = tied().tiedTo(container);
+            if (!shown.contains(container) && (!apartFrom(together, null)
+                    || !holdTogether(together, placesOf, asked))) {
                 return false;
             }
         }
@@ -3255,8 +3329,21 @@ public final class FieldDomains {
      *
      * <p>Where this is not exact the bounds still hold: every value they exclude is truly excluded,
      * and a value they admit may be one nothing can build. What settles such an edge is a witness.
+     *
+     * <p>Worked out the first time it is asked: the answer turns on the readings of this value
+     * alone, and it is asked again at every place a projection is asked of.
      */
     public ProjectionEvidence projection() {
+        ProjectionEvidence known = projected;
+        if (known == null) {
+            known = projectionReadOff();
+            projected = known;
+        }
+        return known;
+    }
+
+    /** {@link #projection}, read off the readings. */
+    private ProjectionEvidence projectionReadOff() {
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
         // A rule that never arrived first. Which rule it was is not known here and there is nothing
         // to say: what a stop leaves is a name and every name under it.

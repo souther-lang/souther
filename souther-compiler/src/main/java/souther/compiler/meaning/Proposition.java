@@ -2285,8 +2285,10 @@ public sealed interface Proposition {
                 kept.putIfAbsent(one.key(), one);
             }
         }
-        List<Proposition> joinedAsKept = List.copyOf(kept.values());
-        kept.values().removeIf(one -> saidByAContainerHolding(one, joinedAsKept, every));
+        if (kept.size() > 1 && kept.values().stream().anyMatch(Some.class::isInstance)) {
+            List<Proposition> joinedAsKept = List.copyOf(kept.values());
+            kept.values().removeIf(one -> saidByAContainerHolding(one, joinedAsKept, every));
+        }
         if (every && kept.size() > 1) {
             Proposition byCases = byTheCases(List.copyOf(kept.values()));
             if (byCases != null) {

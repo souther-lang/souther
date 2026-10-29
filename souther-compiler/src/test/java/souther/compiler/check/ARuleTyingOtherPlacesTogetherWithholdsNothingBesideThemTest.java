@@ -76,6 +76,60 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
         }
     }
 
+    /**
+     * And where the rule is one part of a clause whose other parts are about another place, as
+     * where the parts are written as clauses of their own.
+     *
+     * <p>Each part of the clause is asked of the places it names, the others held to hold, so the
+     * part about {@code c} is not asked where only {@code a} and {@code b} are written. A part
+     * denied holds where what it denies does not, and is held to hold that way.
+     */
+    @Test
+    void soDoesOnePartOfAClauseWhoseOtherPartsAreAboutAnotherPlace() {
+        for (String written : List.of(
+                "    invariant String.contains(a, b) && String.contains(\"q\", c)",
+                "    invariant String.contains(a, b) && Bool.not(String.contains(\"q\", c))")) {
+            String apart = written.replace(" && ", "\n    invariant ");
+            assertTrue(readingOf(apart).projectionAt(RuleKey.of("total")).isCertified(), apart);
+            FieldDomains read = readingOf(written);
+            assertTrue(read.projectionAt(RuleKey.of("total")).isCertified(),
+                    () -> "one clause says what two do: " + written + ": "
+                            + read.projectionAt(RuleKey.of("total")));
+        }
+    }
+
+    /** But not where another part of the clause is one no value of the place it names holds. */
+    @Test
+    void butNotWhereAnotherPartOfTheClauseHoldsOfNoValue() {
+        FieldDomains read = readingOf("""
+                    invariant String.contains(a, b)
+                        && String.matches("A", c) && String.matches("B", c)
+                """);
+
+        assertFalse(read.projectionAt(RuleKey.of("total")).isCertified(),
+                () -> read.projectionAt(RuleKey.of("total")).toString());
+        assertFalse(read.shownToHoldAValue());
+    }
+
+    /**
+     * And where the rule is a denial, however it is written: what a denial answers is worked out
+     * at the values written down, as the clause reads it.
+     */
+    @Test
+    void soDoesADenialHoweverItIsWritten() {
+        for (String rule : List.of("Bool.not(String.contains(a, b))",
+                "if String.contains(a, b) then false else true")) {
+            FieldDomains read = readingOf("    invariant " + rule);
+
+            assertTrue(read.projectionAt(RuleKey.of("total")).isCertified(),
+                    () -> rule + ": " + read.projectionAt(RuleKey.of("total")));
+        }
+        FieldDomains never = readingOf(
+                "    invariant Bool.not(String.contains(a, b)) && String.contains(a, b)");
+        assertFalse(never.projectionAt(RuleKey.of("total")).isCertified(),
+                "a rule and its denial hold of no value together");
+    }
+
     /** And of three, each tied to the next. */
     @Test
     void soDoesAChainOfThem() {
