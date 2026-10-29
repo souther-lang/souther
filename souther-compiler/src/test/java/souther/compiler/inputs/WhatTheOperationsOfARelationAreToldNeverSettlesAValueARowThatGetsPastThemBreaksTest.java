@@ -377,8 +377,9 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
 
     private static void verifyARowEachWay(Program program, int constant, Rel relation, int at,
                                           int held) {
-        List<IntSum> everyOperation = new ArrayList<>(program.sums());
-        everyOperation.addAll(program.hidden());
+        List<IntSum> operations = new ArrayList<>(program.sums());
+        operations.addAll(program.hidden());
+        int[][] everyOperation = compiled(operations);
         int free = 3 - at - 2;
         for (int value : new int[] {-1, 0}) {
             boolean sawTrue = false;
@@ -391,12 +392,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 if (!getsPast(everyOperation, row)) {
                     continue;
                 }
-                ExactRatio form = ExactRatio.of(constant);
-                for (int i = 0; i < 3; i++) {
-                    form = form.plus(program.weightOf(i).times(ExactRatio.of(row[i])).orNull())
-                            .orNull();
-                }
-                if (holds(relation, form.signum())) {
+                if (holds(relation, formAt(program, constant, row).signum())) {
                     sawTrue = true;
                 } else {
                     sawFalse = true;
@@ -438,8 +434,9 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         int range = GREATEST - LEAST + 1;
         // A row is a row of the program where it gets past every operation the program works out,
         // told or not: the code was given those it was told of.
-        List<IntSum> everyOperation = new ArrayList<>(sums);
-        everyOperation.addAll(program.hidden());
+        List<IntSum> operations = new ArrayList<>(sums);
+        operations.addAll(program.hidden());
+        int[][] everyOperation = compiled(operations);
         // For each run it says, whether some value of it has a row that gets past the operations:
         // a run no row stands in settles nothing and is settled for want of one.
         int runsSaid = said instanceof Leaves.Settled settled ? settled.runs().size() : 0;
@@ -464,12 +461,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 if (!getsPast(everyOperation, row)) {
                     continue;
                 }
-                ExactRatio form = ExactRatio.of(constant);
-                for (int i = 0; i < size; i++) {
-                    form = form.plus(program.weightOf(i).times(ExactRatio.of(row[i])).orNull())
-                            .orNull();
-                }
-                if (holds(relation, form.signum())) {
+                if (holds(relation, formAt(program, constant, row).signum())) {
                     sawTrue = true;
                 } else {
                     sawFalse = true;
@@ -502,16 +494,42 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         }
     }
 
-    /** Whether every operation holds at the row, worked out and held to the ends of the type. */
-    private static boolean getsPast(List<IntSum> sums, int[] row) {
-        Map<Object, ExactRatio> values = new LinkedHashMap<>();
-        for (int i = 0; i < row.length; i++) {
-            values.put(NAMES.get(i), ExactRatio.of(row[i]));
+    /**
+     * The operations as whole numbers, once, for the many rows each is worked out at: the
+     * constant, then the weight of each named term. The rows are counted without the code's own
+     * arithmetic, and without allocating a ratio for each.
+     */
+    private static int[][] compiled(List<IntSum> sums) {
+        int[][] out = new int[sums.size()][NAMES.size() + 1];
+        for (int k = 0; k < sums.size(); k++) {
+            out[k][0] = sums.get(k).constant().floor().orNull().intValueExact();
+            for (int i = 0; i < NAMES.size(); i++) {
+                ExactRatio weight = sums.get(k).coefs().get(NAMES.get(i));
+                out[k][i + 1] = weight == null ? 0 : weight.floor().orNull().intValueExact();
+            }
         }
-        for (IntSum each : sums) {
-            ExactRatio at = each.at(values);
-            if (at == null || at.compareTo(ExactRatio.of(LEAST)) < 0
-                    || at.compareTo(ExactRatio.of(GREATEST)) > 0) {
+        return out;
+    }
+
+    /** The form at the row: the constant, and the terms weighed, all the weights times
+     *  {@code scale}. */
+    private static ExactRatio formAt(Program program, int constant, int[] row) {
+        int weighed = 0;
+        for (int i = 0; i < row.length; i++) {
+            weighed += program.weights().get(i) * row[i];
+        }
+        return ExactRatio.of(constant).plus(program.scale().times(ExactRatio.of(weighed)).orNull())
+                .orNull();
+    }
+
+    /** Whether every operation holds at the row, worked out and held to the ends of the type. */
+    private static boolean getsPast(int[][] sums, int[] row) {
+        for (int[] each : sums) {
+            int at = each[0];
+            for (int i = 0; i < row.length; i++) {
+                at += each[i + 1] * row[i];
+            }
+            if (at < LEAST || at > GREATEST) {
                 return false;
             }
         }
