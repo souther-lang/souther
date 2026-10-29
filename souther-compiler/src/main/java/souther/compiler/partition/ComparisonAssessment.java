@@ -31,6 +31,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ExpansionLineage;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -42,8 +43,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -305,9 +304,9 @@ sealed interface ComparisonAssessment {
      * @param mayStopBefore those of {@code undivided} a run may stop on the way to some relation
      *                  about on what nothing here says, so that every value there getting to the
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
-     * @param noRowShownComputed for each of {@code filedAt} some relation about it settles by the terms'
-     *                  ends in some numbers, those numbers where no row is shown computed: no
-     *                  line is drawn for the place, and it is said so
+     * @param noRowShownComputed those of {@code filedAt} some relation about settles by the terms'
+     *                  ends in some numbers where no row is shown computed: no line is drawn for
+     *                  the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
      */
@@ -317,8 +316,7 @@ sealed interface ComparisonAssessment {
                                Optional<DrawnBeside> beside,
                                Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                Set<FilingCoordinate> mayStopBefore,
-                               Map<FilingCoordinate,
-                                       List<WhatARelationLeavesUndivided.SettledRun>> noRowShownComputed,
+                               Set<FilingCoordinate> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
                                        UndividedByARelation.StringsAPartnerCanHold> partnered)
             implements ComparisonAssessment {
@@ -332,10 +330,7 @@ sealed interface ComparisonAssessment {
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
             settling = List.copyOf(settling);
-            Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> unshown =
-                    new LinkedHashMap<>();
-            noRowShownComputed.forEach((at, runs) -> unshown.put(at, List.copyOf(runs)));
-            noRowShownComputed = Collections.unmodifiableMap(unshown);
+            noRowShownComputed = Set.copyOf(noRowShownComputed);
             partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
             Objects.requireNonNull(beside, "drawn beside something, or nothing");
             if (beside.isEmpty() && !settling.isEmpty()) {
@@ -349,7 +344,7 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Map.of(), Map.of())
+                    beside, Map.of(), Set.of(), Set.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
@@ -1920,7 +1915,7 @@ sealed interface ComparisonAssessment {
         return relatingAt(across.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), across.undivided(),
                 stopped, across.left().mayStopBefore(),
-                noRowShownComputedAt(List.copyOf(across.left().settled().entrySet())));
+                noRowShownComputedAt(across.left().settled().entrySet()));
     }
 
     /** The same, of a relation to another value. */
@@ -1973,8 +1968,7 @@ sealed interface ComparisonAssessment {
                                    Set<FilingCoordinate> undivided,
                                    Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                    Set<FilingCoordinate> mayStopBefore,
-                                   Map<FilingCoordinate,
-                                           List<WhatARelationLeavesUndivided.SettledRun>> noRowShownComputed) {
+                                   Set<FilingCoordinate> noRowShownComputed) {
         return places.stream().distinct().flatMap(at -> {
             if (undivided.contains(at)) {
                 return Stream.of(new LeftAt(at, mayStopBefore.contains(at)
@@ -1986,9 +1980,8 @@ sealed interface ComparisonAssessment {
             // past, and numbers in which no row is shown computed are not.
             Set<Figure> figures = stoppedAt.getOrDefault(at, Set.of());
             List<LeftAt> why = new ArrayList<>();
-            if (noRowShownComputed.containsKey(at)) {
-                why.add(new LeftAt(at, new BlockReason.RelationRowsNotShownComputed(
-                        noRowShownComputed.get(at))));
+            if (noRowShownComputed.contains(at)) {
+                why.add(new LeftAt(at, new BlockReason.RelationRowsNotShownComputed()));
             }
             if (!figures.isEmpty() || why.isEmpty()) {
                 why.add(new LeftAt(at, notShownAt(figures)));
@@ -1998,25 +1991,17 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * The numbers, at the place of each number, in which the runs a relation settles by the
-     * terms' ends have no row shown computed, together over the relations about the place: the
-     * runs of each, once, in the order they were met.
+     * The places of the numbers some of whose settling runs have no row shown computed. A set of
+     * places and not the runs: no reader is told which numbers they are.
      */
-    static Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> noRowShownComputedAt(
-            List<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
-        // The terms are met in the order a map gives them, which is not an order of the runs, so
-        // the runs are kept in their own.
-        Map<FilingCoordinate, SortedSet<WhatARelationLeavesUndivided.SettledRun>> together =
-                new LinkedHashMap<>();
+    static Set<FilingCoordinate> noRowShownComputedAt(
+            Collection<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
+        Set<FilingCoordinate> out = new LinkedHashSet<>();
         for (Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> each : settled) {
-            for (WhatARelationLeavesUndivided.SettledRun run : each.getValue().noRowShownComputed()) {
-                together.computeIfAbsent(FilingCoordinate.of(each.getKey()), _ -> new TreeSet<>())
-                        .add(run);
+            if (!each.getValue().noRowShownComputed().isEmpty()) {
+                out.add(FilingCoordinate.of(each.getKey()));
             }
         }
-        Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> out =
-                new LinkedHashMap<>();
-        together.forEach((at, runs) -> out.put(at, List.copyOf(runs)));
         return out;
     }
 

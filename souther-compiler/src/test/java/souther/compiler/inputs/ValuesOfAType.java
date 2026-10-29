@@ -1,7 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.ExactCut;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -74,16 +72,7 @@ final class ValuesOfAType {
     private static final Map<Class<?>, Function<ValuesOfAType, List<Object>>> LEAVES = Map.of(
             TypeSymbol.AtModule.class, values -> values.of(TypeKey.class).stream()
                     .<Object>map(key -> TypeSymbols.declared((TypeKey) key))
-                    .toList(),
-            WhatARelationLeavesUndivided.SettledRun.class, _ -> List.of(
-                    new WhatARelationLeavesUndivided.SettledRun(null,
-                            ExactCut.exclusive(ExactRatio.ZERO), false),
-                    new WhatARelationLeavesUndivided.SettledRun(
-                            ExactCut.exclusive(ExactRatio.ZERO), null, true),
-                    new WhatARelationLeavesUndivided.SettledRun(
-                            ExactCut.inclusive(ExactRatio.ZERO), ExactCut.inclusive(ExactRatio.ONE),
-                            true),
-                    new WhatARelationLeavesUndivided.SettledRun(null, null, false)));
+                    .toList());
 
     /**
      * The words a string component is offered.

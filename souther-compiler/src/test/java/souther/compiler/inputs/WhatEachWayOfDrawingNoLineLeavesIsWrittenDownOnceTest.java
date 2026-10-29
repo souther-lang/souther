@@ -17,8 +17,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
-import souther.compiler.numeric.ExactCut;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
@@ -557,9 +555,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
                 new BlockReason.RelationShownOverARegion(false, 1L, List.of()),
-                new BlockReason.RelationRowsNotShownComputed(List.of(
-                        new WhatARelationLeavesUndivided.SettledRun(null,
-                                ExactCut.exclusive(ExactRatio.ZERO), false))),
+                new BlockReason.RelationRowsNotShownComputed(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

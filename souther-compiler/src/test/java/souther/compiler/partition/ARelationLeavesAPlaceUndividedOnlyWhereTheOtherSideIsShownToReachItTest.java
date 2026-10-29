@@ -15,8 +15,6 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
-import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
-import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -1259,7 +1257,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
                         List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
-                        Set.of(), Map.of(), Map.of())
+                        Set.of(), Set.of(), Map.of())
                         .whereRowsArrive(read, List.of(), stoppedShort);
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
@@ -3508,11 +3506,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aPlaceWithNumbersNoRowIsShownComputedInIsLeftWithThoseNumbers() {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
         FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
-        SettledRun below = new SettledRun(null, ExactCut.exclusive(ExactRatio.ZERO), false);
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
-                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(), Map.of(hours, List.of(below)));
-        assertEquals(new BlockReason.RelationRowsNotShownComputed(List.of(below)),
-                left.get(0).why());
+                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(), Set.of(hours));
+        assertEquals(new BlockReason.RelationRowsNotShownComputed(), left.get(0).why());
         assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
     }
 
@@ -3524,12 +3520,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aFigureASearchStoppedAtIsNotHiddenByNumbersNoRowIsShownComputedIn() {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
-        SettledRun below = new SettledRun(null, ExactCut.exclusive(ExactRatio.ZERO), false);
         Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
                 List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Set.of(),
-                Map.of(hours, List.of(below)));
-        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(List.of(below)),
+                Set.of(hours));
+        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
                 left.stream().map(ComparisonAssessment.LeftAt::why).toList());
         assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,

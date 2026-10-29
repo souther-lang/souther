@@ -363,8 +363,6 @@ public sealed interface BlockReason {
                     }
                     yield Integer.compare(byCodePoints.size(), theirCounts.size());
                 }
-                case RelationRowsNotShownComputed(var over) -> RelationRowsNotShownComputed
-                        .compare(over, ((RelationRowsNotShownComputed) other).over());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -374,7 +372,8 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
+                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _,
+                     RelationRowsNotShownComputed _ -> 0;
             };
         }
 
@@ -1350,40 +1349,15 @@ public sealed interface BlockReason {
 
     /**
      * What the rule states was read in full, and it relates the value here to another value, and
-     * the numbers in {@code over} settle it by the terms' ends; but the operations the rows work
-     * out were not all worked out on a row built in them, so no row is shown computed there.
+     * some numbers here settle it by the terms' ends; but the operations the rows work out were
+     * not all worked out on a row built in them, so no row is shown computed there.
      *
-     * <p>A region of numbers and not an interval: the runs are those the relation settles, and
-     * they lie where the relation puts them. A number in one has no row shown, which is not a row
-     * shown not to compute, and it is no counterexample to what is said of the others. Apart from
-     * {@link RelationNotShownToReachEveryValue}, which says nothing of where.
-     *
-     * @param over the runs in which no row is shown computed, in order of their values
+     * <p>A fact about what was shown and not about the numbers, and one no reader is told which
+     * numbers it is about: the document says the word and not the region, so nothing here holds
+     * the region either. Apart from {@link RelationNotShownToReachEveryValue}, which says
+     * nothing of rows being computed.
      */
-    record RelationRowsNotShownComputed(List<WhatARelationLeavesUndivided.SettledRun> over)
-            implements RuleReadingStopped {
-
-        public RelationRowsNotShownComputed {
-            over = over.stream().distinct().sorted().toList();
-            if (over.isEmpty()) {
-                throw new IllegalArgumentException("a relation whose rows are not shown computed"
-                        + " says over which numbers");
-            }
-        }
-
-        /** These runs in order of where they start, an end with none first. */
-        static int compare(List<WhatARelationLeavesUndivided.SettledRun> one,
-                           List<WhatARelationLeavesUndivided.SettledRun> other) {
-            int common = Math.min(one.size(), other.size());
-            for (int i = 0; i < common; i++) {
-                int byRun = one.get(i).compareTo(other.get(i));
-                if (byRun != 0) {
-                    return byRun;
-                }
-            }
-            return Integer.compare(one.size(), other.size());
-        }
-    }
+    record RelationRowsNotShownComputed() implements RuleReadingStopped {}
 
     /**
      * What the rule states was read in full, and it relates the value here to another value; the
