@@ -610,6 +610,24 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 AdequacyReport.of(compilation).adequacy());
     }
 
+    /**
+     * What is shown to owe nothing is offered nothing: the rows a build is offered are asked of
+     * the walks that are owed, the same ones the measure reports.
+     */
+    @Test
+    void aWalkShownToHoldOneElementAtMostIsOfferedNoRow() {
+        Compilation compilation = measured(foldOverWhatAnInvariantHolds("1", """
+                    | (Few([])) -> 0
+                    | (Few([5])) -> 5
+                """));
+        String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("repro.few")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+
+        assertEquals(List.of(), RowsOfABlock.of(block), () -> block);
+    }
+
     /** Room for a second element is room for a row that tells the rewrites apart. */
     @Test
     void aWalkOverAListTheDeclarationsLeaveRoomForTwoElementsIsStillAsked() {
@@ -618,7 +636,13 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | (Few([5])) -> 5
                 """));
 
-        assertEquals(2, foldVerdicts(compilation).size());
+        assertEquals(List.of("total"), foldsAsked(verdictsByFold(compilation)));
+    }
+
+    /** The definitions that wrote the folds asked about, each once. */
+    private static List<String> foldsAsked(List<String> byFold) {
+        return byFold.stream().map(verdict -> verdict.substring(0, verdict.indexOf(' ')))
+                .distinct().toList();
     }
 
     private static final String FOLD_OF_XS = "List.fold((acc, x) -> acc + x, 0, i.xs)";
@@ -640,8 +664,9 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
     void aWalkWhereNothingIsLeftAfterTheFirstElementOwesNothing() {
         String body = "if List.isEmpty(List.drop(1, i.xs)) then " + FOLD_OF_XS + " else 0";
 
-        assertEquals(List.of("fold_after_one_step: noticed", "fold_from_the_seed: noticed"),
-                verdictsOfTheFoldIn(body, ONE_OR_NONE_ANSWER_ROWS));
+        assertEquals(List.of("drop fold_after_one_step: noticed",
+                        "drop fold_from_the_seed: noticed"),
+                verdictsByFoldIn(body, ONE_OR_NONE_ANSWER_ROWS));
     }
 
     /** One fold written once but entered from two places is owed where any of them is not shown. */
@@ -665,20 +690,52 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | (In { xs = [5], ys = [1, 2] }) -> 8
                 """);
 
-        assertEquals(2, foldVerdicts(compilation).size());
+        assertEquals(List.of("sum"), foldsAsked(verdictsByFold(compilation)));
     }
 
     /** The same shapes with the walk on the other side of the condition leave room for two. */
     @Test
     void aWalkWhereTheSecondElementIsPresentIsStillAsked() {
-        Map<String, Integer> bodies = new java.util.LinkedHashMap<>();
+        Map<String, List<String>> bodies = new java.util.LinkedHashMap<>();
         bodies.put("match List.get(1, i.xs) with\n | Some s -> " + FOLD_OF_XS + "\n | None -> 0",
-                2);
-        bodies.put("if List.isEmpty(List.drop(1, i.xs)) then 0 else " + FOLD_OF_XS, 4);
+                List.of("total"));
+        bodies.put("if List.isEmpty(List.drop(1, i.xs)) then 0 else " + FOLD_OF_XS,
+                List.of("drop", "total"));
 
-        bodies.forEach((body, count) -> assertEquals(count,
-                verdictsOfTheFoldIn(body, ROOM_FOR_TWO_ROWS.formatted(0, 3)).size(), body));
+        bodies.forEach((body, folds) -> assertEquals(folds, foldsAsked(
+                verdictsByFoldIn(body, ROOM_FOR_TWO_ROWS.formatted(0, 3))), body));
     }
+
+    /**
+     * A bound on another list, or on a position nothing is at, says nothing of the list walked:
+     * what the declarations and the conditions leave of {@code ys} or of an index that is never
+     * there is not what they leave of {@code xs}.
+     */
+    @Test
+    void aSecondElementNotFoundElsewhereOrAtNoIndexSaysNothingOfTheListWalked() {
+        for (String body : List.of(
+                "match List.get(1, i.ys) with\n | Some s -> 0\n | None -> " + FOLD_OF_XS,
+                "match List.get(0 - 1, i.xs) with\n | Some s -> 0\n | None -> " + FOLD_OF_XS)) {
+            assertEquals(List.of("total"), foldsAsked(
+                    verdictsByFoldIn(body, ROOM_FOR_TWO_ROWS.formatted(5, 3))), body);
+        }
+    }
+
+    /** The same, by the definition that wrote each fold. */
+    private static List<String> verdictsByFoldIn(String body, String rows) {
+        return verdictsByFold(measured("""
+                module repro.guarded
+
+                data In = { xs: List<Int>, ys: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                let total (i) = %s
+
+                example total
+                %s""".formatted(body, rows)));
+    }
+
     private static List<String> verdictsOfTheFoldIn(String body, String rows) {
         return foldVerdicts(measured("""
                 module repro.guarded

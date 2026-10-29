@@ -121,8 +121,8 @@ public final class Numberings {
         return out;
     }
 
-    /** Which of the two families a fixture's number was handed out to. */
-    public enum Family { ARM, COMPARISON }
+    /** Which of the families a fixture's number was handed out to. */
+    public enum Family { ARM, COMPARISON, WALK }
 
     /**
      * A numbering whose numbers were handed out to the families named, in that order.
@@ -137,6 +137,8 @@ public final class Numberings {
             byNumber.add(switch (families[at]) {
                 case ARM -> armAt(at);
                 case COMPARISON -> new SiteAddress.ConditionOutcome(
+                        new NodeAddress("fixture", java.util.Set.of(pathTo(at))));
+                case WALK -> new SiteAddress.Walk(
                         new NodeAddress("fixture", java.util.Set.of(pathTo(at))));
             });
         }

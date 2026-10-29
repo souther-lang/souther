@@ -7365,6 +7365,26 @@ public final class Adequacy {
     }
 
     /**
+     * The rewrites of the walks of {@code behavior} that the classes carry, with the walks the
+     * model's own rules show to go over one element at most taken as the walk under either
+     * spelling.
+     *
+     * <p>The one place that proof is put with the walks, so that the measure of the rows written
+     * and the choosing of a row to offer ask the same question of the same walks. Held to the plan
+     * the walks are places of, as {@link #unreachedIn} is.
+     */
+    static WalkRewrites walksOwedIn(WalkRewrites carried,
+                                    Map<String, PathReachability.Answers.AsRun> arrived,
+                                    String behavior, Bodies.Elaborated checked) {
+        PathReachability.Answers.AsRun arrives = arrived == null ? null : arrived.get(behavior);
+        if (arrives == null) {
+            return carried;
+        }
+        arrives.answers().requireNumbering(checked.numberingIdentity());
+        return carried.provingTheSameAt(arrives.answers().arrivals().walksHeldToOneAtMost());
+    }
+
+    /**
      * A way to run one behavior's composed rows, said in the generator's words.
      *
      * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
@@ -7394,10 +7414,11 @@ public final class Adequacy {
         SiteNumbering numbering = SiteNumbering.of(checked.numberingIdentity());
         List<CoverageSites.ArmSite> arms = checked.plan().arms(behavior);
         List<CoverageSites.WalkSite> walks = checked.plan().walks(behavior);
-        Predicate<ControlPlace.Arm> unreached =
-                unreachedIn(db.ask(new Arrived(module)).value(), behavior, checked);
+        Map<String, PathReachability.Answers.AsRun> arrived = db.ask(new Arrived(module)).value();
+        Predicate<ControlPlace.Arm> unreached = unreachedIn(arrived, behavior, checked);
         ArmReplacements carried = trials.carried();
-        WalkRewrites walksCarried = trials.walksCarried();
+        WalkRewrites walksCarried =
+                walksOwedIn(trials.walksCarried(), arrived, behavior, checked);
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
         // Each row once, for every search that holds this: a search runs a row to choose it, its
         // reader runs the row it was handed to see where it stands, and the searches of one

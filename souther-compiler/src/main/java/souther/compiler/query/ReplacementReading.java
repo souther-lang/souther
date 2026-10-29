@@ -27,7 +27,6 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
-import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -177,10 +176,6 @@ public final class ReplacementReading {
      * says is another program ({@link WalkRewrites#askedOf}), {@code walkedNoFurther} being what
      * the rows' runs showed of how far each walk went. A walk is no fork of the body's, so a body
      * whose only loops are walks is asked about the values it answered as well.
-     *
-     * <p>{@code heldToOneAtMost} says of a place a walk is entered whether the list it goes over
-     * holds one element at most there. A walk shown so at every place it is entered is not asked
-     * about.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
                                    ArmReplacements carried, WalkRewrites walksCarried,
@@ -191,7 +186,6 @@ public final class ReplacementReading {
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                    Comparing comparing,
-                                   Predicate<WalkProbe> heldToOneAtMost,
                                    Supplier<InputsRowsRanWith> ranWith) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
@@ -257,18 +251,8 @@ public final class ReplacementReading {
             walked.addAll(entered.apply(row));
         }
         Map<Replacement.OfAWalk, WalkOccurrences> walkOccurrences = new LinkedHashMap<>();
-        // A walk shown, at every place it is entered, to go over a list of one element at most is
-        // the walk under either spelling on every run: no row tells a rewrite of it apart, and
-        // none is owed. So a walk is asked about where any of its places shows no such thing.
-        List<CoverageSites.WalkSite> sites = plan.walks(behavior);
-        Set<SourceConstructOrigin> notShown = new HashSet<>();
-        for (CoverageSites.WalkSite site : sites) {
-            if (!heldToOneAtMost.test(site.index())) {
-                notShown.add(site.walk());
-            }
-        }
-        for (CoverageSites.WalkSite site : sites) {
-            if (!walked.contains(site.index()) || !notShown.contains(site.walk())) {
+        for (CoverageSites.WalkSite site : plan.walks(behavior)) {
+            if (!walked.contains(site.index())) {
                 continue;
             }
             ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAWalk(site);
