@@ -5,6 +5,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.ReachEvidence;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecisionReading;
@@ -346,17 +348,18 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
         ControlPlace.Outcome proof = out.getFirst();
 
         assertInstanceOf(Reachability.Unreachable.class,
-                proven.asRunWith(Set.of(), Set.of()).answers().at(proof),
+                proven.asRunWith(ReachEvidence.NONE).answers().at(proof),
                 "no row saw it, so the proof stands");
         assertInstanceOf(Reachability.Unreachable.class,
-                proven.asRunWith(Set.of(), Set.of(new SeenConditionOutcome(proof.at(),
-                        !proof.held()))).answers().at(proof),
+                proven.asRunWith(Runs.evidenceOf(Set.of(), Set.of(new SeenConditionOutcome(
+                        proof.at(), !proof.held())), Set.of())).answers().at(proof),
                 "a row seeing it come out the other way says nothing against it");
-        assertEquals(Set.of(), proven.asRunWith(Set.of(), Set.of(new SeenConditionOutcome(
-                        proof.at(), !proof.held()))).contradicted().places(),
+        assertEquals(Set.of(), proven.asRunWith(Runs.evidenceOf(Set.of(),
+                        Set.of(new SeenConditionOutcome(proof.at(), !proof.held())), Set.of()))
+                        .contradicted().places(),
                 "and nothing it says is shown wrong");
-        PathReachability.Answers.AsRun ran = proven.asRunWith(Set.of(),
-                Set.of(new SeenConditionOutcome(proof.at(), proof.held())));
+        PathReachability.Answers.AsRun ran = proven.asRunWith(Runs.evidenceOf(Set.of(),
+                Set.of(new SeenConditionOutcome(proof.at(), proof.held())), Set.of()));
         assertInstanceOf(Reachability.Reachable.class, ran.answers().at(proof),
                 "a row seeing it come out that way takes the proof back");
         assertEquals(Set.of(proof), ran.contradicted().places(),
