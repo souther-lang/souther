@@ -414,6 +414,7 @@ public final class CoverageSites {
                         + " body, at one place, over a list the input holds or not");
             }
             separators = List.copyOf(separators);
+            over = over.map(List::copyOf);
         }
     }
 
