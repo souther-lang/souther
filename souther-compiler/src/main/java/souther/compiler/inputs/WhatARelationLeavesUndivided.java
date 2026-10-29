@@ -3818,7 +3818,8 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>At a value of the one, the other stands at the last value on one side of the line and the
      * first on the other ({@link #acrossTheLine}), every other term at its value nearest nought,
-     * and {@code beside} with them. Each addend of such a row is a value of the one weighed, or
+     * and {@code beside} with them. That the rows are on the two sides is worked out from the
+     * rows: one where the relation holds and one where it does not, each computed. Each addend of such a row is a value of the one weighed, or
      * the line over it a fixed way off, so each is the same straight function of the value, and
      * so is the sum of the positive ones and of the negative ones. Those are computed at every
      * value of a run where they are at its two ends, and there the rows are asked.
@@ -3879,14 +3880,29 @@ public final class WhatARelationLeavesUndivided {
             if (across == null) {
                 return false;
             }
+            // A row on each side of the line is a row where the relation holds and one where it
+            // does not. Which side a witness is on is worked out from the row and not taken from
+            // how it was chosen: a row at the line holds a relation that allows it and fails one
+            // that does not, and shows nothing of the other side.
+            boolean[] computedWhere = new boolean[2];
             for (ExactRatio at : across) {
                 List<ExactRatio> witness = new ArrayList<>(row);
                 witness.add(at.times(terms.get(by).weight()).orNull());
-                if (!arithmetic.rowIsComputed(() -> witness.toArray(ExactRatio[]::new),
+                ExactRatio total = ExactRatio.ZERO;
+                for (ExactRatio each : witness) {
+                    total = each == null || total == null ? null : total.plus(each).orNull();
+                }
+                if (total != null && arithmetic.rowIsComputed(
+                        () -> witness.toArray(ExactRatio[]::new),
                         () -> valuesByKey(terms, i -> i == by ? at
                                 : i == of ? value : heldNearestNought(terms.get(i))))) {
+                    computedWhere[relation.holds(total.signum()) ? 1 : 0] = true;
+                } else if (terms.get(by).spacing() == Granularity.DISCRETE) {
                     return false;
                 }
+            }
+            if (!computedWhere[0] || !computedWhere[1]) {
+                return false;
             }
         }
         return true;
@@ -3908,22 +3924,22 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
-     * Where a dense {@code reaching} term stands to be as near {@code line} as asked: at it where
-     * it is a decimal, and otherwise at a decimal on each side of it that the term holds. Null
+     * Where a dense {@code reaching} term can stand to be at or beside {@code line}: at it where
+     * it is a decimal, and at a decimal on each side of it, so that the rows stood at show both
+     * sides of the relation and not a side the term is only taken to be able to approach. Null
      * where the term holds none. Every value is one the term holds, which is asked of the term
      * and not left to how the values were chosen.
      */
     private static <P> List<ExactRatio> nearTheLine(ExactRatio line, Term<P> reaching) {
-        if (DecimalPoints.isBuiltAt(line)) {
-            return List.of(line);
-        }
         Interval holds = Interval.of(reaching.holds());
-        List<ExactRatio> beside = DecimalPoints.besideTheLine(line,
-                holds == null ? null : holds.lower(), holds == null ? null : holds.upper());
-        // A line no row stands on is stood beside on both sides, and a row on one side shows
-        // nothing of the other.
-        return beside.size() == 2 && beside.stream().allMatch(reaching.holds()::admits)
-                ? beside : null;
+        List<ExactRatio> near = new ArrayList<>();
+        if (DecimalPoints.isBuiltAt(line)) {
+            near.add(line);
+        }
+        near.addAll(DecimalPoints.besideTheLine(line,
+                holds == null ? null : holds.lower(), holds == null ? null : holds.upper()));
+        List<ExactRatio> held = near.stream().filter(reaching.holds()::admits).toList();
+        return held.isEmpty() ? null : held;
     }
 
     /**

@@ -82,6 +82,68 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                 new Operations(List.of(), List.of(operations), Told.EVERY));
     }
 
+    /** {@code 4h - s >= 0} with {@code h} from {@code lowest} to nought and {@code s} nought. */
+    private static Leaves leftOfNoughtWithTheHoursFrom(BigDecimal lowest) {
+        return leftOfNought(lowest, BigDecimal.ZERO, Rel.GE);
+    }
+
+    /** {@code 4h - s} against nought as {@code relation}, with {@code h} from {@code lowest} to
+     *  {@code highest} and {@code s} nought. */
+    private static Leaves leftOfNought(BigDecimal lowest, BigDecimal highest, Rel relation) {
+        NumericDomain.Bounds below = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(lowest)), Endpoint.inclusive(Count.of(highest)));
+        NumericDomain.Bounds nought = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(0)));
+        List<Term<String>> terms = List.of(
+                new Term<>(List.of("h"), ExactRatio.of(4), below, below, null, true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN, "h"),
+                new Term<>(List.of("s"), ExactRatio.of(-1), nought, nought, null, true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
+        DecimalOperation timesFour = product(H, new Written(new BigDecimal("4.0")));
+        return WhatARelationLeavesUndivided.leavesOf(terms, 1, ExactRatio.ZERO, relation,
+                String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
+                new Operations(List.of(), List.of(timesFour), Told.EVERY));
+    }
+
+    /**
+     * A strict relation fails at its line, so the row at nought shows only that side and the other
+     * is a row past nought: {@code h} held to nought and below has none, and from below to above
+     * has one.
+     */
+    @Test
+    void aStrictRelationNeedsARowPastTheLineAsAnAllowingOneNeedsARowBeforeIt() {
+        BigDecimal minusOne = new BigDecimal("-1");
+        assertFalse(leftOfNought(minusOne, BigDecimal.ZERO, Rel.GT) instanceof Leaves.Undivided);
+        assertInstanceOf(Leaves.Undivided.class,
+                leftOfNought(minusOne, BigDecimal.ONE, Rel.GT));
+        assertInstanceOf(Leaves.Undivided.class,
+                leftOfNought(minusOne, BigDecimal.ONE, Rel.GE));
+        assertFalse(leftOfNought(BigDecimal.ZERO, BigDecimal.ONE, Rel.GE)
+                instanceof Leaves.Undivided);
+    }
+
+    /**
+     * {@code 4h >= s} at {@code s} nought holds at nought and fails below it, so a value of
+     * {@code s} is left either way only by a row of {@code h} on each side of nought. The row at
+     * nought is a row of the line; the other is a row beside it.
+     */
+    @Test
+    void aRowOnTheLineShowsOneSideOfItAndTheOtherSideNeedsARowOfItsOwn() {
+        assertInstanceOf(Leaves.Undivided.class,
+                leftOfNoughtWithTheHoursFrom(new BigDecimal("-1")));
+    }
+
+    /**
+     * The only number {@code h} holds below nought is one at the floor of the range, at which the
+     * product has no room. Nought is worked out and the side below it is not: no row is on it,
+     * and {@code s} is not left either way.
+     */
+    @Test
+    void aSideWithNoRowBuiltOnItIsNotShownThoughTheMathsReachesIt() {
+        BigDecimal atTheFloor = new BigDecimal(BigInteger.ONE.negate(), Integer.MAX_VALUE);
+        assertFalse(leftOfNoughtWithTheHoursFrom(atTheFloor) instanceof Leaves.Undivided);
+    }
+
     @Test
     void anOperationReadingOnlyTheTermAskedOfLeavesTheNumbersWithARowToBeSaidOf() {
         DecimalOperation timesFour = product(H, new Written(new BigDecimal("4.0")));
