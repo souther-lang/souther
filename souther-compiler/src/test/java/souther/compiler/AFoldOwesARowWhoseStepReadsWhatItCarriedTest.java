@@ -521,6 +521,110 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         }
     }
 
+    private static final String GUARDED_TO_ONE = """
+            module repro.pins
+
+            data Pin = Int
+                invariant value >= 1 && value <= 12
+
+            data Throw = List<Pin>
+                invariant List.allDistinctBy(p -> p, value)
+
+            behavior points : (t: Throw) -> Int
+
+            let points (t) = {
+                let n = List.length(t.value)
+                if n == 1 then List.sum(List.map(p -> p.value, t.value)) else n
+            }
+
+            example points
+                | (Throw([])) -> 0
+                | (Throw([Pin(12)])) -> 12
+                | (Throw([Pin(1), Pin(2)])) -> 2
+                | (Throw([Pin(1), Pin(2), Pin(3)])) -> 3
+            """;
+
+    /**
+     * A walk inside an arm that holds only where its list has one element at most has nothing a
+     * row could tell a rewrite of it by: no search is run, and no gap is claimed or left open.
+     */
+    @Test
+    void aWalkInAnArmThatHoldsOnlyForAListOfOneElementAtMostOwesNothing() {
+        Compilation compilation = measured(GUARDED_TO_ONE);
+
+        assertEquals(List.of(), foldVerdicts(compilation));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AdequacyReport.of(compilation).adequacy());
+    }
+
+    private static final String FOLD_OF_XS = "List.fold((acc, x) -> acc + x, 0, i.xs)";
+
+    private static List<String> verdictsOfTheFoldIn(String body, String rows) {
+        return foldVerdicts(measured("""
+                module repro.guarded
+
+                data In = { xs: List<Int>, ys: List<Int> }
+
+                behavior total : (i: In) -> Int
+
+                let total (i) = %s
+
+                example total
+                %s""".formatted(body, rows)));
+    }
+
+    private static final String ONE_OR_NONE_ANSWER_ROWS = """
+                | (In { xs = [], ys = [] }) -> 0
+                | (In { xs = [5], ys = [] }) -> 5
+                | (In { xs = [1, 2], ys = [] }) -> 0
+            """;
+
+    /** Every way a condition the arm is inside says the length is one at most, and only those. */
+    @Test
+    void aConditionOfTheWalkedListsLengthSaysItIsOneAtMostOnlyWhereItDoes() {
+        for (String body : List.of(
+                "if List.length(i.xs) == 1 then " + FOLD_OF_XS + " else 0",
+                "if List.length(i.xs) <= 1 then " + FOLD_OF_XS + " else 0",
+                "if List.length(i.xs) < 2 then " + FOLD_OF_XS + " else 0",
+                "if 1 == List.length(i.xs) then " + FOLD_OF_XS + " else 0",
+                "if 2 > List.length(i.xs) then " + FOLD_OF_XS + " else 0",
+                "if List.length(i.xs) > 1 then 0 else " + FOLD_OF_XS,
+                "if List.length(i.xs) >= 2 then 0 else " + FOLD_OF_XS,
+                "if List.length(i.xs) == 1 && List.length(i.ys) == 0 then " + FOLD_OF_XS
+                        + " else 0",
+                "{ let n = List.length(i.xs)\n if n == 1 then " + FOLD_OF_XS + " else 0 }")) {
+            assertEquals(List.of(), verdictsOfTheFoldIn(body, ONE_OR_NONE_ANSWER_ROWS), body);
+        }
+    }
+
+    private static final String ROOM_FOR_TWO_ROWS = """
+                | (In { xs = [], ys = [] }) -> 0
+                | (In { xs = [5], ys = [] }) -> %d
+                | (In { xs = [1, 2], ys = [] }) -> %d
+            """;
+
+    /** A condition that leaves room for two elements, or is of another list, says nothing: the
+     *  rewrites are still asked of the walk. */
+    @Test
+    void aConditionThatLeavesRoomForTwoElementsOrIsOfAnotherListSaysNothing() {
+        Map<String, String> bodies = new java.util.LinkedHashMap<>();
+        bodies.put("if List.length(i.xs) == 2 then " + FOLD_OF_XS + " else 0",
+                ROOM_FOR_TWO_ROWS.formatted(0, 3));
+        bodies.put("if List.length(i.xs) >= 1 then " + FOLD_OF_XS + " else 0",
+                ROOM_FOR_TWO_ROWS.formatted(5, 3));
+        bodies.put("if List.length(i.xs) <= 2 then " + FOLD_OF_XS + " else 0",
+                ROOM_FOR_TWO_ROWS.formatted(5, 3));
+        bodies.put("if List.length(i.xs) == 1 then 0 else " + FOLD_OF_XS,
+                ROOM_FOR_TWO_ROWS.formatted(0, 3));
+        bodies.put("if List.length(i.ys) <= 1 then " + FOLD_OF_XS + " else 0",
+                ROOM_FOR_TWO_ROWS.formatted(5, 3));
+        bodies.put("if List.length(i.xs) == 1 || List.length(i.ys) == 1 then " + FOLD_OF_XS
+                + " else 0", ROOM_FOR_TWO_ROWS.formatted(5, 0));
+
+        bodies.forEach((body, rows) ->
+                assertEquals(2, verdictsOfTheFoldIn(body, rows).size(), body));
+    }
+
     /** The list a walk goes over is found through the newtype wearing it as it is without. */
     @Test
     void aListWornByANewtypeIsGrownAsOneNotWornIs() {

@@ -97,7 +97,12 @@ the switch is written again without it, and the rewrites of that walk are left u
 sibling left out is.
 
 What is proven the same is narrow, as ADR-0121's proof is. A list written with one element or none is
-walked no further than its first, by either rewrite. A step whose body never reads the accumulator it
+walked no further than its first, by either rewrite. So is a list a condition the walk is inside the
+arm of limits: the length of that very list, at one location of the input, compared with a number that
+leaves room for one element at most (`List.length(xs) == 1`, `<= 1`, `< 2`, either way round, the arm
+where `> 1` did not hold, a conjunct of such, through a name bound to the length). No row can tell
+either rewrite of such a walk apart, so none is searched for and none is owed. A condition that leaves
+room for two, or is of another list, says nothing and the walk is asked as before. A step whose body never reads the accumulator it
 is handed is the walk under another spelling when handed the seed. And a list that reads nothing a
 run is handed is one list on every run, so a run that answered and was seen walking it no further
 than its first element shows every run does: that is the one proof read off a run, and it rests on
