@@ -157,6 +157,19 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code construct}, a newtype's construction, as {@code value}, the
+         * form of the number it wraps. Making it checks the clauses of the type, which stops a run
+         * where the number is not one they leave.
+         *
+         * <p>A reader that tells where each operation is worked out says here where the
+         * construction is, when the clauses leave a run of numbers and nothing else; one that does
+         * not know takes it as a node read without telling of every operation it works out.
+         */
+        default void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
+            unobserved(construct);
+        }
+
+        /**
          * Whether a call that adds up the numbers of a list written out is read as the sum of
          * those numbers, and told as the one operation it is ({@link #totalled}). A reading that
          * does not tell where each operation of a form is worked out has no use for it, and
@@ -372,6 +385,11 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
             of.composed(operation, form, operands);
+        }
+
+        @Override
+        public void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
+            of.constructed(construct, type, value);
         }
 
         @Override
@@ -1111,14 +1129,9 @@ public final class AffineForms {
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
-            case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                            reading.declarations().kinds(), reading.declarations().sums())
-                            .isWrapped() -> {
-                // The construction checks the invariant of the type it makes, which stops a run
-                // that no operation here tells of.
-                reading.unobserved(e);
-                yield formOf(nd.values().get(0).value(), at, reading, following, stopped);
+            case Core.Construct nd -> {
+                TypeView made = newtypeMadeBy(nd, reading);
+                yield made == null ? null : construction(nd, made, at, reading, following, stopped);
             }
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather
@@ -1131,6 +1144,14 @@ public final class AffineForms {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
+                    // A newtype's value is the target itself, so it is read as the target is: the
+                    // construction it stands at is told as any construction is, and the names, the
+                    // bindings and the constructions around it are read as the walk reads them
+                    // anywhere. Taking the value off what the target stands at instead would skip
+                    // whatever the walk does on the way there.
+                    if (isANewtypesValue(fa, reading)) {
+                        yield formOf(fa.target(), at, reading, following, stopped);
+                    }
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
                     if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
@@ -1166,6 +1187,47 @@ public final class AffineForms {
                     stopped);
             default -> null;
         };
+    }
+
+    /**
+     * The view of the type {@code nd} makes where that is a newtype, or null where it is a data
+     * of one field or more, whose construction is a value of its own.
+     */
+    private static <A, E> TypeView newtypeMadeBy(Core.Construct nd, Reading<A, E> reading) {
+        if (nd.values().isEmpty()) {
+            return null;
+        }
+        TypeView made = TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
+                reading.declarations().kinds(), reading.declarations().sums());
+        return made.isWrapped() ? made : null;
+    }
+
+    /**
+     * A newtype's construction read as the number it wraps, and told as the check it makes
+     * ({@link Reading#constructed}) after the operations of that number.
+     */
+    private static <A, E> LinearForm<A> construction(Core.Construct nd, TypeView made, E at,
+                                                     Reading<A, E> reading, Walk<A, E> following,
+                                                     Stop<A, E> stopped) {
+        LinearForm<A> wrapped = formOf(nd.values().get(0).value(), at, reading, following, stopped);
+        if (wrapped == null) {
+            reading.unobserved(nd);
+        } else {
+            reading.constructed(nd, made, wrapped);
+        }
+        return wrapped;
+    }
+
+    /**
+     * Whether {@code fa} reads the number a newtype wraps off a value of the newtype. That is a
+     * fact about the types alone, as {@link Location#isStep} has it: the value is the value the
+     * target is, whatever the target stands at.
+     */
+    private static <A, E> boolean isANewtypesValue(Core.FieldAccess fa, Reading<A, E> reading) {
+        return fa.field().equals("value")
+                && TypeView.asWritten(fa.target().type(), reading.symbols(),
+                        reading.declarations().kinds(), reading.declarations().sums())
+                        .isWrapped();
     }
 
     /**

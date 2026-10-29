@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
@@ -237,6 +238,23 @@ public final class DeclaredBounds {
         FieldDomains own = FieldDomains.of(outermost, reading);
         Bounds bounds = placed(own.placedAt(RuleKey.THE_VALUE), kind, carrier);
         return bounds == null ? everything : bounds.range();
+    }
+
+    /**
+     * The run of numbers the rules of the type {@code view} wears leave its value, every one of
+     * which they leave it — or null where the bounds are not shown to be the whole of what the
+     * rules say.
+     *
+     * <p>Not {@link #of}: that is where the rules stop the value, and a rule such as
+     * {@code value /= 50} or {@code value == 0 || value == 100} leaves holes inside it. Making a
+     * value of the type stops a run at exactly the numbers outside this one, so a caller telling
+     * where a construction stops asks this and takes nothing from the other.
+     */
+    public static NumericDomain.Bounds wholeRunOf(TypeView view, RuleReadingContext reading) {
+        if (!(view.outermostName() instanceof TypeSymbol.AtModule outermost)) {
+            return null;
+        }
+        return FieldDomains.of(outermost, reading).wholeRunAt(RuleKey.THE_VALUE);
     }
 
     /**
