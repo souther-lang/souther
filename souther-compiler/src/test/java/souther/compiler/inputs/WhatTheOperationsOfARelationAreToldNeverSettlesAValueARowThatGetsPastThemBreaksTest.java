@@ -51,10 +51,23 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     }
 
     private static Term<String> term(String place, ExactRatio weight) {
+        return term(place, weight, run(LEAST, GREATEST));
+    }
+
+    /** A term that may hold every value of the type and is shown to take those of
+     *  {@code realizes}: the rows are the ones with it anywhere it may hold. */
+    private static Term<String> term(String place, ExactRatio weight,
+                                     NumericDomain.Bounds realizes) {
         NumericDomain.Bounds held = run(LEAST, GREATEST);
-        return new Term<>(List.of(place), weight, held, held, null, true,
+        return new Term<>(List.of(place), weight, held, realizes, null, true,
                 Granularity.DISCRETE, held, place);
     }
+
+    /** What the terms are shown to take: all of the type, then one value at either end, then a
+     *  pair in the middle. The rows are those with a term anywhere it may hold, whichever of
+     *  these is shown. */
+    private static final List<NumericDomain.Bounds> TAKEN =
+            List.of(run(LEAST, GREATEST), run(GREATEST, GREATEST), run(LEAST, LEAST), run(0, 1));
 
     /** An operation over the named terms, each weighed by the number after it, and a constant. */
     private static IntSum sum(int constant, Object... namesAndWeights) {
@@ -123,6 +136,10 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             new Program("a + 4 - 4 + b + c", List.of(1, 1, 1),
                     List.of(sum(4, "a", 1), sum(0, "a", 1), sum(0, "a", 1, "b", 1),
                             sum(0, "a", 1, "b", 1, "c", 1)), true),
+            // The sum worked out past the greatest value on the way and back: a row stops where
+            // a + b + 4 does, which the form does not show.
+            new Program("((a + b) + 4) - 4", List.of(1, 1),
+                    List.of(sum(0, "a", 1, "b", 1), sum(4, "a", 1, "b", 1)), true),
             // The constant added a piece at a time.
             new Program("(a + 1) + 1 against b", List.of(1, -1),
                     List.of(sum(1, "a", 1), sum(2, "a", 1)), true),
@@ -172,10 +189,12 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     @Test
     void whatIsSaidOfATermIsTrueOfEveryRowThatGetsPastTheOperations() {
         for (Program program : PROGRAMS) {
-            for (int constant = -3; constant <= 3; constant++) {
-                for (Rel relation : RELATIONS) {
-                    for (int at = 0; at < program.weights().size(); at++) {
-                        check(program, program.sums(), constant, relation, at);
+            for (NumericDomain.Bounds taken : TAKEN) {
+                for (int constant = -3; constant <= 3; constant++) {
+                    for (Rel relation : RELATIONS) {
+                        for (int at = 0; at < program.weights().size(); at++) {
+                            check(program, program.sums(), constant, relation, at, taken);
+                        }
                     }
                 }
             }
@@ -193,7 +212,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             adding.add(sum(constant, "a", 1, "b", 1, "c", 1));
             for (Rel relation : RELATIONS) {
                 for (int at = 0; at < 3; at++) {
-                    check(compared, adding, constant, relation, at);
+                    check(compared, adding, constant, relation, at, TAKEN.getFirst());
                 }
             }
         }
@@ -211,18 +230,20 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                     ExactRatio.ONE) != 0) {
                 continue;
             }
-            for (int constant = -3; constant <= 3; constant++) {
-                for (Rel relation : RELATIONS) {
-                    for (int at = 0; at < 2; at++) {
-                        List<Term<String>> terms = termsOf(program);
-                        Operations operations =
-                                new Operations(program.sums(), program.state());
-                        Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(terms,
-                                at, Beside.just(ExactRatio.of(constant)), relation, List.of(),
-                                String::equals, BigInteger.valueOf(GREATEST), operations,
-                                Map.of(),
-                                operations.theSizesAreRowsComputed(terms, ExactRatio.of(constant)));
-                        verify(program, program.sums(), constant, relation, at, said, -1, 0);
+            for (NumericDomain.Bounds taken : TAKEN) {
+                for (int constant = -3; constant <= 3; constant++) {
+                    for (Rel relation : RELATIONS) {
+                        for (int at = 0; at < 2; at++) {
+                            List<Term<String>> terms = termsOf(program, taken);
+                            Operations operations =
+                                    new Operations(program.sums(), program.state());
+                            Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(
+                                    terms, at, Beside.just(ExactRatio.of(constant)), relation,
+                                    List.of(), String::equals, BigInteger.valueOf(GREATEST),
+                                    operations, Map.of(), operations.theSizesAreRowsComputed(
+                                            terms, ExactRatio.of(constant)));
+                            verify(program, program.sums(), constant, relation, at, said, -1, 0);
+                        }
                     }
                 }
             }
@@ -250,24 +271,28 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 continue;
             }
             Operations operations = new Operations(program.sums(), program.state());
-            List<Term<String>> all = termsOf(program);
             // To the ends of the type: a constant the third's value cancels in the sum is as
             // large as the type is.
-            for (int constant = LEAST; constant <= GREATEST; constant++) {
-                boolean sizesAreRowsComputed =
-                        operations.theSizesAreRowsComputed(all, ExactRatio.of(constant));
-                for (int held = LEAST; held <= GREATEST; held++) {
-                    Beside beside = new Beside(List.of(ExactRatio.of(constant),
-                            program.weightOf(2).times(ExactRatio.of(held)).orNull()));
-                    for (Rel relation : RELATIONS) {
-                        for (int at = 0; at < 2; at++) {
-                            Leaves said = WhatARelationLeavesUndivided.leavesByTheirDifference(
-                                    all.subList(0, 2), at, beside, relation, List.of(),
-                                    String::equals, BigInteger.valueOf(GREATEST), operations,
-                                    Map.of(NAMES.get(2), ExactRatio.of(held)),
-                                    sizesAreRowsComputed);
-                            verify(program, program.sums(), constant, relation, at, said, 2,
-                                    held);
+            for (NumericDomain.Bounds taken : TAKEN) {
+                List<Term<String>> all = termsOf(program, taken);
+                for (int constant = LEAST; constant <= GREATEST; constant++) {
+                    boolean sizesAreRowsComputed =
+                            operations.theSizesAreRowsComputed(all, ExactRatio.of(constant));
+                    for (int held = LEAST; held <= GREATEST; held++) {
+                        Beside beside = new Beside(List.of(ExactRatio.of(constant),
+                                program.weightOf(2).times(ExactRatio.of(held)).orNull()));
+                        for (Rel relation : RELATIONS) {
+                            for (int at = 0; at < 2; at++) {
+                                Leaves said =
+                                        WhatARelationLeavesUndivided.leavesByTheirDifference(
+                                                all.subList(0, 2), at, beside, relation,
+                                                List.of(), String::equals,
+                                                BigInteger.valueOf(GREATEST), operations,
+                                                Map.of(NAMES.get(2), ExactRatio.of(held)),
+                                                sizesAreRowsComputed);
+                                verify(program, program.sums(), constant, relation, at, said, 2,
+                                        held);
+                            }
                         }
                     }
                 }
@@ -406,16 +431,20 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     }
 
     private static List<Term<String>> termsOf(Program program) {
+        return termsOf(program, TAKEN.getFirst());
+    }
+
+    private static List<Term<String>> termsOf(Program program, NumericDomain.Bounds taken) {
         List<Term<String>> terms = new ArrayList<>();
         for (int i = 0; i < program.weights().size(); i++) {
-            terms.add(term(NAMES.get(i), program.weightOf(i)));
+            terms.add(term(NAMES.get(i), program.weightOf(i), taken));
         }
         return terms;
     }
 
     private static void check(Program program, List<IntSum> sums, int constant, Rel relation,
-                              int at) {
-        Leaves said = WhatARelationLeavesUndivided.leavesOf(termsOf(program), at,
+                              int at, NumericDomain.Bounds taken) {
+        Leaves said = WhatARelationLeavesUndivided.leavesOf(termsOf(program, taken), at,
                 ExactRatio.of(constant), relation, String::equals, (one, other) -> true,
                 Granularity.DISCRETE, BigInteger.valueOf(GREATEST), List.of(),
                 new Operations(sums, program.state()));
