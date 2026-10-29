@@ -197,6 +197,85 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
                 () -> "a row at the class of `a` the comparison draws: " + rows);
     }
 
+    /**
+     * A row written with the strings tied together lands in the classes it says it fills, and the
+     * classes an axis decides are filled where a value the rules hold of is in them.
+     *
+     * <p>Which classes a row stands in is read off its values, so a row is never said to fill a
+     * class its values are outside. What is asked here is the other half: the class of {@code a}
+     * at {@code "A"} beside {@code b} away from {@code "B"} has a row, though the value the search
+     * put at {@code b} for that class holds no {@code "A"}. And the comparison of {@code b} is
+     * reached only where {@code a} is {@code "A"}, where no {@code b} of {@code "B"} holds the
+     * rule, so no row is said to be on it.
+     */
+    @Test
+    void aRowLandsInTheClassesItSaysItFills() {
+        Compilation compilation = measuredRows("""
+                module demo
+
+                data Pair = { a: String, b: String }
+                    invariant String.matches("[AB]", a)
+                    invariant String.contains(a, b)
+
+                behavior f : (p: Pair) -> Bool
+                let f (p) = p.a == "A" && p.b == "B"
+                """);
+        List<String[]> rows = pairsOffered(compilation);
+
+        assertTrue(rows.stream().anyMatch(row -> row[0].equals("A") && !row[1].equals("B")),
+                () -> "a row at `a` of \"A\" and `b` away from \"B\": " + offered(compilation));
+        assertFalse(offered(compilation).contains("no row for `p.a== A`"),
+                () -> "and the class of `a` at \"A\" is one of those it fills: "
+                        + offered(compilation));
+        assertTrue(rows.stream().allMatch(row -> row[1].contains(row[0])),
+                () -> "every row holds the rule: " + offered(compilation));
+    }
+
+    /**
+     * And a row at a value an axis decides is written with that value held, and the strings tied
+     * to it written beside it.
+     *
+     * <p>{@code b} is one character at most and holds {@code a}, so it is {@code a}. The row at
+     * {@code a} of {@code "B"} has {@code b} written as {@code "B"}: a value of the two found with
+     * nothing held is the first one tried, at {@code "A"}, and a row written with it stands at
+     * another class.
+     */
+    @Test
+    void aRowAtAValueAnAxisDecidesHoldsItAndWritesTheRestBesideIt() {
+        Compilation compilation = measuredRows("""
+                module demo
+
+                data Pair = { a: String, b: String }
+                    invariant String.matches("[AB]", a)
+                    invariant String.contains(a, b) && String.length(b) <= 1
+
+                behavior f : (p: Pair) -> Bool
+                let f (p) = p.a == "B"
+                """);
+
+        assertTrue(pairsOffered(compilation).stream()
+                        .anyMatch(row -> row[0].equals("B") && row[1].equals("B")),
+                () -> "a row at `a` of \"B\": " + offered(compilation));
+    }
+
+    private static Compilation measuredRows(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /** The {@code a} and {@code b} of each pair offered as a row. */
+    private static List<String[]> pairsOffered(Compilation compilation) {
+        List<String[]> out = new ArrayList<>();
+        Matcher row = Pattern.compile("Pair \\{ a = \"([^\"]*)\", b = \"([^\"]*)\" }")
+                .matcher(offered(compilation));
+        while (row.find()) {
+            out.add(new String[] {row.group(1), row.group(2)});
+        }
+        return out;
+    }
+
     private static String offered(Compilation compilation) {
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
