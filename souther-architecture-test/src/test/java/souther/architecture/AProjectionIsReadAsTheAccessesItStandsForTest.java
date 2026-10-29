@@ -299,7 +299,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ValueStanding", "theConstructionAndItsRestEndNone",
                 "(L" + c + "core/Core$FieldAccess;Ljava/lang/Object;L" + c
                         + "check/ValueStanding$Names;L" + c
-                        + "check/BindingWalk;Ljava/util/function/Predicate;)Z",
+                        + "check/BindingWalk;Ljava/util/function/BiPredicate;)Z",
                 Reading.ONE_ACCESS,
                 "asks of one access the construction it is read off and the parts of it other"
                         + " than the field it reads");
