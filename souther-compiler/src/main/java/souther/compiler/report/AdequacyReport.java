@@ -6125,6 +6125,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             left.put("shorterThan", open.shorterThan());
         }
         left.put("atAnyLength", open.atAnyLength());
+        if (!open.byCodePoints().isEmpty()) {
+            ArrayNode counted = left.putArray("codePoints");
+            for (BlockReason.CodePointsLeftOpen each : open.byCodePoints()) {
+                ObjectNode entry = counted.addObject();
+                codePointClass(entry, each.counted());
+                if (each.fewerThan() != null) {
+                    entry.put("fewerThan", each.fewerThan());
+                } else {
+                    entry.put("moreThan", each.moreThan());
+                }
+            }
+        }
         if (!open.imagesNotShown().isEmpty()) {
             ArrayNode names = left.putArray("imagesNotShown");
             open.imagesNotShown().forEach(names::add);
@@ -6951,6 +6963,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** The code points counted, by the class and, where the class leaves one out, which. */
+    private static void codePointClass(ObjectNode into, CodePointClass counted) {
+        switch (counted) {
+            case CodePointClass.NotWhitespace _ -> into.put("class", "not_whitespace");
+            case CodePointClass.NotWhitespaceNorEqualTo apart -> {
+                into.put("class", "not_whitespace_nor_equal_to");
+                into.put("separator", apart.separator());
+            }
+            case CodePointClass.OneOf set -> {
+                into.put("class", "one_of");
+                ArrayNode ranges = into.putArray("ranges");
+                set.held().ranges().forEach(range -> ranges.addArray()
+                        .add(range.from()).add(range.to()));
+            }
+        }
+    }
+
     /**
      * A number a line is drawn on, by what makes two of them one term.
      *
@@ -6991,19 +7020,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.CodePointClassCount it -> {
                 into.put("kind", "code_points");
                 into.put("position", it.position().discriminated());
-                switch (it.counted()) {
-                    case CodePointClass.NotWhitespace _ -> into.put("class", "not_whitespace");
-                    case CodePointClass.NotWhitespaceNorEqualTo apart -> {
-                        into.put("class", "not_whitespace_nor_equal_to");
-                        into.put("separator", apart.separator());
-                    }
-                    case CodePointClass.OneOf set -> {
-                        into.put("class", "one_of");
-                        ArrayNode ranges = into.putArray("ranges");
-                        set.held().ranges().forEach(range -> ranges.addArray()
-                                .add(range.from()).add(range.to()));
-                    }
-                }
+                codePointClass(into, it.counted());
             }
             // What the code points of the string at the place come to.
             case NumericTerm.CodePointValueSum it -> {

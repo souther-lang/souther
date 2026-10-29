@@ -400,7 +400,8 @@ final class Classing {
             return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
                     open.stream().flatMap(each -> each.open().stream()).toList(),
                     open.stream().flatMap(each -> each.statement().imagesNotShown().stream())
-                            .toList()), open);
+                            .toList(),
+                    open.stream().flatMap(each -> each.byCodePoints().stream()).toList()), open);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
@@ -420,13 +421,16 @@ final class Classing {
      * @param open      the values left open, each as long as it is left open at; none of them
      *                  shown to hold nothing
      */
-    record LeftOpen(SetStatement statement, List<ValuesWithin> open) {
+    record LeftOpen(SetStatement statement, List<ValuesWithin> open,
+                    List<BlockReason.CodePointsLeftOpen> byCodePoints) {
 
         LeftOpen {
-            if (statement == null || open == null || open.isEmpty()) {
+            if (statement == null || open == null || byCodePoints == null
+                    || (open.isEmpty() && byCodePoints.isEmpty())) {
                 throw new IllegalArgumentException("a rule leaves some values of a position open");
             }
             open = List.copyOf(open);
+            byCodePoints = List.copyOf(byCodePoints);
         }
     }
 
@@ -449,7 +453,19 @@ final class Classing {
                 open.add(here);
             }
         }
-        return Worked.to(open.isEmpty() ? null : new LeftOpen(statement, open));
+        List<BlockReason.CodePointsLeftOpen> byCodePoints = new ArrayList<>();
+        for (SetStatement.NotCounted each : statement.notCounted()) {
+            Allowance.Composed held =
+                    allowance.meet(Sameness.Block.of(term), admits, each.values());
+            if (held.gaveUp()) {
+                return Worked.refusedAt(held.refused());
+            }
+            if (!ValuesWithin.all(held.set()).shownToHoldNone()) {
+                byCodePoints.add(each.why());
+            }
+        }
+        return Worked.to(open.isEmpty() && byCodePoints.isEmpty() ? null
+                : new LeftOpen(statement, open, byCodePoints));
     }
 
     /**
