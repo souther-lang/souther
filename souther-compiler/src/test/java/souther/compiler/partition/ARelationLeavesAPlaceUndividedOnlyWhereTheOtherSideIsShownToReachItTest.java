@@ -873,7 +873,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
-        assertEquals(Map.of("List.length(ns)", RELATES, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.length(ns)", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", 27));
         assertEquals(Map.of("List.sum(ns[*])", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
@@ -902,6 +902,29 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("List.sum(ns[*])", RELATES, "a", RELATES),
                 left("a: Nat, ns: List<Nat>", NAT, alone,
                         atThe(">=", NAT, "a: Nat, ns: List<Nat>", alone)));
+    }
+
+    /**
+     * A count of a list's elements, and what they sum to, are terms of the relation beside an input
+     * the list does not hold: a list of as many whole numbers as asked is a row at each count, and
+     * a list of one whole number is a row at that number. Where the declarations hold the list to
+     * two elements or more no list of one is a row, so the total is shown to reach nothing and
+     * the input beside it is left unshown, as the count is shown only from two.
+     */
+    @Test
+    void aCountAndATotalOfAListAreReachedWhereTheListMayHoldWhatTheyAreAskedAt() {
+        String inputs = "limit: Int, xs: List<Int>";
+        String count = "limit >= List.length(xs)";
+        assertEquals(Map.of("List.length(xs)", RELATES),
+                left(inputs, NAT, count, atThe(">=", NAT, inputs, count)));
+        String total = "limit >= List.sum(xs)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", RELATES),
+                left(inputs, NAT, total, atThe(">=", NAT, inputs, total)));
+        String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
+        String held = "limit: Int, p: Pair";
+        String heldTotal = "limit >= List.sum(p.value)";
+        assertEquals(Map.of("List.sum(p)", RELATES, "limit", NOT_SHOWN),
+                left(held, pairs, heldTotal, atThe(">=", pairs, held, heldTotal)));
     }
 
     private static final String FORECAST = """

@@ -4667,8 +4667,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
                     ? declared : region;
             NumericDomain.Bounds realizes = source != null
-                    ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
-                            carriers.get(i))
+                    ? asARelationReadsIt(realizedAlong(each.atOnePosition(), source, answering, way,
+                            read, conditions, heldWhole, carriers.get(i)), carriers.get(i))
                     : each.number() instanceof NumericTerm.TakenOver over
                     ? asARelationReadsIt(summedOverOneElement(over, read, region, conditions,
                             heldWhole, carriers.get(i)), carriers.get(i))
@@ -5923,6 +5923,40 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
+    }
+
+    /**
+     * A run every value of which {@code term} is shown to take — or null where none is shown.
+     *
+     * <p>What {@link #realized} shows of the value at the position is that. Where it shows
+     * nothing, how many a container holds is taken at every count some row in the region holds the
+     * container at ({@link #howManyAreHeld}): a count is a number of elements written together,
+     * and no source value of it stands at the position. What a container's elements sum to is,
+     * where the container may hold one element, that element's own number
+     * ({@link #shownOfAnElementAlone}).
+     */
+    private static NumericDomain.Bounds realizedAlong(NumericTerm.FromOnePosition term,
+                                                      Source source, SearchRegion region, Way way,
+                                                      InputReading read, List<OnAWay> conditions,
+                                                      boolean heldWhole, Carrier carrier) {
+        NumericDomain.Bounds ofTheValue = realized(term, source, region, way);
+        if (ofTheValue != null) {
+            return ofTheValue;
+        }
+        if (heldWhole && term instanceof NumericTerm.TakenOf taken) {
+            if (taken.takenAs() instanceof TakenAs.HowManyItHolds) {
+                return howManyAreHeld(taken.position(), read, region);
+            }
+            if (taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds && carrier != null
+                    && SUMMED.equals(
+                            DefaultBoundOperationFacts.get().accumulation(taken.operation()))) {
+                List<TermPath> entry = read.domain().entryOf(taken.position(), read.rules());
+                return entry.size() != 1 ? null
+                        : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(entry.getFirst())),
+                                taken.position(), read, region, conditions, carrier);
+            }
+        }
+        return null;
     }
 
     /**
