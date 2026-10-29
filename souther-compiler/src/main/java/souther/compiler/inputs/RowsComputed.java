@@ -89,6 +89,11 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null && !mayStopARow();
     }
 
+    /** Whether the rows of the relation work out an operation of decimals. */
+    boolean worksOutDecimals() {
+        return !operations.decimals().isEmpty();
+    }
+
     /**
      * Whether what rows built at the ends of a run find of the operations of decimals told holds
      * of every number between, for a claim about the values of the term {@code asked} with the

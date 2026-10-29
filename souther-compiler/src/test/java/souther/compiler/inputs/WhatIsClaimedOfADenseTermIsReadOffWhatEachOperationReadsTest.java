@@ -90,12 +90,22 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     /** {@code 4h - s} against nought as {@code relation}, with {@code h} from {@code lowest} to
      *  {@code highest} and {@code s} nought. */
     private static Leaves leftOfNought(BigDecimal lowest, BigDecimal highest, Rel relation) {
-        NumericDomain.Bounds below = new NumericDomain.Bounds(
+        return leftOfNought(lowest, highest, lowest, highest, relation);
+    }
+
+    /** The same, with {@code h} held to {@code lowest} to {@code highest} and shown to take
+     *  {@code lowestTaken} to {@code highestTaken}. */
+    private static Leaves leftOfNought(BigDecimal lowest, BigDecimal highest,
+                                       BigDecimal lowestTaken, BigDecimal highestTaken,
+                                       Rel relation) {
+        NumericDomain.Bounds held = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(lowest)), Endpoint.inclusive(Count.of(highest)));
+        NumericDomain.Bounds taken = new NumericDomain.Bounds(Endpoint.inclusive(
+                Count.of(lowestTaken)), Endpoint.inclusive(Count.of(highestTaken)));
         NumericDomain.Bounds nought = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(0)));
         List<Term<String>> terms = List.of(
-                new Term<>(List.of("h"), ExactRatio.of(4), below, below, null, true,
+                new Term<>(List.of("h"), ExactRatio.of(4), held, taken, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "h"),
                 new Term<>(List.of("s"), ExactRatio.of(-1), nought, nought, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
@@ -103,6 +113,24 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         return WhatARelationLeavesUndivided.leavesOf(terms, 1, ExactRatio.ZERO, relation,
                 String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
                 new Operations(List.of(), List.of(timesFour), Told.EVERY));
+    }
+
+    /**
+     * A row stands a term at a value it is shown to take, and not at one it is only held to. Held
+     * from minus one to one, {@code h} has rows either side of nought; shown to take only a number
+     * at the floor of the range below nought, it has none there, and what it is held to says
+     * nothing of that. Shown to take a tenth below nought, it has one.
+     */
+    @Test
+    void aRowStandsATermWhereItIsShownToTakeAValueAndNotWhereItIsHeld() {
+        BigDecimal minusOne = new BigDecimal("-1");
+        BigDecimal atTheFloor = new BigDecimal(BigInteger.ONE.negate(), Integer.MAX_VALUE);
+        assertInstanceOf(Leaves.Undivided.class,
+                leftOfNought(minusOne, BigDecimal.ONE, minusOne, BigDecimal.ONE, Rel.GE));
+        assertFalse(leftOfNought(minusOne, BigDecimal.ONE, atTheFloor, BigDecimal.ZERO, Rel.GE)
+                instanceof Leaves.Undivided);
+        assertInstanceOf(Leaves.Undivided.class, leftOfNought(minusOne, BigDecimal.ONE,
+                new BigDecimal("-0.1"), BigDecimal.ZERO, Rel.GE));
     }
 
     /**
