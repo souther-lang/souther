@@ -2,8 +2,10 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.partition.Generator;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
@@ -77,9 +79,13 @@ class ARowIsOfferedOnlyTheRewritesTheMeasureOwesTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        assertEquals(0, Adequacy.walksTakenOnIn(
-                ComposedRows.watched(compilation, "total", "one")).size());
-        assertEquals(1, Adequacy.walksTakenOnIn(
-                ComposedRows.watched(compilation, "total", "two")).size());
+        assertEquals(0, evidenceOf(compilation, "one").walksOn().size());
+        assertEquals(1, evidenceOf(compilation, "two").walksOn().size());
+    }
+
+    private static ReachEvidence evidenceOf(Compilation compilation, String row) {
+        Generator.Watched.Ran ran = assertInstanceOf(Generator.Watched.Ran.class,
+                ComposedRows.watched(compilation, "total", row));
+        return ReachEvidence.ofRuns(List.of(ran.seen()));
     }
 }

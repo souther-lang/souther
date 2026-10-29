@@ -44,6 +44,7 @@ import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.types.ConstructOccurrence;
 
@@ -527,7 +528,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void aRowAtAnApplicationTakesBackThatNothingArrivesThere() {
         PathReachability.Answers.AsRun run = APPLIED.proving(
-                new ComparisonArrival.NothingArrives()).asRunWith(Set.of(), APPLIED.aRowCame());
+                new ComparisonArrival.NothingArrives())
+                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame()));
 
         assertEquals(Set.of(APPLIED.construct()), run.contradicted().emptyArrivals(),
                 "a row answered there, so it came there");
@@ -546,10 +548,10 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonArrival proven = APPLIED.proving(new ComparisonArrival.NothingArrives())
                 .arrivals().arrivalAt(APPLIED.construct());
         ComparisonArrival ran = APPLIED.proving(new ComparisonArrival.NothingArrives())
-                .asRunWith(Set.of(), APPLIED.aRowCame()).answers().arrivals()
+                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame())).answers().arrivals()
                 .arrivalAt(APPLIED.construct());
         ComparisonArrival missedAndRan = APPLIED.proving(misses())
-                .asRunWith(Set.of(), APPLIED.aRowCame()).answers().arrivals()
+                .asRunWith(ReachEvidence.of(Set.of(), APPLIED.aRowCame())).answers().arrivals()
                 .arrivalAt(APPLIED.construct());
 
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,

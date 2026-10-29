@@ -1,0 +1,165 @@
+package souther.compiler.query;
+
+import org.junit.jupiter.api.Test;
+import souther.compiler.check.PathReachability;
+import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ArmReportAnchor;
+import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.RecordedConditionOutcome;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.reach.ComparisonArrival;
+import souther.compiler.reach.PathDecision;
+import souther.compiler.reach.Proof;
+import souther.compiler.reach.Reachability;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
+/**
+ * A run recorded at a place a proof says nothing reaches takes that proof back where the runs of a
+ * module are handed to the reading — for each kind of proof there is, and with the contradiction
+ * written down.
+ *
+ * <p>No model has a row a proof is wrong about, so the runs here are recorded at the places the
+ * numbering issued, which is what a row the proof was wrong about would be recorded doing. They go
+ * through {@link Adequacy.Arrived#readAsRun}, where the runs become what the reading is handed,
+ * and not through {@code asRunWith} with sets chosen here: the corrections themselves are held
+ * where {@code asRunWith} is tested, and what is held here is that a kind of run reaches them.
+ */
+class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
+
+    private static final String BEHAVIOR = "f";
+
+    private static final SiteNumbering NUMBERING = Numberings.of(Numberings.Family.ARM,
+            Numberings.Family.COMPARISON, Numberings.Family.COMPARISON, Numberings.Family.WALK);
+
+    private static final NumberingIdentity IDENTITY = NUMBERING.identity();
+
+    private static final SourceConstructOrigin FORK = origin(0, SourceConstruct.IF);
+    private static final SourceConstructOrigin CONDITION = origin(1, SourceConstruct.IF);
+    private static final SourceConstructOrigin APPLICATION = origin(2, SourceConstruct.CALL);
+    private static final SourceConstructOrigin FOLD = origin(3, SourceConstruct.CALL);
+
+    private static final ControlPlace.Arm ARM = new ControlPlace.Arm(Numberings.arm(FORK, 0),
+            Optional.of(NUMBERING.arm(0)), new ArmReportAnchor.WhereItIsWritten(FORK));
+
+    private static final ControlPlace.Outcome WAY = new ControlPlace.Outcome(
+            ConstructOccurrence.asWritten(CONDITION), NUMBERING.outcome(1), true);
+
+    private static final ConstructOccurrence ARRIVED_AT = ConstructOccurrence.asWritten(APPLICATION);
+
+    private static final WalkProbe WALK = NUMBERING.walk(3);
+
+    private static SourceConstructOrigin origin(int at, SourceConstruct construct) {
+        return SourceConstructOrigin.written(new WrittenOwner.Body("fixture", "f"), at, construct);
+    }
+
+    private static Reachability shut() {
+        return new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
+                List.of(PathDecision.ofACondition(new SourcePos(1, 1), true))));
+    }
+
+    /** One of each proof, every one of them wrong if a run is where it says no run is. */
+    private static PathReachability.Answers proven() {
+        Optional<NumberingIdentity> numbering = Optional.of(IDENTITY);
+        return new PathReachability.Answers(numbering, Map.of(ARM, shut(), WAY, shut()),
+                new PathReachability.Arrivals(numbering,
+                        Map.of(ARRIVED_AT, new ComparisonArrival.NothingArrives()),
+                        Map.of(ARRIVED_AT, NUMBERING.outcome(2)), Map.of(),
+                        Map.of(WALK, FOLD)));
+    }
+
+    /** A run recorded as {@code arms}, {@code ways} and {@code walksOn} say, of the module's
+     *  numbering. */
+    private static AlignedObservation run(Set<Integer> arms,
+                                          Set<RecordedConditionOutcome> ways, boolean walkedOn) {
+        return NUMBERING.align(new Observation(IDENTITY, arms, ways, Set.of(),
+                Set.of(3), walkedOn ? Set.of(3) : Set.of()));
+    }
+
+    private static PathReachability.Answers.AsRun readWith(AlignedObservation... runs) {
+        return Adequacy.Arrived.readAsRun(Map.of(BEHAVIOR, proven()), List.of(runs))
+                .get(BEHAVIOR);
+    }
+
+    @Test
+    void runsThatWentAgainstNothingTakeNothingBack() {
+        PathReachability.Answers.AsRun none = readWith();
+        PathReachability.Answers.AsRun elsewhere = readWith(
+                run(Set.of(), Set.of(new RecordedConditionOutcome(1, false)), false));
+
+        assertEquals(PathReachability.Answers.Contradictions.NONE, none.contradicted(),
+                "no run, so no proof is gone against");
+        assertEquals(PathReachability.Answers.Contradictions.NONE, elsewhere.contradicted(),
+                "and a run that entered the walk and took no second element, and saw the"
+                        + " condition come out the way it was not proven never to, goes against"
+                        + " none");
+        assertInstanceOf(Reachability.Unreachable.class, elsewhere.answers().at(ARM));
+        assertInstanceOf(Reachability.Unreachable.class, elsewhere.answers().at(WAY));
+    }
+
+    @Test
+    void aRunThroughAnArmProvenShutTakesTheProofBack() {
+        PathReachability.Answers.AsRun ran = readWith(run(Set.of(0), Set.of(), false));
+
+        assertEquals(Set.of(ARM), ran.contradicted().places());
+        assertInstanceOf(Reachability.Reachable.class, ran.answers().at(ARM));
+        assertInstanceOf(Reachability.Unreachable.class, ran.answers().at(WAY),
+                "and no other proof with it");
+    }
+
+    @Test
+    void aRunBringingAConditionOutAWayProvenNeverToTakesTheProofBack() {
+        PathReachability.Answers.AsRun ran = readWith(
+                run(Set.of(), Set.of(new RecordedConditionOutcome(1, true)), false));
+
+        assertEquals(Set.of(WAY), ran.contradicted().places());
+        assertInstanceOf(Reachability.Reachable.class, ran.answers().at(WAY));
+        assertInstanceOf(Reachability.Unreachable.class, ran.answers().at(ARM),
+                "and no other proof with it");
+    }
+
+    @Test
+    void aRunComingToAConstructProvenArrivedAtByNothingTakesTheProofBack() {
+        PathReachability.Answers.AsRun ran = readWith(
+                run(Set.of(), Set.of(new RecordedConditionOutcome(2, false)), false));
+
+        assertEquals(Set.of(ARRIVED_AT), ran.contradicted().emptyArrivals());
+        assertInstanceOf(ComparisonArrival.NoProjection.class,
+                ran.answers().arrivals().arrivalAt(ARRIVED_AT));
+    }
+
+    @Test
+    void aRunTakingASecondElementOfAWalkProvenToHaveOneAtMostTakesTheProofBack() {
+        PathReachability.Answers.AsRun ran = readWith(run(Set.of(), Set.of(), true));
+
+        assertEquals(Set.of(FOLD), ran.contradicted().walks());
+        assertEquals(Set.of(), ran.answers().arrivals().walksHeldToOneAtMost().keySet());
+    }
+
+    @Test
+    void whichRunWentAgainstAProofIsNoPartOfIt() {
+        PathReachability.Answers.AsRun ran = readWith(
+                run(Set.of(), Set.of(), false),
+                run(Set.of(0), Set.of(), false),
+                run(Set.of(), Set.of(new RecordedConditionOutcome(1, true)), true));
+
+        assertEquals(Set.of(ARM, WAY), ran.contradicted().places(),
+                "a proof is gone against by any one of the runs");
+        assertEquals(Set.of(FOLD), ran.contradicted().walks());
+    }
+}

@@ -14,6 +14,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.ShownBy;
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.query.Adequacy.DecisionSearch.NothingReaches;
 import souther.compiler.reach.ComparisonArrival;
@@ -116,7 +117,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         ControlPlace.Outcome second = COMPILED.twice().get(1);
         PathReachability.Answers.AsRun run = proven(Map.of(
                 first, unreachable(), second, unreachable()), Map.of())
-                .asRunWith(Set.of(), Set.of(seen(first)));
+                .asRunWith(ReachEvidence.of(Set.of(), Set.of(seen(first))));
 
         assertEquals(Set.of(first), run.contradicted().places(),
                 "the copy a row came out of is the proof shown wrong");
@@ -134,7 +135,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         ControlPlace.Outcome first = COMPILED.twice().get(0);
         NothingReaches reading = reading(proven(Map.of(
                 first, unreachable(), COMPILED.twice().get(1), unreachable()), Map.of())
-                .asRunWith(Set.of(), Set.of(seen(first))));
+                .asRunWith(ReachEvidence.of(Set.of(), Set.of(seen(first)))));
         DecisionReading.Ruled way = seenAt(at(COMPILED.writtenTwice()));
 
         assertNull(reading.onTheWay(way), "a proof a row went against excludes nothing");
@@ -153,7 +154,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         NothingReaches reading = reading(proven(Map.of(
                 first, unreachable(), COMPILED.twice().get(1), unreachable(),
                 COMPILED.once(), unreachable()), Map.of())
-                .asRunWith(Set.of(), Set.of(seen(first))));
+                .asRunWith(ReachEvidence.of(Set.of(), Set.of(seen(first)))));
         DecisionReading.Ruled way = seenAt(at(COMPILED.writtenTwice()), at(COMPILED.writtenOnce()));
 
         RuleRequirement.Excluded out = reading.onTheWay(way);
@@ -173,7 +174,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         ControlPlace.Outcome first = COMPILED.twice().get(0);
         NothingReaches reading = reading(proven(Map.of(
                 first, unreachable(), COMPILED.twice().get(1), unreachable()), Map.of())
-                .asRunWith(Set.of(), Set.of(seen(first))));
+                .asRunWith(ReachEvidence.of(Set.of(), Set.of(seen(first)))));
         DecisionReading.Ruled way = seenAt(at(COMPILED.writtenTwice()));
 
         assertEquals(Set.of(first), Adequacy.DecisionSearch.settledAt(way,
@@ -196,8 +197,9 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
                 once, unsettled()), Map.of());
 
         assertEquals(PathReachability.Answers.Contradictions.NONE,
-                proven.asRunWith(Set.of(), Set.of()).contradicted(), "no row ran");
-        PathReachability.Answers.AsRun ran = proven.asRunWith(Set.of(), Set.of(seen(once)));
+                proven.asRunWith(ReachEvidence.NONE).contradicted(), "no row ran");
+        PathReachability.Answers.AsRun ran =
+                proven.asRunWith(ReachEvidence.of(Set.of(), Set.of(seen(once))));
         assertEquals(PathReachability.Answers.Contradictions.NONE, ran.contradicted(),
                 "nothing was proven where the row went");
         assertInstanceOf(Reachability.Reachable.class, ran.answers().at(once),
@@ -217,7 +219,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         PathReachability.Answers.AsRun run = proven(Map.of(first, unsettled()),
                 Map.of(first.occurrence(), new ComparisonArrival.NothingArrives(),
                         second.occurrence(), new ComparisonArrival.NothingArrives()))
-                .asRunWith(Set.of(), Set.of(seen(first)));
+                .asRunWith(ReachEvidence.of(Set.of(), Set.of(seen(first))));
 
         assertEquals(Set.of(first.occurrence()), run.contradicted().emptyArrivals(),
                 "the copy a row came to is the arrival shown wrong");
@@ -245,12 +247,13 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
                 high.place().arm().part()));
 
         NothingReaches unrun = NothingReaches.of(COMPILED.arms(), COMPILED.copies(),
-                COMPILED.plan(), proven.asRunWith(Set.of(), Set.of()));
+                COMPILED.plan(), proven.asRunWith(ReachEvidence.NONE));
         assertEquals(new RuleRequirement.Excluded.AnArmNothingReaches(
                 high.obligation().asWritten()), unrun.onTheWay(way), "no row, and the arm is shut");
 
         NothingReaches ran = NothingReaches.of(COMPILED.arms(), COMPILED.copies(),
-                COMPILED.plan(), proven.asRunWith(Set.of(high.index()), Set.of()));
+                COMPILED.plan(), proven.asRunWith(
+                ReachEvidence.of(Set.of(high.index()), Set.of())));
         assertNull(ran.onTheWay(way), "a row went through it");
         assertEquals(Set.of(high.place()), ran.shownWrongOnTheWay(way),
                 "and the rule names the proof that would have left it no row");
@@ -266,9 +269,9 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         CoverageSites.ArmSite high = COMPILED.arms().getFirst();
         ControlPlace.Outcome first = COMPILED.twice().get(0);
         PathReachability.Answers proven = proven(Map.of(), Map.of());
-        PathReachability.Answers.AsRun none = proven.asRunWith(Set.of(), Set.of());
-        PathReachability.Answers.AsRun somewhere = proven.asRunWith(Set.of(high.index()),
-                Set.of(seen(first)));
+        PathReachability.Answers.AsRun none = proven.asRunWith(ReachEvidence.NONE);
+        PathReachability.Answers.AsRun somewhere = proven.asRunWith(
+                ReachEvidence.of(Set.of(high.index()), Set.of(seen(first))));
 
         assertNotEquals(none.answers(), somewhere.answers(), "the rows went somewhere");
         assertEquals(none.answers().arrivals(), somewhere.answers().arrivals(),

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
@@ -452,7 +453,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(TAKEN, RowWitnesses.ANOTHER_ROW),
                 Set.of(),
-                proving().asRunWith(Set.of(TAKEN), Set.of()), WeakeningSet.none(),
+                proving().asRunWith(ReachEvidence.of(Set.of(TAKEN), Set.of())), WeakeningSet.none(),
                 _ -> List.of());
 
         assertEquals(List.of(TAKEN), probesOf(measured));
@@ -475,8 +476,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 .map(each -> (ControlPlace.Outcome) each.getKey())
                 .findFirst().orElseThrow(() -> new AssertionError(
                         "the guard at 50 is proven never to hold: " + proven.found()));
-        PathReachability.Answers.AsRun asRun = proven.asRunWith(Set.of(TAKEN),
-                Set.of(new SeenConditionOutcome(shut.at(), shut.held())));
+        PathReachability.Answers.AsRun asRun = proven.asRunWith(ReachEvidence.of(
+                Set.of(TAKEN), Set.of(new SeenConditionOutcome(shut.at(), shut.held()))));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(TAKEN, RowWitnesses.ANOTHER_ROW),
                 Set.of(), asRun, WeakeningSet.none(), _ -> List.of());
@@ -506,8 +507,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
         // The rows lit both arms, one of which nothing was supposed to reach. Handed to the same
         // fold the measures read, so what a run does to a proof is decided in one place.
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN),
-                Set.of());
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(
+                ReachEvidence.of(Set.of(UNREACHED, TAKEN), Set.of()));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM),
                 Map.of(UNREACHED, RowWitnesses.ANOTHER_ROW, TAKEN, RowWitnesses.ANOTHER_ROW),
@@ -543,7 +544,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     @Test
     void andAnArmIsStillAnsweredForBesideADisprovedProof() {
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED), Set.of());
+        PathReachability.Answers.AsRun asRun =
+                proving().asRunWith(ReachEvidence.of(Set.of(UNREACHED), Set.of()));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(UNREACHED, RowWitnesses.ANOTHER_ROW),
                 Set.of(), asRun,
@@ -561,7 +563,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * the case behind it would stay unowed over a proof already disproved. */
     @Test
     void theSameArmIsBackForEveryMeasure() {
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED), Set.of());
+        PathReachability.Answers.AsRun asRun =
+                proving().asRunWith(ReachEvidence.of(Set.of(UNREACHED), Set.of()));
 
         assertEquals(Set.of(UNREACHED_ARM.place()), asRun.contradicted().places(),
                 "a row went through an arm this reading had proven nothing reaches");

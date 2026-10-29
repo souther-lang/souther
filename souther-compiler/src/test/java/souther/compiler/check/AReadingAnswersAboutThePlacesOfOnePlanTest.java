@@ -7,6 +7,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.partition.GuardThresholds;
@@ -203,11 +204,12 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
         ArmProbe elsewhere = refused.armProvenDead().probe().orElseThrow();
 
         assertEquals(PathReachability.Answers.Contradictions.NONE,
-                capped.arrives.asRunWith(Set.of(), Set.of()).contradicted(),
+                capped.arrives.asRunWith(ReachEvidence.NONE).contradicted(),
                 "no row ran, so this reading is shown wrong nowhere");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
-                () -> capped.arrives.asRunWith(Set.of(elsewhere), Set.of()));
+                () -> capped.arrives.asRunWith(
+                        ReachEvidence.of(Set.of(elsewhere), Set.of())));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());
