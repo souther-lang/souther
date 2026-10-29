@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
@@ -12,6 +13,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -22,6 +24,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -32,11 +35,16 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * A comparison read as one statement: {@code Σ coef·position REL threshold}.
@@ -81,18 +89,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *
          * <p>The one exception is a reading that stopped, whatever it stopped at: the lines drawn
          * from it are another analysis's (a product, a remainder, a date, a fold, a lookup, the
-         * arms of a branch), built from the statement's form and not from this walk, and they are
-         * answered for their rows by the form's sizes
-         * ({@link UndividedByARelation.Working#NOTHING}). That takes the program to add the form
-         * up, which holds of those analyses only so far as no operation beside the expression it
-         * stopped at can stop a row; the walk keeps nothing of what it composed before it stopped,
-         * so this cannot be told, and the cost of saying otherwise is that none of those lines is
-         * read. A stop that names the analysis it belongs to would narrow this.
+         * arms of a branch), built from the statement's form and not from this walk. The
+         * expression it stopped at is that analysis's own, and what the program works out beside
+         * that expression is read again with the stopped value held aside ({@link Stopped#apart}).
+         * Where nothing beside it can stop a row the lines are answered for their rows by the
+         * form's sizes ({@link UndividedByARelation.Working#NOTHING}); where an operation beside it
+         * can, the operations told are kept and the rest is not told.
          */
         static UndividedByARelation.Working workingOf(OfAComparison read) {
             return switch (read) {
                 case Cuts cuts -> cuts.working();
-                case Stopped _ -> UndividedByARelation.Working.NOTHING;
+                case Stopped stopped -> stopped.apart(_ -> false);
                 case CutsNothing _, NotHeld _ -> UndividedByARelation.Working.UNREAD;
             };
         }
@@ -179,11 +186,36 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * The reading stopped: where, in what environment, and for the reason the arithmetic gave.
          * The reason is the arithmetic's own, so a reader of this takes it as it is.
          */
-        record Stopped(AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> failure)
-                implements OfAComparison {
+        record Stopped(AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> failure,
+                        WhatLiesBesideTheStop beside) implements OfAComparison {
 
             public Stopped {
                 java.util.Objects.requireNonNull(failure, "a reading that stopped stopped somewhere");
+                Objects.requireNonNull(beside, "what the comparison works out beside the stop");
+            }
+
+            /**
+             * What the program works out beside the expression the reading stopped at, for a
+             * relation drawn by an analysis that owns that expression: none of the stopped value's
+             * own operations are told, and a row is not shown computed for an operation beside it
+             * that is not. {@code answersFor} says which other expressions nothing here reads the
+             * analysis answers for as well; any other that may end a run leaves the operations
+             * told as not every one.
+             */
+            UndividedByARelation.Working apart(Predicate<Core> answersFor) {
+                return beside.apart(answersFor);
+            }
+
+            /**
+             * The same, for the analysis of a quotient by a value, whose lines are drawn on the
+             * dividend and the divisor with the divisor away from nought, and which answers for
+             * everything written under the quotient. The dividend and the divisor are worked out
+             * on every row of those lines, and the quotient of two numbers answers on every divisor
+             * but nought, so they are told with the rest. Not every operation is told where the
+             * quotient is not of that kind.
+             */
+            UndividedByARelation.Working ofTheQuotientAwayFromNought(Core division) {
+                return beside.ofTheQuotientAwayFromNought(division);
             }
 
             /** The expression the reading stopped at. */
@@ -206,8 +238,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
         AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
-                reads, reading(read.domain(), read.rules(), KeptTruths.readIn(read),
-                        new LinkedHashSet<>(), new ElementsMet(), new WhatWasTold()));
+                reads, reading(read, new LinkedHashSet<>(), new ElementsMet(),
+                        new WhatWasTold()));
         return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }
@@ -220,7 +252,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                               InputReading ofTheInput) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
-        ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
@@ -233,9 +264,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
                     AffineForms.outcome(side, reads,
-                            reading(inputs, ruleSource, kept, named, met, told));
+                            reading(ofTheInput, named, met, told));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
-                return new OfAComparison.Stopped(stopped);
+                return new OfAComparison.Stopped(stopped,
+                        new WhatLiesBesideTheStop(comparison, reads, ofTheInput, stopped.node()));
             }
             if (left == null) {
                 left = ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form();
@@ -342,8 +374,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            InputDomain inputs, RuleReadingSource ruleSource, ReadMeaning.WhereKept kept,
-            Set<NumericTerm> named, ElementsMet met, WhatWasTold told) {
+            InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told) {
+        return reading(ofTheInput, named, met, told, null);
+    }
+
+    /**
+     * The same, holding aside the value of {@code stoppedAt} where it is not null: the expression a
+     * reading stopped at stands for an atom no operation is told over, so that the rest of the
+     * comparison is read for what it works out.
+     */
+    private static AffineForms.Reading<NumericTerm, InputReads> reading(
+            InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
+            StoppedValues stoppedAt) {
+        InputDomain inputs = ofTheInput.domain();
+        RuleReadingSource ruleSource = ofTheInput.rules();
+        ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             /**
@@ -351,6 +396,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * where its type says it answers only between two ends, a row is computed only where
              * that number lies between them. An operation whose type says a run may stop at it
              * and not where is not every operation, and what is told is then not all there is.
+             *
+             * <p>An operation over the stopped value is not told: the number it comes to is not
+             * the form's, and a row held to the form's would be refused for an operation that
+             * does not stop it. What the reading then says of every operation is that it stops
+             * no row or stops one only where the owner of the value answers for it, or the
+             * operations told are not every one.
              */
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form) {
@@ -360,14 +411,35 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
                     default -> null;
                 };
+                List<StoppedValues.Held> over = stoppedAt == null ? List.of()
+                        : stoppedAt.heldIn(form);
+                if (!over.isEmpty()) {
+                    if (!stopsNoRowOrIsTheOwners(where, form, over)) {
+                        told.exact = false;
+                    }
+                    return;
+                }
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    told.add(operation, new UndividedByARelation.IntOperation(form,
-                            held.least(), held.greatest(), told.workedOutOf(operation)));
+                    // One no row of the places it is over stops at is not an operation a run can
+                    // stop at, and there is nothing to tell of it.
+                    FormRange range = FormRange.of(form, ofTheInput);
+                    UndividedByARelation.IntOperation operationTold =
+                            new UndividedByARelation.IntOperation(form, held.least(),
+                                    held.greatest(), told.workedOutOf(operation));
+                    if ((range == null || !range.liesWithin(held.least(), held.greatest()))
+                            && !told.operations.contains(operationTold)) {
+                        told.add(operation, operationTold);
+                    }
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
                     told.exact = false;
                 }
             }
 
+            /**
+             * A node read without telling of every operation it works out. One written around the
+             * expression the reading stopped at is the analysis that owns the expression's to
+             * answer for, as the expression is.
+             */
             @Override
             public void unobserved(Core node) {
                 told.exact = false;
@@ -397,6 +469,45 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
             }
 
+            /**
+             * Whether {@code node}, an expression nothing here reads other than the stopped one,
+             * ends no run, or is one the analysis that drew the lines answers for. Any other that
+             * may end a run has no owner here.
+             */
+            private boolean worksOutNothingBesideTheStop(Core node) {
+                return WhatARunMayEndFor.endsNoneBeneath(node) || stoppedAt.answersFor(node);
+            }
+
+            /**
+             * Whether {@code form}, an operation over the expressions {@code over} held aside and
+             * worked out as {@code where} says, stops no row: it answers everywhere, or the
+             * numbers it comes to lie where it answers, from the numbers each expression held
+             * aside is known to come to (none, for one nothing is known of). Or stops one only
+             * where the analysis that owns the stopped value answers for it, which is a sum of the
+             * addends of the comparison over that value and no other held aside, asked once the
+             * comparison has been read ({@link WhatLiesBesideTheStop#beside}). Anything else
+             * worked out over them is no owner's.
+             */
+            private boolean stopsNoRowOrIsTheOwners(WhereAnOperatorAnswers where,
+                                                    LinearForm<NumericTerm> form,
+                                                    List<StoppedValues.Held> over) {
+                if (where instanceof WhereAnOperatorAnswers.Everywhere) {
+                    return true;
+                }
+                if (!(where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held)) {
+                    return false;
+                }
+                FormRange range = FormRange.of(form, stoppedAt.read(), stoppedAt.ranges());
+                if (range != null && range.liesWithin(held.least(), held.greatest())) {
+                    return true;
+                }
+                if (over.size() == 1 && stoppedAt.isAPlainStop(over.get(0))) {
+                    told.sumsOverTheStop.add(form);
+                    return true;
+                }
+                return false;
+            }
+
             @Override
             public boolean makingEndsNoRun(Core.Construct construct) {
                 return ClausesInOrder.at(construct, ruleSource).governsNothing();
@@ -424,8 +535,75 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (!stopsOnlyWhereItsAnswerHasNoPlace(node)) {
                         told.exact = false;
                     }
+                    return numbers;
                 }
-                return numbers;
+                if (stoppedAt == null) {
+                    return null;
+                }
+                // Each expression nothing here reads is held aside as an atom of its own. What the
+                // one the reading stopped at works out is its owner's to show; any other has no
+                // owner here unless it ends no run or the analysis that drew the lines says so,
+                // and the operations are then not every one.
+                StoppedValues.Held aside = stoppedAt.holdAside(node);
+                if (aside.firstMeeting()) {
+                    if (!aside.theStop) {
+                        if (!worksOutNothingBesideTheStop(node)) {
+                            told.exact = false;
+                        }
+                    } else if (stoppedAt.quotientAwayFromNought()) {
+                        operandsOfTheQuotient(node, at);
+                    }
+                    if (aside.aChoice) {
+                        aside.rangeIs(rangeOfTheArms(node, at));
+                    }
+                }
+                return LinearForm.atom(aside.atom);
+            }
+
+            /**
+             * The numbers the arms of the choice {@code node} answer between them, or null where
+             * an arm is no form of places with ends.
+             */
+            private FormRange rangeOfTheArms(Core node, InputReads at) {
+                FormRange hull = null;
+                // Read apart: what an arm works out is not told of the comparison being read.
+                AffineForms.Reading<NumericTerm, InputReads> apart = reading(stoppedAt.read(),
+                        new LinkedHashSet<>(), new ElementsMet(), new WhatWasTold());
+                for (Choice.Arm arm : Choice.of(Core.withoutStanding(node)).arms()) {
+                    if (!(AffineForms.outcome(arm.answers(), at, apart)
+                            instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> answer)) {
+                        return null;
+                    }
+                    FormRange range = FormRange.of(answer.form(), stoppedAt.read());
+                    if (range == null) {
+                        return null;
+                    }
+                    hull = hull == null ? range : hull.hull(range);
+                }
+                return hull;
+            }
+
+            /**
+             * What a quotient by a value works out of its own: its dividend and its divisor, each
+             * read as any side is. The quotient is a number wherever its divisor is not nought,
+             * which the analysis that owns it keeps its rows to; any other operation at the stop
+             * is not told.
+             */
+            private void operandsOfTheQuotient(Core node, InputReads at) {
+                if (!(Core.withoutStanding(node) instanceof Core.Binary quotient)
+                        || quotient.op() != BinOp.DIV
+                        || !(WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
+                                List.of(quotient.left().type(), quotient.right().type()))
+                                instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
+                    told.exact = false;
+                    return;
+                }
+                for (Core operand : List.of(quotient.left(), quotient.right())) {
+                    if (AffineForms.outcome(operand, at, this)
+                            instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
+                        told.exact = false;
+                    }
+                }
             }
 
             @Override
@@ -517,6 +695,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
+        /** The forms of the operations over a stopped value that are told of nowhere, to be asked
+         *  of the form of the comparison. */
+        private final List<LinearForm<NumericTerm>> sumsOverTheStop = new ArrayList<>();
         private boolean exact = true;
 
         void add(Core node, UndividedByARelation.IntOperation operation) {
@@ -562,6 +743,276 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return new UndividedByARelation.Working(operations, exact
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME);
+        }
+    }
+
+    /**
+     * What a run works out to decide which arm of {@code choice} it takes, which every run of an
+     * arm has worked out first: what evaluating the choice reaches before any arm. A comparison
+     * among it is read as any is, its two sides worked out whichever way it comes out; anything
+     * else that can stop a run tells nothing.
+     */
+    static UndividedByARelation.Working workingOfWhatDecides(Core choice, InputReads at,
+                                                             InputReading ofTheInput) {
+        UndividedByARelation.Working together = new UndividedByARelation.Working(List.of(),
+                WhatARelationLeavesUndivided.Told.EVERY);
+        for (Evaluated.Step step : Evaluated.inOrder(choice)) {
+            UndividedByARelation.Working here = switch (step) {
+                case Evaluated.Step.Always always ->
+                        workingOfEvaluating(always.expression(), at, ofTheInput);
+                case Evaluated.Step.OnlyWhere only ->
+                        WhatARunMayEndFor.endsNoneBeneath(only.expression())
+                                ? new UndividedByARelation.Working(List.of(),
+                                        WhatARelationLeavesUndivided.Told.EVERY)
+                                : UndividedByARelation.Working.UNREAD;
+            };
+            together = here.after(together);
+        }
+        return together;
+    }
+
+    private static UndividedByARelation.Working workingOfEvaluating(Core expression, InputReads at,
+                                                                    InputReading ofTheInput) {
+        if (WhatARunMayEndFor.endsNoneBeneath(expression)) {
+            return new UndividedByARelation.Working(List.of(),
+                    WhatARelationLeavesUndivided.Told.EVERY);
+        }
+        if (!(Core.withoutStanding(expression) instanceof Core.Binary comparison)
+                || !comparison.op().compares()) {
+            return UndividedByARelation.Working.UNREAD;
+        }
+        WhatWasTold told = new WhatWasTold();
+        AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
+                new LinkedHashSet<>(), new ElementsMet(), told);
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            if (AffineForms.outcome(side, at, reading)
+                    instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
+                told.exact = false;
+            }
+        }
+        return told.working();
+    }
+
+    /** What {@code side} comes to once the bindings written around it are taken off. */
+    static Core withoutBindings(Core side) {
+        Core value = Core.withoutStanding(side);
+        while (value instanceof Core.LetIn binding) {
+            value = Core.withoutStanding(binding.body());
+        }
+        return value;
+    }
+
+    /**
+     * The expressions nothing reads, held aside while the rest of a comparison is read: the one
+     * the reading stopped at, and any other. Each stands for an atom of its own, no position of
+     * the input, so that what is proved of one — the numbers it comes to, that its owner answers
+     * for it — is proved of that one and of no other that was held aside as well.
+     *
+     * <p>The stopped expression is read as a quotient by a value on the rows whose divisor is not
+     * nought where {@code quotientAwayFromNought} says so, and then the dividend and the divisor
+     * are worked out on them and told.
+     */
+    private static final class StoppedValues {
+
+        private final Core stop;
+        private final boolean quotientAwayFromNought;
+        private final InputReading read;
+        private final Predicate<Core> answersFor;
+        private final Map<Core, Held> byExpression = new IdentityHashMap<>();
+        private final Map<NumericTerm, Held> byAtom = new LinkedHashMap<>();
+        private Held theStop;
+
+        StoppedValues(Core stop, boolean quotientAwayFromNought, InputReading read,
+                      Predicate<Core> answersFor) {
+            this.stop = Objects.requireNonNull(stop);
+            this.quotientAwayFromNought = quotientAwayFromNought;
+            this.read = Objects.requireNonNull(read);
+            this.answersFor = Objects.requireNonNull(answersFor);
+        }
+
+        /** One expression held aside, and what is known of the numbers it comes to. */
+        private static final class Held {
+
+            private final NumericTerm atom;
+            private final boolean aChoice;
+            private final boolean theStop;
+            private boolean met;
+            private FormRange range;
+
+            Held(NumericTerm atom, Core expression, boolean theStop) {
+                this.atom = atom;
+                this.aChoice = Choice.of(Core.withoutStanding(expression)) != null;
+                this.theStop = theStop;
+            }
+
+            /** Whether this is the first time the expression was met, so that it is answered for
+             *  once however often the walk reads it. */
+            boolean firstMeeting() {
+                boolean first = !met;
+                met = true;
+                return first;
+            }
+
+            void rangeIs(FormRange range) {
+                this.range = range;
+            }
+        }
+
+        /** The atom {@code expression} stands for, the same one wherever the same expression is
+         *  read, and the stopped expression's wherever that is. */
+        Held holdAside(Core expression) {
+            Core bare = Core.withoutStanding(expression);
+            Held held = byExpression.get(bare);
+            if (held == null) {
+                if (stop.equals(expression)) {
+                    if (theStop == null) {
+                        theStop = newHeld(expression, true);
+                    }
+                    held = theStop;
+                } else {
+                    held = newHeld(expression, false);
+                }
+                byExpression.put(bare, held);
+            }
+            return held;
+        }
+
+        private Held newHeld(Core expression, boolean isTheStop) {
+            NumericTerm atom = new NumericTerm.ValueOf(
+                    TermPath.of("the expression held aside #" + byAtom.size()));
+            Held held = new Held(atom, expression, isTheStop);
+            byAtom.put(atom, held);
+            return held;
+        }
+
+        /** What {@code form} holds aside. */
+        List<Held> heldIn(LinearForm<NumericTerm> form) {
+            List<Held> out = new ArrayList<>();
+            for (NumericTerm atom : form.coefs().keySet()) {
+                Held held = byAtom.get(atom);
+                if (held != null) {
+                    out.add(held);
+                }
+            }
+            return out;
+        }
+
+        /** The numbers each expression held aside comes to, null where that is not known. */
+        Map<NumericTerm, FormRange> ranges() {
+            Map<NumericTerm, FormRange> out = new HashMap<>();
+            byAtom.forEach((atom, held) -> out.put(atom, held.range));
+            return out;
+        }
+
+        /** Whether the analysis that drew the lines answers for {@code other}, an expression
+         *  beside the stopped one, as it does for that one. */
+        boolean answersFor(Core other) {
+            return answersFor.test(other);
+        }
+
+        /** Whether {@code held} is the stopped expression, and neither a choice nor a quotient by
+         *  a value. */
+        boolean isAPlainStop(Held held) {
+            return held.theStop && !held.aChoice && !quotientAwayFromNought;
+        }
+
+        boolean quotientAwayFromNought() {
+            return quotientAwayFromNought;
+        }
+
+        InputReading read() {
+            return read;
+        }
+    }
+
+    /**
+     * What a comparison works out beside the expression its reading stopped at, read once and
+     * only when a line drawn from the stopped reading asks.
+     */
+    static final class WhatLiesBesideTheStop {
+
+        private final StatedComparison comparison;
+        private final InputReads reads;
+        private final InputReading ofTheInput;
+        private final Core node;
+
+        WhatLiesBesideTheStop(StatedComparison comparison, InputReads reads,
+                              InputReading ofTheInput, Core node) {
+            this.comparison = Objects.requireNonNull(comparison);
+            this.reads = Objects.requireNonNull(reads);
+            this.ofTheInput = Objects.requireNonNull(ofTheInput);
+            this.node = Objects.requireNonNull(node);
+        }
+
+        /**
+         * What is worked out beside the stop, where nothing of the stopped value is told: the
+         * operations beside it are every one that is told, and the sizes of the form answer for a
+         * row where there are none.
+         */
+        UndividedByARelation.Working apart(Predicate<Core> answersFor) {
+            UndividedByARelation.Working beside =
+                    beside(new StoppedValues(node, false, ofTheInput, answersFor));
+            return beside.operations().isEmpty() && beside.exact()
+                    ? UndividedByARelation.Working.NOTHING : beside;
+        }
+
+        /** The same for the quotient {@code division}, which the analysis answers for with
+         *  everything written under it and under the expression the reading stopped at, which it
+         *  reads the quotient out of. */
+        UndividedByARelation.Working ofTheQuotientAwayFromNought(Core division) {
+            Set<Core> under = Collections.newSetFromMap(new IdentityHashMap<>());
+            collectUnder(division, under);
+            collectUnder(node, under);
+            return beside(new StoppedValues(division, true, ofTheInput,
+                    node -> under.contains(Core.withoutStanding(node))));
+        }
+
+        private static void collectUnder(Core around, Set<Core> into) {
+            Core here = Core.withoutStanding(around);
+            into.add(here);
+            Core.forEachChild(here, child -> collectUnder(child, into));
+        }
+
+        private UndividedByARelation.Working beside(StoppedValues stoppedAt) {
+            WhatWasTold told = new WhatWasTold();
+            AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
+                    new LinkedHashSet<>(), new ElementsMet(), told, stoppedAt);
+            List<LinearForm<NumericTerm>> sides = new ArrayList<>();
+            for (Core side : List.of(comparison.left(), comparison.right())) {
+                // A second stop is one more expression nothing is told of.
+                if (AffineForms.outcome(side, reads, reading)
+                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> read) {
+                    sides.add(read.form());
+                } else {
+                    told.exact = false;
+                }
+            }
+            LinearForm<NumericTerm> whole = sides.size() == 2 ? sides.get(0).minus(sides.get(1))
+                    .orNull() : null;
+            for (LinearForm<NumericTerm> sum : told.sumsOverTheStop) {
+                if (!areAddendsOf(sum, whole)) {
+                    told.exact = false;
+                }
+            }
+            // The stopped expression is worked out too, and a run may stop in it before any
+            // operation told.
+            return told.working().notOnEveryRun();
+        }
+
+        /**
+         * Whether {@code sum} adds up addends of {@code whole}, the form the comparison is a
+         * cut of, each as large as it weighs there. That is all the program is taken to work
+         * out where the sizes of the addends answer for a row: a size has no sign, and which side
+         * of the comparison an addend was written on only turns it round. A sum with a constant,
+         * or weighing an addend differently, is an operation of its own.
+         */
+        private static boolean areAddendsOf(LinearForm<NumericTerm> sum,
+                                            LinearForm<NumericTerm> whole) {
+            return whole != null && sum.constant().signum() == 0
+                    && sum.coefs().entrySet().stream().allMatch(each -> {
+                        ExactRatio weighs = whole.coefs().get(each.getKey());
+                        return weighs != null && each.getValue().abs().equals(weighs.abs());
+                    });
         }
     }
 

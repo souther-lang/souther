@@ -169,9 +169,10 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
         assertNotNull(building);
         List<String> built = surface.typedFixtureValues().values().stream()
                 .flatMap(List::stream)
-                .map(named -> named.rendered() + " " + building.buildAlone(
+                .map(named -> named.rendered() + " " + (building.buildAlone(
                         typeOfTheTable(surface), FixtureTemplate.named(named,
-                                new FixtureReferenceOrigin(0))))
+                                new FixtureReferenceOrigin(0)))
+                        instanceof BoundaryValues.OnItsOwn.Built ? "BUILT" : "REFUSED"))
                 .sorted().toList();
         assertEquals(List.of("broken REFUSED", "yenRates BUILT"), built);
     }

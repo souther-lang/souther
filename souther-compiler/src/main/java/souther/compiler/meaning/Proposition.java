@@ -58,6 +58,17 @@ public sealed interface Proposition {
     String key();
 
     /**
+     * The spelling of {@link #denied}, for a reader that wants no more of it than that.
+     *
+     * <p>A denial is made whole to be asked its spelling, and a part's spelling is asked for every
+     * statement a reading projects; a proposition that spells its own denial from its spelling says
+     * so here and makes none.
+     */
+    default String deniedKey() {
+        return denied().key();
+    }
+
+    /**
      * The statements this one holds as parts of what it states, in the order it keeps them.
      *
      * <p>The one place that says which they are. A reader asking something of every part — whether
@@ -243,6 +254,11 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new Compared(relation, !holds);
+        }
+
+        @Override
+        public String deniedKey() {
+            return holds ? "!" + key : key.substring(1);
         }
     }
 

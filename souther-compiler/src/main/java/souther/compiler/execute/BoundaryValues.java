@@ -43,24 +43,27 @@ public interface BoundaryValues {
      *
      * <p>The same decoder a value of that type goes through wherever it stands, so a value it refuses
      * here is refused inside every value that holds one. What it admits here says nothing about
-     * those: a rule relating two fields refuses a pair whose halves each built.
+     * those: a rule relating two fields refuses a pair whose halves each built. What it built is
+     * returned with the answer, read the way a built row's input is, so a caller that needs the value
+     * a fixture stands for does not read the fixture itself.
      *
      * <p>Throws {@link LinkageError} where the runtime is absent, as {@link #build} does.
      */
     OnItsOwn buildAlone(Type type, Hir.Expr fixture);
 
     /** What came of building one value as its own type. */
-    enum OnItsOwn {
+    sealed interface OnItsOwn {
 
-        BUILT,
+        /** It built, and this is what it came to: the value a row holding it would carry. */
+        record Built(ObservedValue observed) implements OnItsOwn {}
 
-        REFUSED,
+        record Refused() implements OnItsOwn {}
 
         /**
          * The type is not one a value is decoded as on its own — an optional, a tuple, a function —
          * so nothing was asked. Not a refusal: such a type is decoded by the value that holds it.
          */
-        NO_DECODER_OF_ITS_OWN
+        record NoDecoderOfItsOwn() implements OnItsOwn {}
     }
 
     /** What came of building one value. */

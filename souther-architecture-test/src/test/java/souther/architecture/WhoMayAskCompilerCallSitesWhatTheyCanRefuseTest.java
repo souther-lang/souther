@@ -235,6 +235,25 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + " carried on in exact ratios from the value just tried, which records"
                             + " the value it could not hold. No step is taken past last."),
             new Permission(
+                    "souther/compiler/partition/NearbyValues#unitsOf(Lsouther/compiler/observe/"
+                            + "ObservedValue$Decimal;)Ljava/util/Iterator; add(Ljava/math/"
+                            + "BigDecimal;)Ljava/math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "Caught with the other two calls of the method: a decimal too wide to step has"
+                            + " no unit step, and the iterator of candidates is empty."),
+            new Permission(
+                    "souther/compiler/partition/NearbyValues#unitsOf(Lsouther/compiler/observe/"
+                            + "ObservedValue$Decimal;)Ljava/util/Iterator; movePointLeft(I)Ljava/"
+                            + "math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "The unit of the decimal's scale, caught by the same try/catch."),
+            new Permission(
+                    "souther/compiler/partition/NearbyValues#unitsOf(Lsouther/compiler/observe/"
+                            + "ObservedValue$Decimal;)Ljava/util/Iterator; subtract(Ljava/math/"
+                            + "BigDecimal;)Ljava/math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "The step below, caught by the same try/catch."),
+            new Permission(
                     "souther/compiler/partition/TermRealizations#atThoseParts(Ljava/util/Map;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/check/RuleReadingSource;)Lsouther/compiler/"

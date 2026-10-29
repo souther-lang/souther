@@ -1173,6 +1173,18 @@ public final class Generator {
             return Admissibility.UNKNOWN;
         }
 
+        /**
+         * The value the decoder of {@code type} makes of {@code candidate} on its own, read the way
+         * a built row's input is: empty where it refuses it, where the type has no decoder of its
+         * own, or where nothing here can build.
+         *
+         * <p>The one way a value written as a fixture becomes a value a search walks. A reader of
+         * the fixture's text or tree would be a second reading of what the decoder already says.
+         */
+        default Optional<ObservedValue> builtAlone(Type type, FixtureTemplate candidate) {
+            return Optional.empty();
+        }
+
         /** What a type's own decoder said of a value, or that nothing asked it. */
         enum Admissibility {
             ADMITTED,
@@ -2212,13 +2224,13 @@ public final class Generator {
                     int through = arm.seenThrough().size();
                     Examining pieces = new Examining(looking);
                     Examining lists = new Examining(looking);
+                    Beside growing = aListGrown(arm.ranWith(), axes.subject(), check, looking);
                     yield seen != null ? seen : taking(looking, List.of(
                             inOrder(through, at -> piecesDemanded(arm.seenThrough().get(at),
                                     axes, purposes, looking, check, answers,
                                     read.piecesAttempted(), pieces)),
                             inOrder(through, at -> candidatesBeside(arm.seenThrough().get(at),
-                                    axes, purposes, check, answers, aListGrown(arm.ranWith()),
-                                    lists)),
+                                    axes, purposes, check, answers, growing, lists)),
                             inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
                                     purposes, looking, check, answers))));
                 }
@@ -2258,6 +2270,7 @@ public final class Generator {
                     Examining numbers = new Examining(looking);
                     Examining pieces = new Examining(looking);
                     Examining lists = new Examining(looking);
+                    Beside growing = aListGrown(one.ranWith(), axes.subject(), check, looking);
                     yield seen != null ? seen : taking(looking, List.of(
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
                                     purposes, check, answers, A_WHOLE_NUMBER_MOVED, numbers)),
@@ -2265,8 +2278,7 @@ public final class Generator {
                                     purposes, looking, check, answers, read.piecesAttempted(),
                                     pieces)),
                             inOrder(rows, at -> candidatesBeside(one.answeredOn().get(at), axes,
-                                    purposes, check, answers, aListGrown(one.ranWith()),
-                                    lists))));
+                                    purposes, check, answers, growing, lists))));
                 }
             };
             replacementAnswers.put(asked, found != null
@@ -2399,8 +2411,31 @@ public final class Generator {
      * ({@link NearbyValues#grown}). Which candidate answers, and whether it answers differently,
      * is what running it says.
      */
-    private static Beside aListGrown(InputsRowsRanWith ranWith) {
-        return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith);
+    private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
+                                     CandidateCheck check, ReplacementWitness looking) {
+        // What stands for a type is the same for every row and list the search grows, so it is one
+        // for the search and made as far as the search asks, its stops said as they are met. A
+        // type's values are bounded as a composing's candidates are, and the bound is said as that
+        // figure.
+        ElementsOfAType elements = new ElementsOfAType(
+                standingFor -> subject.representativesHolding(standingFor,
+                        FieldDomains.ConstructionLimits.NONE),
+                ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
+                subject.ruleReading(), check, MOST_REPAIRS, new ElementsOfAType.Stops() {
+
+                    @Override
+                    public void met(CompositionShortfall shortfall) {
+                        looking.composingMet(shortfall);
+                    }
+
+                    @Override
+                    public void limitedAt(int most) {
+                        looking.composingStopped(List.of(
+                                WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
+                    }
+                });
+        return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
+                elements::of);
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
@@ -10071,6 +10106,22 @@ public final class Generator {
                 case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
             }
             return null;
+        }
+
+        /**
+         * Composing stopped at every figure {@code met} holds, if it holds any.
+         *
+         * <p>The figures and no more of it, as at every place a search's composing is said to have
+         * stopped here: what a rewrite's search ended at is a figure or something no figure decides
+         * ({@link ReplacementDisposition.Met}), and what a shortfall holds besides its figures — a
+         * population written in part, a number not held — is neither said nor asked for here. A
+         * shortfall of those alone says nothing, and does not reach {@link #composingStopped}, which
+         * is only ever told a figure.
+         */
+        void composingMet(CompositionShortfall met) {
+            if (!met.figures().isEmpty()) {
+                composingStopped(asFigures(met.figures()));
+            }
         }
 
         /** Composing the rows the search looked through stopped at {@code figure}. */
