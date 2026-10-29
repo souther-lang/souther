@@ -271,6 +271,76 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
     }
 
     /**
+     * What the region carries of an operation over a number outside a container — here the
+     * addition of one to it, which stops a run at the greatest {@code Int} — holds the number
+     * the sum with the length is taken out over. With it the number is one below the greatest, and
+     * a string of no code points has no number that gets a run past both: only a string of one
+     * does. Taken out over the sum alone, the number at the greatest would get the empty string
+     * past, which is a run the addition of one stops.
+     */
+    @Test
+    void anOperationOnTheNumberBeforeTheSumHoldsTheNumberTheSumIsTakenOutOver() {
+        Compilation compilation = measured("""
+                module example.equal
+
+                data A = String
+                    invariant String.matches("[a-z]+", value)
+
+                data B = String
+                    invariant String.matches("[a-z]*", value)
+
+                data N = Int
+                    invariant value >= 9223372036854775806
+
+                behavior f : (a: A, b: B, n: N) -> Bool
+
+                let f (a, b, n) = {
+                    guard n.value + 1 > 0 else false
+                    guard String.length(b.value) + n.value > 9223372036854775806 else false
+                    a.value == b.value
+                }
+                """);
+
+        assertEquals(List.of("b"), shownOverARegion(evidenceOf(compilation)));
+        assertTrue(Pattern.compile("\"longerThan\"\\s*:\\s*1\\b").matcher(json(compilation)).find(),
+                json(compilation));
+        assertTrue(Pattern.compile("\"shorterThan\"\\s*:\\s*1\\b").matcher(json(compilation)).find(),
+                json(compilation));
+    }
+
+    /**
+     * What accounts for a place is a claim about the application the relation is reached in. An
+     * earlier application of the closure works out the same statements over values of its own,
+     * and where no row is shown to make none, the claim is not carried to them.
+     */
+    @Test
+    void whatAccountsForAPlaceIsNotCarriedToTheApplicationsBeforeTheOneItIsReachedIn() {
+        Compilation compilation = measured("""
+                module example.equal
+
+                data L = String
+                    invariant String.matches("[a-z]+", value)
+
+                data Row = { id: String, tag: String?, n: Int }
+                    invariant n >= 9223372036854775805
+
+                let tagIs (text: String, r: Row): Bool =
+                    match r.tag with
+                        | Some own -> String.length(own) + r.n > 0 && own == text
+                        | None -> false
+
+                behavior f : (a: L, rows: List<Row>) -> List<Row>
+
+                let f (a, rows) =
+                    if List.length(rows) >= 2 then List.filter(r -> tagIs(a.value, r), rows)
+                    else []
+                """);
+
+        assertEquals(List.of("a", "rows[*].tag@Some"),
+                notShownToReachEveryValue(evidenceOf(compilation)));
+    }
+
+    /**
      * A sum the number cannot bring below nought is not one a string of any length gets a run
      * past: nothing arrives at the equality, which is said and not read as a rule owed.
      */

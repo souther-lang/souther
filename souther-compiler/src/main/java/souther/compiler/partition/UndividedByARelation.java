@@ -1746,7 +1746,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // shown for every length the string has, what it states of the length leaves its strings
         // as they were.
         RoomOnTheWay lengthsRoom = heldWhole
-                ? roomAmongTheSides(carriers, written, past, read) : null;
+                ? roomAmongTheSides(carriers, written, past, declined, read) : null;
         if (!offItsLine && lengthsRoom != null && lengthsRoom.lengths() == null) {
             unfree = unfree.stream()
                     .filter(each -> !lengthsRoom.statements().contains(each)).toList();
@@ -2099,7 +2099,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static RoomOnTheWay roomOnTheWay(TermPath mine, TermPath theirs,
                                              List<OnAWay> written,
-                                             DemandReading.Answered past, InputReading read,
+                                             DemandReading.Answered past,
+                                             Optional<Set<String>> declined, InputReading read,
                                              Quantity.ThePieceAt piece) {
         if (piece != null || past.narrowing().stream().anyMatch(constraint ->
                 constraint.terms().stream().anyMatch(term -> overlap(term.subjectPath(), mine)
@@ -2139,18 +2140,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (system.isEmpty()) {
             return RoomOnTheWay.UNTOUCHED;
         }
-        // Every statement and tie on the numbers that stand beside the length is part of what
-        // those numbers are held to, and a number held to something outside the system is not one
-        // a value can be chosen for by the system alone.
+        // Everything the run states or works out of the numbers that stand beside the length is
+        // part of what those numbers are held to: a statement the way makes, a tie it keeps, and
+        // what a region carries of an operation over numbers outside a container. A number held
+        // to something outside the system is not one a value can be chosen for by the system
+        // alone, so a hold on such a number that is not taken in leaves nothing proved.
         boolean grew = true;
+        Set<TakenConstraint> narrowed = new LinkedHashSet<>();
+        List<TermPath> beside = new ArrayList<>();
         while (grew) {
             grew = false;
-            List<TermPath> beside = new ArrayList<>();
-            system.forEach(constraint -> constraint.terms().forEach(term -> {
-                if (!isTheLengthOfAStringAt(term, mine) && !isTheLengthOfAStringAt(term, theirs)) {
-                    beside.add(term.subjectPath());
+            beside = placesBesideTheLength(system, mine, theirs);
+            List<TermPath> asked = beside;
+            for (TakenConstraint each : past.narrowing()) {
+                if (narrowed.contains(each) || each.terms().stream().noneMatch(term ->
+                        asked.stream().anyMatch(place -> overlap(term.subjectPath(), place)))) {
+                    continue;
                 }
-            }));
+                if (!(each instanceof TakenConstraint.Affine)) {
+                    return null;
+                }
+                system.add(each);
+                narrowed.add(each);
+                grew = true;
+            }
             for (OnAWay each : written) {
                 if (stated.contains(each) || each.relation() == null || each.elementsOf() != null
                         || beside.stream().noneMatch(place -> reaches(each, place))) {
@@ -2174,6 +2187,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ties.add(tie);
                 grew = true;
             }
+        }
+        // An operation the run may stop at whose owner says where it answers holds the numbers it
+        // reads to what no statement here carries, so a value chosen for one of these numbers is
+        // not shown to get the run past it.
+        for (Pullback.StopObligation owed : past.owed()) {
+            if (touchesAny(owed.places(), beside)) {
+                return null;
+            }
+        }
+        // And a condition the way declined to read may hold them to what is not said at all.
+        if (!beside.isEmpty() && (declined.isEmpty() || beside.stream()
+                .anyMatch(place -> declined.get().contains(place.head())))) {
+            return null;
         }
         NumericTerm length = null;
         List<TermPath> places = new ArrayList<>();
@@ -2217,7 +2243,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link #roomOnTheWay}). Asked once for a relation: it is the same for both sides.
      */
     private RoomOnTheWay roomAmongTheSides(List<Carrier> carriers, List<OnAWay> written,
-                                           DemandReading.Answered past, InputReading read) {
+                                           DemandReading.Answered past,
+                                           Optional<Set<String>> declined, InputReading read) {
         if (kind != Kind.AFFINE || remainder != null || sides.size() != 2
                 || (relation != Rel.EQ && relation != Rel.NE)
                 || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
@@ -2232,8 +2259,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Quantity.ThePieceAt piece = sides.get(0).piece() != null ? sides.get(0).piece()
                 : sides.get(1).piece();
         return first == null || second == null ? null
-                : roomOnTheWay(first.subjectPath(), second.subjectPath(), written, past, read,
-                        piece);
+                : roomOnTheWay(first.subjectPath(), second.subjectPath(), written, past,
+                        declined, read, piece);
+    }
+
+    /** The places of the numbers {@code system} reads other than the lengths of the strings at
+     *  {@code mine} and {@code theirs}. */
+    private static List<TermPath> placesBesideTheLength(List<TakenConstraint> system,
+                                                        TermPath mine, TermPath theirs) {
+        List<TermPath> beside = new ArrayList<>();
+        system.forEach(constraint -> constraint.terms().forEach(term -> {
+            if (!isTheLengthOfAStringAt(term, mine) && !isTheLengthOfAStringAt(term, theirs)) {
+                beside.add(term.subjectPath());
+            }
+        }));
+        return beside;
     }
 
     /** Whether {@code term} is the number of code points of the string at {@code place}. */
@@ -2570,7 +2610,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (applicationsBefore) {
             for (DemandReading.PriorApplications prior : past.before()) {
-                if (stopsOn(prior.workedOut(), reads, witness, true, accountedFor)) {
+                // What accounts for a place is a claim about the application the relation is
+                // reached in. An earlier application works out the same statements over values of
+                // its own, which that claim does not reach.
+                // What accounts for a place is a claim about the application the relation is
+                // reached in. An earlier application works out the same statements over values of
+                // its own, which that claim does not reach.
+                if (stopsOn(prior.workedOut(), reads, witness, true, Set.of())) {
                     return true;
                 }
             }
