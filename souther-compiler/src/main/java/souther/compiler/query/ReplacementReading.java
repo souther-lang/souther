@@ -27,6 +27,7 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -256,8 +257,18 @@ public final class ReplacementReading {
             walked.addAll(entered.apply(row));
         }
         Map<Replacement.OfAWalk, WalkOccurrences> walkOccurrences = new LinkedHashMap<>();
-        for (CoverageSites.WalkSite site : plan.walks(behavior)) {
-            if (!walked.contains(site.index())) {
+        // A walk shown, at every place it is entered, to go over a list of one element at most is
+        // the walk under either spelling on every run: no row tells a rewrite of it apart, and
+        // none is owed. So a walk is asked about where any of its places shows no such thing.
+        List<CoverageSites.WalkSite> sites = plan.walks(behavior);
+        Set<SourceConstructOrigin> notShown = new HashSet<>();
+        for (CoverageSites.WalkSite site : sites) {
+            if (!heldToOneAtMost.test(site.index())) {
+                notShown.add(site.walk());
+            }
+        }
+        for (CoverageSites.WalkSite site : sites) {
+            if (!walked.contains(site.index()) || !notShown.contains(site.walk())) {
                 continue;
             }
             ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAWalk(site);
@@ -281,12 +292,6 @@ public final class ReplacementReading {
                         : Optional.empty());
             }
         }
-        // A walk shown, at every place it is entered, to go over a list of one element at most is
-        // the walk under either spelling on every run: no row tells a rewrite of it apart, and
-        // none is owed.
-        walkOccurrences.keySet().removeIf(replaced -> plan.walks(behavior).stream()
-                .filter(site -> site.walk().equals(replaced.walk()))
-                .allMatch(site -> heldToOneAtMost.test(site.index())));
         walkOccurrences.forEach((replaced, at) -> out.add(new Account(
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
