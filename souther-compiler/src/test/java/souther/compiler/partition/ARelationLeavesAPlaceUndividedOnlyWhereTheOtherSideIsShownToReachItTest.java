@@ -3163,19 +3163,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(g.value - c.value)
                 }
                 """;
-        // The sum of two amounts is built into a Yen, whose invariant stops a run that no
-        // operation of the comparison tells of: no row is shown computed beside an end of the
-        // type, and no term is shown left either way: the difference of two terms is answered by
-        // the sizes of the form's addends, which say nothing of that invariant.
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "c", NOT_SHOWN),
+        // The sum of two amounts is built into a Yen, whose invariant leaves the numbers from
+        // nought up. A run stops at that construction where the sum is below nought, which is
+        // told as an operation over the sum, so the places of the comparison are shown the way
+        // the sum written over Int shows them.
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
                 leftIn(named, whereWritten(named, ">= c")));
-        assertEquals(List.of(), classesIn(named, "c"));
-        assertEquals(Set.of("a", "b", "c"), notReadIn(named, whereWritten(named, ">= c")));
+        assertEquals(List.of("c/0 <= x <= 0", "c/0 < x"), classesIn(named, "c"));
+        assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
 
         String writtenOut = named.replace("let g = a + b\n    guard g >= c",
                 "guard a + b >= c").replace("g.value", "a.value + b.value");
-        assertEquals(Set.of("a", "b", "c"),
-                notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
+        assertEquals(Set.of(), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
 
         String payroll = """
                 module w1

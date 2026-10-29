@@ -157,6 +157,19 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code construct}, a newtype's construction, as {@code value}, the
+         * form of the number it wraps. Making it checks the clauses of the type, which stops a run
+         * where the number is not one they leave.
+         *
+         * <p>A reader that tells where each operation is worked out says here where the
+         * construction is, when the clauses leave a run of numbers and nothing else; one that does
+         * not know takes it as a node read without telling of every operation it works out.
+         */
+        default void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
+            unobserved(construct);
+        }
+
+        /**
          * Whether a call that adds up the numbers of a list written out is read as the sum of
          * those numbers, and told as the one operation it is ({@link #totalled}). A reading that
          * does not tell where each operation of a form is worked out has no use for it, and
@@ -372,6 +385,11 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
             of.composed(operation, form, operands);
+        }
+
+        @Override
+        public void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
+            of.constructed(construct, type, value);
         }
 
         @Override
@@ -1115,10 +1133,19 @@ public final class AffineForms {
                     && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
                             reading.declarations().kinds(), reading.declarations().sums())
                             .isWrapped() -> {
-                // The construction checks the invariant of the type it makes, which stops a run
-                // that no operation here tells of.
-                reading.unobserved(e);
-                yield formOf(nd.values().get(0).value(), at, reading, following, stopped);
+                // The construction checks the clauses of the type it makes, which stops a run where
+                // the number is not one they leave. Told after the operations of the number it
+                // wraps, as the run works it out after them.
+                LinearForm<A> wrapped =
+                        formOf(nd.values().get(0).value(), at, reading, following, stopped);
+                if (wrapped == null) {
+                    reading.unobserved(e);
+                } else {
+                    reading.constructed(nd, TypeView.asWritten(Type.ref(nd.typeName()),
+                            reading.symbols(), reading.declarations().kinds(),
+                            reading.declarations().sums()), wrapped);
+                }
+                yield wrapped;
             }
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather

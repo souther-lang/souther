@@ -4,6 +4,8 @@ import souther.compiler.abort.AbortKind;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
@@ -30,11 +32,13 @@ import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -413,6 +417,75 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
                     default -> null;
                 };
+                tell(operation, form, operands, where);
+            }
+
+            /**
+             * A newtype's construction, told as the operation it is where the clauses of the type
+             * leave a run of numbers and every number of the run: a run stops there where the
+             * number it wraps is outside it, as it stops at a sum outside the ends of an
+             * {@code Int}. Where they leave anything else, or the wrapped number is not an
+             * {@code Int}, what stops the run is not told.
+             */
+            @Override
+            public void constructed(Core.Construct construct, TypeView type,
+                                    LinearForm<NumericTerm> value) {
+                if (makingEndsNoRun(construct)) {
+                    return;
+                }
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
+                        whereMakingSucceeds(construct, type);
+                if (where == null) {
+                    told.exact = false;
+                    return;
+                }
+                tell(construct, value, List.of(value), where);
+            }
+
+            /**
+             * The numbers a construction of {@code type} over an {@code Int} succeeds for: the
+             * whole run its clauses leave, within the ends of an {@code Int}. Null where they leave
+             * none that is shown to be the whole of what they say.
+             */
+            private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereMakingSucceeds(
+                    Core.Construct construct, TypeView type) {
+                if (construct.values().get(0).value().type() != Type.INT) {
+                    return null;
+                }
+                NumericDomain.Bounds run =
+                        DeclaredBounds.wholeRunOf(type, ofTheInput.ruleReading());
+                if (run == null) {
+                    return null;
+                }
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
+                        WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS;
+                BigInteger least = ofAnInt.least();
+                BigInteger greatest = ofAnInt.greatest();
+                if (run.min() != null) {
+                    BigInteger end = run.min().wholeAdmitted(true);
+                    if (end == null) {
+                        return null;
+                    }
+                    least = least.max(end);
+                }
+                if (run.max() != null) {
+                    BigInteger end = run.max().wholeAdmitted(false);
+                    if (end == null) {
+                        return null;
+                    }
+                    greatest = greatest.min(end);
+                }
+                return least.compareTo(greatest) > 0 ? null
+                        : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
+            }
+
+            /**
+             * {@code operation}, worked out as {@code form} over {@code operands} where a run
+             * stops at it as {@code where} says, told as the operations of this comparison.
+             */
+            private void tell(Core operation, LinearForm<NumericTerm> form,
+                              List<LinearForm<NumericTerm>> operands,
+                              WhereAnOperatorAnswers where) {
                 List<StoppedValues.Held> over = stoppedAt == null ? List.of()
                         : stoppedAt.heldIn(form);
                 if (!over.isEmpty()) {
@@ -755,6 +828,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return workedOutOf(switch (Core.withoutStanding(node)) {
                 case Core.Neg neg -> List.of(neg.operand());
                 case Core.Binary binary -> List.of(binary.left(), binary.right());
+                case Core.Construct construct when !construct.values().isEmpty() ->
+                        List.of(construct.values().get(0).value());
                 default -> List.<Core>of();
             });
         }
