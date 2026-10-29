@@ -607,6 +607,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
+             * The length of a list written out, whose elements are worked out as the list is
+             * built. Past the figure a list is read element by element up to, they are not told.
+             */
+            @Override
+            public void counted(Core call, List<Core> elements, InputReads at) {
+                if (told.readsElementByElement(elements.size())) {
+                    builtFrom(elements, at);
+                } else {
+                    told.exact = false;
+                }
+            }
+
+            /**
              * {@code total}, which {@code node} holds to {@code Int} once it is worked out exactly,
              * told as the one operation it is, worked out after the operations {@code after}.
              */
