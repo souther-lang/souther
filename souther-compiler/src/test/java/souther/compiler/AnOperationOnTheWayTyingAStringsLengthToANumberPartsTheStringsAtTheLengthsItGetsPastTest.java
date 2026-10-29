@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -306,6 +307,47 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
                 json(compilation));
         assertTrue(Pattern.compile("\"shorterThan\"\\s*:\\s*1\\b").matcher(json(compilation)).find(),
                 json(compilation));
+    }
+
+    /**
+     * The lengths a run gets past are a proof about numbers, and a row writes a string. The
+     * number is held to the three greatest {@code Int}s, so the sum with a length stays within the
+     * type only for a string of one or two code points. Where the position admits only strings of
+     * three there is none, no row gets to the equality, and no class says what a string is beside
+     * the other; where it admits two as well, the classes are over the strings of one or two.
+     */
+    @Test
+    void whereTheAdmittedStringsHaveNoneOfTheLengthsNoClassSaysWhatAStringIsBesideTheOther() {
+        String model = """
+                module example.equal
+
+                data A = String
+                    invariant String.matches("[a-z]+", value)
+
+                data B = String
+                    invariant String.matches("%s", value)
+
+                data N = Int
+                    invariant value >= 9223372036854775805
+
+                behavior f : (a: A, b: B, n: N) -> Bool
+
+                let f (a, b, n) = {
+                    guard String.length(b.value) + n.value > 0 else false
+                    a.value == b.value
+                }
+                """;
+
+        PartitionEvidence three = evidenceOf(measured(model.formatted("[a-z][a-z][a-z]")));
+        PartitionEvidence orTwo = evidenceOf(measured(model.formatted("[a-z][a-z][a-z]?")));
+
+        List<String> sayings = new ArrayList<>();
+        three.axes().forEach(axis -> sayings.addAll(axis.classes()));
+        assertTrue(sayings.stream().noneMatch(saying ->
+                saying.contains(" can be ") || saying.contains(" is never ")), sayings.toString());
+        assertEquals(List.of("a/x can be b", "a/x is never b"),
+                classesOf(orTwo, "a").get("a"));
+        assertEquals(List.of(), stringsNotShownToReachEveryValue(orTwo));
     }
 
     /**

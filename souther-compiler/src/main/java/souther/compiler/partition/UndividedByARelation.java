@@ -2233,6 +2233,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language.Ends ends = strings == null ? null : strings.lengths();
         BigInteger fewest = BigInteger.valueOf(ends == null ? 0 : ends.least());
         BigInteger most = BigInteger.valueOf(longestOf(strings));
+        // Whether the place holds a string of one of these lengths is not asked here. The lengths
+        // are a proof about numbers; the strings of the place at them are met with what it admits
+        // where the classes are made, under the allowance of the place, and a side that holds
+        // none is drawn as no class ({@link Classing}).
         return lengths.holds(fewest, most) ? new RoomOnTheWay(limited, null, null, stated)
                 : new RoomOnTheWay(limited, limited, lengths, stated);
     }
@@ -2610,9 +2614,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (applicationsBefore) {
             for (DemandReading.PriorApplications prior : past.before()) {
-                // What accounts for a place is a claim about the application the relation is
-                // reached in. An earlier application works out the same statements over values of
-                // its own, which that claim does not reach.
                 // What accounts for a place is a claim about the application the relation is
                 // reached in. An earlier application works out the same statements over values of
                 // its own, which that claim does not reach.
