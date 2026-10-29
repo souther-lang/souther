@@ -117,6 +117,12 @@ class TheRowsMadeForAStringInsideAnotherHoldTheRelationWhereTheyAreSaidToTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
+    /** The first value the document gives {@code field}, which is the whole document's. */
+    private static String firstValueOf(String field, String json) {
+        Matcher found = Pattern.compile("\"" + field + "\"\\s*:\\s*\"([^\"]*)\"").matcher(json);
+        return found.find() ? found.group(1) : null;
+    }
+
     private static String converted(boolean lowercased, String text) {
         return lowercased ? BoundUnderEvaluation.mapped(CaseMapping.LOWERCASE, text) : text;
     }
@@ -199,6 +205,15 @@ class TheRowsMadeForAStringInsideAnotherHoldTheRelationWhereTheyAreSaidToTest {
             String json = reported(source("contains", true, true, codes));
             assertTrue(json.contains("\"imagesNotShown\""), () -> "the image is named: " + codes);
             assertTrue(json.contains("String.lowercase"), () -> "and it is lowercase: " + codes);
+            // What no row was made for is left owed, and not counted as covered: the question of
+            // which class this rule puts those values in stays open at the position.
+            assertTrue(json.contains("relation_shown_over_a_region"),
+                    () -> "the region left open is reported: " + codes);
+            assertTrue(json.contains("\"leftOpen\""), () -> "and says what it leaves: " + codes);
+            assertEquals("partial", firstValueOf("status", json),
+                    () -> "and the measure is not complete: " + codes);
+            assertEquals("not_satisfied", firstValueOf("adequacy", json),
+                    () -> "nor adequate: " + codes);
         }
     }
 

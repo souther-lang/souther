@@ -74,6 +74,24 @@ public sealed interface CaseMapping {
         return List.copyOf(out);
     }
 
+    /**
+     * Each conversion this is made of as far as it has been done, the one done first alone and
+     * this whole last: the same count and order as {@link #operations}, so the operation at a
+     * place is the last one done by the conversion at the same place. None for the string as it
+     * stands.
+     */
+    default List<CaseMapping> doneSoFar() {
+        List<CaseMapping> out = switch (this) {
+            case None _ -> new ArrayList<>();
+            case Lowercase lowercase -> new ArrayList<>(lowercase.of().doneSoFar());
+            case Uppercase uppercase -> new ArrayList<>(uppercase.of().doneSoFar());
+        };
+        if (!(this instanceof None)) {
+            out.add(this);
+        }
+        return List.copyOf(out);
+    }
+
     /** {@code value} as it is written where it has been converted by this. */
     default String writtenAround(String value) {
         return switch (this) {

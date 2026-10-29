@@ -11,12 +11,15 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -343,5 +346,30 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
         Proposition appended = stated("String.contains(i.a, String.append(i.b, \"x\"))");
         assertTrue(!(appended instanceof Proposition.StringInside),
                 () -> "a string with a constant in it is no value of the input: " + appended);
+    }
+
+    /**
+     * The places a side is made of are all of them places the run reads, and each the place of an
+     * argument the side was read at: never a union of the places of several ways a value may have
+     * been made. What leaves a place out of the places a run that reaches the relation stands at
+     * ({@link WhereARunReachingARelationStands}) rests on this, so it is held here, where the
+     * sides are made, and not only where it is used.
+     */
+    @Test
+    void aSideIsMadeOfTheEveryPlaceItIsReadAtAndNoPlaceItMayHaveComeFrom() {
+        Quantity joined = new Quantity.WhatAnOperationAnswers(
+                ValueName.Stdlib.operation("String", "append"), List.of(value("a"), value("b")));
+        UndividedByARelation relation = UndividedByARelation.ofAForm(
+                LinearForm.atom(joined), Rel.EQ);
+        assertEquals(List.of(FilingCoordinate.of(new NumericTerm.ValueOf(
+                        TermPath.of("i").then("a"))),
+                FilingCoordinate.of(new NumericTerm.ValueOf(TermPath.of("i").then("b")))),
+                relation.sides().getFirst().madeOf());
+        UndividedByARelation inside = UndividedByARelation.ofAStringInside(lowercased("a"),
+                value("b"), StringContainment.ANYWHERE);
+        assertEquals(List.of(FilingCoordinate.of(new NumericTerm.ValueOf(
+                        TermPath.of("i").then("a")))), inside.sides().get(0).madeOf());
+        assertEquals(List.of(FilingCoordinate.of(new NumericTerm.ValueOf(
+                        TermPath.of("i").then("b")))), inside.sides().get(1).madeOf());
     }
 }

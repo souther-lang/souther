@@ -2524,7 +2524,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private StringsAPartnerCanHold stringsInside(boolean hereIsFirst, ConvertedText mine,
                                                  ConvertedText theirs, ValueSet theirStrings,
-                                                 String called) {
+                                                 Position mineHolds, String called) {
         Language partner = languageOf(theirStrings);
         if (mine == null || theirs == null || partner == null) {
             return null;
@@ -2580,8 +2580,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         long upTo = hereIsFirst
                 ? TextExtents.LONGEST_STRING - 2L * (shownOther.size() + 1L)
                 : TextExtents.LONGEST_STRING;
-        List<String> operations = new ArrayList<>(mine.through().operations());
-        operations.addAll(theirs.through().operations());
+        List<String> operations = new ArrayList<>(
+                operationsNotExactOver(mine.through(), languageHeldAt(mineHolds)));
+        operations.addAll(operationsNotExactOver(theirs.through(), partner));
         if (upTo < 0) {
             return new StringsAPartnerCanHold(ValueSet.NONE, ValueSet.matching(mayBe), null,
                     called).withTheImagesNotShownOf(operations);
@@ -2599,13 +2600,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   ValueSet theirStrings, Position mine,
                                                   String called) {
         if (kind.inside() != null) {
-            return stringsInside(hereIsFirst, here.text(), there.text(), theirStrings, called);
+            return stringsInside(hereIsFirst, here.text(), there.text(), theirStrings, mine,
+                    called);
         }
         if (there.piece() != null) {
             return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);
         }
         if (here.piece() != null) {
-            return stringsWithAPiece(here.piece(), theirStrings, called);
+            return stringsWithAPiece(here.piece(), theirStrings, mine, called);
         }
         return theirStrings.isEmpty() ? null : new StringsAPartnerCanHold(theirStrings, called);
     }
@@ -2677,8 +2679,58 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // Each conversion the run is gotten past exactly is one whose image is shown only where
         // it is exact, and the strings it is not exact on are the ones left open.
         List<String> operations = new ArrayList<>();
-        conversions.forEach(each -> operations.addAll(each.conversion().operations()));
+        for (ConvertedOn each : conversions) {
+            operations.addAll(operationsNotExactOver(each.conversion(),
+                    each.place().equals(mine) ? languageHeldAt(mineHolds)
+                            : languageOf(theirStrings)));
+        }
         return out.withTheImagesNotShownOf(operations);
+    }
+
+    /**
+     * The operations of the library that {@code conversion} is made of whose image is not shown
+     * over {@code over}: the ones at whose step a string of {@code over} first stops being one the
+     * conversion done so far is exactly a map on ({@link CodeMap}).
+     *
+     * <p>Named by what made them open, and not by being written. A conversion exact on every
+     * string of {@code over} leaves nothing open and is named for nothing, and of two done in turn
+     * the one named is the one whose step the strings fail at. Where which strings {@code over}
+     * holds is not worked out, or the machines for them are more than a piece's allowance, every
+     * operation is named: a name too many says where to look, and a name too few says to look
+     * elsewhere.
+     *
+     * @param over the strings the conversion is done to, or null where they are not a language
+     */
+    private static List<String> operationsNotExactOver(CaseMapping conversion, Language over) {
+        List<String> operations = conversion.operations();
+        if (over == null) {
+            return operations;
+        }
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        List<CaseMapping> doneSoFar = conversion.doneSoFar();
+        List<String> named = new ArrayList<>();
+        Language notExactBefore = Language.EVERY_STRING.not(meter);
+        for (int step = 0; step < doneSoFar.size(); step++) {
+            Language exact = CaseMaps.of(doneSoFar.get(step)).strings(meter);
+            Language notExact = exact == null ? null : over.and(exact.not(meter), meter);
+            Language fresh = notExact == null ? null
+                    : notExact.and(notExactBefore.not(meter), meter);
+            Language notExactNow = notExact == null ? null : notExactBefore.or(notExact, meter);
+            if (fresh == null || notExactNow == null) {
+                return operations;
+            }
+            if (!fresh.isEmpty()) {
+                named.add(operations.get(step));
+            }
+            notExactBefore = notExactNow;
+        }
+        return named;
+    }
+
+    /** The strings the place {@code held} is of holds, or null where they are not shown to be a
+     *  language; every string where there is no position to ask. */
+    private static Language languageHeldAt(Position held) {
+        return held == null ? Language.EVERY_STRING : languageOf(held.admitted().approximation());
     }
 
     /** The strings {@code set} is, where it is a language of strings, or null. */
@@ -2719,7 +2771,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the piece ({@link CodeMap}), and a string it is not exactly a map on is shown neither way.
      */
     private static StringsAPartnerCanHold stringsWithAPiece(PiecesOfAString piece,
-                                                            ValueSet partner, String called) {
+                                                            ValueSet partner, Position mineHolds,
+                                                            String called) {
         ConvertedText whole = piece.whole();
         if (whole == null || !(partner instanceof ValueSet.Matching(Language language))) {
             return null;
@@ -2742,7 +2795,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return mayBe == null || mayBe.isEmpty() ? null
                 : new StringsAPartnerCanHold(ValueSet.matching(converted),
                         ValueSet.matching(mayBe), null, called)
-                        .withTheImagesNotShownOf(whole.through().operations());
+                        .withTheImagesNotShownOf(operationsNotExactOver(whole.through(),
+                                languageHeldAt(mineHolds)));
     }
 
     /**
@@ -2826,9 +2880,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (mayBe == null) {
             return null;
         }
+        List<String> notShown = operationsNotExactOver(conversion, whole);
         if (shown.upTo() < 0) {
             return new StringsAPartnerCanHold(ValueSet.NONE, ValueSet.matching(mayBe), null,
-                    called).withTheImagesNotShownOf(conversion.operations());
+                    called).withTheImagesNotShownOf(notShown);
         }
         Language held = mine == null ? null
                 : mine.admitted().approximation() instanceof ValueSet.Matching(Language strings)
@@ -2836,7 +2891,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         long longest = longestOf(held);
         return new StringsAPartnerCanHold(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(mayBe), longest <= shown.upTo() ? null : shown.upTo(), called)
-                .withTheImagesNotShownOf(conversion.operations());
+                .withTheImagesNotShownOf(notShown);
     }
 
     /**
