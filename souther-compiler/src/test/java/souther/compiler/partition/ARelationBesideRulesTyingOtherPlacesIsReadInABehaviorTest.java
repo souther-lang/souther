@@ -15,6 +15,7 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -143,6 +145,56 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
                                 Type.ref(TypeSymbols.declared(new TypeKey(module, "Priced"))),
                                 reading)
                         .values().stream().map(FixtureTemplate::text).toList());
+    }
+
+    private static final String PAIR = """
+            module demo
+
+            data Pair = { a: String, b: String }
+                invariant String.contains(a, b) && String.length(b) <= 2
+            """;
+
+    /**
+     * A value of the strings tied together is one value of both, so a field given beside it is
+     * given to the value and not set beside a part of another.
+     *
+     * <p>With nothing given, an empty {@code a} and an empty {@code b} hold the rule; with
+     * {@code a} given as {@code "xy"}, the empty {@code b} of that value holds nothing, and the
+     * {@code b} written is one the rule holds of beside the {@code a} given.
+     */
+    @Test
+    void aFieldGivenIsHeldInTheValueOfTheStringsTiedToIt() {
+        Compilation compilation = Compilation.ofSource(PAIR, "Main");
+        String module = compilation.modules().get(0);
+        RuleReadingContext reading = RuleReadingContext.unshared(
+                RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
+        TypeSymbol.AtModule pair = TypeSymbols.declared(new TypeKey(module, "Pair"));
+
+        assertEquals(List.of("Pair { a = \"xy\", b = \"xy\" }"),
+                Partitions.composed(pair, pair, reading, Set.of(),
+                                Map.of("a", FixtureTemplate.string("xy")),
+                                Partitions.RulesAround.NONE)
+                        .values().stream().map(FixtureTemplate::text).toList());
+    }
+
+    /**
+     * And a row whose assignment puts a class of a string at one of the strings tied together is
+     * written with the other held to it: the value the other was offered was found with nothing
+     * settled, and beside the class the row stands at it holds nothing.
+     */
+    @Test
+    void aRowAtAClassOfOneStringIsWrittenWithTheOtherHeldToIt() {
+        Compilation compilation = Compilation.ofSource(PAIR + """
+
+                behavior f : (p: Pair) -> Bool
+                let f (p) = p.a == "xy"
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String rows = offered(compilation);
+
+        assertTrue(rows.contains("Pair { a = \"xy\", b = \"xy\" }"),
+                () -> "a row at the class of `a` the comparison draws: " + rows);
     }
 
     private static String offered(Compilation compilation) {

@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.core.IntNegation;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
@@ -19,6 +20,8 @@ import souther.compiler.check.TypeView;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+
+import java.math.BigDecimal;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -590,6 +593,58 @@ final class Witnesses {
             }
         }
         return out;
+    }
+
+    /**
+     * {@code constant}, as the fold reads one, written at a place of {@code type} under the names
+     * that type wears — or null where there is none, or it is no value a scalar place holds.
+     *
+     * <p>The way back is {@link #constantOf}: a value a reader of the rules wrote down is handed to
+     * a builder this way, and what a builder has written is handed back to that reader the other.
+     */
+    static FixtureTemplate writtenAs(Object constant, Type type, RuleReadingContext reading) {
+        if (constant == null || type == null) {
+            return null;
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Scalar)) {
+            return null;
+        }
+        FixtureTemplate written = switch (constant) {
+            case String text -> FixtureTemplate.string(text);
+            case Long number -> FixtureTemplate.integer(number);
+            case BigDecimal number -> FixtureTemplate.decimal(number);
+            case Boolean truth -> FixtureTemplate.bool(truth);
+            default -> null;
+        };
+        return written == null ? null : WornNames.under(view.wrappers(), written, source);
+    }
+
+    /**
+     * The constant {@code written} is, as the fold reads one, with the names written around it
+     * taken off — or null where it is no constant: a record, a collection, a case.
+     */
+    static Object constantOf(FixtureTemplate written) {
+        return constantOf(bare(written.value()));
+    }
+
+    private static Object constantOf(Hir.Expr written) {
+        return switch (written) {
+            case Hir.StringLit text -> text.value();
+            case Hir.BoolLit truth -> truth.value();
+            case Hir.IntLit number -> number.value();
+            case Hir.DecimalLit number -> number.value();
+            case Hir.Neg negated when IntNegation.isTheLeastInt(negated.operand()) ->
+                    Long.MIN_VALUE;
+            case Hir.Neg negated -> switch (constantOf(negated.operand())) {
+                case Long number -> -number;
+                case BigDecimal number -> number.negate();
+                case null, default -> null;
+            };
+            default -> null;
+        };
     }
 
     /** {@code value} with the names a fixture writes around it taken off, so that two values are

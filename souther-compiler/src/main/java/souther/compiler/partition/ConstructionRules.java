@@ -8,7 +8,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
-import souther.compiler.core.Core;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -177,16 +176,30 @@ final class ConstructionRules {
     }
 
     /**
-     * The constant written at {@code path} where a rule of a value it is in ties it to other
-     * places ({@link FieldDomains#writtenTogether}) — or null where none is.
+     * The constant, as the fold reads one, written at {@code path} where a rule of a value it is in
+     * ties it to other places, in a value of those places that holds what {@code fixed} puts at
+     * any of them ({@link FieldDomains#writtenTogether}) — or null where none is.
      *
      * <p>A value of the places such a rule ties together is one value of all of them, which the
      * limits each place is chosen in cannot say: a rule relating two strings leaves no one of them
-     * a set. So each of those places offers its part of it, and the parts make the one value.
+     * a set. So each of those places offers its part of it, and the parts make the one value —
+     * of the values already at the rest, and not of a value found with nothing there.
+     *
+     * @param fixed the constants, as the fold reads one, already at other positions
      */
-    Core writtenTogetherAt(TermPath path) {
+    Object writtenTogetherAt(TermPath path, Map<TermPath, Object> fixed) {
         for (RuleRoots.Naming each : namingOf(path)) {
-            Core written = bare(each).writtenTogether().get(each.address().key());
+            TermPath root = each.address().root();
+            Map<RuleKey, Object> held = new LinkedHashMap<>();
+            fixed.forEach((at, value) -> {
+                for (RuleRoots.Naming other : namingOf(at)) {
+                    if (other.address().root().equals(root)) {
+                        held.put(other.address().key(), value);
+                    }
+                }
+            });
+            Object written = bare(each).writtenTogether(each.address().key(), held)
+                    .get(each.address().key());
             if (written != null) {
                 return written;
             }

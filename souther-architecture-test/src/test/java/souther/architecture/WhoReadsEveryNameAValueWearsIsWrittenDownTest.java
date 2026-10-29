@@ -276,10 +276,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
-            row(PARTITION + "Partitions", "writtenAs",
-                    "(Lsouther/compiler/core/Core;" + TYPE + CONTEXT + ")L" + PARTITION
-                            + "FixtureTemplate;",
-                    THE_POSITION),
             row(PARTITION + "Partitions", "writtenNumberAt",
                     "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")L" + PARTITION
                             + "FixtureTemplate;",
@@ -330,6 +326,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
                     "(" + TYPE + CONTEXT + ")Ljava/util/function/IntFunction;",
+                    THE_POSITION),
+            row(PARTITION + "Witnesses", "writtenAs",
+                    "(Ljava/lang/Object;" + TYPE + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
                     THE_POSITION));
 
     private static String row(String owner, String name, String descriptor, String way) {

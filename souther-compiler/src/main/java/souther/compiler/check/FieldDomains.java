@@ -298,20 +298,32 @@ public final class FieldDomains {
     private final Map<TypeSymbol.AtModule, FieldDomains> elements = new ConcurrentHashMap<>();
 
     /**
-     * Whether a value is written down at each set of places tied together that some value of all
-     * of them holds every rule of ({@link #holdTogether}), kept for the same reason
-     * {@link #classes} is: asked at every place a projection is asked of, and the answer turns on
-     * the rules of this value alone.
+     * The value written down at each set of places tied together, with some of them held to
+     * constants, that every rule naming one of them holds of ({@link #writtenOver}) — kept for the
+     * same reason {@link #classes} is: asked at every place a projection is asked of and for every
+     * value a builder writes there, and the answer turns on the rules of this value alone.
      */
-    private final Map<Set<RuleKey>, Optional<Map<RuleKey, Core>>> heldTogether =
+    private final Map<Joint, Optional<Map<RuleKey, Object>>> heldTogether =
             new ConcurrentHashMap<>();
 
     /** Which places the parts of this value's rules tie together, made the first time it is
      *  asked ({@link #tied}). */
     private volatile TiedPlaces tied;
 
-    /** What {@link #writtenTogether} answers, worked out the first time it is asked. */
-    private volatile Map<RuleKey, Core> writtenTogether;
+    /**
+     * A set of places tied together, with the constants some of them are held to.
+     *
+     * @param together the places
+     * @param held     the constants, as the fold reads one, at the places among them a caller has
+     *                 already put a value at; none where a value of all of them is asked for
+     */
+    private record Joint(Set<RuleKey> together, Map<RuleKey, Object> held) {
+
+        Joint {
+            together = Set.copyOf(together);
+            held = Map.copyOf(held);
+        }
+    }
 
     /** What {@link #projection} answers, worked out the first time it is asked. */
     private volatile ProjectionEvidence projected;
@@ -2901,64 +2913,71 @@ public final class FieldDomains {
         if (together.size() == 1) {
             return holdsAValueAt(together.iterator().next(), placesOf, asked);
         }
-        return writtenAt(together).isPresent();
+        return writtenAt(new Joint(together, Map.of())).isPresent();
     }
 
-    /** {@link #writtenOver} of {@code together}, worked out once for each set of places. */
-    private Optional<Map<RuleKey, Core>> writtenAt(Set<RuleKey> together) {
-        return heldTogether.computeIfAbsent(Set.copyOf(together), this::writtenOver);
+    /** {@link #writtenOver} of {@code joint}, worked out once for each. */
+    private Optional<Map<RuleKey, Object>> writtenAt(Joint joint) {
+        return heldTogether.computeIfAbsent(joint, this::writtenOver);
     }
 
     /**
-     * The constant at each place of each set of places a rule the bounds do not hold ties
-     * together, in a value written down that every part naming one of those places holds of — the
-     * value that shows they hold one together ({@link #holdTogether}).
+     * Where {@code place} is one of a set of places a rule the bounds do not hold ties together,
+     * the constant at each place of that set, as the fold reads one, in a value written down that
+     * every part naming one of them holds of and that holds each place {@code fixed} names among
+     * them at what it gives — empty where {@code place} is in no such set or no such value is
+     * written down.
      *
      * <p>What a builder of a value of this declaration offers at those places. Chosen a place at a
      * time against what the rules leave each, the second of {@code String.contains("q", a)} and
      * {@code String.contains(a, b)} was chosen against nothing, since what a rule relating two
-     * strings leaves one is not a set of strings, and the value was refused. The sets are apart,
-     * so no place is in two of them.
+     * strings leaves one is not a set of strings, and the value was refused.
+     *
+     * <p>Asked with what the builder has already put at the others, because the value is one value
+     * of all of them. A part of a value found with nothing held, written beside another value at
+     * the rest, is a value the rules were never shown to hold of: under
+     * {@code String.contains(a, b)} the empty string at both is a value, and an empty {@code b}
+     * beside an {@code a} of {@code "x"} is none.
+     *
+     * @param fixed the constants, as the fold reads one, a builder has already put at places of this
+     *              value
      */
-    public Map<RuleKey, Core> writtenTogether() {
-        Map<RuleKey, Core> known = writtenTogether;
-        if (known == null) {
-            known = Collections.unmodifiableMap(writtenTogetherReadOff());
-            writtenTogether = known;
-        }
-        return known;
-    }
-
-    /** {@link #writtenTogether}, read off the places the rules tie together. */
-    private Map<RuleKey, Core> writtenTogetherReadOff() {
-        if (!(projection() instanceof ProjectionEvidence.NotCertified(
-                List<ProjectionEvidence.Cause> causes))) {
+    public Map<RuleKey, Object> writtenTogether(RuleKey place, Map<RuleKey, Object> fixed) {
+        Set<RuleKey> together = tied().tiedTo(place);
+        if (together.size() < 2 || !apartFrom(together, null)
+                || !namedByARuleTheBoundsDoNotHold(together)) {
             return Map.of();
         }
-        Set<RuleRef> unheld = new LinkedHashSet<>();
+        Map<RuleKey, Object> held = new LinkedHashMap<>();
+        fixed.forEach((at, value) -> {
+            if (together.stream().anyMatch(at::isAtOrUnder)) {
+                held.put(at, value);
+            }
+        });
+        return writtenAt(new Joint(together, held)).orElse(Map.of());
+    }
+
+    /** Whether a part of a rule the bounds do not hold names one of {@code places}. */
+    private boolean namedByARuleTheBoundsDoNotHold(Set<RuleKey> places) {
+        if (!(projection() instanceof ProjectionEvidence.NotCertified(
+                List<ProjectionEvidence.Cause> causes))) {
+            return false;
+        }
+        Set<RuleRef> unheld = new HashSet<>();
         causes.forEach(each -> {
             if (each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _)) {
                 unheld.add(rule);
             }
         });
-        Map<RuleKey, Core> out = new LinkedHashMap<>();
-        Set<Set<RuleKey>> asked = new HashSet<>();
-        tied().placesOf().forEach((read, places) -> {
-            if (!unheld.contains(read.part().rule())) {
-                return;
-            }
-            Set<RuleKey> together = tied().tiedTo(places.iterator().next());
-            if (together.size() >= 2 && apartFrom(together, null) && asked.add(together)) {
-                writtenAt(together).ifPresent(out::putAll);
-            }
-        });
-        return out;
+        return places.stream().anyMatch(at -> naming.getOrDefault(at, Set.of()).stream()
+                .anyMatch(read -> unheld.contains(read.part().rule())));
     }
 
     /**
-     * A value of this declaration at the fields the places {@code together} are in, written down
-     * that every part naming one of them holds of, as the constant at each of those places and at
-     * each place under one of them — see {@link #holdTogether}.
+     * A value of this declaration at the fields the places {@code joint} ties together are in,
+     * holding the constants it holds some of them to, that every part naming one of them holds of,
+     * as the constant at each of those places and at each place under one of them — see
+     * {@link #holdTogether}.
      *
      * <p>Asked of each clause such a part is in, as it comes out where its other parts hold
      * ({@link InvariantChecker.Written#withPartsSettled}). Those name places no part ties to these,
@@ -2968,7 +2987,8 @@ public final class FieldDomains {
      * were. A binding the clause is read under is still worked out, and one naming a field not
      * written here stops the fold as it did.
      */
-    private Optional<Map<RuleKey, Core>> writtenOver(Set<RuleKey> together) {
+    private Optional<Map<RuleKey, Object>> writtenOver(Joint joint) {
+        Set<RuleKey> together = joint.together();
         Set<String> fields = new LinkedHashSet<>();
         together.forEach(at -> fields.add(at.steps().getFirst()));
         Map<InvariantChecker.ReadingId, Set<PartId<RuleRef.Invariant>>> kept =
@@ -2994,14 +3014,16 @@ public final class FieldDomains {
             }
             rules.add(held);
         }
-        Map<List<String>, Core> written = ADeclarationsWitness.written(source, named, fields,
-                rules, this::stringsAdmittedAt);
+        Map<List<String>, Object> pinned = new LinkedHashMap<>();
+        joint.held().forEach((at, value) -> pinned.put(at.steps(), value));
+        Map<List<String>, Object> written = ADeclarationsWitness.written(source, named, fields,
+                rules, this::stringsAdmittedAt, pinned);
         if (written == null) {
             return Optional.empty();
         }
         // The fields are written whole, and only the places these are or are under are this
         // value's to offer: the rest of a field is the rest of the rules'.
-        Map<RuleKey, Core> out = new LinkedHashMap<>();
+        Map<RuleKey, Object> out = new LinkedHashMap<>();
         written.forEach((steps, value) -> {
             RuleKey place = placeReachedBy(steps);
             if (place != null && together.stream().anyMatch(place::isAtOrUnder)) {
@@ -3231,8 +3253,10 @@ public final class FieldDomains {
             Map<PartId<RuleRef.Invariant>, Boolean> settled = new LinkedHashMap<>(others);
             settled.put(part, answers == stated.positive());
             Core clause = written.withPartsSettled(settled);
-            return clause != null && fold.eval(clause).orElse(null) instanceof Boolean holds
-                    ? holds : null;
+            if (clause == null) {
+                return null;
+            }
+            return fold.eval(clause).orElse(null) instanceof Boolean holds ? holds : null;
         };
     }
 

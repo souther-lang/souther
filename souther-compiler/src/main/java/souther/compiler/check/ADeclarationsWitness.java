@@ -73,9 +73,13 @@ final class ADeclarationsWitness {
 
     private final Hints hints;
 
+    /** The constant each place is held to, by the fields that reach it. */
+    private final Map<List<String>, Object> pinned;
+
     private ADeclarationsWitness(RuleReadingSource source, List<Core> rules,
                                  Map<String, BindingId> bindings, List<String> names,
-                                 List<Shape> fields, Hints hints) {
+                                 List<Shape> fields, Hints hints,
+                                 Map<List<String>, Object> pinned) {
         this.hints = hints;
         this.pos = rules.getFirst().pos();
         this.source = source;
@@ -83,6 +87,7 @@ final class ADeclarationsWitness {
         this.bindings = bindings;
         this.names = names;
         this.fields = fields;
+        this.pinned = pinned;
     }
 
     /**
@@ -99,20 +104,31 @@ final class ADeclarationsWitness {
      */
     static boolean exists(RuleReadingSource source, TypeSymbol.AtModule declared,
                           Set<String> writing, List<Core> rules, Hints hints) {
-        return written(source, declared, writing, rules, hints) != null;
+        return written(source, declared, writing, rules, hints, Map.of()) != null;
     }
 
     /**
-     * The value {@link #exists} found, as the constant tried at each place a value was tried at,
-     * by the fields that reach the place — or null where none was found.
+     * The value {@link #exists} finds with the places {@code pinned} names held to the constants
+     * it gives them, as the constant at each place a value was tried at — what the fold reads it
+     * as, by the fields that reach the place — or null where none was found.
      *
      * <p>By place and not by field, so that what the value is at each place is said as itself and
      * not as a tree a reader takes apart: a name's value is at the place the name is, and a field
      * of a record is a place of its own.
+     *
+     * <p>Held to what a caller already put at some of the places, because a value of several places
+     * found with nothing held is one value: a part of it beside another value at the rest is no
+     * value the rules were shown to hold of. A constant held is tried at every other place of its
+     * type as well, as a constant a rule writes is, which is where a rule relating two places is
+     * met by the two being alike.
+     *
+     * @param pinned the constants some places are held to, by the fields that reach them, as the
+     *               fold reads a constant
      */
-    static Map<List<String>, Core> written(RuleReadingSource source,
-                                           TypeSymbol.AtModule declared, Set<String> writing,
-                                           List<Core> rules, Hints hints) {
+    static Map<List<String>, Object> written(RuleReadingSource source,
+                                             TypeSymbol.AtModule declared, Set<String> writing,
+                                             List<Core> rules, Hints hints,
+                                             Map<List<String>, Object> pinned) {
         Map<String, BindingId> bindings = source.bindings().of(declared);
         List<String> names = source.layout().of(declared).stream()
                 .filter(writing::contains).toList();
@@ -131,7 +147,7 @@ final class ADeclarationsWitness {
             fields.add(shape);
         }
         ADeclarationsWitness search = new ADeclarationsWitness(source, rules, bindings, names,
-                fields, hints);
+                fields, hints, pinned);
         return search.found();
     }
 
@@ -219,20 +235,36 @@ final class ADeclarationsWitness {
 
     /** The first value tried that every rule holds of, by the place each constant was tried at,
      *  or null where none was. */
-    private Map<List<String>, Core> found() {
+    private Map<List<String>, Object> found() {
         List<Shape> numbered = new ArrayList<>();
         for (Shape each : fields) {
             numbered.add(numbered(each));
         }
-        Pools pools = Pools.of(rules, pos);
+        Map<List<String>, Core> held = new LinkedHashMap<>();
+        for (Slot slot : slots) {
+            if (pinned.containsKey(slot.place())) {
+                Core at = writtenAs(pinned.get(slot.place()), slot.type());
+                if (at == null) {
+                    return null;   // a constant of another type than the place holds
+                }
+                held.put(slot.place(), at);
+            }
+        }
+        List<Core> mentioned = new ArrayList<>(rules);
+        mentioned.addAll(held.values());
+        Pools pools = Pools.of(mentioned, pos);
         List<List<Core>> candidates = new ArrayList<>();
         for (Slot slot : slots) {
             List<Core> tried = new ArrayList<>();
-            if (slot.type() == Type.Prim.STRING) {
-                hints.stringsAt(slot.place()).forEach(
-                        text -> tried.add(new Core.Str(text, Type.STRING, pos)));
+            if (held.containsKey(slot.place())) {
+                tried.add(held.get(slot.place()));
+            } else {
+                if (slot.type() == Type.Prim.STRING) {
+                    hints.stringsAt(slot.place()).forEach(
+                            text -> tried.add(new Core.Str(text, Type.STRING, pos)));
+                }
+                tried.addAll(pools.of(slot.type()));
             }
-            tried.addAll(pools.of(slot.type()));
             candidates.add(tried);
         }
         int[] unfolded = new int[rules.size()];
@@ -244,9 +276,10 @@ final class ADeclarationsWitness {
         for (int rank = 0; rank <= most && tried[0] < MOST_TRIED; rank++) {
             int[] chosen = new int[slots.size()];
             if (tryAll(numbered, candidates, chosen, 0, rank, unfolded, tried)) {
-                Map<List<String>, Core> out = new LinkedHashMap<>();
+                Map<List<String>, Object> out = new LinkedHashMap<>();
                 for (Slot slot : slots) {
-                    out.put(slot.place(), candidates.get(slot.at()).get(chosen[slot.at()]));
+                    out.put(slot.place(),
+                            readAs(candidates.get(slot.at()).get(chosen[slot.at()])));
                 }
                 return out;
             }
@@ -255,6 +288,32 @@ final class ADeclarationsWitness {
             }
         }
         return null;
+    }
+
+    /** {@code value}, a constant as the fold reads one, written as a value of {@code type} — or
+     *  null where it is no value of that type. */
+    private Core writtenAs(Object value, Type.Prim type) {
+        return switch (type) {
+            case INT -> value instanceof Long number ? new Core.Int(number, Type.INT, pos) : null;
+            case DECIMAL -> value instanceof BigDecimal number
+                    ? new Core.Decimal(number, Type.DECIMAL, pos) : null;
+            case STRING -> value instanceof String text ? new Core.Str(text, Type.STRING, pos)
+                    : null;
+            case BOOL -> value instanceof Boolean truth ? new Core.Bool(truth, Type.BOOL, pos)
+                    : null;
+            case RATIONAL, DATE, TIME, DATETIME, INSTANT -> null;
+        };
+    }
+
+    /** What the fold reads {@code tried}, one of the constants a place is tried at, as. */
+    private static Object readAs(Core tried) {
+        return switch (Core.withoutStanding(tried)) {
+            case Core.Int number -> number.value();
+            case Core.Decimal number -> number.value();
+            case Core.Str text -> text.value();
+            case Core.Bool truth -> truth.value();
+            default -> throw new IllegalStateException("a place is tried at a constant: " + tried);
+        };
     }
 
     /** The shape with its slots numbered in the order they are met, each remembered. */

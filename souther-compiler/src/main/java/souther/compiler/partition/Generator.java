@@ -12977,7 +12977,7 @@ public final class Generator {
         // One for every pass below, so what one of them found refused is known to the others.
         Composing composing =
                 new Composing(p, plan, subject.inputs(), subject.ruleReading(), check,
-                        handed.asked(), here, found);
+                        handed.asked(), here, found, rules);
         through[0] = composing;
         Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
@@ -13380,9 +13380,13 @@ public final class Generator {
          */
         private final FoundOut found;
 
+        /** The rules of every value reaching a position, which say what a position tied to others
+         *  takes beside what the assignment put at them ({@link #heldTogether}). */
+        private final ConstructionRules rules;
+
         Composing(int parameter, ConstructionPlan plan, BehaviorInputs inputs,
                   RuleReadingContext reading, CandidateCheck check, ContentsAsked asked,
-                  ContentsAsked.Here here, FoundOut found) {
+                  ContentsAsked.Here here, FoundOut found, ConstructionRules rules) {
             this.parameter = parameter;
             this.plan = plan;
             this.inputs = inputs;
@@ -13390,6 +13394,7 @@ public final class Generator {
             this.check = check;
             this.here = here;
             this.found = found;
+            this.rules = rules;
             this.handedOn = asked.handedOnFrom(plan.root().at().head());
             for (ConstructionPlan.Slot each : plan.slots()) {
                 typeAt.put(each.at(), each.type());
@@ -13433,8 +13438,52 @@ public final class Generator {
             return lastBuilt;
         }
 
+        /**
+         * {@code assigned} with each position that took its part of a value of the places a rule
+         * ties it to ({@link Generator#choicesOf}) given its part of such a value again: of one
+         * holding what
+         * the assignment put at the rest of those places — or as assigned, where none is written
+         * down.
+         *
+         * <p>What such a position was offered is its part of a value found with nothing else
+         * settled, and an assignment puts its own values at the rest: a class of an axis, another
+         * position's own offer. Beside those the part is of no value the rules were shown to hold
+         * of. The positions that took their part are asked together, with the same values held, so
+         * that their parts are of one value.
+         */
+        Map<TermPath, FixtureTemplate> heldTogether(Map<TermPath, FixtureTemplate> assigned) {
+            Set<TermPath> taking = new LinkedHashSet<>();
+            assigned.forEach((at, value) -> {
+                FixtureTemplate offered = Witnesses.writtenAs(
+                        rules.writtenTogetherAt(at, Map.of()), typeAt.get(at), reading);
+                if (offered != null && offered.text().equals(value.text())) {
+                    taking.add(at);
+                }
+            });
+            if (taking.isEmpty()) {
+                return assigned;
+            }
+            Map<TermPath, Object> fixed = new LinkedHashMap<>();
+            assigned.forEach((at, value) -> {
+                Object constant = taking.contains(at) ? null : Witnesses.constantOf(value);
+                if (constant != null) {
+                    fixed.put(at, constant);
+                }
+            });
+            Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>(assigned);
+            for (TermPath at : taking) {
+                FixtureTemplate again = Witnesses.writtenAs(rules.writtenTogetherAt(at, fixed),
+                        typeAt.get(at), reading);
+                if (again != null) {
+                    out.put(at, again);
+                }
+            }
+            return out;
+        }
+
         /** What putting one assignment to the decoder came to, or that it did not need putting. */
-        Tried attempt(Map<TermPath, FixtureTemplate> chosen, Budget budget) {
+        Tried attempt(Map<TermPath, FixtureTemplate> assigned, Budget budget) {
+            Map<TermPath, FixtureTemplate> chosen = heldTogether(assigned);
             Map<TermPath, String> written = new HashMap<>();
             for (Map.Entry<TermPath, FixtureTemplate> each : chosen.entrySet()) {
                 if (refusedAlone(each.getKey(), each.getValue())) {
@@ -13721,7 +13770,9 @@ public final class Generator {
             paths.add(slot.at());
             // Its part of a value of the places a rule ties it to first, where the part is inside
             // what the rules leave it: chosen a place at a time, no place of such a value would be.
-            FixtureTemplate tied = Partitions.writtenAs(left.writtenTogetherAt(slot.at()),
+            // A part of the value with nothing else settled, which an assignment taking it has
+            // made again of what the assignment puts at the rest ({@link Composing#heldTogether}).
+            FixtureTemplate tied = Witnesses.writtenAs(left.writtenTogetherAt(slot.at(), Map.of()),
                     slot.type(), reading);
             List<FixtureTemplate> offered = new ArrayList<>();
             if (tied != null && Witnesses.heldWithin(tied, limits)) {

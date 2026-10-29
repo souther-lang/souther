@@ -21,7 +21,6 @@ import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
-import souther.compiler.core.Core;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.InputDomain;
@@ -2279,9 +2278,6 @@ public final class Partitions {
         // before it settled into it, which is what a settling states — a reading per settled field
         // would be paying for every clause again to arrive where the first one already is.
         FieldDomains.Composing left = rules.composing(Map.of());
-        // A value of the fields a rule relating them ties together, which no field chosen at a time
-        // against what the rules leave it is: such a rule leaves no one of them a set.
-        Map<RuleKey, Core> together = rules.writtenTogether();
         // The places the record's own rules read, which a value built at one of its fields is held
         // to where they are under the field.
         PlacesTheRulesRead read = PlacesTheRulesRead.of(Type.ref(rulesOn), ruleSource);
@@ -2349,10 +2345,23 @@ public final class Partitions {
                                 inner))
                         .firstOf(1);
                 met = met.and(stands.met());
-                // Its part of the value written for the fields tied together first, where this is
-                // one of them and the part is inside what the rules and a search leave the field.
-                FixtureTemplate tied = writtenAs(together.get(RuleKey.of(name)), field.getValue(),
-                        reading);
+                // Its part of a value of the fields a rule relating them ties it to first, which no
+                // field chosen at a time against what the rules leave it is: such a rule leaves no
+                // one of them a set. Asked with what the fields given and chosen so far hold, so
+                // that the part is of a value with those and not of one with nothing settled; and
+                // only where it is inside what the rules and a search leave this field.
+                Map<RuleKey, Object> settled = new LinkedHashMap<>();
+                for (String other : fields.keySet()) {
+                    FixtureTemplate written = given.containsKey(other) ? given.get(other)
+                            : chosenByName.get(other);
+                    Object constant = written == null ? null : Witnesses.constantOf(written);
+                    if (constant != null) {
+                        settled.put(RuleKey.of(other), constant);
+                    }
+                }
+                FixtureTemplate tied = Witnesses.writtenAs(
+                        rules.writtenTogether(RuleKey.of(name), settled).get(RuleKey.of(name)),
+                        field.getValue(), reading);
                 List<FixtureTemplate> offered = new ArrayList<>();
                 if (tied != null && Witnesses.heldWithin(tied, limits)) {
                     offered.add(tied);
@@ -2379,30 +2388,6 @@ public final class Partitions {
             chosen.put(name, chosenByName.get(name));
         }
         return new FieldsChosen(chosen, met);
-    }
-
-    /**
-     * The constant {@code value}, written down at a place of {@code type}, under the names that
-     * type wears — or null where there is none, or the place is no scalar.
-     */
-    static FixtureTemplate writtenAs(Core value, Type type, RuleReadingContext reading) {
-        if (value == null || type == null) {
-            return null;
-        }
-        RuleReadingSource ruleSource = reading.source();
-        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.kinds(), ruleSource.sums());
-        if (!(view.shape() instanceof Shape.Scalar)) {
-            return null;
-        }
-        FixtureTemplate written = switch (Core.withoutStanding(value)) {
-            case Core.Str text -> FixtureTemplate.string(text.value());
-            case Core.Int number -> FixtureTemplate.integer(number.value());
-            case Core.Decimal number -> FixtureTemplate.decimal(number.value());
-            case Core.Bool truth -> FixtureTemplate.bool(truth.value());
-            default -> null;
-        };
-        return written == null ? null : WornNames.under(view.wrappers(), written, ruleSource);
     }
 
     /** What a search leaves a field besides the rules, as the limits a field is chosen in: none
