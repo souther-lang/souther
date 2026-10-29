@@ -15,6 +15,14 @@ import java.util.List;
  * count of the answer is therefore asked of the answer and never taken back to the code points of
  * the string it was made from; what a conversion makes of a text is worked out where the run
  * time's operations are applied ({@code evaluate.BoundUnderEvaluation#mapped}).
+ *
+ * <p>The one place that says which operations of the library are case conversions
+ * ({@link #isAConversion}), and the only one a reader of a relation asks: it works with what a
+ * conversion is exactly a map on ({@code regex.CodeMap}, worked out from the run time) and never
+ * names an operation. A conversion added to the library is added here, with the facts about it
+ * that {@link OperationFacts} states for every operation (what it keeps, how long its answer is);
+ * what a relation over it comes to follows from the map and is not written again where the
+ * relation is read.
  */
 public sealed interface CaseMapping {
 

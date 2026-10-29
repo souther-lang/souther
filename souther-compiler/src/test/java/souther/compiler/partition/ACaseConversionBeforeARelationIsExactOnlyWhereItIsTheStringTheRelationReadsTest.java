@@ -99,6 +99,58 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
         return out;
     }
 
+    /**
+     * A string the relation does not read, converted in the same walk over a list that the string
+     * it reads is converted in, is not a conversion owed before the relation: it feeds neither
+     * side. So it leaves the relation shown over a region whether the string is a short one a
+     * conversion cannot fail on, or any string at all.
+     */
+    @Test
+    void aConversionOfAStringNoSideReadsLeavesTheRelationShownOverARegion() {
+        for (String tagType : List.of("data Tag = String\n    invariant String.matches(\"[a-z]{1,2}\", value)",
+                "data Tag = String")) {
+            NavigableSet<String> reasons = reasons("""
+                    module demo
+
+                    %s
+
+                    data P = { name: String, tag: Tag }
+                    data Acc = { domain: String }
+                    data Keyed = { domain: String, tag: String }
+                    data In = { ps: List<P>, accounts: List<Acc> }
+
+                    let keyed (ps: List<P>): List<Keyed> =
+                        List.map(p -> Keyed { domain = String.lowercase(p.name),
+                                              tag = String.lowercase(p.tag.value) }, ps)
+
+                    behavior f : (i: In) -> Bool
+                    let f (i) = List.any(k -> List.any(a -> String.contains(k.domain, a.domain),
+                                                       i.accounts), keyed(i.ps))
+                    """.formatted(tagType));
+            assertTrue(reasons.contains("relation_shown_over_a_region"),
+                    () -> tagType + " " + reasons);
+        }
+    }
+
+    /**
+     * What a run reads of the pieces of a split does not turn on the separator it splits at: the
+     * relation of the pieces is shown over a region whichever code point parts the string, and
+     * the code point the address is written with in its pattern.
+     */
+    @Test
+    void theRelationOfAPieceOfASplitIsReadWhicheverCodePointPartsTheString() {
+        for (String separator : List.of("@", ",", ";", "#", "~", "/")) {
+            String source = PICKED_OUT_OF_A_SUM.replace("@", separator);
+            NavigableSet<String> reasons = reasons(source);
+            assertTrue(reasons.contains("relation_shown_over_a_region"),
+                    () -> separator + " " + reasons);
+            assertFalse(reasons.contains("unsupported_syntax"), () -> separator + " " + reasons);
+            assertEquals(List.of(), reasons.stream()
+                    .filter(each -> each.startsWith("relation_not_shown")).toList(),
+                    () -> separator + " " + reasons);
+        }
+    }
+
     @Test
     void theConversionsOfTheStringsASideReadsLeaveTheRelationShownOverARegion() {
         NavigableSet<String> reasons = reasons(DECLARATIONS.replace("BODY",
