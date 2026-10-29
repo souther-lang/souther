@@ -1756,7 +1756,11 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
         } catch (RuntimeException | LinkageError e) {
-            EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out, or the class would not link; neither is this value being unreadable
+            // The walk reflects on a live value and loads no class of this compile by name, and the
+            // value may be one a supplied implementation answered. A value that exists has had its
+            // class linked, so a link failure here is what that class's dependencies came to and is
+            // not this compile's output: it is a value that cannot be read. Only a stop is let by.
+            EvaluationContext.rethrowIfOverspent(e);
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1775,7 +1779,7 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(value, symbols, neutral, WHOLE);
         } catch (RuntimeException | LinkageError e) {
-            EvaluationContext.rethrowUnlessAboutTheValue(e);
+            EvaluationContext.rethrowIfOverspent(e);   // as in observed
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }

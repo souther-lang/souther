@@ -171,8 +171,12 @@ final class ObservedValues {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            EvaluationContext.rethrowUnlessAboutTheValue(e);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            // The value may be one a supplied implementation answered, of classes this compile did
+            // not generate. A value that exists has had its class linked, so a link failure here is
+            // what that class's own dependencies came to, and it is not this compile's output.
+            // Resolving the accessor can raise one unwrapped. Only a stop is let through.
+            EvaluationContext.rethrowIfOverspent(e);
             return FAILED;
         }
     }

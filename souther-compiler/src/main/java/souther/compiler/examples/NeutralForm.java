@@ -175,8 +175,10 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowUnlessAboutTheValue(e);
+        } catch (ReflectiveOperationException | LinkageError e) {
+            // A live value may be one a supplied implementation answered, so a link failure of its
+            // class is not this compile's output; see ObservedValues.read.
+            EvaluationContext.rethrowIfOverspent(e);
             throw new FixtureException(what + " cannot be read back as a fixture: `"
                     + simpleName(live) + "` has no `" + name + "` to read");
         }
@@ -480,8 +482,8 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod("value");
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowUnlessAboutTheValue(e);
+        } catch (ReflectiveOperationException | LinkageError e) {
+            EvaluationContext.rethrowIfOverspent(e);
             throw new FixtureException("an optional's value cannot be read back: `"
                     + simpleName(live) + "` has no `value` to read");
         }

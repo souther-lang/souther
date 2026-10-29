@@ -69,8 +69,9 @@ final class PaidForBeforeItIsWalked {
         try {
             accessor.setAccessible(true);
             return accessor.invoke(r);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            EvaluationContext.rethrowUnlessAboutTheValue(e);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            // A node of a value that may be a supplied implementation's, as in ObservedValues.read.
+            EvaluationContext.rethrowIfOverspent(e);
             return NOTHING;
         }
     }
