@@ -202,6 +202,17 @@ public final class AffineForms {
         }
 
         /**
+         * Whether making {@code construct} ends no run, given {@code wrapped}, the value its one
+         * field is given followed as far as it goes, or null where it has no one field. A clause
+         * checked when it is made ends none where the value written satisfies it, which is a
+         * property of the written value and of nothing a run does. A reader that does not know
+         * says what {@link #makingEndsNoRun} does.
+         */
+        default boolean makingEndsNoRunOver(Core.Construct construct, Core wrapped) {
+            return makingEndsNoRun(construct);
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -1155,7 +1166,7 @@ public final class AffineForms {
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
                     if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
-                            following, reading::makingEndsNoRun)) {
+                            following, reading::makingEndsNoRunOver)) {
                         reading.unobserved(e);
                     }
                     yield commonForm(eliminated, e, at, following, stopped);

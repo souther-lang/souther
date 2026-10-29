@@ -5,7 +5,7 @@ import souther.compiler.core.Core;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
  * What an occurrence stands as, once every step with one successor has been taken: a name the
@@ -373,21 +373,51 @@ public final class ValueStanding {
      * when it is written out under the construction and names nothing, since what a name stands
      * for was worked out where it was bound, out of this reading's sight. False where nothing
      * written stands against the access, which has no construction to ask.
+     *
+     * <p>A name a part is given is followed to the value it was given, and a construction among
+     * the parts ends none where {@code makingEndsNone} says so of it over the one value it wraps:
+     * a row of a table whose other fields are written as {@code Yen(58000)}, or handed to the
+     * helper that writes them, ends no run at the fields beside the one read.
+     *
+     * @param makingEndsNone whether making a construction ends no run, given the value its one
+     *                       field is given followed as far as it goes, or null where it has not
+     *                       one field
      */
     static <E, N extends Names<E, N>> boolean theConstructionAndItsRestEndNone(
             Core.FieldAccess fa, E at, N names, BindingWalk<?> following,
-            Predicate<Core.Construct> makingEndsNone) {
+            BiPredicate<Core.Construct, Core> makingEndsNone) {
         for (Standing<E, N> target : of(fa.target(), at, names, following)) {
             if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)
-                    || !makingEndsNone.test(nd)) {
+                    || !makingEndsNone.test(nd, null)) {
                 return false;
             }
             Core read = ConstructionProjection.given(nd, fa.field());
             for (var part : nd.values()) {
-                if (part.value() != read
-                        && !WhatARunMayEndFor.endsNoneAndReadsNoNameBeneath(part.value())) {
+                if (part.value() != read && !endsNoneAsWritten(target.part(part.value()),
+                        makingEndsNone)) {
                     return false;
                 }
+            }
+        }
+        return true;
+    }
+
+    /** Whether working out {@code written}, followed as far as it goes, ends no run: a
+     *  construction by what {@code makingEndsNone} says of it, and anything else by what is
+     *  written under it, which reads no name. */
+    private static <E, N extends Names<E, N>> boolean endsNoneAsWritten(
+            Standing<E, N> written, BiPredicate<Core.Construct, Core> makingEndsNone) {
+        if (!(Core.withoutStanding(written.value()) instanceof Core.Construct nd)) {
+            return WhatARunMayEndFor.endsNoneAndReadsNoNameBeneath(written.value());
+        }
+        Standing<E, N> wrapped = nd.values().size() == 1
+                ? written.part(nd.values().getFirst().value()) : null;
+        if (!makingEndsNone.test(nd, wrapped == null ? null : wrapped.value())) {
+            return false;
+        }
+        for (var part : nd.values()) {
+            if (!endsNoneAsWritten(written.part(part.value()), makingEndsNone)) {
+                return false;
             }
         }
         return true;
