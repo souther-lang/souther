@@ -2759,8 +2759,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static ValueSet stringsShownAt(TermPath place, InputReading read) {
         Position at = read.domain().at(place);
-        Source source = at == null ? null : sourceOf(new NumericTerm.ValueOf(place), read);
-        return source == null ? null : StringsHeld.at(at, !source.named());
+        // A place the declarations are not shown to leave a set of values is not shown to hold
+        // any of its strings ({@link #takes}).
+        return at == null || sourceOf(new NumericTerm.ValueOf(place), read) == null ? null
+                : StringsHeld.at(at);
     }
 
     /**

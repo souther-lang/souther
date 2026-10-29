@@ -25,9 +25,8 @@ import java.math.BigInteger;
  * length of a string is a bound on a number the set does not read. Such a position is left wider
  * than it is by the set alone, and the bounds on the length are the rest of what the rules say: the
  * strings it holds are the strings of the set that have a length the bounds leave. That is shown
- * only where the bounds are shown to be the whole of the rules, the length is the one number they
- * bound, and no rule of a value the position sits in ties it to another place. Otherwise nothing
- * is said of the strings.
+ * only where the bounds are shown to be the whole of the rules and the length is the one number
+ * they bound. Otherwise nothing is said of the strings.
  *
  * <p>Asked in one place, so that what a relation is read over is the same strings wherever it is
  * asked.
@@ -40,15 +39,13 @@ final class StringsHeld {
      * The strings {@code at} holds, or null where they are not shown to be all of them.
      *
      * <p>Null is that nothing is shown, and not that the position holds more.
-     *
-     * @param tiedToNothing whether no rule of a value the position sits in names it
      */
-    static ValueSet at(Position at, boolean tiedToNothing) {
+    static ValueSet at(Position at) {
         ValueSet admitted = at.admitted().approximation();
         if (at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete) {
             return admitted;
         }
-        if (!tiedToNothing || !(at.projection() instanceof ProjectionEvidence.CertifiedExact)) {
+        if (!(at.projection() instanceof ProjectionEvidence.CertifiedExact)) {
             return null;
         }
         Language language = UndividedByARelation.languageOf(admitted);
