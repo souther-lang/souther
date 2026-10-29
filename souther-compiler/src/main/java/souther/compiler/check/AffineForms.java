@@ -1129,10 +1129,12 @@ public final class AffineForms {
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
-            case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                            reading.declarations().kinds(), reading.declarations().sums())
-                            .isWrapped() -> {
+            case Core.Construct nd when !nd.values().isEmpty() -> {
+                TypeView made = TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
+                        reading.declarations().kinds(), reading.declarations().sums());
+                if (!made.isWrapped()) {
+                    yield null;
+                }
                 // The construction checks the clauses of the type it makes, which stops a run where
                 // the number is not one they leave. Told after the operations of the number it
                 // wraps, as the run works it out after them.
@@ -1141,9 +1143,7 @@ public final class AffineForms {
                 if (wrapped == null) {
                     reading.unobserved(e);
                 } else {
-                    reading.constructed(nd, TypeView.asWritten(Type.ref(nd.typeName()),
-                            reading.symbols(), reading.declarations().kinds(),
-                            reading.declarations().sums()), wrapped);
+                    reading.constructed(nd, made, wrapped);
                 }
                 yield wrapped;
             }
