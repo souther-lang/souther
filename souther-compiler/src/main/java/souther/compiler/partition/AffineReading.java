@@ -572,7 +572,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return;
                 }
                 if (name != null && stoppedAt != null && stoppedAt.reads(name)
-                        && WhatARunMayEndFor.endsOnlyWhereItsAnswerHasNoPlace(binding.value())) {
+                        && WorkedOutToReachIt.of(ofTheInput).endsOnlyWhereItsAnswerHasNoPlace(
+                                new Denotation(binding.value(), at))) {
                     return;
                 }
                 told.exact = false;
@@ -648,11 +649,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * Whether {@code node}, an expression nothing here reads other than the stopped one,
-             * ends no run, or is one the analysis that drew the lines answers for. Any other that
-             * may end a run has no owner here.
+             * ends no run, with what each name read in it was given, or is one the analysis that
+             * drew the lines answers for. Any other that may end a run has no owner here.
              */
-            private boolean worksOutNothingBesideTheStop(Core node) {
-                return WhatARunMayEndFor.endsNoneBeneath(node) || stoppedAt.answersFor(node);
+            private boolean worksOutNothingBesideTheStop(Core node, InputReads at) {
+                return WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(node, at))
+                        || stoppedAt.answersFor(node);
             }
 
             /**
@@ -663,7 +665,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * out comes to, which says nothing of whether it gets there.
              */
             private boolean theStopIsAnsweredFor(Core node, InputReads at) {
-                return WhatARunMayEndFor.endsOnlyWhereItsAnswerHasNoPlace(node)
+                return WorkedOutToReachIt.of(ofTheInput)
+                        .endsOnlyWhereItsAnswerHasNoPlace(new Denotation(node, at))
                         || stoppedAt.answersFor(node)
                         || addsUpTheFormItIsReadAs(node, at);
             }
@@ -681,8 +684,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 boolean[] rest = {true};
+                WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
                 Core.forEachChild(Core.withoutStanding(node), child -> rest[0] &=
-                        child == operand || WhatARunMayEndFor.endsNoneBeneath(child));
+                        child == operand || reached.endsNoRun(new Denotation(child, at)));
                 WhatWasTold apart = new WhatWasTold();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
                         reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
@@ -800,7 +804,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 StoppedValues.Held aside = stoppedAt.holdAside(node);
                 if (aside.firstMeeting()) {
                     if (!aside.theStop) {
-                        if (!worksOutNothingBesideTheStop(node)) {
+                        if (!worksOutNothingBesideTheStop(node, at)) {
                             told.exact = false;
                         }
                     } else if (stoppedAt.quotientAwayFromNought()) {
@@ -847,7 +851,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 for (Core element : elements) {
                     if (AffineForms.outcome(element, at, this)
                             instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
-                            && !WhatARunMayEndFor.endsNoneBeneath(element)) {
+                            && !WorkedOutToReachIt.of(ofTheInput)
+                                    .endsNoRun(new Denotation(element, at))) {
                         told.exact = false;
                     }
                 }
@@ -1389,7 +1394,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 case Evaluated.Step.Always always ->
                         workingOfEvaluating(always.expression(), at, ofTheInput);
                 case Evaluated.Step.OnlyWhere only ->
-                        WhatARunMayEndFor.endsNoneBeneath(only.expression())
+                        WorkedOutToReachIt.of(ofTheInput)
+                                .endsNoRun(new Denotation(only.expression(), at))
                                 ? new UndividedByARelation.Working(List.of(),
                                         WhatARelationLeavesUndivided.Told.EVERY)
                                 : UndividedByARelation.Working.UNREAD;
@@ -1401,7 +1407,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
     private static UndividedByARelation.Working workingOfEvaluating(Core expression, InputReads at,
                                                                     InputReading ofTheInput) {
-        if (WhatARunMayEndFor.endsNoneBeneath(expression)) {
+        if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
             return new UndividedByARelation.Working(List.of(),
                     WhatARelationLeavesUndivided.Told.EVERY);
         }

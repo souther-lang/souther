@@ -9917,68 +9917,7 @@ final class Pullback {
      * it is the declaration's ({@link #endsNoRun(Denotation)}).
      */
     private boolean endsNoRun(Denotation value) {
-        Core written = Core.withoutStanding(value.value());
-        InputReads at = value.at();
-        if (written instanceof Core.LetIn let) {
-            return endsNoRun(new Denotation(let.value(), at))
-                    && endsNoRun(new Denotation(let.body(), at.and(let.binder(), let.value())));
-        }
-        // Written in a value that was built, whatever is inside it: the build ran all of it.
-        if (written instanceof Core.Construct made && read.rules().declarations().answers()
-                .builtWhereItsModuleIsBuilt(read.rules().symbols().module(), made.pos())) {
-            return true;
-        }
-        // A reference to a value is run as the value is defined, which no part of this node says.
-        if (written instanceof Core.MaterialisedValue) {
-            Denotation defined = at.taken(written);
-            return defined != null && endsNoRun(defined);
-        }
-        if (!endsNoRunItself(value)) {
-            return false;
-        }
-        for (Core part : whatIsRunWith(written)) {
-            if (!endsNoRun(new Denotation(part, at))) {
-                return false;
-            }
-        }
-        for (Denotation bound : at.boundTo(written, read.rules().symbols(),
-                read.rules().newtypes())) {
-            if (!endsNoRun(bound)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * The parts of {@code written} whose ending a run is the ending of a run of it: what
-     * {@link Evaluated#inOrder} says is evaluated, and every branch and arm, which are not
-     * evaluated by reaching the node but one of which is, so that all of them are asked.
-     *
-     * <p>A function value is made and not run where it is written, so its body is not a part. The
-     * construction an {@code if} tests for is a part by its fields alone: a refusal of its
-     * invariant is the branch the {@code if} takes and ends nothing.
-     */
-    private static List<Core> whatIsRunWith(Core written) {
-        List<Core> parts = new ArrayList<>();
-        if (Core.withoutStanding(written) instanceof Core.IfConstructed tested) {
-            tested.construct().values().forEach(field -> parts.add(field.value()));
-            parts.add(tested.then());
-            tested.els().forEach(arm -> parts.add(arm.body()));
-            return parts;
-        }
-        for (Evaluated.Step step : Evaluated.inOrder(written)) {
-            parts.add(step.expression());
-        }
-        switch (Core.withoutStanding(written)) {
-            case Core.If fork -> {
-                parts.add(fork.then());
-                parts.add(fork.els());
-            }
-            case Core.Match match -> match.cases().forEach(arm -> parts.add(arm.body()));
-            default -> { }
-        }
-        return parts;
+        return WorkedOutToReachIt.asking(read, this::endsNoRunItself).endsNoRun(value);
     }
 
     /**

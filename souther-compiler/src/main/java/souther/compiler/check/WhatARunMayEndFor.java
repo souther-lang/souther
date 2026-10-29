@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.abort.GetsPast;
@@ -153,25 +152,6 @@ public final class WhatARunMayEndFor {
         }
         boolean[] under = {true};
         Core.forEachChild(here, child -> under[0] &= endsNoneBeneath(child));
-        return under[0];
-    }
-
-    /**
-     * Whether working {@code e} out ends a run only where its own answer has no place in its
-     * type, and nothing under it ends one: an operation refuses only what its own answer has no
-     * place for. A number that is the value of such a node is a value of its type, and a row
-     * standing at it is not stopped by working the node out. Not where something under it ends a
-     * run, a closure it applies included: what that works out is another evaluation's, and the
-     * answer having a place says nothing of it.
-     */
-    public static boolean endsOnlyWhereItsAnswerHasNoPlace(Core e) {
-        if (!(itself(e) instanceof Endings.Known own)
-                || !own.kinds().kinds().stream()
-                .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE)) {
-            return false;
-        }
-        boolean[] under = {true};
-        Core.forEachChild(Core.withoutStanding(e), child -> under[0] &= endsNoneBeneath(child));
         return under[0];
     }
 

@@ -60,75 +60,44 @@ final class NumbersOnTheWayToATotal {
     /**
      * Whether working {@code node} out here, which comes to {@code answer}, works out nothing
      * beyond the type where {@code answer} is in it, and nor does working out what each name it
-     * reads was given ({@link InputReads#boundTo}): a reading of the input follows a name to the
+     * reads was given ({@link WorkedOutToReachIt}): a reading of the input follows a name to the
      * value it was given, and that value is worked out whatever the name goes on to stand as.
+     *
+     * <p>Every part of it is asked of one of the two ways here, and nothing either way finds of a
+     * name is taken for the other: that a name was followed to the elements a total adds up says
+     * nothing of whether working its value out gets there.
      */
     static boolean completeWhereTheAnswerHasAPlace(Core node, LinearForm<NumericTerm> answer,
                                                    InputReading read, InputReads at) {
-        if (workedOutWhereItsAnswerHasAPlace(node)
-                && soIsWhatEachNameWasGiven(node, read, at, new HashSet<>())) {
+        WorkedOutToReachIt reached = WorkedOutToReachIt.of(read);
+        Denotation it = new Denotation(node, at);
+        if (reached.endsOnlyWhereItsAnswerHasNoPlace(it)) {
             return true;
         }
-        Set<BindingId> addedIn = new HashSet<>();
         return noughtOrMoreFromEachElement(answer, read)
-                && addsUpWhatItsClosuresAnswer(node, read, at, addedIn)
-                && soIsWhatEachNameWasGiven(node, read, at, addedIn);
+                && addsUpWhatItsClosuresAnswer(it, reached);
     }
 
     /**
-     * Whether working {@code e} out works out nothing beyond the type where what it answers is in
-     * it: it applies no function, so every number on the way is the answer of a part of it and the
-     * numbers of the input it is read as stand only where each part has one; or what its own
-     * operations refuse ({@link WhatARunMayEndFor#endsOnlyWhereItsAnswerHasNoPlace}) is all it
-     * refuses.
-     */
-    private static boolean workedOutWhereItsAnswerHasAPlace(Core e) {
-        return !appliesAFunction(e) || WhatARunMayEndFor.endsOnlyWhereItsAnswerHasNoPlace(e);
-    }
-
-    /** Whether what each name read under {@code e} was given is worked out where its answer has
-     *  a place, each name followed once and none in {@code followed} again. */
-    private static boolean soIsWhatEachNameWasGiven(Core e, InputReading read, InputReads at,
-                                                    Set<BindingId> followed) {
-        Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Read name && followed.add(name.binding())) {
-            for (Denotation given : at.boundTo(here, read.rules().symbols(),
-                    read.rules().newtypes())) {
-                if (!workedOutWhereItsAnswerHasAPlace(given.value())
-                        || !soIsWhatEachNameWasGiven(given.value(), read, given.at(), followed)) {
-                    return false;
-                }
-            }
-        }
-        boolean[] so = {true};
-        Core.forEachChild(here, child -> so[0] = so[0]
-                && soIsWhatEachNameWasGiven(child, read, at, followed));
-        return so[0];
-    }
-
-    /**
-     * Whether {@code e} adds up a container, as a total of it or as a walk whose step adds to the
+     * Whether {@code it} adds up a container, as a total of it or as a walk whose step adds to the
      * answer so far, and every closure applied on the way answers what is added in: the step, or
      * a closure each element of the container is the answer of
      * ({@link BuiltFrom#mapsEachElementOf}), down a run of those. Each number such a closure works
      * out is then no more than an addend of the answer. A closure whose answer is put to any other
      * use — a key to sort by, a condition, something only counted — adds nothing in, and what it
-     * works out is not between nought and the answer.
-     *
-     * <p>The names the run of containers is read through are followed to what they were given and
-     * put in {@code addedIn}: what each was given is asked here.
+     * works out is not between nought and the answer. Everything else worked out on the way ends
+     * no run, as {@code reached} follows it.
      */
-    private static boolean addsUpWhatItsClosuresAnswer(Core e, InputReading read, InputReads at,
-                                                       Set<BindingId> addedIn) {
-        Core here = Core.withoutStanding(e);
+    private static boolean addsUpWhatItsClosuresAnswer(Denotation it, WorkedOutToReachIt reached) {
+        Core here = Core.withoutStanding(it.value());
         SeededWalk walk = SeededWalk.of(here, NumbersOnTheWayToATotal::writtenClosure);
         if (walk != null) {
             // The elements are added in only where the step reads the one it is handed.
             Set<BindingId> readByTheStep = new HashSet<>();
-            return WhatARunMayEndFor.endsNoneBeneath(walk.seed())
+            return reached.endsNoRun(new Denotation(walk.seed(), it.at()))
                     && answersNoMoreThanItIsHanded(walk.step(), readByTheStep)
-                    && madeOfWhatClosuresAnswer(walk.container(),
-                            readByTheStep.contains(walk.element().binding()), read, at, addedIn);
+                    && madeOfWhatClosuresAnswer(new Denotation(walk.container(), it.at()),
+                            readByTheStep.contains(walk.element().binding()), reached);
         }
         if (!(here instanceof Core.PreservedCall call)
                 || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
@@ -137,32 +106,31 @@ final class NumbersOnTheWayToATotal {
             return false;
         }
         for (int i = 0; i < call.args().size(); i++) {
-            if (i != container && !WhatARunMayEndFor.endsNoneBeneath(call.args().get(i))) {
+            if (i != container
+                    && !reached.endsNoRun(new Denotation(call.args().get(i), it.at()))) {
                 return false;
             }
         }
-        return madeOfWhatClosuresAnswer(call.args().get(container), true, read, at, addedIn);
+        return madeOfWhatClosuresAnswer(new Denotation(call.args().get(container), it.at()), true,
+                reached);
     }
 
     /**
-     * Whether the elements of {@code e} are each what a closure answered, where they are
+     * Whether the elements of {@code it} are each what a closure answered, where they are
      * {@code addedIn} to the answer, down a run of calls that hold one closure answer for each
      * element of a container ({@link BuiltFrom#mapsEachElementOf}) and end no run apart from the
-     * closure, each closure answering no more than it is handed; or {@code e} applies no function
-     * and ends no run. A name is followed to what it was given.
+     * closure, each closure answering no more than it is handed; or working {@code it} out ends
+     * no run, as {@code reached} follows it. A name is followed to what it was given, which is
+     * asked the same.
      */
-    private static boolean madeOfWhatClosuresAnswer(Core e, boolean addedIn, InputReading read,
-                                                    InputReads at, Set<BindingId> followed) {
-        Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Read name) {
-            List<Denotation> given = at.boundTo(here, read.rules().symbols(),
-                    read.rules().newtypes());
-            if (given.isEmpty()) {
-                return true;
-            }
-            followed.add(name.binding());
-            return given.stream().allMatch(each -> madeOfWhatClosuresAnswer(each.value(),
-                    addedIn, read, each.at(), followed));
+    private static boolean madeOfWhatClosuresAnswer(Denotation it, boolean addedIn,
+                                                    WorkedOutToReachIt reached) {
+        Core here = Core.withoutStanding(it.value());
+        InputReads at = it.at();
+        if (here instanceof Core.Read) {
+            List<Denotation> given = reached.boundTo(it);
+            return given.stream().allMatch(each -> madeOfWhatClosuresAnswer(each, addedIn,
+                    reached));
         }
         if (addedIn && here instanceof Core.PreservedCall call) {
             BuiltFrom<DeclaredArgument> built =
@@ -180,16 +148,16 @@ final class NumbersOnTheWayToATotal {
                         }
                         closure = block;
                     } else if (i != over
-                            && !WhatARunMayEndFor.endsNoneBeneath(call.args().get(i))) {
+                            && !reached.endsNoRun(new Denotation(call.args().get(i), at))) {
                         return false;
                     }
                 }
                 return closure != null && answersNoMoreThanItIsHanded(closure, new HashSet<>())
-                        && madeOfWhatClosuresAnswer(call.args().get(over), true, read, at,
-                        followed);
+                        && madeOfWhatClosuresAnswer(new Denotation(call.args().get(over), at),
+                        true, reached);
             }
         }
-        return !appliesAFunction(here) && WhatARunMayEndFor.endsNoneBeneath(here);
+        return reached.endsNoRun(it);
     }
 
     /** The closure {@code e} is written as, or null where it is none. */
@@ -213,20 +181,6 @@ final class NumbersOnTheWayToATotal {
         }
         return closure.body().type() == Type.INT
                 && noMoreThanItAnswers(closure.body(), handed, read);
-    }
-
-    /** Whether working {@code e} out applies a function: a closure written under it, which what
-     *  it is handed to applies as often as it does with numbers of its own on the way, or a
-     *  function value applied. A function handed by its name is written at the call as a
-     *  closure. */
-    private static boolean appliesAFunction(Core e) {
-        Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Block || here instanceof Core.Apply) {
-            return true;
-        }
-        boolean[] applies = {false};
-        Core.forEachChild(here, child -> applies[0] |= appliesAFunction(child));
-        return applies[0];
     }
 
     /**

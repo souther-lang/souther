@@ -669,24 +669,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, and goes down to its parts: a name read"
                         + " off a value ends none, so what a projection may end one for is what"
                         + " its base may");
-        row(out, c + "check/WhatARunMayEndFor", "endsOnlyWhereItsAnswerHasNoPlace",
-                "(" + core + ")Z", Reading.STRUCTURE,
-                "asks a node what it ends a run for, and each part under it: a projection ends"
-                        + " none beyond what its base does");
         row(out, c + "partition/NumbersOnTheWayToATotal", "readOffWhatItIsHanded",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks whether a value is a name a closure is handed or a run of fields read off"
                         + " one, with nothing between, which the base answers");
-        row(out, c + "partition/NumbersOnTheWayToATotal", "appliesAFunction",
-                "(" + core + ")Z", Reading.STRUCTURE,
-                "asks each node whether it is a closure or an application of a function value,"
-                        + " and goes down to its parts: a projection applies none beyond what its"
-                        + " base does");
-        row(out, c + "partition/NumbersOnTheWayToATotal", "soIsWhatEachNameWasGiven",
-                "(" + core + "L" + c + "inputs/InputReading;L" + c
-                        + "inputs/InputReads;Ljava/util/Set;)Z", Reading.STRUCTURE,
-                "follows each name under a node to what it was given, and goes down to its"
-                        + " parts: a projection reads no name beyond what its base does");
+        row(out, c + "partition/WorkedOutToReachIt", "readsNoName", "(" + core + ")Z",
+                Reading.STRUCTURE,
+                "asks each node whether it is a name, and goes down to its parts: a projection"
+                        + " reads the names its base does");
         row(out, c + "partition/AffineReading$WhatWasTold", "readByATerm", "(" + core + ")V",
                 Reading.STRUCTURE,
                 "records each name under a node read as numbers of the input: a projection reads"

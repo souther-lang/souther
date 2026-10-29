@@ -275,6 +275,82 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     }
 
     /**
+     * A name between the total and the list a closure made is no evidence of its own: what the
+     * name was given is worked out, and so is what each name read in that reads. Ordered the
+     * other way round through a name or not, a total of {@code x + 1 - 1} over the elements stops
+     * at the greatest {@code Int}, and the comparison is not taken to tell every operation.
+     */
+    @Test
+    void aNameBetweenTheTotalAndWhatAClosureMadeShowsNothingOfTheClosure() {
+        String inputs = "gross: Int, ns: List<Nat>";
+        for (String body : List.of("""
+                {
+                    let ys = List.map(n -> n.value + 1 - 1, ns)
+                    let rev = List.reverse(ys)
+                    gross >= List.sum(rev)
+                }""", """
+                {
+                    let ys = List.map(n -> n.value + 1 - 1, ns)
+                    gross >= List.sum(List.reverse(ys))
+                }""", """
+                gross >= List.sum(List.reverse(List.map(n -> n.value + 1 - 1, ns)))""")) {
+            String report = report(inputs, NAT, body);
+            assertEquals(Set.of(), related(report), report);
+        }
+    }
+
+    /**
+     * What a run works out to reach a value read through a name is worked out where the name was
+     * given it, and a row of the comparison gets past it all the same: {@code n + 1 - 1} in a list
+     * bound to a name stops at the greatest {@code Int}, whether the total reads the name or a
+     * name for the list ordered the other way round. Written at the total, its sum is told.
+     */
+    @Test
+    void whatANameWasGivenIsWorkedOutBeforeTheRowGetsToTheTotal() {
+        String inputs = "n: Int, m: Int, k: Int";
+        for (String condition : List.of("""
+                {
+                    let ys = [n + 1 - 1, m]
+                    List.sum(ys) >= k
+                }""", """
+                {
+                    let ys = [n + 1 - 1, m]
+                    let rev = List.reverse(ys)
+                    List.sum(rev) >= k
+                }""")) {
+            UndividedByARelation.Working read = workingOf(inputs, condition);
+            assertEquals(WhatARelationLeavesUndivided.Told.SOME, read.told(), read::toString);
+        }
+        UndividedByARelation.Working written = workingOf(inputs, "List.sum([n + 1 - 1, m]) >= k");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, written.told(), written::toString);
+    }
+
+    /**
+     * A number of the input read through a name stands where what the name was given got there
+     * only as far as the library's operations on the way go: a date moved by a count stands only
+     * where the moved date is one. An operator's sum on the way is folded into what the number is
+     * read as, and {@code n + 1 - 1} stops at the greatest {@code Int} where the count it comes to
+     * moves the date to one. A sum of numbers written down is the same on every run.
+     */
+    @Test
+    void aNumberReadThroughANameStandsOnlyWhereTheLibraryWorkedItOut() {
+        String inputs = "b: Date, n: Int, k: Int";
+        UndividedByARelation.Working byASum = workingOf(inputs, """
+                {
+                    let moved = Date.addDays(n + 1 - 1, b)
+                    Date.year(moved) >= k
+                }""");
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, byASum.told(), byASum::toString);
+        UndividedByARelation.Working byAWrittenCount = workingOf(inputs, """
+                {
+                    let moved = Date.addDays(0 - 1, b)
+                    Date.year(moved) >= k
+                }""");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, byAWrittenCount.told(),
+                byAWrittenCount::toString);
+    }
+
+    /**
      * How many a list holds is no number a closure applied to its elements adds into, so that
      * closure is not between nought and it: {@code List.length(List.map(x -> 2 * x, ns))} stops
      * at a doubling past the type with the length one. Nor is a count a walk keeps, whose step
