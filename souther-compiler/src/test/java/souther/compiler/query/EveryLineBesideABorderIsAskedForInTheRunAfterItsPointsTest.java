@@ -6,6 +6,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.BorderObligationId;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -208,6 +209,20 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
         }
         assertTrue(searchedBeyondTheFirst,
                 "an obligation is read at a line that searched nothing ahead of one that did");
+
+        // And a line of the family is stood at by one line of the obligation: a finding is made
+        // for each line that stands it, so two would be one owed row said twice.
+        List<ObligationIdentity> owed = new ArrayList<>();
+        for (BorderAssessment edge : edges) {
+            if (edge.beside() instanceof AnotherLineTheRowsAllow.ByDirection family) {
+                family.standing().forEach(each -> owed.add(
+                        new ObligationIdentity.OfABorder(edge.border().obligation(),
+                                each.direction())));
+            }
+        }
+        assertEquals(owed.size(), Set.copyOf(owed).size(),
+                () -> "each line of a family is owed once however many lines read its border: "
+                        + owed);
     }
 
     /** What the searches for {@code direction} composed. */
