@@ -450,13 +450,15 @@ public final class WhatARelationLeavesUndivided {
          *                 its type stops, the relation draws none of them. {@code count >= k}
          *                 holds whatever {@code k} is at the greatest count only because no
          *                 {@code k} is greater. Such a line is no class of the model's
-         * @param notComputed the runs that settle the relation by its terms' ends and in none of
-         *                 which a row is shown computed: the operations worked out on a row built
-         *                 there were not all worked out. They are no class, no line is drawn at
-         *                 them, and the values of one are neither settled nor left either way
+         * @param noRowShownComputed the runs that settle the relation by its terms' ends and in none
+         *                 of which a row was built that the operations are worked out on. A fact
+         *                 about what was shown and not about the numbers: it does not say that a
+         *                 number of such a run has no room, and a number of a run kept in
+         *                 {@code runs} may have none. They are no class, no line is drawn at
+         *                 them, and what they hold is neither settled nor left either way
          */
         record Settled(List<SettledRun> runs, ExactCut least, ExactCut greatest, boolean whole,
-                       List<Line> ofTheTypeAlone, List<SettledRun> notComputed)
+                       List<Line> ofTheTypeAlone, List<SettledRun> noRowShownComputed)
                 implements Leaves {
 
             /** Runs of a term whose values are whole, its ends being the whole numbers it holds. */
@@ -469,8 +471,8 @@ public final class WhatARelationLeavesUndivided {
             public Settled {
                 runs = List.copyOf(runs);
                 ofTheTypeAlone = List.copyOf(ofTheTypeAlone);
-                notComputed = List.copyOf(notComputed);
-                if (runs.isEmpty() && notComputed.isEmpty()) {
+                noRowShownComputed = List.copyOf(noRowShownComputed);
+                if (runs.isEmpty() && noRowShownComputed.isEmpty()) {
                     throw new IllegalArgumentException("a term some values of which settle a"
                             + " relation has some");
                 }
@@ -481,7 +483,7 @@ public final class WhatARelationLeavesUndivided {
             Settled besideWhatTheModelDraws(List<Line> model) {
                 return new Settled(runs, least, greatest, whole,
                         lines().stream().filter(each -> !model.contains(each)).toList(),
-                        notComputed);
+                        noRowShownComputed);
             }
 
             /** The lines the model draws: {@link #lines()} but those the orders' ends alone do. */
@@ -512,7 +514,7 @@ public final class WhatARelationLeavesUndivided {
              * @param number the term these runs are of, or null where the side is no number
              */
             public boolean leavesItsPlacesUndivided(NumericTerm number) {
-                return notComputed.isEmpty() && !lines().isEmpty()
+                return noRowShownComputed.isEmpty() && !lines().isEmpty()
                         && (linesOfTheModel().isEmpty()
                                 || (number != null && number.partsNoPlaceByALine()));
             }
@@ -1953,7 +1955,7 @@ public final class WhatARelationLeavesUndivided {
      * something untold can stop a row, no run is taken, and the term is not shown. Where every
      * operation is told, a run is taken only if a row is built in it and the operations are
      * worked out on that row ({@link #aValueOfTheRunComputes}). A run in which none is built is
-     * kept apart as one no row is shown computed in ({@link Leaves.Settled#notComputed}), and
+     * kept apart as one no row is shown computed in ({@link Leaves.Settled#noRowShownComputed}), and
      * the runs that are taken stand as they were.
      */
     private static <P> Leaves leavesOfADenseTerm(List<Term<P>> terms, int at, ExactRatio constant,
@@ -2015,12 +2017,12 @@ public final class WhatARelationLeavesUndivided {
         if (runs.isEmpty()) {
             return null;
         }
-        List<SettledRun> notComputed = new ArrayList<>();
+        List<SettledRun> noRowShownComputed = new ArrayList<>();
         if (arithmetic.mayStopARow()) {
             runs.removeIf(run -> {
                 boolean unshown = !aValueOfTheRunComputes(arithmetic, terms, at, run);
                 if (unshown) {
-                    notComputed.add(run);
+                    noRowShownComputed.add(run);
                 }
                 return unshown;
             });
@@ -2033,7 +2035,7 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return new Leaves.Settled(inOrder(runs, false), held.lower(), held.upper(), false,
-                List.of(), inOrder(notComputed, false));
+                List.of(), inOrder(noRowShownComputed, false));
     }
 
     /**

@@ -195,10 +195,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // allowed more leaves the same values open.
         table.put("RelationShownOverARegion",
                 "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
-        // The same word over numbers: the rows shown computed stand, and the numbers in which none
-        // is are fixed by the operations the rows work out, which a run allowed more meets again.
+        // Numbers of a run the relation settles in which no row is shown to get past an operation
+        // of decimals: fixed by the operations the rows work out, which a run allowed more meets
+        // again, and said in the word for values not shown to get to the rule.
         table.put("RelationRowsNotShownComputed",
-                "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
+                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
         // many parts a step states, or at how far a container is written out, is one a run

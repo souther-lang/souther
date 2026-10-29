@@ -193,8 +193,8 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                 new BigDecimal("-1"), BigDecimal.ONE, atTheFloor, BigDecimal.ONE, Rel.GE));
         assertEquals(1, settled.runs().size());
         assertTrue(settled.runs().getFirst().holds());
-        assertEquals(1, settled.notComputed().size());
-        assertFalse(settled.notComputed().getFirst().holds());
+        assertEquals(1, settled.noRowShownComputed().size());
+        assertFalse(settled.noRowShownComputed().getFirst().holds());
         assertFalse(settled.leavesItsPlacesUndivided(null));
     }
 
@@ -203,7 +203,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         BigDecimal minusOne = new BigDecimal("-1");
         Leaves.Settled settled = assertInstanceOf(Leaves.Settled.class,
                 leftOfNought(0, minusOne, BigDecimal.ONE, minusOne, BigDecimal.ONE, Rel.GE));
-        assertEquals(List.of(), settled.notComputed());
+        assertEquals(List.of(), settled.noRowShownComputed());
     }
 
     @Test
@@ -225,12 +225,19 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     /** The same with the sum {@code operand + 5.0} told. */
     private static Leaves leftOfAmounts(int asked, Formed operand) {
+        return leftOfAmounts(asked, operand, null);
+    }
+
+    /** The same, with {@code s} held to {@code mostOfS} at the most, or to no most where null. */
+    private static Leaves leftOfAmounts(int asked, Formed operand, Long mostOfS) {
         NumericDomain.Bounds amounts = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), null);
+        NumericDomain.Bounds partners = mostOfS == null ? amounts : new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(mostOfS)));
         List<Term<String>> terms = List.of(
                 new Term<>(List.of("a"), ExactRatio.ONE, amounts, amounts, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "a"),
-                new Term<>(List.of("s"), ExactRatio.of(-1), amounts, amounts, null, true,
+                new Term<>(List.of("s"), ExactRatio.of(-1), partners, partners, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
         DecimalOperation plusFive = sum(operand, new Written(new BigDecimal("5.0")));
         return WhatARelationLeavesUndivided.leavesOf(terms, asked, ExactRatio.of(-5), Rel.GE,
@@ -246,6 +253,46 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     @Test
     void aRunWithNoEndIsAskedAtTheEndItHasWhenNoOperationReadsTheTermAskedOf() {
         assertInstanceOf(Leaves.Settled.class, leftOfAmountsAgainstASumOfTheOther(0));
+    }
+
+    /**
+     * That the sum has room is not what shows a row on each side of the line at an {@code a}: the
+     * {@code s} to stand at is what {@code a} comes to. A partner held to at most a hundred has
+     * none past a hundred and five, so the far end of the run is not left either way but settled
+     * true, and the end the run has is asked of what is left, which is the numbers from five to a
+     * hundred and five.
+     */
+    @Test
+    void aRunWithNoEndHasRowsOnBothSidesOnlyWhereThePartnerReachesTheLine() {
+        Leaves.Settled bounded = assertInstanceOf(Leaves.Settled.class,
+                leftOfAmounts(0, S, 100L));
+        assertEquals(2, bounded.runs().size());
+        assertNull(bounded.runs().getLast().to());
+        assertTrue(bounded.runs().getLast().holds());
+        assertEquals(ExactRatio.of(105), bounded.runs().getLast().from().at());
+        Leaves.Settled open = assertInstanceOf(Leaves.Settled.class, leftOfAmounts(0, S, null));
+        assertEquals(1, open.runs().size());
+        assertFalse(open.runs().getFirst().holds());
+    }
+
+    /**
+     * The room the sum has turns on the scale of the {@code s} it is worked out over, and the
+     * {@code s} a row stands at is what {@code a} comes to beside the line, written at few places
+     * however large {@code a} is. So rows a long way out, where no row was built, are computed as
+     * those at the end are: {@code a} a thousand, a power of ten past thirty digits and past a
+     * hundred thousand, each with an {@code s} just below and just above {@code a - 5}.
+     */
+    @Test
+    void theSumIsWorkedOutOnTheRowsBesideTheLineHoweverFarOutTheTermAskedOfStands() {
+        List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
+        for (int digits : new int[] {3, 30, 100_000}) {
+            ExactRatio far = ExactRatio.of(BigInteger.TEN.pow(digits));
+            for (String beside : new String[] {"-5.1", "-4.9", "-5.0"}) {
+                ExactRatio at = far.plus(ExactRatio.of(new BigDecimal(beside))).orNull();
+                assertTrue(DecimalOperation.allCompleteAt(plusFive, Map.of("s", at)),
+                        digits + " digits, " + beside);
+            }
+        }
     }
 
     /** An operation reading {@code a} has room by the scale {@code a} is written at, which a run

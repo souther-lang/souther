@@ -326,14 +326,15 @@ public final class ReportedReason {
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
             // Its own word and not the one above: what falls short is the values here getting to
             // the rule, and a reader looks at what the run works out before it.
-            case BlockReason.RelationNotShownReachedAtEveryValue _ ->
+            // Numbers of a run the relation settles in which no row is shown to get past the
+            // operations of decimals told are the same kind of thing: what falls short is values
+            // getting to the rule, and no class is drawn over them.
+            case BlockReason.RelationNotShownReachedAtEveryValue _,
+                 BlockReason.RelationRowsNotShownComputed _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
             // Its own word again: the classes stand over what was shown, and what falls short is
             // the values they do not hold.
-            // The same word for numbers: the rows shown computed stand, and what falls short is
-            // the numbers in which none is.
-            case BlockReason.RelationShownOverARegion _,
-                 BlockReason.RelationRowsNotShownComputed _ ->
+            case BlockReason.RelationShownOverARegion _ ->
                     UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;

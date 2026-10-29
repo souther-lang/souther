@@ -105,10 +105,18 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     }
 
     /**
-     * Whether a run of the term {@code asked} with no end on a side is shown by asking its other
-     * end: every operation that can stop a row is an operation of decimals, and none of them reads
-     * the term, so whether a row is computed does not turn on which number of the run it stands at
-     * ({@link DecimalOperation#allowAClaimOver}).
+     * Whether the room the operations of a row have is the same at every number of a run of the
+     * term {@code asked} with no end on a side, so that asking the end it has asks the far side
+     * too: every operation that can stop a row is an operation of decimals, and none of them
+     * reads the term.
+     *
+     * <p>That is the third of three things a row on each side of a line at every number of the run
+     * takes, and the only one of them this answers. That a term put beside it reaches the line at
+     * every number is {@code reaches}' own question, asked before the rows are, of the run the
+     * term has to stand in. That the row built there is computed is asked of the rows built at
+     * the end the run has, at the places the partner is chosen at whatever number is asked of
+     * ({@link DecimalOperation#allowAClaimOver}); the room of an operation turns on the scales of
+     * its operands, and the number asked of is read by none.
      */
     boolean aRunWithNoEndIsAskedAtTheEndItHas(Object asked) {
         return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()

@@ -3516,6 +3516,27 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
     }
 
+    /**
+     * A place a search stopped at a figure for and some of whose numbers have no row shown
+     * computed is told both, and neither hides the other: the figure is one a run allowed more may
+     * get past, and the numbers are not.
+     */
+    @Test
+    void aFigureASearchStoppedAtIsNotHiddenByNumbersNoRowIsShownComputedIn() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        SettledRun below = new SettledRun(null, ExactCut.exclusive(ExactRatio.ZERO), false);
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Set.of(),
+                Map.of(hours, List.of(below)));
+        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(List.of(below)),
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
+                left.stream().map(ComparisonAssessment.LeftAt::why).toList());
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                left.stream().map(each -> ReportedReason.of(each.why())).toList());
+    }
+
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
