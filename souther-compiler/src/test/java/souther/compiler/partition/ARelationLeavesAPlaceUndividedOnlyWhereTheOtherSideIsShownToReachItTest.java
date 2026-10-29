@@ -3304,6 +3304,53 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * stop a run at a scale, and the run past every value has no end to build a row at, so the
      * sum is worked out on no row of it and the relation is not shown to reach.
      */
+    private static final String UNIT =
+            "data Unit = Decimal invariant value >= 0.0m && value <= 1.0m";
+
+    /**
+     * Weighed by three, the unit run turns at a third, which no decimal is. The line is drawn at
+     * the number it is, and the rows that show a computed row either side of it are built at
+     * decimals next to it. Weighed by the other term it is the same line, on the term it divides.
+     * The order of the axis then holds a line at a decimal ({@code s = 0}) and one at a third,
+     * which are compared by the numbers they count to.
+     */
+    @Test
+    void aLineAtANumberNoDecimalWritesIsDrawnAndItsRowsAreBuiltNextToIt() {
+        String inputs = "a: Unit, s: Unit";
+        String over = "a.value * 3.0m >= s.value";
+        assertEquals(Map.of(), left(inputs, UNIT, over, atThe(">=", UNIT, inputs, over)));
+        assertEquals(List.of("a/0 <= x and 3 * x <= 1", "a/1 < 3 * x and x <= 1"),
+                classesAt(inputs, UNIT, over, "a"));
+        String under = "a.value >= s.value * 3.0m";
+        assertEquals(Map.of("a", RELATES),
+                left(inputs, UNIT, under, atThe(">=", UNIT, inputs, under)));
+        assertEquals(List.of("s/0 <= x <= 0", "s/0 < x and 3 * x <= 1", "s/1 < 3 * x and x <= 1"),
+                classesAt(inputs, UNIT, under, "s"));
+    }
+
+    /**
+     * An operation of decimals has room for its digits at the scale its operands are worked out
+     * at, so a run is taken only where the scale is known: a number written in the program, the
+     * answer of an operation told before, or a place of the input, which a row is built with.
+     * Chains of them are worked out from the scale each leaves, and a call's answer, whose scale
+     * nothing here knows, is not: the product is not told and no run is taken.
+     */
+    @Test
+    void anOperandWhoseScaleIsNotKnownIsNotToldSoNoRunIsTaken() {
+        String inputs = "h: Hours, s: Hours";
+        for (String known : List.of("h.value * (2.0m + 2.0m) >= s.value",
+                "(h.value * 4.0m) * 1.0m >= s.value", "h.value * 4.0m + 0.0m >= s.value")) {
+            assertEquals(Map.of(), left(inputs, HOURS, known, atThe(">=", HOURS, inputs, known)),
+                    known);
+            assertEquals(List.of("h/0 <= x < 42", "h/42 <= x <= 168"),
+                    classesAt(inputs, HOURS, known, "h"), known);
+        }
+        String unknown = "h.value * Decimal.round(1, HALF_UP, 4.00m) >= s.value";
+        assertEquals(Map.of("h", NOT_SHOWN, "s", NOT_SHOWN),
+                left(inputs, HOURS, unknown, atThe(">=", HOURS, inputs, unknown)));
+        assertEquals(List.of(), classesAt(inputs, HOURS, unknown, "h"));
+    }
+
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";

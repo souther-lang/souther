@@ -908,12 +908,18 @@ public interface LevelSpace {
             return numberOf(l).compareTo(numberOf(r));
         }
 
+        /**
+         * The number a level counts to. A level on a carrier whose places are counts is the number
+         * it counts to: one axis can be parted at a decimal, which is a place of the carrier, and
+         * at a number no decimal writes, which is counted, and the two are compared by the numbers.
+         */
         static ExactRatio numberOf(Level level) {
-            if (!(level instanceof Level.OfTheQuantity counted)) {
-                throw new IllegalStateException(
-                        "a counted order was asked about a level that is not a number: " + level);
-            }
-            return counted.at();
+            return switch (level) {
+                case Level.OfTheQuantity counted -> counted.at();
+                case Level.OnACarrier on when on.at() instanceof Count count -> count.exactly();
+                case Level.OnACarrier on -> throw new IllegalStateException(
+                        "a counted order was asked about a level that is not a number: " + on);
+            };
         }
     }
 }

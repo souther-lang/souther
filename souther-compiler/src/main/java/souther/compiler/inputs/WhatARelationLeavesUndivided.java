@@ -2021,19 +2021,21 @@ public final class WhatARelationLeavesUndivided {
      * taken as rows the program computes only by a row that was; the values of the run that were
      * not built are not asked.
      *
-     * <p>The values tried are the ends the run holds, then one between its ends, and one past the
-     * end it has where it has one end alone. A value no decimal writes is no row.
+     * <p>The values tried are the decimals nearest each end of the run ({@link DecimalPoints}),
+     * and nought where the run has no end.
      */
     private static <P> boolean aValueOfTheRunComputes(RowsComputed arithmetic, List<Term<P>> terms,
                                                       int at, SettledRun run) {
         List<ExactRatio> tried = new ArrayList<>();
-        if (run.from() != null && run.from().inclusive()) {
-            tried.add(run.from().at());
+        if (run.from() != null) {
+            tried.add(DecimalPoints.within(run.from(), run.to(), true));
         }
-        if (run.to() != null && run.to().inclusive()) {
-            tried.add(run.to().at());
+        if (run.to() != null) {
+            tried.add(DecimalPoints.within(run.to(), run.from(), false));
         }
-        tried.add(aValueWithin(run));
+        if (run.from() == null && run.to() == null) {
+            tried.add(ExactRatio.ZERO);
+        }
         for (ExactRatio value : tried) {
             if (value != null && arithmetic.computedAt(() -> valuesByKey(terms,
                     i -> i == at ? value : heldNearestNought(terms.get(i))))) {
@@ -2041,22 +2043,6 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return false;
-    }
-
-    /** A value of {@code run} that is in neither end: halfway between them, one inside the end it
-     *  has alone, or nought; null where that is not a number. */
-    private static ExactRatio aValueWithin(SettledRun run) {
-        if (run.from() != null && run.to() != null) {
-            return run.from().at().plus(run.to().at())
-                    .flatMap(sum -> sum.dividedBy(ExactRatio.of(2))).orNull();
-        }
-        if (run.from() != null) {
-            return run.from().at().plus(ExactRatio.ONE).orNull();
-        }
-        if (run.to() != null) {
-            return run.to().at().minus(ExactRatio.ONE).orNull();
-        }
-        return ExactRatio.ZERO;
     }
 
     /** {@code value} weighed {@code weight}, or null where either is no number. */
@@ -3859,7 +3845,11 @@ public final class WhatARelationLeavesUndivided {
                 fixed.add(weighedAt(heldNearestNought(terms.get(i)), terms.get(i).weight()));
             }
         }
-        for (ExactRatio value : List.of(asked.low(), asked.high())) {
+        List<ExactRatio> askedAt = rowValuesAtTheEnds(terms.get(of), asked);
+        if (askedAt == null) {
+            return false;
+        }
+        for (ExactRatio value : askedAt) {
             List<ExactRatio> row = new ArrayList<>(fixed);
             row.add(weighedAt(value, terms.get(of).weight()));
             ExactRatio rest = ExactRatio.ZERO;
@@ -3887,6 +3877,42 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
+     * The values a row is built at to ask the two ends of {@code asked}, a run of {@code term}.
+     * A whole term stands at the ends. A dense term stands at decimals inside them
+     * ({@link DecimalPoints}): an end that is left out, or that is no decimal, is no value the
+     * term takes. Null where the run has no decimal to build a row at.
+     */
+    private static <P> List<ExactRatio> rowValuesAtTheEnds(Term<P> term, Interval asked) {
+        if (term.spacing() == Granularity.DISCRETE) {
+            return List.of(asked.low(), asked.high());
+        }
+        ExactRatio lowest = DecimalPoints.within(asked.lower(), asked.upper(), true);
+        ExactRatio highest = DecimalPoints.within(asked.upper(), asked.lower(), false);
+        return lowest == null || highest == null ? null : List.of(lowest, highest);
+    }
+
+    /**
+     * Where a dense {@code reaching} term stands to be as near {@code line} as asked: at it where
+     * it is a decimal, and otherwise at a decimal on each side of it that the term holds. Null
+     * where the term holds none.
+     */
+    private static <P> List<ExactRatio> nearTheLine(ExactRatio line, Term<P> reaching) {
+        if (line.fitsWrittenDecimal()) {
+            return List.of(line);
+        }
+        Interval holds = Interval.of(reaching.holds());
+        List<ExactRatio> near = new ArrayList<>();
+        for (boolean above : List.of(false, true)) {
+            ExactCut far = holds == null ? null : above ? holds.upper() : holds.lower();
+            ExactRatio at = DecimalPoints.within(ExactCut.exclusive(line), far, above);
+            if (at != null) {
+                near.add(at);
+            }
+        }
+        return near.isEmpty() ? null : near;
+    }
+
+    /**
      * Where {@code reaching} stands in a row on each side of {@code line} for {@code relation}:
      * the last value of its spacing on one side and the first on the other — or null where they
      * are no number. A whole term weighed so that the side strictly past the line is below it
@@ -3897,7 +3923,7 @@ public final class WhatARelationLeavesUndivided {
     private static <P> List<ExactRatio> acrossTheLine(ExactRatio line, Rel relation,
                                                       Term<P> reaching) {
         if (reaching.spacing() != Granularity.DISCRETE) {
-            return List.of(line);
+            return nearTheLine(line, reaching);
         }
         if (relation == Rel.EQ || relation == Rel.NE) {
             ExactRatio next = line.plus(ExactRatio.ONE).orNull();

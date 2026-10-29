@@ -435,7 +435,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)
                         // A decimal operation has no region; a row is asked by working it out.
                         && !(where instanceof WhereAnOperatorAnswers.NotStated
-                                && told.addsDecimal(operation, operands))) {
+                                && told.addsDecimal(operation, form, operands))) {
                     told.exact = false;
                 }
             }
@@ -516,6 +516,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // of is one that may.
                     if (!stopsOnlyWhereItsAnswerHasNoPlace(node)) {
                         told.exact = false;
+                    }
+                    if (isAPlainRead(node)) {
+                        told.readsTheInput(numbers);
                     }
                     return numbers;
                 }
@@ -670,6 +673,27 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return under[0];
     }
 
+    /**
+     * Whether {@code node} is a place of the input read as it is: a name or a field of one, with
+     * no call or operation between it and the place. A row is built with the number at such a
+     * place, so the representation it has is the one the row is built with.
+     */
+    private static boolean isAPlainRead(Core node) {
+        Core at = Core.withoutStanding(node);
+        while (true) {
+            switch (at) {
+                case Core.Read _ -> {
+                    return true;
+                }
+                case Core.FieldAccess access -> at = Core.withoutStanding(access.target());
+                case Core.FieldProjection projection -> at = Core.withoutStanding(projection.base());
+                default -> {
+                    return false;
+                }
+            }
+        }
+    }
+
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
      *  whether nothing it read could stop a run without telling. */
     private static final class WhatWasTold {
@@ -677,9 +701,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
-        /** The operations of decimals, and the node each was told at, by where it is among them. */
+        /** The operations of decimals, in the order they were told. */
         private final List<DecimalOperation> decimals = new ArrayList<>();
-        private final List<Core> decimalAt = new ArrayList<>();
+        /** Where in {@link #decimals} the operation a form is the result of is, by the form. */
+        private final Map<LinearForm<NumericTerm>, Integer> resultOf = new IdentityHashMap<>();
+        /** The forms that are a place of the input read as it is, a number a row is built with. */
+        private final Set<LinearForm<NumericTerm>> inputReads =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         /** The forms of the operations over a stopped value that are told of nowhere, to be asked
          *  of the form of the comparison. */
         private final List<LinearForm<NumericTerm>> sumsOverTheStop = new ArrayList<>();
@@ -725,11 +753,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * row is asked by working it out, over the numbers of {@code operands}; false where it is
          * none of those, and nothing is told.
          *
-         * <p>An operand is the decimal as written where it is a literal, the result of the
-         * operation told at it where there is one — its scale is the scale that operation left —
-         * and otherwise the number its form comes to at a row.
+         * <p>An operand is told only where the scale it is worked out at is known, since the scale
+         * is what a decimal operation has room for: a decimal as the program wrote it; the result
+         * of an operation told before, at the scale that operation left; or a number the row
+         * itself holds, which the row is built with at the fewest places. An operand that is
+         * anything else — a negated value, a constant the program folded, a call's answer — has a
+         * scale nothing here knows, and the operation is then not told: no row is shown to get
+         * past it.
+         *
+         * <p>An operand is known by the form it was composed as, which a name carries to where it
+         * is read: {@code let x = h.value} reads {@code x} as the form of {@code h.value}.
          */
-        boolean addsDecimal(Core operation, List<LinearForm<NumericTerm>> operands) {
+        boolean addsDecimal(Core operation, LinearForm<NumericTerm> result,
+                            List<LinearForm<NumericTerm>> operands) {
             if (!(Core.withoutStanding(operation) instanceof Core.Binary binary)
                     || binary.type() != Type.DECIMAL
                     || (binary.op() != BinOp.ADD && binary.op() != BinOp.SUB
@@ -741,37 +777,51 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             List<Integer> after = new ArrayList<>();
             List<Core> written = List.of(binary.left(), binary.right());
             for (int i = 0; i < 2; i++) {
-                Core bare = Core.withoutStanding(written.get(i));
-                int worked = decimalWorkedOutAt(bare);
-                if (bare instanceof Core.Decimal literal) {
-                    over.add(new DecimalOperation.Written(literal.value()));
-                } else if (worked >= 0) {
-                    over.add(new DecimalOperation.Worked(worked));
-                    after.add(worked);
-                    after.addAll(decimals.get(worked).after());
-                } else {
-                    LinearForm<NumericTerm> form = operands.get(i);
-                    over.add(new DecimalOperation.Formed(
-                            new LinkedHashMap<Object, ExactRatio>(form.coefs()),
-                            form.constant()));
+                DecimalOperation.Operand operand = operandOf(written.get(i), operands.get(i));
+                if (operand == null) {
+                    return false;
+                }
+                over.add(operand);
+                if (operand instanceof DecimalOperation.Worked worked) {
+                    after.add(worked.operation());
+                    after.addAll(decimals.get(worked.operation()).after());
                 }
             }
             DecimalOperation told = new DecimalOperation(binary.op(), over, after);
-            if (!decimals.contains(told)) {
-                decimalAt.add(Core.withoutStanding(operation));
+            int at = decimals.indexOf(told);
+            if (at < 0) {
+                at = decimals.size();
                 decimals.add(told);
             }
+            resultOf.put(result, at);
             return true;
         }
 
-        /** Where the operation of decimals told at {@code node} is among those told, or -1. */
-        private int decimalWorkedOutAt(Core node) {
-            for (int i = decimalAt.size() - 1; i >= 0; i--) {
-                if (decimalAt.get(i) == node) {
-                    return i;
-                }
+        /** What {@code node}, composed as {@code form}, is worked out of by an operation of
+         *  decimals, or null where the scale it has is not known. */
+        private DecimalOperation.Operand operandOf(Core node, LinearForm<NumericTerm> form) {
+            Core bare = Core.withoutStanding(node);
+            if (bare instanceof Core.Decimal literal) {
+                return new DecimalOperation.Written(literal.value());
             }
-            return -1;
+            if (bare instanceof Core.Neg negated
+                    && Core.withoutStanding(negated.operand()) instanceof Core.Decimal literal) {
+                return new DecimalOperation.Written(literal.value().negate());
+            }
+            Integer worked = resultOf.get(form);
+            if (worked != null) {
+                return new DecimalOperation.Worked(worked);
+            }
+            if (inputReads.contains(form)) {
+                return new DecimalOperation.Formed(
+                        new LinkedHashMap<Object, ExactRatio>(form.coefs()), form.constant());
+            }
+            return null;
+        }
+
+        /** That {@code form} is the number a row holds at a place of the input, read as it is. */
+        void readsTheInput(LinearForm<NumericTerm> form) {
+            inputReads.add(form);
         }
 
         UndividedByARelation.Working working() {
